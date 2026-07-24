@@ -105,7 +105,15 @@ export async function fetchCloudStates() {
       
       // Safe merge: Profile
       if (isPlainObject(data.profile)) {
-        AppState.profile = { ...AppState.profile, ...data.profile };
+        console.log("[DEBUG] Firestore snapshot.profile:", JSON.stringify(data.profile));
+        console.log("[DEBUG] AppState.profile BEFORE merge:", JSON.stringify(AppState.profile));
+        
+        const mergedProfile = { ...AppState.profile, ...data.profile };
+        console.log("[DEBUG] merged profile:", JSON.stringify(mergedProfile));
+        
+        AppState.profile = mergedProfile;
+        
+        console.log("[DEBUG] AppState.profile AFTER merge:", JSON.stringify(AppState.profile));
         stateChanged = true;
       }
       
@@ -128,29 +136,56 @@ export async function fetchCloudStates() {
   }
 }
 
+function isValidProfile(profile) {
+  return profile && 
+         typeof profile.name === 'string' && profile.name.trim() !== '' &&
+         typeof profile.rollNumber === 'string' && profile.rollNumber.trim() !== '';
+}
+
+function hasAttendanceData(attendance) {
+  return attendance && Object.keys(attendance).length > 0;
+}
+
+function isValidSettings(settings) {
+  return settings && Object.keys(settings).length > 0;
+}
+
 export function triggerCloudSync(isResetting = false) {
   if (!auth.currentUser) return;
   const uid = auth.currentUser.uid;
   
-  // Defensive guard: Do not upload completely empty attendance unless it's a reset
-  if (!isResetting && Object.keys(AppState.attendance).length === 0) {
-    // If the user hasn't marked anything and it's not a reset, do not upload `{}` 
-    // This prevents accidental clearing of the cloud document if local state is blank.
-    return;
-  }
+  // IMMEDIATELY persist local state. This ensures that modifications made outside
+  // of normal attendance flow (e.g. Profile creation during signup) are securely 
+  // saved to localStorage before any network delays or page unloads.
+  persistLocalState(uid);
   
   if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
   
   cloudSyncTimeout = setTimeout(async () => {
     try {
-      await db.collection('students').doc(uid).set({
-        attendance: AppState.attendance,
-        settings: AppState.settings,
-        profile: AppState.profile
-      }, { merge: true });
+      const payload = {};
+
+      if (isValidProfile(AppState.profile)) {
+        payload.profile = AppState.profile;
+      }
+
+      if (isValidSettings(AppState.settings)) {
+        payload.settings = AppState.settings;
+      }
+
+      // Defensive guard: Never upload an empty attendance object unless explicitly resetting.
+      // This allows the profile and settings to sync normally for new users without 
+      // accidentally wiping cloud attendance data if local state failed to hydrate.
+      if (isResetting || hasAttendanceData(AppState.attendance)) {
+        payload.attendance = AppState.attendance;
+      }
+
+      if (Object.keys(payload).length > 0) {
+        await db.collection('students').doc(uid).set(payload, { merge: true });
+      }
       
       AppState.isDirty = false;
-      persistLocalState(uid);
+      persistLocalState(uid); // persist again to clear isDirty flag
       console.log("[storage.js] Cloud sync complete.");
     } catch (err) {
       console.error("[storage.js] Cloud sync failed", err);

@@ -126,12 +126,26 @@ function checkMigration() {
   }
 }
 
-function updateProfileUI() {
+function updateProfileUI(profileArg) {
   console.log("[app.js] updateProfileUI called");
+  console.log("[DEBUG] profile argument inside updateProfileUI():", JSON.stringify(profileArg));
+  console.log("[DEBUG] AppState.profile immediately before updateProfileUI:", JSON.stringify(AppState.profile));
+  
+  const nameEl = document.getElementById('profileName');
+  const rollEl = document.getElementById('profileRoll');
+  
+  console.log("[DEBUG] profileName element:", nameEl);
+  console.log("[DEBUG] profileRoll element:", rollEl);
+  console.log("[DEBUG] textContent BEFORE update - Name:", nameEl ? nameEl.textContent : null, "Roll:", rollEl ? rollEl.textContent : null);
+  
   const name = AppState.profile.name || "Student";
   const roll = AppState.profile.rollNumber || "Roll No";
-  document.getElementById('profileName').textContent = name;
-  document.getElementById('profileRoll').textContent = roll;
+  
+  if (nameEl) nameEl.textContent = name;
+  if (rollEl) rollEl.textContent = roll;
+  
+  console.log("[DEBUG] textContent AFTER update - Name:", nameEl ? nameEl.textContent : null, "Roll:", rollEl ? rollEl.textContent : null);
+
   // Sync profile view
   const pvName = document.getElementById('profileViewName');
   const pvRoll = document.getElementById('profileViewRoll');
