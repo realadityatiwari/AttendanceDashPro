@@ -127,9 +127,11 @@ function checkMigration() {
 }
 
 function checkProfileRecovery() {
-  console.log("[app.js] checkProfileRecovery called");
+  console.log("[RECOVERY 1] checkProfileRecovery called");
+  console.log("[RECOVERY 2] Profile:", AppState.profile);
+  console.log("[RECOVERY 3] isProfileComplete:", isProfileComplete(AppState.profile));
   if (!isProfileComplete(AppState.profile)) {
-    console.log("[app.js] Profile incomplete, showing recovery modal");
+    console.log("[RECOVERY 4] Showing modal");
     document.getElementById('profileRecoveryModal').style.display = 'flex';
   }
 }
