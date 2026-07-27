@@ -91,6 +91,8 @@ export async function fetchCloudStates() {
     if (doc.exists) {
       const data = doc.data();
       
+      console.log("[PROFILE 1] Firestore:", data.profile);
+      
       // Safe merge: Attendance
       if (isPlainObject(data.attendance)) {
         AppState.attendance = { ...AppState.attendance, ...data.attendance };
@@ -105,15 +107,11 @@ export async function fetchCloudStates() {
       
       // Safe merge: Profile
       if (isPlainObject(data.profile)) {
-        console.log("[DEBUG] Firestore snapshot.profile:", JSON.stringify(data.profile));
-        console.log("[DEBUG] AppState.profile BEFORE merge:", JSON.stringify(AppState.profile));
+        console.log("[PROFILE 2] Local Before Merge:", AppState.profile);
         
-        const mergedProfile = { ...AppState.profile, ...data.profile };
-        console.log("[DEBUG] merged profile:", JSON.stringify(mergedProfile));
+        AppState.profile = { ...AppState.profile, ...data.profile };
         
-        AppState.profile = mergedProfile;
-        
-        console.log("[DEBUG] AppState.profile AFTER merge:", JSON.stringify(AppState.profile));
+        console.log("[PROFILE 3] Local After Merge:", AppState.profile);
         stateChanged = true;
       }
       
@@ -136,7 +134,7 @@ export async function fetchCloudStates() {
   }
 }
 
-function isValidProfile(profile) {
+export function isProfileComplete(profile) {
   return profile && 
          typeof profile.name === 'string' && profile.name.trim() !== '' &&
          typeof profile.rollNumber === 'string' && profile.rollNumber.trim() !== '';
@@ -165,7 +163,7 @@ export function triggerCloudSync(isResetting = false) {
     try {
       const payload = {};
 
-      if (isValidProfile(AppState.profile)) {
+      if (isProfileComplete(AppState.profile)) {
         payload.profile = AppState.profile;
       }
 

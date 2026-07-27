@@ -896,13 +896,7 @@ export function recalculateAndRender() {
 
   updateModeBadge();
   updateViewingLabel();
-  // Sync profile view
-  const pvName = document.getElementById('profileViewName');
-  const pvRoll = document.getElementById('profileViewRoll');
-  const pvInit = document.getElementById('profileInitial');
-  if (pvName) pvName.textContent = AppState.profile.name || 'Student';
-  if (pvRoll) pvRoll.textContent = AppState.profile.rollNumber || 'Roll No';
-  if (pvInit) pvInit.textContent = (AppState.profile.name || 'S')[0].toUpperCase();
+
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 import { initTimetable } from './utils.js';
 import { auth } from './firebase.js';
-import { AppState, fetchCloudStates, getLocalAttendance, clearLocalAttendance, triggerCloudSync, initLocalState } from './storage.js';
-import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav, updateProfileUI } from './ui.js';
+import { AppState, fetchCloudStates, getLocalAttendance, clearLocalAttendance, triggerCloudSync, initLocalState, persistLocalState, isProfileComplete } from './storage.js';
+import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav } from './ui.js';
 import { selectDate } from './dateContext.js';
 import { loginUser, signupUser, logoutUser } from './auth.js';
 import { validateSignupForm, validateRollNumber, validatePassword } from './validation.js';
@@ -126,17 +126,55 @@ function checkMigration() {
   }
 }
 
+function checkProfileRecovery() {
+  console.log("[app.js] checkProfileRecovery called");
+  if (!isProfileComplete(AppState.profile)) {
+    console.log("[app.js] Profile incomplete, showing recovery modal");
+    document.getElementById('profileRecoveryModal').style.display = 'flex';
+  }
+}
+
+export function saveProfile(profile) {
+  if (!profile.name || profile.name.trim() === '') {
+    return { success: false, error: 'Full Name is required.' };
+  }
+  const rollValidation = validateRollNumber(profile.rollNumber);
+  if (!rollValidation.valid) {
+    return { success: false, error: rollValidation.message };
+  }
+
+  // Update AppState
+  AppState.profile = {
+    ...AppState.profile,
+    name: profile.name.trim(),
+    rollNumber: profile.rollNumber.trim()
+  };
+
+  // Persist locally
+  if (auth.currentUser) {
+    persistLocalState(auth.currentUser.uid);
+  }
+
+  // Trigger cloud sync
+  triggerCloudSync();
+
+  // Refresh UI
+  updateProfileUI();
+
+  return { success: true };
+}
+
 function updateProfileUI(profileArg) {
-  console.log("[app.js] updateProfileUI called");
-  console.log("[DEBUG] profile argument inside updateProfileUI():", JSON.stringify(profileArg));
-  console.log("[DEBUG] AppState.profile immediately before updateProfileUI:", JSON.stringify(AppState.profile));
+  console.log("[PROFILE 5] Rendering:", AppState.profile);
+  console.log("[PROFILE 5] Before DOM update:", {
+      profileName: document.getElementById("profileName")?.textContent,
+      profileRoll: document.getElementById("profileRoll")?.textContent,
+      profileViewName: document.getElementById("profileViewName")?.textContent,
+      profileViewRoll: document.getElementById("profileViewRoll")?.textContent
+  });
   
   const nameEl = document.getElementById('profileName');
   const rollEl = document.getElementById('profileRoll');
-  
-  console.log("[DEBUG] profileName element:", nameEl);
-  console.log("[DEBUG] profileRoll element:", rollEl);
-  console.log("[DEBUG] textContent BEFORE update - Name:", nameEl ? nameEl.textContent : null, "Roll:", rollEl ? rollEl.textContent : null);
   
   const name = AppState.profile.name || "Student";
   const roll = AppState.profile.rollNumber || "Roll No";
@@ -144,8 +182,6 @@ function updateProfileUI(profileArg) {
   if (nameEl) nameEl.textContent = name;
   if (rollEl) rollEl.textContent = roll;
   
-  console.log("[DEBUG] textContent AFTER update - Name:", nameEl ? nameEl.textContent : null, "Roll:", rollEl ? rollEl.textContent : null);
-
   // Sync profile view
   const pvName = document.getElementById('profileViewName');
   const pvRoll = document.getElementById('profileViewRoll');
@@ -157,6 +193,13 @@ function updateProfileUI(profileArg) {
   const theme = document.documentElement.getAttribute('data-theme') || 'dark';
   const label = document.getElementById('profileThemeLabel');
   if (label) label.textContent = theme === 'dark' ? 'Dark Mode' : 'Light Mode';
+  
+  console.log("[PROFILE 5] After DOM update:", {
+      profileName: document.getElementById("profileName")?.textContent,
+      profileRoll: document.getElementById("profileRoll")?.textContent,
+      profileViewName: document.getElementById("profileViewName")?.textContent,
+      profileViewRoll: document.getElementById("profileViewRoll")?.textContent
+  });
 }
 
 async function bootstrap() {
@@ -196,6 +239,7 @@ async function bootstrap() {
         console.log("[app.js] Cloud states fetched");
         if (stateChanged) {
           applyTheme(AppState.settings.theme || 'dark');
+          console.log("[PROFILE 4] Before Render:", AppState.profile);
           updateProfileUI();
           recalculateAndRender();
           console.log("[app.js] UI updated with merged cloud data");
@@ -204,6 +248,11 @@ async function bootstrap() {
         console.error("[app.js] fetchCloudStates failed:", e);
       }
 
+      try {
+        checkProfileRecovery();
+      } catch (e) {
+        console.error("[app.js] checkProfileRecovery failed:", e);
+      }
 
       try {
         checkMigration();
@@ -380,6 +429,22 @@ function initDOMBindings() {
     }
   });
   bindClick('profileLogoutBtn', handleAppLogout);
+
+  bindClick('btnRecoverySignOut', handleAppLogout);
+  bindClick('btnRecoverySave', () => {
+    const errDiv = document.getElementById('recoveryError');
+    errDiv.style.display = 'none';
+    const nameVal = document.getElementById('recoveryName').value;
+    const rollVal = document.getElementById('recoveryRoll').value;
+    
+    const res = saveProfile({ name: nameVal, rollNumber: rollVal });
+    if (res.success) {
+      document.getElementById('profileRecoveryModal').style.display = 'none';
+    } else {
+      errDiv.textContent = res.error;
+      errDiv.style.display = 'block';
+    }
+  });
 
   initFeedbackSystem();
   initPWA();

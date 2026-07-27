@@ -93,6 +93,35 @@
   </div>
 </div>
 
+<!-- PROFILE RECOVERY MODAL -->
+<div id="profileRecoveryModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+  <div class="stat-card" style="max-width: 400px; width: 90%; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+    <div style="font-size: 40px; margin-bottom: 16px; text-align: center;">👤</div>
+    <h2 style="font-size: 18px; color: var(--text); margin-bottom: 12px; text-align: center;">Complete Your Profile</h2>
+    <p style="color: var(--text2); font-size: 13px; line-height: 1.6; text-align: center; margin-bottom: 24px;">
+      Your profile is missing some essential details. Please complete your profile to continue using AttendanceDash Pro.
+    </p>
+    
+    <div id="recoveryError" style="display:none; background: var(--red-dim); color: var(--red); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 20px; font-size: 13px; text-align: center; border: 1px solid var(--red);"></div>
+    
+    <div style="margin-bottom:16px;">
+      <label class="stat-label" for="recoveryName">Full Name</label>
+      <input type="text" id="recoveryName" style="width:100%; padding:12px 14px; margin-top:6px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:14px;" placeholder="John Doe">
+    </div>
+    
+    <div style="margin-bottom:28px;">
+      <label class="stat-label" for="recoveryRoll">Roll Number</label>
+      <input type="text" id="recoveryRoll" style="width:100%; padding:12px 14px; margin-top:6px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:14px;" placeholder="13 digit roll number" maxlength="13">
+    </div>
+    
+    <div style="display:flex; gap: 12px;">
+      <button class="theme-btn danger" style="flex:1; justify-content:center; padding:12px;" id="btnRecoverySignOut">Sign Out</button>
+      <button class="tab-btn active" style="flex:1; justify-content:center; padding:12px; border:none;" id="btnRecoverySave">Save Profile</button>
+    </div>
+  </div>
+</div>
+
+
 <!-- DASHBOARD CONTAINER -->
 <div class="shell" id="appDashboard" style="display:none;">
 
