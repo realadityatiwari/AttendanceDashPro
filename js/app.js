@@ -225,7 +225,7 @@ async function bootstrap() {
 
       // 2. Initial Render
       applyTheme(AppState.settings.theme || 'dark');
-      document.getElementById('appDashboard').style.display = 'block';
+      document.getElementById('appShell').style.display = 'block';
       updateProfileUI();
       renderDateNavigator();
       
@@ -263,7 +263,7 @@ async function bootstrap() {
       }
     } else {
       document.getElementById('authContainer').style.display = 'block';
-      document.getElementById('appDashboard').style.display = 'none';
+      document.getElementById('appShell').style.display = 'none';
     }
   });
 }
