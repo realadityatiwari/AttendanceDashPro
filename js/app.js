@@ -226,6 +226,8 @@ async function bootstrap() {
       // 2. Initial Render
       applyTheme(AppState.settings.theme || 'dark');
       document.getElementById('appShell').style.display = 'block';
+      document.getElementById('bottomNav').style.display = 'flex';
+      document.getElementById('fabMarkAttendance').style.display = 'flex';
       updateProfileUI();
       renderDateNavigator();
       
@@ -264,6 +266,8 @@ async function bootstrap() {
     } else {
       document.getElementById('authContainer').style.display = 'block';
       document.getElementById('appShell').style.display = 'none';
+      document.getElementById('bottomNav').style.display = 'none';
+      document.getElementById('fabMarkAttendance').style.display = 'none';
     }
   });
 }
