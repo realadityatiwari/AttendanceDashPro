@@ -1,41 +1,464 @@
-# Attendance Dashboard
+<div align="center">
 
-A standalone, browser-based attendance tracker for quiz eligibility. It uses the configured timetable to calculate current attendance, best-case forecast attendance, minimum required future attendance, and safe skips for each subject.
+# 📊 AttendanceDash Pro
 
-## Run locally
+### Smart Attendance Intelligence Platform for SRMCEM Students
 
-No installation, build step, or external dependency is required.
+A cloud-powered Progressive Web App (PWA) that helps students track attendance, forecast eligibility, optimize attendance strategy, and monitor quiz readiness through a modern, analytics-driven dashboard.
 
-1. Open [attendancedash.html](./attendancedash.html) in a modern browser.
-2. Record each scheduled class as **Attended** or **Missed**.
-3. Use **Simulation Mode** to test future timetable dates.
+<p>
+  <img src="https://img.shields.io/badge/version-2.x-blue" alt="Version">
+  <img src="https://img.shields.io/badge/status-active-success" alt="Status">
+  <img src="https://img.shields.io/badge/PWA-supported-purple" alt="PWA">
+  <img src="https://img.shields.io/badge/Firebase-Authentication-orange" alt="Firebase">
+  <img src="https://img.shields.io/badge/JavaScript-ES6+-yellow" alt="JavaScript">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+</p>
 
-Attendance data is stored only in the browser's local storage. **Reset Tracker** removes all saved attendance data.
+</div>
 
-## Attendance calculations
+---
 
-Eligibility is calculated per subject:
+# 📖 Overview
 
-`(Lecture % + Tutorial %) / 2 >= 75%`
+AttendanceDash Pro is a modern attendance management platform developed specifically for **Shri Ramswaroop Memorial College of Engineering & Management (SRMCEM)** students.
 
-For subjects without tutorials, the lecture percentage is used directly. Current percentage includes only completed classes; forecast percentage assumes every pending class is attended.
+Unlike traditional attendance calculators, AttendanceDash Pro combines attendance tracking, forecasting, quiz eligibility analysis, attendance optimization, cloud synchronization, offline support, and simulation tools into a single modern dashboard.
 
-The optimizer exhaustively checks valid whole-class lecture/tutorial combinations. It returns the minimum number of pending classes that must be attended; where totals tie, it chooses the option that attends fewer lectures (maximising lecture skips).
+The project has evolved from a simple attendance tracker into a modular attendance intelligence platform with a dedicated calculation engine, cloud-backed architecture, and Progressive Web App support.
 
-## Built-in checks
+---
 
-The dashboard runs a dependency-free console test suite automatically on load. It reports `PASS`/`FAIL` for percentage helpers, optimizer boundaries, impossible cases, all state transitions, storage validation, and exhaustive small-count combinations.
+# ✨ Why AttendanceDash Pro?
 
-Current coverage: **143 automated checks**.
+Unlike conventional attendance calculators, AttendanceDash Pro provides:
 
-## Project structure
+- ✅ Cloud synchronization across devices
+- ✅ Offline support with automatic synchronization
+- ✅ Smart attendance forecasting
+- ✅ Quiz eligibility prediction
+- ✅ Attendance optimization engine
+- ✅ Progressive Web App (PWA)
+- ✅ Responsive modern interface
+- ✅ Modular calculation engine
+- ✅ Firebase Authentication & Firestore integration
 
-| File | Purpose |
-| --- | --- |
-| `attendancedash.html` | Complete dashboard: markup, styles, timetable data, application logic, and test harness. |
+---
 
-## Notes
+# 🚀 Features
 
-- Future class outcomes are blocked unless Simulation Mode is enabled.
-- History keeps one entry per scheduled class, so duplicate entries cannot be created.
-- The dashboard is intentionally dependency-free and can be deployed as a static HTML file.
+## 📚 Attendance Tracking
+
+- Track attendance subject-wise
+- Mark classes as:
+  - ✅ Present
+  - ❌ Absent
+  - ⏳ Pending
+- Automatic attendance percentage calculation
+- Live dashboard updates
+- Cloud synchronization
+
+---
+
+## 🎯 Quiz Eligibility Engine
+
+Implements SRMCEM quiz attendance rules.
+
+Features include:
+
+- Subject-wise quiz eligibility
+- Required attendance calculation
+- Forecast-based eligibility prediction
+- Lecture & Tutorial analysis
+- Remaining classes analysis
+- Automatic eligibility updates
+
+---
+
+## 📈 Attendance Forecasting
+
+Forecast future attendance assuming all remaining scheduled classes are attended.
+
+Displays:
+
+- Current Overall Attendance
+- Forecast Overall Attendance
+- Remaining Classes
+- Attendance Progress
+- Attendance Trend
+
+---
+
+## 🧠 Attendance Optimizer
+
+The optimization engine calculates:
+
+- Minimum lectures required
+- Minimum tutorials required
+- Safe classes that can be skipped
+- Best attendance strategy
+- Attendance deficit
+
+---
+
+## 📅 Simulation Mode
+
+Simulate attendance on future dates.
+
+Simulation mode allows users to:
+
+- Preview future attendance
+- Test attendance scenarios
+- Evaluate attendance strategies
+- Plan attendance before quizzes
+
+---
+
+## ☁️ Cloud Synchronization
+
+Powered by Firebase.
+
+Supports:
+
+- Email/Password Authentication
+- Individual student accounts
+- Firestore cloud storage
+- Automatic synchronization
+- Local-first architecture
+- Persistent login sessions
+
+---
+
+## 📱 Progressive Web App (PWA)
+
+Install AttendanceDash Pro on:
+
+- Android
+- Windows
+- macOS
+- Linux
+
+Features include:
+
+- Offline launch
+- Local caching
+- Fast loading
+- Background synchronization
+- Native app-like experience
+
+---
+
+## 🎨 Modern UI
+
+- Dark Mode
+- Light Mode
+- Responsive Design
+- Mobile-first layout
+- Desktop dashboard
+- Touch-friendly controls
+- Modern glass-inspired interface
+
+---
+
+# 🛠 Technology Stack
+
+## Frontend
+
+- HTML5
+- CSS3
+- JavaScript (ES6 Modules)
+
+## Backend & Cloud Services
+
+- Firebase Authentication
+- Cloud Firestore
+
+## Architecture
+
+- Modular JavaScript
+- Pure Calculation Engine
+- UI / Engine Separation
+- Local-first State Management
+- Progressive Web App
+
+---
+
+# 📂 Project Structure
+
+```text
+AttendanceDashPro/
+
+├── assets/
+│
+├── css/
+│   ├── styles.css
+│   └── responsive.css
+│
+├── js/
+│   ├── app.js
+│   ├── attendance-engine.js
+│   ├── auth.js
+│   ├── storage.js
+│   ├── ui.js
+│   ├── utils.js
+│   ├── validation.js
+│   ├── firebase.js
+│   ├── dateContext.js
+│   ├── feedback.js
+│   └── pwa.js
+│
+├── timetable.json
+├── firestore.rules
+├── manifest.json
+├── service-worker.js
+├── firebase.json
+├── .firebaserc
+├── index.html
+└── README.md
+```
+
+---
+
+# 🏗 Architecture
+
+```text
+                   User Actions
+                        │
+                        ▼
+                Attendance Records
+                        │
+                        ▼
+               Attendance Engine
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+        ▼               ▼               ▼
+Subject Statistics  Overall Statistics  Quiz Eligibility
+        │               │               │
+        └───────────────┼───────────────┘
+                        ▼
+               Dashboard Models
+                        │
+                        ▼
+                 UI Rendering Layer
+```
+
+AttendanceDash Pro follows a modular architecture with a strict separation between business logic and presentation.
+
+The UI only renders data. All attendance calculations, forecasting, optimization, and quiz eligibility logic are performed by dedicated engine modules.
+
+---
+
+# ⚙ Core Modules
+
+## 📊 Attendance Engine
+
+Responsible for:
+
+- Attendance calculations
+- Percentage calculations
+- Forecast calculations
+- Attendance optimization
+- Subject statistics
+- Overall statistics
+
+---
+
+## 🎯 Quiz Eligibility Engine
+
+Responsible for:
+
+- Quiz eligibility prediction
+- Lecture analysis
+- Tutorial analysis
+- Attendance threshold validation
+- Eligibility calculations
+
+---
+
+## ☁️ Storage Layer
+
+Responsible for:
+
+- Local Storage
+- Firestore synchronization
+- Offline persistence
+- Conflict-safe synchronization
+
+---
+
+## 🖥 UI Layer
+
+Responsible only for:
+
+- Rendering
+- DOM updates
+- User interactions
+- Theme management
+- Responsive layout
+
+---
+
+# 🔒 Security
+
+- Firebase Authentication
+- Firestore Security Rules
+- Per-user cloud documents
+- Persistent login sessions
+- Local-first synchronization
+- Offline-safe state persistence
+
+---
+
+# 📋 Requirements
+
+- Modern Web Browser
+- Firebase Project
+- Node.js *(optional for development)*
+- Firebase CLI *(for deployment)*
+
+---
+
+# 🚀 Installation
+
+## Clone the Repository
+
+```bash
+git clone https://github.com/realadityatiwari/AttendanceTrackerPro.git
+```
+
+```bash
+cd AttendanceTrackerPro
+```
+
+---
+
+## Configure Firebase
+
+Create a Firebase project and enable:
+
+- Authentication (Email/Password)
+- Cloud Firestore
+
+Update:
+
+```text
+js/firebase.js
+```
+
+with your Firebase configuration.
+
+---
+
+## Deploy Firestore Rules
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+---
+
+## Run Locally
+
+Using Python:
+
+```bash
+python -m http.server
+```
+
+or
+
+```bash
+npx serve .
+```
+
+Open:
+
+```
+http://localhost:8000
+```
+
+---
+
+# 🗺 Roadmap
+
+## ✅ Completed
+
+- Firebase Authentication
+- Cloud Synchronization
+- Attendance Engine
+- Overall Attendance Engine
+- Quiz Eligibility Engine
+- Attendance Forecasting
+- Attendance Optimizer
+- Simulation Mode
+- Responsive UI
+- Progressive Web App
+- Offline Support
+
+---
+
+## 🚧 In Progress
+
+- Quiz Dashboard
+- Practical Attendance Module
+- Lab Session Support
+- Academic Analytics
+
+---
+
+## 🔮 Planned
+
+- Practical Assignment Tracking
+- Semester Performance Analytics
+- Attendance History
+- Attendance Reports (PDF)
+- Calendar View
+- Push Notifications
+- Multi-Semester Support
+- Data Export
+- Academic Insights Dashboard
+
+---
+
+# 📸 Screenshots
+
+> Screenshots will be added soon.
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome!
+
+If you'd like to improve AttendanceDash Pro:
+
+1. Fork the repository
+2. Create a new feature branch
+3. Commit your changes
+4. Push to your branch
+5. Open a Pull Request
+
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+# 👨‍💻 Author
+
+**Aditya Tiwari**
+
+GitHub: https://github.com/realadityatiwari
+
+---
+
+<div align="center">
+
+**Made with ❤️ for SRMCEM Students**
+
+⭐ If you found this project useful, consider giving it a star!
+
+</div>
