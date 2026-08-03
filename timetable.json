@@ -1,52 +1,215 @@
 {
   "start_date": "2026-07-15",
   "quiz_dates": [
-    {"label": "1st Quiz", "date": "2026-08-17"},
-    {"label": "2nd Quiz", "date": "2026-09-14"},
-    {"label": "3rd Quiz", "date": "2026-10-21"}
+    {
+      "label": "1st Quiz",
+      "date": "2026-08-17"
+    },
+    {
+      "label": "2nd Quiz",
+      "date": "2026-09-14"
+    },
+    {
+      "label": "3rd Quiz",
+      "date": "2026-10-21"
+    }
   ],
   "subjects": [
-    {"code":"BNC-501", "name":"Constitution of India",          "tag":null},
-    {"code":"BCS-501", "name":"Database Management System",     "tag":null},
-    {"code":"BCS-502", "name":"Web Technology",                 "tag":null},
-    {"code":"BCS-503", "name":"Design & Analysis of Algorithm", "tag":null},
-    {"code":"BCS-054", "name":"OOS Design with C++",            "tag":"Elective-I"},
-    {"code":"BCS-058", "name":"Data Warehousing & Data Mining", "tag":"Elective-II"}
+    {
+      "code": "BNC-501",
+      "name": "Constitution of India",
+      "tag": null,
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-501",
+      "name": "Database Management System",
+      "tag": null,
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-502",
+      "name": "Web Technology",
+      "tag": null,
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-503",
+      "name": "Design & Analysis of Algorithm",
+      "tag": null,
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-054",
+      "name": "OOS Design with C++",
+      "tag": "Elective-I",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-058",
+      "name": "Data Warehousing & Data Mining",
+      "tag": "Elective-II",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-551",
+      "name": "Database Management System Lab",
+      "tag": "Lab",
+      "category": "lab",
+      "quizApplicable": false,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-552",
+      "name": "Web Technology Lab",
+      "tag": "Lab",
+      "category": "lab",
+      "quizApplicable": false,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-553",
+      "name": "Design & Analysis of Algorithm Lab",
+      "tag": "Lab",
+      "category": "lab",
+      "quizApplicable": false,
+      "attendanceApplicable": true
+    }
   ],
   "day_schedule": {
     "0": [
-      {"s":"BCS-058", "t":"L"},
-      {"s":"BNC-501", "t":"L"},
-      {"s":"BCS-054", "t":"L"}
+      {
+        "s": "BCS-058",
+        "t": "L"
+      },
+      {
+        "s": "BNC-501",
+        "t": "L"
+      },
+      {
+        "s": "BCS-054",
+        "t": "L"
+      },
+      {
+        "s": "BCS-551",
+        "t": "P1"
+      },
+      {
+        "s": "BCS-551",
+        "t": "P2"
+      }
     ],
     "1": [
-      {"s":"BCS-503", "t":"L"},
-      {"s":"BCS-502", "t":"L"},
-      {"s":"BCS-501", "t":"L"},
-      {"s":"BCS-501", "t":"T"},
-      {"s":"BCS-503", "t":"T"},
-      {"s":"BCS-058", "t":"T"}
+      {
+        "s": "BCS-503",
+        "t": "L"
+      },
+      {
+        "s": "BCS-502",
+        "t": "L"
+      },
+      {
+        "s": "BCS-501",
+        "t": "L"
+      },
+      {
+        "s": "BCS-501",
+        "t": "T"
+      },
+      {
+        "s": "BCS-503",
+        "t": "T"
+      },
+      {
+        "s": "BCS-058",
+        "t": "T"
+      }
     ],
     "2": [
-      {"s":"BCS-054", "t":"L"},
-      {"s":"BCS-503", "t":"L"},
-      {"s":"BNC-501", "t":"L"},
-      {"s":"BCS-502", "t":"L"},
-      {"s":"BCS-058", "t":"L"},
-      {"s":"BCS-054", "t":"T"}
+      {
+        "s": "BCS-054",
+        "t": "L"
+      },
+      {
+        "s": "BCS-503",
+        "t": "L"
+      },
+      {
+        "s": "BNC-501",
+        "t": "L"
+      },
+      {
+        "s": "BCS-502",
+        "t": "L"
+      },
+      {
+        "s": "BCS-058",
+        "t": "L"
+      },
+      {
+        "s": "BCS-054",
+        "t": "T"
+      }
     ],
     "3": [
-      {"s":"BCS-054", "t":"L"},
-      {"s":"BCS-058", "t":"L"},
-      {"s":"BCS-501", "t":"L"},
-      {"s":"BCS-503", "t":"L"},
-      {"s":"BCS-054", "t":"T"}
+      {
+        "s": "BCS-054",
+        "t": "L"
+      },
+      {
+        "s": "BCS-058",
+        "t": "L"
+      },
+      {
+        "s": "BCS-501",
+        "t": "L"
+      },
+      {
+        "s": "BCS-503",
+        "t": "L"
+      },
+      {
+        "s": "BCS-552",
+        "t": "P1"
+      },
+      {
+        "s": "BCS-552",
+        "t": "P2"
+      }
     ],
     "4": [
-      {"s":"BCS-502", "t":"L"},
-      {"s":"BCS-501", "t":"L"},
-      {"s":"BCS-058", "t":"T"},
-      {"s":"BCS-502", "t":"T"}
+      {
+        "s": "BCS-502",
+        "t": "L"
+      },
+      {
+        "s": "BCS-501",
+        "t": "L"
+      },
+      {
+        "s": "BCS-502",
+        "t": "T"
+      },
+      {
+        "s": "BCS-553",
+        "t": "P1"
+      },
+      {
+        "s": "BCS-553",
+        "t": "P2"
+      }
     ]
   },
   "time_slots": [

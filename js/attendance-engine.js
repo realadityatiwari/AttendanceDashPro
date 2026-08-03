@@ -1,4 +1,4 @@
-import { getTimetable, parseDateString, isScheduledClass, getLocalDateString } from './utils.js';
+import { getTimetable, parseDateString, isScheduledClass, getLocalDateString, CLASS_TYPES, normalizeClassType } from './utils.js';
 
 const TARGET_ATTENDANCE = 0.75;
 
@@ -186,21 +186,20 @@ export function optimizeLive(totL, totT, attL_done, missL_done, attT_done, missT
    Called after every getAttendanceData() to detect data inconsistencies.
 ═══════════════════════════════════════════════════════════════════════ */
 export function assertConsistency(code, d) {
-  const checkType = (type, att, miss, pending, tot) => {
-    const sum = att + miss + pending;
-    if (sum !== tot) {
+  const validTypes = Object.keys(CLASS_TYPES);
+  validTypes.forEach(t => {
+    const c = d.counts[t];
+    const sum = c.att_done + c.miss_done + c.pending;
+    if (sum !== c.tot) {
       console.error(
-        `[ASSERT FAIL] ${code} ${type}: ` +
-        `att(${att}) + miss(${miss}) + pending(${pending}) = ${sum} ≠ tot(${tot})`
+        `[ASSERT FAIL] ${code} ${t}: ` +
+        `att(${c.att_done}) + miss(${c.miss_done}) + pending(${c.pending}) = ${sum} ≠ tot(${c.tot})`
       );
     }
-  };
-  checkType('Lec', d.attL_done, d.missL_done, d.pendingL, d.totL);
-  checkType('Tut', d.attT_done, d.missT_done, d.pendingT, d.totT);
-  // Skip budgets must never be negative
-  if (d.pendingL < 0 || d.pendingT < 0) {
-    console.error(`[ASSERT FAIL] ${code}: negative pending (L:${d.pendingL}, T:${d.pendingT})`);
-  }
+    if (c.pending < 0) {
+      console.error(`[ASSERT FAIL] ${code}: negative pending (${t}:${c.pending})`);
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -209,14 +208,17 @@ export function assertConsistency(code, d) {
 ═══════════════════════════════════════════════════════════════════════ */
 export function getAttendanceData(quizDate, states = {}) {
   const data   = {};
+  const validTypes = Object.keys(CLASS_TYPES);
 
   getTimetable().subjects.forEach(({code}) => {
-    data[code] = {
-      totL: 0, totT: 0,
-      attL_done: 0, missL_done: 0,
-      attT_done: 0, missT_done: 0,
-      pendingL:  0, pendingT: 0
-    };
+    data[code] = { counts: {} };
+    validTypes.forEach(t => {
+      data[code].counts[t] = {
+        tot: 0,
+        att_done: 0, miss_done: 0,
+        pending: 0
+      };
+    });
   });
 
   const cur   = new Date(getTimetable().start_date);
@@ -229,23 +231,22 @@ export function getAttendanceData(quizDate, states = {}) {
 
     if (getTimetable().day_schedule[monIdx]) {
       getTimetable().day_schedule[monIdx].forEach(({s, t}) => {
-        if (!data[s]) return;
-        if (t === 'L') data[s].totL++;
-        else           data[s].totT++;
+        // Normalize slot identifier to canonical class type (P1/P2 → P)
+        const statType = normalizeClassType(t);
+        if (!data[s] || !data[s].counts[statType]) return;
+        
+        data[s].counts[statType].tot++;
 
+        // Attendance ID preserves raw slot identifier for storage uniqueness
         const classId = `${dateStr}:${s}:${t}`;
         const state   = states[classId] || 'Pending';
 
         if (state === 'Attended') {
-          if (t === 'L') data[s].attL_done++;
-          else           data[s].attT_done++;
+          data[s].counts[statType].att_done++;
         } else if (state === 'Missed') {
-          if (t === 'L') data[s].missL_done++;
-          else           data[s].missT_done++;
+          data[s].counts[statType].miss_done++;
         } else {
-          // Pending (unlogged = pending, includes future classes)
-          if (t === 'L') data[s].pendingL++;
-          else           data[s].pendingT++;
+          data[s].counts[statType].pending++;
         }
       });
     }
@@ -264,39 +265,60 @@ export function getAttendanceData(quizDate, states = {}) {
 ═══════════════════════════════════════════════════════════════════════ */
 export function computeSubjectStats(code, name, tag, rawData) {
   const d = rawData;
+  // Compatibility Layer
+  const safeCount = (type) => d.counts[type] ?? {
+    tot: 0, att_done: 0, miss_done: 0, pending: 0
+  };
+
+  const flat = {
+    totL: safeCount('L').tot,
+    totT: safeCount('T').tot,
+    attL_done: safeCount('L').att_done,
+    missL_done: safeCount('L').miss_done,
+    attT_done: safeCount('T').att_done,
+    missT_done: safeCount('T').miss_done,
+    pendingL: safeCount('L').pending,
+    pendingT: safeCount('T').pending
+  };
 
   // Completed = classes with a definitive outcome (attended or missed)
-  const completedL = d.attL_done + d.missL_done;
-  const completedT = d.attT_done + d.missT_done;
+  const completedL = flat.attL_done + flat.missL_done;
+  const completedT = flat.attT_done + flat.missT_done;
 
   // Current %: only over completed classes. null if nothing done yet.
-  const currentLecPct = calcCurrentPct(d.attL_done, completedL);
-  const currentTutPct = d.totT > 0 ? calcCurrentPct(d.attT_done, completedT) : null;
+  const currentLecPct = calcCurrentPct(flat.attL_done, completedL);
+  const currentTutPct = flat.totT > 0 ? calcCurrentPct(flat.attT_done, completedT) : null;
   const currentAvgPct = calcAvgPct(currentLecPct, currentTutPct);
 
   // Forecast %: assumes all pending are attended (best case from here).
-  const forecastLecPct = calcForecastPct(d.attL_done, d.pendingL, d.totL);
-  const forecastTutPct = d.totT > 0 ? calcForecastPct(d.attT_done, d.pendingT, d.totT) : null;
+  const forecastLecPct = calcForecastPct(flat.attL_done, flat.pendingL, flat.totL);
+  const forecastTutPct = flat.totT > 0 ? calcForecastPct(flat.attT_done, flat.pendingT, flat.totT) : null;
   const forecastAvgPct = calcAvgPct(forecastLecPct, forecastTutPct);
 
   // Status always based on forecast (what you'll achieve if you attend everything remaining)
   const status = getSubjectStatus(forecastAvgPct);
 
   // Optimizer: how many remaining pending must be attended to just qualify?
-  const optResult = optimizeLive(
-    d.totL,      d.totT,
-    d.attL_done, d.missL_done,
-    d.attT_done, d.missT_done,
-    d.pendingL,  d.pendingT
-  );
+  const hasLorT = (safeCount('L').tot + safeCount('T').tot) > 0;
+  const optResult = hasLorT ? optimizeLive(
+    flat.totL,      flat.totT,
+    flat.attL_done, flat.missL_done,
+    flat.attT_done, flat.missT_done,
+    flat.pendingL,  flat.pendingT
+  ) : {
+    infeasible: true,
+    addL: 0, addT: 0,
+    skipL_budget: 0, skipT_budget: 0,
+    lecPct: 0, tutPct: 0, avgPct: 0
+  };
 
   return {
     code, name, tag,
     // raw counts
-    totL: d.totL,    totT: d.totT,    totComb: d.totL + d.totT,
-    attL_done: d.attL_done,   missL_done: d.missL_done,
-    attT_done: d.attT_done,   missT_done: d.missT_done,
-    pendingL:  d.pendingL,    pendingT:   d.pendingT,
+    totL: flat.totL,    totT: flat.totT,    totComb: flat.totL + flat.totT,
+    attL_done: flat.attL_done,   missL_done: flat.missL_done,
+    attT_done: flat.attT_done,   missT_done: flat.missT_done,
+    pendingL:  flat.pendingL,    pendingT:   flat.pendingT,
     completedL, completedT,
     // percentages
     currentLecPct, currentTutPct, currentAvgPct,
@@ -317,18 +339,19 @@ export function computeSubjectStats(code, name, tag, rawData) {
 ═══════════════════════════════════════════════════════════════════════ */
 export function calcForecastImpact(rawData, subjectCode, classType, currentState, newAction) {
   const d = rawData[subjectCode];
-  if (!d) return null;
+  if (!d || !d.counts[classType]) return null;
 
   // Start with current counts
-  let attL = d.attL_done,  pendL = d.pendingL;
-  let attT = d.attT_done,  pendT = d.pendingT;
+  let attL = d.counts['L'].att_done, pendL = d.counts['L'].pending;
+  let attT = d.counts['T'].att_done, pendT = d.counts['T'].pending;
+  let totL = d.counts['L'].tot;
+  let totT = d.counts['T'].tot;
 
   // Step 1: Remove the contribution of the CURRENT state for this class
   if (classType === 'L') {
     if (currentState === 'Attended') attL--;
     else if (currentState === 'Pending') pendL--;
-    // Missed contributes nothing to forecast — no change needed
-  } else {
+  } else if (classType === 'T') {
     if (currentState === 'Attended') attT--;
     else if (currentState === 'Pending') pendT--;
   }
@@ -337,18 +360,18 @@ export function calcForecastImpact(rawData, subjectCode, classType, currentState
   if (classType === 'L') {
     if (newAction === 'Attended') attL++;
     else if (newAction === 'Pending') pendL++;
-  } else {
+  } else if (classType === 'T') {
     if (newAction === 'Attended') attT++;
     else if (newAction === 'Pending') pendT++;
   }
 
   // Compute before and after forecast averages
-  const curFL  = calcForecastPct(d.attL_done, d.pendingL, d.totL);
-  const curFT  = d.totT > 0 ? calcForecastPct(d.attT_done, d.pendingT, d.totT) : null;
+  const curFL  = calcForecastPct(d.counts['L'].att_done, d.counts['L'].pending, totL);
+  const curFT  = totT > 0 ? calcForecastPct(d.counts['T'].att_done, d.counts['T'].pending, totT) : null;
   const curAvg = calcAvgPct(curFL, curFT);
 
-  const newFL  = calcForecastPct(attL, pendL, d.totL);
-  const newFT  = d.totT > 0 ? calcForecastPct(attT, pendT, d.totT) : null;
+  const newFL  = calcForecastPct(attL, pendL, totL);
+  const newFT  = totT > 0 ? calcForecastPct(attT, pendT, totT) : null;
   const newAvg = calcAvgPct(newFL, newFT);
 
   return {
@@ -358,3 +381,286 @@ export function calcForecastImpact(rawData, subjectCode, classType, currentState
   };
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ERP OVERALL ATTENDANCE ENGINE — computeCurrentOverallAttendance()
+   Mirrors the SRMCEM / AKTU ERP formula:
+     Overall = Σ attended_done / Σ completed × 100
+
+   Rules:
+   • Completed = att_done + miss_done (pending excluded)
+   • Subjects with conducted = 0 are fully ignored
+   • No percentage averaging — only raw class counts
+   • Uses CLASS_TYPES registry — no hardcoded L/T/P
+   • rawData = output of getAttendanceData() (keyed by subject code)
+   • subjects = getTimetable().subjects array
+═══════════════════════════════════════════════════════════════════════ */
+export function computeCurrentOverallAttendance(rawData, subjects) {
+  const attendanceTypes = Object.entries(CLASS_TYPES)
+    .filter(([, meta]) => meta.supportsAttendance)
+    .map(([key]) => key);
+
+  let totalAttended  = 0;
+  let totalConducted = 0;
+
+  for (const { code } of subjects) {
+    const d = rawData[code];
+    if (!d) continue;
+
+    let subjectAttended  = 0;
+    let subjectConducted = 0;
+
+    for (const type of attendanceTypes) {
+      const bucket = d.counts[type];
+      if (!bucket) continue;
+
+      // Completed = classes with a definitive outcome only (pending excluded)
+      const completed = bucket.att_done + bucket.miss_done;
+      subjectAttended  += bucket.att_done;
+      subjectConducted += completed;
+    }
+
+    // Subjects with zero conducted classes contribute nothing
+    if (subjectConducted === 0) continue;
+
+    totalAttended  += subjectAttended;
+    totalConducted += subjectConducted;
+  }
+
+  if (totalConducted === 0) {
+    return {
+      attended: 0,
+      conducted: 0,
+      percentage: null,
+      formattedPercentage: null
+    };
+  }
+
+  const percentage = (totalAttended / totalConducted) * 100;
+  return {
+    attended: totalAttended,
+    conducted: totalConducted,
+    percentage,
+    formattedPercentage: percentage.toFixed(2)
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ERP FORECAST OVERALL ATTENDANCE ENGINE — computeForecastOverallAttendance()
+   Predicts overall attendance if every remaining scheduled class is attended.
+
+   Formula:
+     forecastAttended  = Σ (att_done + pending)
+     forecastConducted = Σ (att_done + miss_done + pending)   [= tot]
+     percentage        = forecastAttended / forecastConducted × 100
+
+   Rules:
+   • Pending classes are assumed fully attended (best-case from here)
+   • Missed classes stay missed — historical data is never modified
+   • Subjects with tot = 0 across all types contribute nothing
+   • Uses CLASS_TYPES registry — no hardcoded L/T/P
+   • rawData  = output of getAttendanceData() (keyed by subject code)
+   • subjects = getTimetable().subjects array
+═══════════════════════════════════════════════════════════════════════ */
+export function computeForecastOverallAttendance(rawData, subjects) {
+  const attendanceTypes = Object.entries(CLASS_TYPES)
+    .filter(([, meta]) => meta.supportsAttendance)
+    .map(([key]) => key);
+
+  let totalForecastAttended  = 0;
+  let totalForecastConducted = 0;
+  let totalRemaining         = 0;
+
+  for (const { code } of subjects) {
+    const d = rawData[code];
+    if (!d) continue;
+
+    let subjectForecastAttended  = 0;
+    let subjectForecastConducted = 0;
+    let subjectRemaining         = 0;
+
+    for (const type of attendanceTypes) {
+      const bucket = d.counts[type];
+      if (!bucket) continue;
+
+      // Forecast: pending classes are treated as attended
+      subjectForecastAttended  += bucket.att_done + bucket.pending;
+      // Forecast conducted = all scheduled classes for this type
+      subjectForecastConducted += bucket.att_done + bucket.miss_done + bucket.pending;
+      subjectRemaining         += bucket.pending;
+    }
+
+    // Subjects with no scheduled classes at all contribute nothing
+    if (subjectForecastConducted === 0) continue;
+
+    totalForecastAttended  += subjectForecastAttended;
+    totalForecastConducted += subjectForecastConducted;
+    totalRemaining         += subjectRemaining;
+  }
+
+  if (totalForecastConducted === 0) {
+    return {
+      attended: 0,
+      conducted: 0,
+      remainingClasses: 0,
+      percentage: null,
+      formattedPercentage: null
+    };
+  }
+
+  const percentage = (totalForecastAttended / totalForecastConducted) * 100;
+  return {
+    attended: totalForecastAttended,
+    conducted: totalForecastConducted,
+    remainingClasses: totalRemaining,
+    percentage,
+    formattedPercentage: percentage.toFixed(2)
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OVERALL ATTENDANCE ENGINE
+   Single source of truth for dashboard-wide statistics.
+═══════════════════════════════════════════════════════════════════════ */
+export function computeOverallStats(subjectStats) {
+  let totalSubjects = 0;
+  let totalClasses = 0;
+  let totalCompleted = 0;
+  let totalPending = 0;
+  let totalAttended = 0;
+  let totalMissed = 0;
+  let totalMustAttend = 0;
+  let totalSafeSkips = 0;
+
+  for (const r of subjectStats) {
+    totalSubjects++;
+    totalClasses += r.totComb;
+    totalCompleted += r.completedL + r.completedT;
+    totalPending += r.pendingL + r.pendingT;
+    totalAttended += r.attL_done + r.attT_done;
+    totalMissed += r.missL_done + r.missT_done;
+    totalMustAttend += r.optResult.addL + r.optResult.addT;
+    totalSafeSkips += r.optResult.skipL_budget + r.optResult.skipT_budget;
+  }
+
+  return {
+    totalSubjects,
+    totalClasses,
+    totalCompleted,
+    totalPending,
+    totalAttended,
+    totalMissed,
+    totalMustAttend,
+    totalSafeSkips
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   QUIZ ELIGIBILITY ENGINE
+   Evaluates a single subject's quiz eligibility against configured rules.
+═══════════════════════════════════════════════════════════════════════ */
+
+export const QUIZ_RULES = {
+  firstQuiz: {
+    minimumAverage: 70,
+    includedTypes: ['L', 'T'],
+    calculationMethod: 'average',
+    useForecast: true,
+    ignorePracticals: true
+  }
+};
+
+/**
+ * Domain Result Object for Quiz Eligibility
+ */
+export class QuizEligibilityResult {
+  constructor({
+    applicable = false,
+    eligible = null,
+    lecturePercentage = null,
+    tutorialPercentage = null,
+    average = null,
+    required = null,
+    deficit = null
+  } = {}) {
+    this.applicable = applicable;
+    this.eligible = eligible;
+    this.lecturePercentage = lecturePercentage;
+    this.tutorialPercentage = tutorialPercentage;
+    this.average = average;
+    this.required = required;
+    this.deficit = deficit;
+  }
+}
+
+/**
+ * Calculates quiz eligibility for a subject based on its raw attendance stats.
+ * Independent of the forecast engine's pre-calculated percentages.
+ * Returns: QuizEligibilityResult
+ */
+export function computeQuizEligibility(subjectStats) {
+  const rules = QUIZ_RULES.firstQuiz;
+
+  // Retrieve subject metadata from the academic model (Single Source of Truth)
+  const timetable = getTimetable();
+  const subjectMeta = timetable.subjects.find(s => s.code === subjectStats.code);
+
+  if (!subjectMeta || !subjectMeta.quizApplicable) {
+    return new QuizEligibilityResult({ applicable: false });
+  }
+
+  const percentages = [];
+  let lecturePercentage = null;
+  let tutorialPercentage = null;
+
+  // Compute percentage dynamically for every configured type (e.g. L, T, P)
+  for (const type of rules.includedTypes) {
+    const tot = subjectStats[`tot${type}`] || 0;
+    const att_done = subjectStats[`att${type}_done`] || 0;
+    const pending = subjectStats[`pending${type}`] || 0;
+
+    if (tot > 0) {
+      const pct = ((att_done + pending) / tot) * 100;
+      percentages.push(pct);
+      
+      // Preserve explicit L/T properties on the output payload for existing API consumers
+      if (type === 'L') lecturePercentage = pct;
+      if (type === 'T') tutorialPercentage = pct;
+    }
+  }
+
+  let average = null;
+  if (percentages.length > 0) {
+    if (rules.calculationMethod === 'average') {
+      const sum = percentages.reduce((acc, val) => acc + val, 0);
+      average = sum / percentages.length;
+    }
+  }
+
+  // Handle cases where the semester hasn't started or no applicable classes exist
+  if (average === null) {
+    return new QuizEligibilityResult({
+      applicable: true,
+      eligible: null,
+      lecturePercentage,
+      tutorialPercentage,
+      average: null,
+      required: rules.minimumAverage,
+      deficit: null
+    });
+  }
+
+  // Use Number.EPSILON to account for floating point inaccuracies near exact boundaries
+  const eligible = (average + Number.EPSILON) >= rules.minimumAverage;
+  const deficit = eligible ? 0 : Math.max(0, rules.minimumAverage - average);
+
+  return new QuizEligibilityResult({
+    applicable: true,
+    eligible,
+    lecturePercentage,
+    tutorialPercentage,
+    average,
+    required: rules.minimumAverage,
+    deficit
+  });
+}

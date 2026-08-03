@@ -1,6 +1,6 @@
 import { loadStates, clearStates, AppState } from './storage.js';
-import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate } from './utils.js';
-import { computeSubjectStats, calcForecastImpact, getAttendanceData, getSubjectStatus, pctColor, barColor, dimColor } from './attendance-engine.js';
+import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType } from './utils.js';
+import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData, getSubjectStatus, pctColor, barColor, dimColor } from './attendance-engine.js';
 import {
   dateContext, MODE, isSimulationMode, getActiveDate, getActiveDateString,
   selectDate, selectDateByString, resetToToday,
@@ -269,54 +269,75 @@ export function makePctCell(pct, isAvg = false, label = '') {
    RENDER PANEL — refactored into sub-functions (each ≤ 50 lines)
 ═══════════════════════════════════════════════════════════════════════ */
 
-/** Build the hero card HTML from aggregated row data. */
+/** Build the Attendance Analytics section (replaces legacy hero card). */
 
-export function buildHeroCard(rows, label, quizDate) {
-  const totalClasses         = rows.reduce((s, r) => s + r.totComb, 0);
-  const totalSubj            = rows.length;
-  const totalMustAtt         = rows.reduce((s, r) => s + r.optResult.addL + r.optResult.addT, 0);
-  const totalSkips           = rows.reduce((s, r) => s + r.optResult.skipL_budget + r.optResult.skipT_budget, 0);
-  const forecastVals         = rows.map(r => r.forecastAvgPct).filter(v => v !== null);
-  const overallForecastAvg   = forecastVals.length > 0
-    ? forecastVals.reduce((a, b) => a + b, 0) / forecastVals.length
-    : null;
-  const overallStatus        = getSubjectStatus(overallForecastAvg);
-  const dateStr              = quizDate.toLocaleDateString('en-US', {day:'numeric', month:'short', year:'numeric'});
-  const valColor             = overallForecastAvg !== null ? pctColor(overallForecastAvg) : 'var(--text3)';
-  const valDisplay           = overallForecastAvg !== null ? overallForecastAvg.toFixed(1) + '%' : '—';
+export function buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate) {
+  const { totalMustAttend, totalSafeSkips, totalClasses, totalSubjects } = overallStats;
+  const dateStr = quizDate.toLocaleDateString('en-US', {day:'numeric', month:'short', year:'numeric'});
+
+  // ── Section 1: Current Overall ───────────────────────────────────────────
+  const curPct      = erpStats.percentage;
+  const curColor    = curPct !== null ? pctColor(curPct) : 'var(--text3)';
+  const curDisplay  = curPct !== null ? erpStats.formattedPercentage + '%' : '\u2014';
+  const curFraction = curPct !== null
+    ? `${erpStats.attended} / ${erpStats.conducted} Classes`
+    : 'No classes conducted yet';
+
+  // ── Section 2: Forecast Overall ──────────────────────────────────────────
+  const fcPct      = forecastStats.percentage;
+  const fcColor    = fcPct !== null ? pctColor(fcPct) : 'var(--text3)';
+  const fcDisplay  = fcPct !== null ? forecastStats.formattedPercentage + '%' : '\u2014';
+  const remaining  = forecastStats.remainingClasses ?? 0;
+  const fcFraction = fcPct !== null
+    ? `${forecastStats.attended} / ${forecastStats.conducted} Classes`
+    : 'No classes scheduled';
+  const remainingLine = remaining > 0
+    ? `<div style="font-size:11px;color:var(--accent);margin-top:3px;font-variant-numeric:tabular-nums;">+${remaining} Remaining Classes</div>`
+    : (fcPct !== null
+      ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">Semester completed</div>`
+      : '');
 
   return `
     <div class="hero-card">
       <div class="hero-left">
-        <div class="hero-label">Dashboard Summary</div>
-        <div class="hero-title">${label} · ${dateStr}</div>
+        <div class="hero-label">Attendance Analytics</div>
+        <div class="hero-title">${label} \u00b7 ${dateStr}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:24px;">
-        <div style="text-align:right;">
-          <div class="hero-val" style="color:${valColor}">${valDisplay}</div>
-          <div class="hero-label" style="margin-top:2px;">Avg Forecast</div>
+      <div style="display:flex;align-items:stretch;gap:0;">
+        <div style="text-align:right;padding-right:24px;border-right:1px solid var(--border);">
+          <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Current</div>
+          <div class="hero-val" style="color:${curColor}">${curDisplay}</div>
+          <div class="hero-label" style="margin-top:2px;">Overall Attendance</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;font-variant-numeric:tabular-nums;">${curFraction}</div>
         </div>
-        <span class="status-badge ${overallStatus.cls}" style="font-size:13px;padding:5px 14px;">${overallStatus.text}</span>
+        <div style="text-align:right;padding-left:24px;">
+          <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Forecast</div>
+          <div class="hero-val" style="color:${fcColor}">${fcDisplay}</div>
+          <div class="hero-label" style="margin-top:2px;">If All Remaining Attended</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;font-variant-numeric:tabular-nums;">${fcFraction}</div>
+          ${remainingLine}
+        </div>
       </div>
       <div class="hero-right">
         <div class="hero-item">
           <div class="hero-item-label">Must Attend</div>
-          <div class="hero-item-val" style="color:var(--accent)">${totalMustAtt}</div>
+          <div class="hero-item-val" style="color:var(--accent)">${totalMustAttend}</div>
           <div class="hero-item-sub">remaining classes</div>
         </div>
         <div class="hero-item">
           <div class="hero-item-label">Safe Skips Left</div>
-          <div class="hero-item-val" style="color:var(--green)">${totalSkips}</div>
+          <div class="hero-item-val" style="color:var(--green)">${totalSafeSkips}</div>
           <div class="hero-item-sub">maximum skips</div>
         </div>
         <div class="hero-item">
           <div class="hero-item-label">Total Classes</div>
           <div class="hero-item-val">${totalClasses}</div>
-          <div class="hero-item-sub">across ${totalSubj} subjects</div>
+          <div class="hero-item-sub">across ${totalSubjects} subjects</div>
         </div>
       </div>
     </div>`;
 }
+
 
 /** Build one accordion-style subject card for mobile. */
 export function buildMobileSubjectCard(r) {
@@ -505,27 +526,24 @@ export function buildSubjectCard(r) {
 }
 
 /** Build the summary stats row (4 cards at top of panel). */
-export function buildStatsRow(rows) {
-  const totalClasses = rows.reduce((s, r) => s + r.totComb, 0);
-  const totalSubj    = rows.length;
-  const totalMustAtt = rows.reduce((s, r) => s + r.optResult.addL + r.optResult.addT, 0);
-  const totalSkips   = rows.reduce((s, r) => s + r.optResult.skipL_budget + r.optResult.skipT_budget, 0);
+export function buildStatsRow(overallStats) {
+  const { totalClasses, totalSubjects, totalMustAttend, totalSafeSkips } = overallStats;
 
   return `
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-label">Total Classes</div>
         <div class="stat-val">${totalClasses}</div>
-        <div class="stat-sub">across ${totalSubj} subjects</div>
+        <div class="stat-sub">across ${totalSubjects} subjects</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Must Attend Rem.</div>
-        <div class="stat-val" style="color:var(--accent)">${totalMustAtt}</div>
+        <div class="stat-val" style="color:var(--accent)">${totalMustAttend}</div>
         <div class="stat-sub">additional classes needed</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Safe Skips Rem.</div>
-        <div class="stat-val" style="color:var(--green)">${totalSkips}</div>
+        <div class="stat-val" style="color:var(--green)">${totalSafeSkips}</div>
         <div class="stat-sub">maximum remaining skips</div>
       </div>
       <div class="stat-card">
@@ -579,13 +597,7 @@ export function buildTableRow(r) {
 }
 
 /** Main render orchestrator — assembles all sub-sections. */
-export function renderPanel(quizIdx, liveData = getAttendanceData(getTimetable().quiz_dates[quizIdx].date), isMobile = false) {
-  const {label, date: quizDate} = getTimetable().quiz_dates[quizIdx];
-
-  // Compute all stats in ONE pass (single source of truth)
-  const rows = getTimetable().subjects.map(({code, name, tag}) =>
-    computeSubjectStats(code, name, tag, liveData[code])
-  );
+export function renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, isMobile = false) {
 
   if (isMobile) {
     const mobileCardsHTML = rows.map(r => buildMobileSubjectCard(r)).join('');
@@ -610,9 +622,9 @@ export function renderPanel(quizIdx, liveData = getAttendanceData(getTimetable()
       </div>`;
   }
 
-  const heroHTML  = buildHeroCard(rows, label, quizDate);
+  const heroHTML  = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
   const cardsHTML = rows.map(buildSubjectCard).join('');
-  const statsHTML = buildStatsRow(rows);
+  const statsHTML = buildStatsRow(overallStats);
   const rowsHTML  = rows.map(buildTableRow).join('');
 
   return `
@@ -729,7 +741,7 @@ export function renderTodayClasses(targetDate, quizLiveData) {
     const classId    = `${dateStr}:${c.s}:${c.t}`;
     const currState  = states[classId] || 'Pending';
     const timeSlot   = getTimetable().time_slots[idx] || 'TBD';
-    const typeLabel  = c.t === 'L' ? 'Lecture' : 'Tutorial';
+    const typeLabel  = CLASS_TYPES[normalizeClassType(c.t)]?.label ?? c.t;
 
     const attActive  = currState === 'Attended' ? 'active-attended' : '';
     const missActive = currState === 'Missed'   ? 'active-missed'   : '';
@@ -830,7 +842,7 @@ export function renderHistoryLog() {
     const isAttended  = item.state === 'Attended';
     const badgeClass  = isAttended ? 'badge-skip' : 'badge-zero';
     const symbol      = isAttended ? '✓' : '✕';
-    const typeLabel   = item.type === 'L' ? 'Lecture' : 'Tutorial';
+    const typeLabel   = CLASS_TYPES[normalizeClassType(item.type)]?.label ?? item.type;
 
     return `
       <div class="history-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12.5px;">
@@ -871,17 +883,23 @@ export function recalculateAndRender() {
     }
   }
 
-  // Render panels (mobile version skips hero/stats/table)
-  document.getElementById('panels').innerHTML = renderPanel(currentQuiz, liveData, isMobile);
+  // PRE-COMPUTE subject rows, overall stats, and ERP overall ONCE here
+  const {label, date: quizDate} = getTimetable().quiz_dates[currentQuiz];
+  const rows = getTimetable().subjects.map(({code, name, tag}) =>
+    computeSubjectStats(code, name, tag, liveData[code])
+  );
+  const overallStats = computeOverallStats(rows);
+
+  // ERP Overall Attendance — single source of truth, computed once
+  const erpStats      = computeCurrentOverallAttendance(liveData, getTimetable().subjects);
+  const forecastStats = computeForecastOverallAttendance(liveData, getTimetable().subjects);
+
+  // Render panels
+  document.getElementById('panels').innerHTML = renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, isMobile);
 
   if (isMobile) {
-    // Pre-compute rows for hero + stats
-    const {label, date: quizDate} = getTimetable().quiz_dates[currentQuiz];
-    const rows = getTimetable().subjects.map(({code, name, tag}) =>
-      computeSubjectStats(code, name, tag, liveData[code])
-    );
-    const heroHTML  = buildHeroCard(rows, label, quizDate);
-    const statsHTML = buildStatsRow(rows);
+    const heroHTML  = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
+    const statsHTML = buildStatsRow(overallStats);
 
     // Insert hero + stats into mobile container (positioned before Today's Classes in HTML)
     const heroContainer = document.getElementById('mobileHeroContainer');

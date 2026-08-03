@@ -2,6 +2,59 @@ export const APP_VERSION = '2.0.1';
 
 let timetable = null;
 
+export const CLASS_TYPES = {
+  'L': {
+    id: 'L',
+    label: 'Lecture',
+    shortLabel: 'Lec',
+    displayOrder: 1,
+    countsTowardsQuiz: true,
+    countsTowardsOverall: true,
+    supportsAttendance: true,
+    supportsForecast: true,
+    supportsOptimization: true
+  },
+  'T': {
+    id: 'T',
+    label: 'Tutorial',
+    shortLabel: 'Tut',
+    displayOrder: 2,
+    countsTowardsQuiz: true,
+    countsTowardsOverall: true,
+    supportsAttendance: true,
+    supportsForecast: true,
+    supportsOptimization: true
+  },
+  'P': {
+    id: 'P',
+    label: 'Practical',
+    shortLabel: 'Prac',
+    displayOrder: 3,
+    countsTowardsQuiz: false,
+    countsTowardsOverall: true,
+    supportsAttendance: true,
+    supportsForecast: true,
+    supportsOptimization: true
+  }
+};
+
+/**
+ * normalizeClassType(type) — the ONLY place that knows P1/P2 are aliases of P.
+ * Maps slot identifiers to their canonical academic class type.
+ * All other values are returned unchanged.
+ */
+export function normalizeClassType(type) {
+  if (type === 'P1' || type === 'P2') return 'P';
+  return type;
+}
+
+/**
+ * isValidClassType — normalizes before registry lookup.
+ * Accepts P1/P2 as valid (they normalize to P).
+ */
+export function isValidClassType(type) {
+  return CLASS_TYPES.hasOwnProperty(normalizeClassType(type));
+}
 export async function initTimetable() {
   const res = await fetch('timetable.json');
   timetable = await res.json();
@@ -42,12 +95,14 @@ export function parseDateString(str) {
 }
 
 export function isScheduledClass(dateStr, subjectCode, type) {
+  if (!isValidClassType(type)) return false;
   const d = parseDateString(dateStr);
   if (!d || d < timetable.start_date) return false;
   const dow = d.getDay();
   const monIdx = (dow + 6) % 7;
   const sched = timetable.day_schedule[monIdx];
   if (!sched) return false;
+  // Match the raw type string (P1/P2 must match exactly against timetable slots)
   return sched.some(c => c.s === subjectCode && c.t === type);
 }
 
