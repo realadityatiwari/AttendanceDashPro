@@ -815,11 +815,9 @@ export function buildTableRow(r) {
 export function renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, quizModel, labModel, isMobile = false) {
 
   if (isMobile) {
-    const mobileCardsHTML = rows.map(r => buildMobileSubjectCard(r)).join('');
     const mobileAttHTML = rows.map(r => buildMobileAttendanceCard(r)).join('');
 
     return `
-      <div class="subject-grid mobile-subj-grid">${mobileCardsHTML}</div>
       <div class="mobile-section-title">Attendance Overview</div>
       <div class="mobile-att-cards">${mobileAttHTML}</div>
       <div class="opt-note">
@@ -843,13 +841,12 @@ export function renderPanel(rows, overallStats, erpStats, forecastStats, label, 
   const statsHTML     = buildStatsRow(overallStats);
   const rowsHTML      = rows.map(buildTableRow).join('');
   const quizSectionHTML = quizModel ? buildQuizDashboardSection(quizModel) : '';
-  const labSectionHTML = labModel ? buildLaboratoryDashboardSection(labModel) : '';
 
 
   return `
     ${heroHTML}
-    ${quizSectionHTML
-    ${labSectionHTML}}
+    ${quizSectionHTML}
+    ${labSectionHTML}
     <div class="subject-grid">${cardsHTML}</div>
     ${statsHTML}
     <div class="table-card">
@@ -1137,6 +1134,13 @@ export function recalculateAndRender() {
   const labModel = computeLaboratoryDashboard(AppState.laboratory || {}, getEffectiveStates(), rows, getTimetable());
 
   // Render panels
+  if (isMobile) {
+    const mobileCardsHTML = rows.map(r => buildMobileSubjectCard(r)).join('');
+    const subjectsViewContent = document.getElementById('subjectsViewContent');
+    if (subjectsViewContent) {
+      subjectsViewContent.innerHTML = `<div class="subject-grid mobile-subj-grid">${mobileCardsHTML}</div>`;
+    }
+  }
   document.getElementById('panels').innerHTML = renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, quizModel, labModel, isMobile);
 
   if (isMobile) {
