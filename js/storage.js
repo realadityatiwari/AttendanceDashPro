@@ -3,6 +3,7 @@ import { auth, db } from './firebase.js';
 export const AppState = {
   profile: {},
   attendance: {},
+  laboratory: {},
   history: [],
   settings: {
     theme: 'dark',
@@ -23,7 +24,10 @@ export function initLocalState(uid) {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        if (parsed.attendance && typeof parsed.attendance === 'object' && !Array.isArray(parsed.attendance)) {
+                if (parsed.laboratory && typeof parsed.laboratory === 'object' && !Array.isArray(parsed.laboratory)) {
+          AppState.laboratory = parsed.laboratory;
+        }
+if (parsed.attendance && typeof parsed.attendance === 'object' && !Array.isArray(parsed.attendance)) {
           AppState.attendance = parsed.attendance;
         }
         if (parsed.settings && typeof parsed.settings === 'object' && !Array.isArray(parsed.settings)) {
@@ -53,6 +57,32 @@ export function loadStates() {
   return AppState.attendance;
 }
 
+export function loadLaboratoryStates() {
+  return AppState.laboratory;
+}
+
+export function saveLaboratoryStates(labState) {
+  const serialized = {};
+  for (const [subjectCode, experiments] of Object.entries(labState)) {
+    serialized[subjectCode] = experiments.map(exp => ({
+      experimentNumber: exp.experimentNumber,
+      title: exp.title,
+      dateConducted: exp.dateConducted,
+      signatureStatus: exp.signatureStatus,
+      signedOn: exp.signedOn,
+      marks: exp.marks,
+      remarks: exp.remarks
+    }));
+  }
+  AppState.laboratory = serialized;
+  AppState.isDirty = true;
+  
+  if (auth.currentUser) {
+    persistLocalState(auth.currentUser.uid);
+    triggerCloudSync();
+  }
+}
+
 export function saveStates(states) {
   AppState.attendance = states;
   AppState.isDirty = true;
@@ -64,6 +94,7 @@ export function saveStates(states) {
 }
 
 export function clearStates() {
+  AppState.laboratory = {};
   AppState.attendance = {};
   AppState.isDirty = true;
   
@@ -96,6 +127,12 @@ export async function fetchCloudStates() {
       // Safe merge: Attendance
       if (isPlainObject(data.attendance)) {
         AppState.attendance = { ...AppState.attendance, ...data.attendance };
+        stateChanged = true;
+      }
+      
+            // Safe merge: Laboratory
+      if (isPlainObject(data.laboratory)) {
+        AppState.laboratory = { ...AppState.laboratory, ...data.laboratory };
         stateChanged = true;
       }
       
@@ -174,6 +211,10 @@ export function triggerCloudSync(isResetting = false) {
       // Defensive guard: Never upload an empty attendance object unless explicitly resetting.
       // This allows the profile and settings to sync normally for new users without 
       // accidentally wiping cloud attendance data if local state failed to hydrate.
+            if (isResetting || Object.keys(AppState.laboratory).length > 0) {
+        payload.laboratory = AppState.laboratory;
+      }
+
       if (isResetting || hasAttendanceData(AppState.attendance)) {
         payload.attendance = AppState.attendance;
       }

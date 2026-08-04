@@ -1,4 +1,4 @@
-import { getTimetable, parseDateString, isScheduledClass, getLocalDateString, CLASS_TYPES, normalizeClassType } from './utils.js';
+import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
 
 const TARGET_ATTENDANCE = 0.75;
 
@@ -229,8 +229,9 @@ export function getAttendanceData(quizDate, states = {}) {
     const monIdx  = (cur.getDay() + 6) % 7;
     const dateStr = getLocalDateString(cur);
 
-    if (getTimetable().day_schedule[monIdx]) {
-      getTimetable().day_schedule[monIdx].forEach(({s, t}) => {
+    const mergedSchedule = getMergedDaySchedule(monIdx);
+    if (mergedSchedule) {
+      mergedSchedule.forEach(({s, t}) => {
         // Normalize slot identifier to canonical class type (P1/P2 → P)
         const statType = normalizeClassType(t);
         if (!data[s] || !data[s].counts[statType]) return;
@@ -555,112 +556,3 @@ export function computeOverallStats(subjectStats) {
   };
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   QUIZ ELIGIBILITY ENGINE
-   Evaluates a single subject's quiz eligibility against configured rules.
-═══════════════════════════════════════════════════════════════════════ */
-
-export const QUIZ_RULES = {
-  firstQuiz: {
-    minimumAverage: 70,
-    includedTypes: ['L', 'T'],
-    calculationMethod: 'average',
-    useForecast: true,
-    ignorePracticals: true
-  }
-};
-
-/**
- * Domain Result Object for Quiz Eligibility
- */
-export class QuizEligibilityResult {
-  constructor({
-    applicable = false,
-    eligible = null,
-    lecturePercentage = null,
-    tutorialPercentage = null,
-    average = null,
-    required = null,
-    deficit = null
-  } = {}) {
-    this.applicable = applicable;
-    this.eligible = eligible;
-    this.lecturePercentage = lecturePercentage;
-    this.tutorialPercentage = tutorialPercentage;
-    this.average = average;
-    this.required = required;
-    this.deficit = deficit;
-  }
-}
-
-/**
- * Calculates quiz eligibility for a subject based on its raw attendance stats.
- * Independent of the forecast engine's pre-calculated percentages.
- * Returns: QuizEligibilityResult
- */
-export function computeQuizEligibility(subjectStats) {
-  const rules = QUIZ_RULES.firstQuiz;
-
-  // Retrieve subject metadata from the academic model (Single Source of Truth)
-  const timetable = getTimetable();
-  const subjectMeta = timetable.subjects.find(s => s.code === subjectStats.code);
-
-  if (!subjectMeta || !subjectMeta.quizApplicable) {
-    return new QuizEligibilityResult({ applicable: false });
-  }
-
-  const percentages = [];
-  let lecturePercentage = null;
-  let tutorialPercentage = null;
-
-  // Compute percentage dynamically for every configured type (e.g. L, T, P)
-  for (const type of rules.includedTypes) {
-    const tot = subjectStats[`tot${type}`] || 0;
-    const att_done = subjectStats[`att${type}_done`] || 0;
-    const pending = subjectStats[`pending${type}`] || 0;
-
-    if (tot > 0) {
-      const pct = ((att_done + pending) / tot) * 100;
-      percentages.push(pct);
-      
-      // Preserve explicit L/T properties on the output payload for existing API consumers
-      if (type === 'L') lecturePercentage = pct;
-      if (type === 'T') tutorialPercentage = pct;
-    }
-  }
-
-  let average = null;
-  if (percentages.length > 0) {
-    if (rules.calculationMethod === 'average') {
-      const sum = percentages.reduce((acc, val) => acc + val, 0);
-      average = sum / percentages.length;
-    }
-  }
-
-  // Handle cases where the semester hasn't started or no applicable classes exist
-  if (average === null) {
-    return new QuizEligibilityResult({
-      applicable: true,
-      eligible: null,
-      lecturePercentage,
-      tutorialPercentage,
-      average: null,
-      required: rules.minimumAverage,
-      deficit: null
-    });
-  }
-
-  // Use Number.EPSILON to account for floating point inaccuracies near exact boundaries
-  const eligible = (average + Number.EPSILON) >= rules.minimumAverage;
-  const deficit = eligible ? 0 : Math.max(0, rules.minimumAverage - average);
-
-  return new QuizEligibilityResult({
-    applicable: true,
-    eligible,
-    lecturePercentage,
-    tutorialPercentage,
-    average,
-    required: rules.minimumAverage,
-    deficit
-  });
-}

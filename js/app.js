@@ -464,6 +464,13 @@ function initDOMBindings() {
     if (action === 'switchQuiz') {
       const quizId = parseInt(target.getAttribute('data-quiz'), 10);
       UI.switchQuiz(quizId, target);
+    } else if (action === 'logLab') {
+      const sCode = target.getAttribute('data-s');
+      const expNo = target.getAttribute('data-exp');
+      const date = prompt('Enter date conducted for Experiment ' + expNo + ' (YYYY-MM-DD):', UI.getTodayString());
+      if (date) {
+        UI.logExperiment(sCode, expNo, date);
+      }
     } else if (action === 'logAttendance') {
       const dateStr = target.getAttribute('data-date');
       const sCode = target.getAttribute('data-s');

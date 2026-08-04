@@ -1,6 +1,8 @@
-import { loadStates, clearStates, AppState } from './storage.js';
-import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType } from './utils.js';
+import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
+import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData, getSubjectStatus, pctColor, barColor, dimColor } from './attendance-engine.js';
+import { computeLaboratoryDashboard } from './laboratory-engine.js';
+import { computeQuizDashboard } from './quiz-engine.js';
 import {
   dateContext, MODE, isSimulationMode, getActiveDate, getActiveDateString,
   selectDate, selectDateByString, resetToToday,
@@ -554,7 +556,220 @@ export function buildStatsRow(overallStats) {
     </div>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   QUIZ DASHBOARD UI
+   Pure rendering layer — consumes QuizDashboardModel. No calculations.
+═══════════════════════════════════════════════════════════════════════ */
+
+
+/** Renders a single percentage stat row for the quiz card. */
+function buildQuizPctRow(label, pct) {
+  if (pct === null) {
+    return `<div class="quiz-pct-row"><span class="quiz-pct-label">${label}</span><span class="quiz-pct-na">—</span></div>`;
+  }
+  const col = pctColor(pct);
+  const w   = Math.min(100, Math.max(0, pct)).toFixed(1);
+  return `
+    <div class="quiz-pct-row">
+      <span class="quiz-pct-label">${label}</span>
+      <div class="quiz-pct-right">
+        <span class="quiz-pct-val" style="color:${col}">${pct.toFixed(1)}%</span>
+        <div class="quiz-pct-track"><div class="quiz-pct-bar" style="width:${w}%;background:${col}"></div></div>
+      </div>
+    </div>`;
+}
+
+/** Builds one quiz subject card from a QuizDashboardModel subject entry. */
+export function buildQuizSubjectCard(item) {
+  const { subject, eligibility } = item;
+  const cls = `quiz-${eligibility.status}`;
+  const label = eligibility.statusLabel;
+
+  if (!eligibility.applicable) {
+    return `
+      <div class="quiz-subj-card quiz-subj-card--na">
+        <div class="quiz-subj-header">
+          <span class="subj-card-code">${subject.code}</span>
+          <span class="status-badge ${cls}">${label}</span>
+        </div>
+        <div class="quiz-subj-name">${subject.name}</div>
+        <div class="quiz-na-message">This laboratory subject does not participate in quiz eligibility.</div>
+      </div>`;
+  }
+
+  const { lecturePercentage, tutorialPercentage, average, required, displayDeficit } = eligibility;
+
+  const deficitLine = displayDeficit
+    ? `<div class="quiz-deficit">${displayDeficit}</div>`
+    : '';
+
+  const requiredLine = `
+    <div class="quiz-pct-row quiz-required-row">
+      <span class="quiz-pct-label">Required</span>
+      <span class="quiz-required-val">${required}%</span>
+    </div>`;
+
+  return `
+    <div class="quiz-subj-card">
+      <div class="quiz-subj-header">
+        <span class="subj-card-code">${subject.code}</span>
+        <span class="status-badge ${cls}">${label}</span>
+      </div>
+      <div class="quiz-subj-name">${subject.name}</div>
+      <div class="quiz-subj-stats">
+        ${buildQuizPctRow('Lecture', lecturePercentage)}
+        ${buildQuizPctRow('Tutorial', tutorialPercentage)}
+        ${buildQuizPctRow('Average', average)}
+        ${requiredLine}
+      </div>
+      ${deficitLine}
+    </div>`;
+}
+
+/** Builds the summary header card for the quiz dashboard. */
+export function buildQuizSummaryCard(summary) {
+  return `
+    <div class="quiz-summary-card">
+      <div class="quiz-summary-header">
+        <h2 class="quiz-summary-title">Quiz Eligibility</h2>
+        <span class="quiz-summary-sub">First Quiz · Min ${summary.requiredAverage}% Average</span>
+      </div>
+      <div class="quiz-summary-stats">
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--green)">${summary.eligible}</div>
+          <div class="quiz-summary-label">Eligible</div>
+        </div>
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--amber)">${summary.needsAttendance}</div>
+          <div class="quiz-summary-label">Needs Attendance</div>
+        </div>
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--text3)">${summary.notApplicable}</div>
+          <div class="quiz-summary-label">Not Applicable</div>
+        </div>
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--accent)">${summary.requiredAverage}%</div>
+          <div class="quiz-summary-label">Required Average</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/**
+ * Builds the full quiz dashboard section — summary card + subject grid.
+ * Consumes a QuizDashboardModel directly. Zero business logic inside.
+ */
+export function buildQuizDashboardSection(quizModel) {
+  const summaryHTML  = buildQuizSummaryCard(quizModel.summary);
+  const subjectsHTML = quizModel.subjects.map(buildQuizSubjectCard).join('');
+  return `
+    <section class="quiz-dashboard-section" aria-label="Quiz Eligibility Dashboard">
+      ${summaryHTML}
+      <div class="quiz-subj-grid">${subjectsHTML}</div>
+    </section>`;
+}
+
 /** Build one table row HTML from computed stats. */
+/* ═══════════════════════════════════════════════════════════════════════
+   LABORATORY DASHBOARD UI
+   Pure rendering layer — consumes LaboratoryDashboardModel. No calculations.
+═══════════════════════════════════════════════════════════════════════ */
+
+export function buildLaboratorySubjectCard(item) {
+  const {
+    subject,
+    completedExperiments,
+    remainingExperiments,
+    currentExperiment,
+    attendancePercentage,
+    progressPercentage,
+    activeMilestones,
+    nextMilestone
+  } = item;
+  
+  const pColor = pctColor(progressPercentage);
+  const pw = Math.min(100, Math.max(0, progressPercentage)).toFixed(1);
+  
+  const aColor = pctColor(attendancePercentage);
+  const aw = Math.min(100, Math.max(0, attendancePercentage)).toFixed(1);
+
+  // Milestone line
+  let milestoneHTML = '';
+  if (nextMilestone) {
+    milestoneHTML = `
+      <div class="lab-milestone" style="margin-top:12px;padding:8px;background:var(--bg2);border-radius:6px;font-size:12px;color:var(--text2);">
+        <span style="color:var(--accent);">Next Milestone:</span> ${nextMilestone.label} (Need ${nextMilestone.remainingRequired} more)
+      </div>`;
+  } else if (activeMilestones.length > 0) {
+    const lastMs = activeMilestones[activeMilestones.length - 1];
+    milestoneHTML = `
+      <div class="lab-milestone" style="margin-top:12px;padding:8px;background:var(--bg2);border-radius:6px;font-size:12px;color:var(--green);">
+        <span style="color:var(--green);">✓ Reached:</span> ${lastMs.label}
+      </div>`;
+  }
+
+  return `
+    <div class="quiz-subj-card">
+      <div class="quiz-subj-header">
+        <span class="subj-card-code">${subject.code}</span>
+        <span class="status-badge active-attended">Exp ${currentExperiment}</span>
+      </div>
+      <div class="quiz-subj-name">${subject.name}</div>
+      <div class="quiz-subj-stats" style="margin-top: 12px;">
+        <div class="quiz-pct-row">
+          <span class="quiz-pct-label">Progress</span>
+          <div class="quiz-pct-right">
+            <span class="quiz-pct-val" style="color:${pColor}">${completedExperiments} / ${completedExperiments + remainingExperiments}</span>
+            <div class="quiz-pct-track"><div class="quiz-pct-bar" style="width:${pw}%;background:${pColor}"></div></div>
+          </div>
+        </div>
+        <div class="quiz-pct-row">
+          <span class="quiz-pct-label">Attendance</span>
+          <div class="quiz-pct-right">
+            <span class="quiz-pct-val" style="color:${aColor}">${attendancePercentage.toFixed(1)}%</span>
+            <div class="quiz-pct-track"><div class="quiz-pct-bar" style="width:${aw}%;background:${aColor}"></div></div>
+          </div>
+        </div>
+      </div>
+      ${milestoneHTML}
+    </div>`;
+}
+
+export function buildLaboratorySummaryCard(summary) {
+  return `
+    <div class="quiz-summary-card">
+      <div class="quiz-summary-header">
+        <h2 class="quiz-summary-title">Laboratory Tracker</h2>
+        <span class="quiz-summary-sub">Track practical sessions & signatures</span>
+      </div>
+      <div class="quiz-summary-stats">
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--green)">${summary.totalCompletedExperiments}</div>
+          <div class="quiz-summary-label">Completed Exps</div>
+        </div>
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--accent)">${summary.milestonesReached}</div>
+          <div class="quiz-summary-label">Milestones Reached</div>
+        </div>
+        <div class="quiz-summary-stat">
+          <div class="quiz-summary-val" style="color:var(--text3)">${summary.totalLabSubjects}</div>
+          <div class="quiz-summary-label">Lab Subjects</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+export function buildLaboratoryDashboardSection(labModel) {
+  if (!labModel || labModel.subjects.length === 0) return '';
+  const summaryHTML  = buildLaboratorySummaryCard(labModel.summary);
+  const subjectsHTML = labModel.subjects.map(buildLaboratorySubjectCard).join('');
+  return `
+    <section class="quiz-dashboard-section" aria-label="Laboratory Dashboard">
+      ${summaryHTML}
+      <div class="quiz-subj-grid">${subjectsHTML}</div>
+    </section>`;
+}
+
 export function buildTableRow(r) {
   const opt      = r.optResult;
   const tutBadge = r.totT === 0
@@ -597,7 +812,7 @@ export function buildTableRow(r) {
 }
 
 /** Main render orchestrator — assembles all sub-sections. */
-export function renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, isMobile = false) {
+export function renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, quizModel, labModel, isMobile = false) {
 
   if (isMobile) {
     const mobileCardsHTML = rows.map(r => buildMobileSubjectCard(r)).join('');
@@ -622,13 +837,19 @@ export function renderPanel(rows, overallStats, erpStats, forecastStats, label, 
       </div>`;
   }
 
-  const heroHTML  = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
-  const cardsHTML = rows.map(buildSubjectCard).join('');
-  const statsHTML = buildStatsRow(overallStats);
-  const rowsHTML  = rows.map(buildTableRow).join('');
+  const labSectionHTML = labModel ? buildLaboratoryDashboardSection(labModel) : "";
+    const heroHTML      = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
+  const cardsHTML     = rows.map(buildSubjectCard).join('');
+  const statsHTML     = buildStatsRow(overallStats);
+  const rowsHTML      = rows.map(buildTableRow).join('');
+  const quizSectionHTML = quizModel ? buildQuizDashboardSection(quizModel) : '';
+  const labSectionHTML = labModel ? buildLaboratoryDashboardSection(labModel) : '';
+
 
   return `
     ${heroHTML}
+    ${quizSectionHTML
+    ${labSectionHTML}}
     <div class="subject-grid">${cardsHTML}</div>
     ${statsHTML}
     <div class="table-card">
@@ -688,6 +909,21 @@ export function renderPanel(rows, overallStats, erpStats, forecastStats, label, 
  * Log or update attendance for one class.
  * Blocks future-date logging unless simulation mode is active.
  */
+export function logExperiment(subjectCode, expNumber, dateConducted) {
+  if (!AppState.laboratory) AppState.laboratory = {};
+  if (!AppState.laboratory[subjectCode]) AppState.laboratory[subjectCode] = [];
+  
+  let exp = AppState.laboratory[subjectCode].find(e => e.experimentNumber === parseInt(expNumber, 10));
+  if (!exp) {
+    exp = { experimentNumber: parseInt(expNumber, 10), signatureStatus: 'pending' };
+    AppState.laboratory[subjectCode].push(exp);
+  }
+  
+  exp.dateConducted = dateConducted;
+  saveLaboratoryStates(AppState.laboratory);
+  recalculateAndRender();
+}
+
 export function logAttendance(dateStr, subjectCode, type, newState) {
   if (!isScheduledClass(dateStr, subjectCode, type) || !['Attended', 'Missed', 'Pending'].includes(newState)) {
     console.warn('[logAttendance] Blocked invalid class or state.');
@@ -724,12 +960,12 @@ export function renderTodayClasses(targetDate, quizLiveData) {
   const semEnd   = getTimetable().quiz_dates[getTimetable().quiz_dates.length - 1].date;
   const isWithinSemester = targetNoon >= semStart && targetNoon <= semEnd;
 
-  if (isWeekend || !isWithinSemester || !getTimetable().day_schedule[monIdx]) {
+  if (isWeekend || !isWithinSemester || !getMergedDaySchedule(monIdx)) {
     listContainer.innerHTML = `<div class="today-empty">No scheduled classes on this date.</div>`;
     return;
   }
 
-  const classes      = getTimetable().day_schedule[monIdx];
+  const classes      = getMergedDaySchedule(monIdx);
   const states       = getEffectiveStates();
   const isFuture     = dateStr > getTodayString();
   const isBlocked    = isFuture && !isSimulationMode();
@@ -740,7 +976,7 @@ export function renderTodayClasses(targetDate, quizLiveData) {
     const subjName   = subj ? subj.name : c.s;
     const classId    = `${dateStr}:${c.s}:${c.t}`;
     const currState  = states[classId] || 'Pending';
-    const timeSlot   = getTimetable().time_slots[idx] || 'TBD';
+    const timeSlot   = c.mergedTimeSlot || 'TBD';
     const typeLabel  = CLASS_TYPES[normalizeClassType(c.t)]?.label ?? c.t;
 
     const attActive  = currState === 'Attended' ? 'active-attended' : '';
@@ -894,17 +1130,24 @@ export function recalculateAndRender() {
   const erpStats      = computeCurrentOverallAttendance(liveData, getTimetable().subjects);
   const forecastStats = computeForecastOverallAttendance(liveData, getTimetable().subjects);
 
+  // Quiz Dashboard Model — computed once, passed into renderPanel
+  const quizModel = computeQuizDashboard(rows, getTimetable());
+
+  // Laboratory Dashboard Model
+  const labModel = computeLaboratoryDashboard(AppState.laboratory || {}, getEffectiveStates(), rows, getTimetable());
+
   // Render panels
-  document.getElementById('panels').innerHTML = renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, isMobile);
+  document.getElementById('panels').innerHTML = renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, quizModel, labModel, isMobile);
 
   if (isMobile) {
+    const quizSectionHTML = buildQuizDashboardSection(quizModel);
     const heroHTML  = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
     const statsHTML = buildStatsRow(overallStats);
 
     // Insert hero + stats into mobile container (positioned before Today's Classes in HTML)
     const heroContainer = document.getElementById('mobileHeroContainer');
     if (heroContainer) {
-      heroContainer.innerHTML = heroHTML + statsHTML;
+      heroContainer.innerHTML = heroHTML + statsHTML + quizSectionHTML + (labModel ? buildLaboratoryDashboardSection(labModel) : "");
     }
 
     // Setup accordion + formula toggle (only on first run per render)

@@ -2172,3 +2172,213 @@ table.att td.left { text-align: left; }
 .nav-picker-input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .viewing-date { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   QUIZ DASHBOARD
+   Namespaced 'quiz-' classes. Reuses existing design tokens and utilities.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Quiz status badge variants ──────────────────────────────────── */
+.quiz-eligible { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+.quiz-needs    { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+.quiz-na       { background: var(--surface3);  color: var(--text3); border: 1px solid var(--border2); }
+.quiz-pending  { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-glow); }
+
+/* ─── Section wrapper ──────────────────────────────────────────────── */
+.quiz-dashboard-section {
+  margin-bottom: 28px;
+}
+
+/* ─── Summary card ─────────────────────────────────────────────────── */
+.quiz-summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.quiz-summary-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quiz-summary-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+.quiz-summary-sub {
+  font-size: 11px;
+  color: var(--text3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.quiz-summary-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.quiz-summary-stat {
+  text-align: center;
+}
+.quiz-summary-val {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.quiz-summary-label {
+  font-size: 10.5px;
+  color: var(--text3);
+  margin-top: 4px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ─── Subject grid ─────────────────────────────────────────────────── */
+.quiz-subj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+/* ─── Subject card ─────────────────────────────────────────────────── */
+.quiz-subj-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+.quiz-subj-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  border-color: var(--accent-glow);
+}
+.quiz-subj-card--na {
+  opacity: 0.7;
+}
+.quiz-subj-card--na:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+.quiz-subj-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.quiz-subj-name {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.4;
+  margin-top: -4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.quiz-na-message {
+  font-size: 12px;
+  color: var(--text3);
+  font-style: italic;
+  line-height: 1.5;
+  padding: 6px 0;
+}
+
+/* ─── Stats rows inside quiz card ─────────────────────────────────── */
+.quiz-subj-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quiz-pct-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.quiz-pct-label {
+  font-size: 11px;
+  color: var(--text2);
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 60px;
+}
+.quiz-pct-na {
+  font-size: 12px;
+  color: var(--text3);
+  font-weight: 500;
+}
+.quiz-pct-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
+}
+.quiz-pct-val {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+.quiz-pct-track {
+  width: 60px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface3);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.quiz-pct-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Required threshold row ──────────────────────────────────────── */
+.quiz-required-row {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+.quiz-required-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text3);
+}
+
+/* ─── Deficit line ─────────────────────────────────────────────────── */
+.quiz-deficit {
+  font-size: 11.5px;
+  color: var(--amber);
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* ─── Responsive: collapse summary to column on narrow screens ───── */
+@media (max-width: 600px) {
+  .quiz-summary-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .quiz-summary-stats {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .quiz-subj-grid {
+    grid-template-columns: 1fr;
+  }
+}

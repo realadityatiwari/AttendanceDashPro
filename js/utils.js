@@ -75,6 +75,41 @@ export function getTimetable() {
   return timetable;
 }
 
+/**
+ * Returns the day schedule with contiguous P1/P2 slots merged into a single 'P' session.
+ * Also computes merged time slots (e.g. "01:00 PM - 03:00 PM").
+ */
+export function getMergedDaySchedule(monIdx) {
+  const sched = timetable.day_schedule[monIdx];
+  if (!sched) return null;
+  const merged = [];
+  let currentLab = null;
+
+  for (let i = 0; i < sched.length; i++) {
+    const c = sched[i];
+    const normType = normalizeClassType(c.t);
+    const ts = timetable.time_slots[i] || 'TBD';
+
+    if (normType === 'P') {
+      if (currentLab && currentLab.s === c.s) {
+        // Merge time slot
+        const tsStart = currentLab.mergedTimeSlot.split(' - ')[0];
+        const tsEnd = ts.split(' - ')[1] || ts.split(' - ')[0];
+        if (tsStart && tsEnd) {
+          currentLab.mergedTimeSlot = `${tsStart} - ${tsEnd}`;
+        }
+        continue;
+      }
+      currentLab = { ...c, t: 'P', originalIndex: i, mergedTimeSlot: ts };
+      merged.push(currentLab);
+    } else {
+      currentLab = null;
+      merged.push({ ...c, originalIndex: i, mergedTimeSlot: ts });
+    }
+  }
+  return merged;
+}
+
 export function getLocalDateString(date) {
   const yyyy = date.getFullYear();
   const mm   = String(date.getMonth() + 1).padStart(2, '0');
