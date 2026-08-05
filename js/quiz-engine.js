@@ -1,4 +1,5 @@
 import { getTimetable } from './utils.js';
+import { optimizeLive } from './attendance-engine.js';
 
 /* ═══════════════════════════════════════════════════════════════════════
    QUIZ ELIGIBILITY ENGINE
@@ -6,13 +7,9 @@ import { getTimetable } from './utils.js';
 ═══════════════════════════════════════════════════════════════════════ */
 
 export const QUIZ_RULES = {
-  firstQuiz: {
-    minimumAverage: 70,
-    includedTypes: ['L', 'T'],
-    calculationMethod: 'average',
-    useForecast: true,
-    ignorePracticals: true
-  }
+  quiz1: { targetPercentage: 70 },
+  quiz2: { targetPercentage: 75 },
+  quiz3: { targetPercentage: 75 }
 };
 
 /**
@@ -25,22 +22,14 @@ export class QuizEligibilityResult {
     lecturePercentage = null,
     tutorialPercentage = null,
     average = null,
-    required = null,
-    deficit = null,
-    status = 'not-applicable',
-    statusLabel = 'Not Applicable',
-    displayDeficit = null
+    optResult = null
   } = {}) {
     this.applicable = applicable;
     this.eligible = eligible;
     this.lecturePercentage = lecturePercentage;
     this.tutorialPercentage = tutorialPercentage;
     this.average = average;
-    this.required = required;
-    this.deficit = deficit;
-    this.status = status;
-    this.statusLabel = statusLabel;
-    this.displayDeficit = displayDeficit;
+    this.optResult = optResult;
   }
 }
 
@@ -50,7 +39,7 @@ export class QuizEligibilityResult {
  * Returns: QuizEligibilityResult
  */
 export function computeQuizEligibility(subjectStats) {
-  const rules = QUIZ_RULES.firstQuiz;
+  const rules = QUIZ_RULES.quiz1; // Using quiz1 rules per architecture
 
   // Retrieve subject metadata from the academic model (Single Source of Truth)
   const timetable = getTimetable();
@@ -60,69 +49,24 @@ export function computeQuizEligibility(subjectStats) {
     return new QuizEligibilityResult({ applicable: false });
   }
 
-  const percentages = [];
-  let lecturePercentage = null;
-  let tutorialPercentage = null;
+  // Unified Optimizer call replacing duplicate business logic
+  const optResult = optimizeLive(
+    subjectStats.totL, subjectStats.totT,
+    subjectStats.attL_done, subjectStats.missL_done,
+    subjectStats.attT_done, subjectStats.missT_done,
+    subjectStats.pendingL, subjectStats.pendingT,
+    rules.targetPercentage
+  );
 
-  // Compute percentage dynamically for every configured type (e.g. L, T, P)
-  for (const type of rules.includedTypes) {
-    const tot = subjectStats[`tot${type}`] || 0;
-    const att_done = subjectStats[`att${type}_done`] || 0;
-    const pending = subjectStats[`pending${type}`] || 0;
-
-    if (tot > 0) {
-      const pct = ((att_done + pending) / tot) * 100;
-      percentages.push(pct);
-      
-      // Preserve explicit L/T properties on the output payload for existing API consumers
-      if (type === 'L') lecturePercentage = pct;
-      if (type === 'T') tutorialPercentage = pct;
-    }
-  }
-
-  let average = null;
-  if (percentages.length > 0) {
-    if (rules.calculationMethod === 'average') {
-      const sum = percentages.reduce((acc, val) => acc + val, 0);
-      average = sum / percentages.length;
-    }
-  }
-
-  // Handle cases where the semester hasn't started or no applicable classes exist
-  if (average === null) {
-    return new QuizEligibilityResult({
-      applicable: true,
-      eligible: null,
-      lecturePercentage,
-      tutorialPercentage,
-      average: null,
-      required: rules.minimumAverage,
-      deficit: null,
-      status: 'pending',
-      statusLabel: 'Pending',
-      displayDeficit: null
-    });
-  }
-
-  // Use Number.EPSILON to account for floating point inaccuracies near exact boundaries
-  const eligible = (average + Number.EPSILON) >= rules.minimumAverage;
-  const deficit = eligible ? 0 : Math.max(0, rules.minimumAverage - average);
-
-  const status = eligible ? 'eligible' : 'needs-attendance';
-  const statusLabel = eligible ? 'Eligible' : 'Needs Attendance';
-  const displayDeficit = eligible ? null : `Need ${deficit.toFixed(1)}% more to reach ${rules.minimumAverage}% threshold`;
+  const eligible = optResult.reachable && optResult.lectureDeficit === 0 && optResult.tutorialDeficit === 0;
 
   return new QuizEligibilityResult({
     applicable: true,
     eligible,
-    lecturePercentage,
-    tutorialPercentage,
-    average,
-    required: rules.minimumAverage,
-    deficit,
-    status,
-    statusLabel,
-    displayDeficit
+    lecturePercentage: optResult.lecturePercentage,
+    tutorialPercentage: optResult.tutorialPercentage,
+    average: optResult.averagePercentage,
+    optResult
   });
 }
 
@@ -158,7 +102,7 @@ export class QuizDashboardModel {
  * @returns {QuizDashboardModel}
  */
 export function computeQuizDashboard(subjectStatsArray, timetable) {
-  const rules = QUIZ_RULES.firstQuiz;
+  const rules = QUIZ_RULES.quiz1;
   
   const summary = {
     totalSubjects: 0,
@@ -166,7 +110,7 @@ export function computeQuizDashboard(subjectStatsArray, timetable) {
     eligible: 0,
     needsAttendance: 0,
     notApplicable: 0,
-    requiredAverage: rules.minimumAverage
+    requiredAverage: rules.targetPercentage
   };
   
   const subjects = [];

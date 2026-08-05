@@ -1,6 +1,39 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
 import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
-import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData, getSubjectStatus, pctColor, barColor, dimColor } from './attendance-engine.js';
+import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
+
+/**
+ * Determine status badge from forecast average.
+ * Status is ALWAYS based on forecast, never current.
+ * N/A (no data) uses neutral class.
+ */
+export function getSubjectStatus(forecastAvgPct, targetPercentage = 75) {
+  if (forecastAvgPct === null) return {text: 'N/A',      cls: 'status-warning'};
+  if (forecastAvgPct >= targetPercentage + 5) return {text: 'SAFE',     cls: 'status-safe'};
+  if (forecastAvgPct >= targetPercentage)     return {text: 'WARNING',  cls: 'status-warning'};
+  return {text: 'CRITICAL', cls: 'status-critical'};
+}
+
+/** Color for a percentage value (green ≥ target, amber ≥ target-15, red otherwise). */
+export function pctColor(pct, targetPercentage = 75) {
+  if (pct === null) return 'var(--text3)';
+  if (pct >= targetPercentage) return 'var(--green)';
+  if (pct >= targetPercentage - 15) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+/** Bar fill color — same thresholds as pctColor. */
+export function barColor(pct, targetPercentage = 75) {
+  return pctColor(pct, targetPercentage);
+}
+
+/** Dim background color for average cell highlight. */
+export function dimColor(pct, targetPercentage = 75) {
+  if (pct === null) return 'transparent';
+  if (pct >= targetPercentage) return 'var(--green-dim)';
+  if (pct >= targetPercentage - 15) return 'var(--amber-dim)';
+  return 'var(--red-dim)';
+}
 import { computeLaboratoryDashboard } from './laboratory-engine.js';
 import { computeQuizDashboard } from './quiz-engine.js';
 import {
@@ -193,15 +226,15 @@ export function getImpactTooltipHTML(impact) {
    NEED-TEXT & VISUAL HELPERS
 ═══════════════════════════════════════════════════════════════════════ */
 export function getRemainingRequirementText(optResult) {
-  if (optResult.infeasible) {
-    return `<div class="subj-need-text danger">⚡ Ineligible — impossible to reach 75%</div>`;
+  if (!optResult.reachable) {
+    return `<div class="subj-need-text danger">⚡ Ineligible — impossible to reach ${optResult.targetPercentage}%</div>`;
   }
-  if (optResult.addL === 0 && optResult.addT === 0) {
+  if (optResult.lectureDeficit === 0 && optResult.tutorialDeficit === 0) {
     return `<div class="subj-need-text safe">✓ Already Safe — attend any remaining</div>`;
   }
   const parts = [];
-  if (optResult.addL > 0) parts.push(`${optResult.addL} Lecture${optResult.addL > 1 ? 's' : ''}`);
-  if (optResult.addT > 0) parts.push(`${optResult.addT} Tutorial${optResult.addT > 1 ? 's' : ''}`);
+  if (optResult.lectureDeficit > 0) parts.push(`${optResult.lectureDeficit} Lecture${optResult.lectureDeficit > 1 ? 's' : ''}`);
+  if (optResult.tutorialDeficit > 0) parts.push(`${optResult.tutorialDeficit} Tutorial${optResult.tutorialDeficit > 1 ? 's' : ''}`);
   return `<div class="subj-need-text warning">Need ${parts.join(' & ')} more to qualify</div>`;
 }
 
@@ -376,11 +409,10 @@ export function buildMobileSubjectCard(r) {
       </div>`
     : '';
 
-  const opt = r.optResult;
-  const mustAttend = opt.addL + opt.addT;
-  const safeSkips = opt.skipL_budget + opt.skipT_budget;
+  const mustAttend = opt.lectureDeficit + opt.tutorialDeficit;
+  const safeSkips = opt.safeSkipLecture + opt.safeSkipTutorial;
   const needText = getRemainingRequirementText(opt);
-  const needClass = opt.infeasible ? 'danger' : (opt.addL === 0 && opt.addT === 0 ? 'safe' : 'warning');
+  const needClass = !opt.reachable ? 'danger' : (opt.lectureDeficit === 0 && opt.tutorialDeficit === 0 ? 'safe' : 'warning');
 
   const totalCls = ` ${r.totL + r.totT}`;
   const attendedCls = ` ${r.attL_done + r.attT_done}`;
@@ -397,7 +429,7 @@ export function buildMobileSubjectCard(r) {
           </div>
         </div>
         <div class="mobile-subj-right">
-          <span class="status-badge ${r.status.cls}">${r.status.text}</span>
+          <span class="status-badge ${status.cls}">${status.text}</span>
           <svg class="mobile-subj-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
         </div>
       </button>
@@ -437,8 +469,8 @@ export function buildMobileSubjectCard(r) {
 export function buildMobileAttendanceCard(r) {
   const avgCol = r.currentAvgPct !== null ? pctColor(r.currentAvgPct) : 'var(--text3)';
   const opt = r.optResult;
-  const mustAttend = opt.addL + opt.addT;
-  const safeSkips = opt.skipL_budget + opt.skipT_budget;
+  const mustAttend = opt.lectureDeficit + opt.tutorialDeficit;
+  const safeSkips = opt.safeSkipLecture + opt.safeSkipTutorial;
 
   const lecVal = r.currentLecPct !== null ? r.currentLecPct.toFixed(2) + '%' : '—';
   const tutVal = r.currentTutPct !== null ? r.currentTutPct.toFixed(2) + '%' : (r.totT > 0 ? '—' : 'N/A');
@@ -483,6 +515,9 @@ export function buildMobileAttendanceCard(r) {
 
 /** Build one subject card HTML from computed stats. */
 export function buildSubjectCard(r) {
+  const isLab = r.tag === 'LAB';
+  const opt = r.optResult;
+  const status = getSubjectStatus(r.forecastAvgPct, opt.targetPercentage);
   const currentLecRow = r.completedL > 0
     ? getProgressRowHTML('Lecture', r.currentLecPct, `${r.attL_done} / ${r.completedL}`)
     : `<div class="subj-stat-row"><div class="subj-stat-label"><span>Lecture</span><span class="val">—</span></div></div>`;
@@ -510,7 +545,7 @@ export function buildSubjectCard(r) {
     <div class="subj-card">
       <div class="subj-card-header">
         <span class="subj-card-code">${r.code}</span>
-        <span class="status-badge ${r.status.cls}">${r.status.text}</span>
+        <span class="status-badge ${status.cls}">${status.text}</span>
       </div>
       <div class="subj-card-name">${r.name}</div>
       <div class="subj-card-stats">
@@ -563,12 +598,17 @@ export function buildStatsRow(overallStats) {
 
 
 /** Renders a single percentage stat row for the quiz card. */
-function buildQuizPctRow(label, pct) {
+function buildQuizPctRow(label, pct, targetPct) {
   if (pct === null) {
-    return `<div class="quiz-pct-row"><span class="quiz-pct-label">${label}</span><span class="quiz-pct-na">—</span></div>`;
+    return `
+      <div class="quiz-pct-row quiz-empty-row">
+        <span class="quiz-pct-label">${label}</span>
+        <span class="badge-na">—</span>
+      </div>`;
   }
-  const col = pctColor(pct);
-  const w   = Math.min(100, Math.max(0, pct)).toFixed(1);
+  const display = Math.min(100, Math.max(0, pct));
+  const w = display.toFixed(1);
+  const col = pctColor(pct, targetPct);
   return `
     <div class="quiz-pct-row">
       <span class="quiz-pct-label">${label}</span>
@@ -582,47 +622,59 @@ function buildQuizPctRow(label, pct) {
 /** Builds one quiz subject card from a QuizDashboardModel subject entry. */
 export function buildQuizSubjectCard(item) {
   const { subject, eligibility } = item;
-  const cls = `quiz-${eligibility.status}`;
-  const label = eligibility.statusLabel;
+  const opt = eligibility.optResult;
+  const targetPct = opt ? opt.targetPercentage : 70;
+  
+  let cls = '';
+  let label = '';
 
   if (!eligibility.applicable) {
     return `
       <div class="quiz-subj-card quiz-subj-card--na">
         <div class="quiz-subj-header">
           <span class="subj-card-code">${subject.code}</span>
-          <span class="status-badge ${cls}">${label}</span>
+          <span class="status-badge quiz-na">N/A</span>
         </div>
         <div class="quiz-subj-name">${subject.name}</div>
         <div class="quiz-na-message">This laboratory subject does not participate in quiz eligibility.</div>
       </div>`;
   }
 
-  const { lecturePercentage, tutorialPercentage, average, required, displayDeficit } = eligibility;
+  if (eligibility.eligible) {
+    cls = 'status-safe';
+    label = 'ELIGIBLE';
+  } else {
+    cls = 'status-danger';
+    label = 'NEEDS ATTENDANCE';
+  }
 
-  const deficitLine = displayDeficit
+  const displayDeficit = getRemainingRequirementText(opt);
+  const deficitLine = displayDeficit !== 'Already eligible'
     ? `<div class="quiz-deficit">${displayDeficit}</div>`
     : '';
 
   const requiredLine = `
     <div class="quiz-pct-row quiz-required-row">
       <span class="quiz-pct-label">Required</span>
-      <span class="quiz-required-val">${required}%</span>
+      <span class="quiz-required-val">${targetPct}%</span>
     </div>`;
 
   return `
     <div class="quiz-subj-card">
       <div class="quiz-subj-header">
         <span class="subj-card-code">${subject.code}</span>
-        <span class="status-badge ${cls}">${label}</span>
+        <span class="status-badge ${status.cls}">${status.text}</span>
       </div>
       <div class="quiz-subj-name">${subject.name}</div>
       <div class="quiz-subj-stats">
-        ${buildQuizPctRow('Lecture', lecturePercentage)}
-        ${buildQuizPctRow('Tutorial', tutorialPercentage)}
-        ${buildQuizPctRow('Average', average)}
+        ${buildQuizPctRow('Lecture', eligibility.lecturePercentage, targetPct)}
+        ${buildQuizPctRow('Tutorial', eligibility.tutorialPercentage, targetPct)}
+        ${buildQuizPctRow('Average', eligibility.average, targetPct)}
         ${requiredLine}
       </div>
-      ${deficitLine}
+      <div style="margin-top: 12px; font-size: 11px;">
+        ${deficitLine}
+      </div>
     </div>`;
 }
 
@@ -774,10 +826,10 @@ export function buildTableRow(r) {
   const opt      = r.optResult;
   const tutBadge = r.totT === 0
     ? `<td data-label="Must T"><span class="badge-na">N/A</span></td>`
-    : `<td data-label="Must T"><span class="badge badge-must">${opt.addT}</span></td>`;
+    : `<td data-label="Must T"><span class="badge badge-must">${opt.tutorialDeficit}</span></td>`;
   const tutSkip  = r.totT === 0
     ? `<td data-label="Skip T"><span class="badge-na">—</span></td>`
-    : `<td data-label="Skip T">${makeSkipBudgetVisual(opt.skipT_budget, r.missT_done, 'T')}</td>`;
+    : `<td data-label="Skip T">${makeSkipBudgetVisual(opt.safeSkipTutorial, r.missT_done, 'T')}</td>`;
   const tagHTML  = r.tag ? `<div><span class="s-elec">${r.tag}</span></div>` : '';
 
   const currentTutCell  = r.totT > 0 ? makePctCell(r.currentTutPct, false, 'Tut %')  : `<td data-label="Tut %"><span class="badge-na">N/A</span></td>`;
@@ -793,9 +845,9 @@ export function buildTableRow(r) {
     <td data-label="Tutorials">${r.totT > 0 ? `<span class="num">${r.totT}</span>` : `<span class="badge-na">—</span>`}</td>
     <td data-label="Combined"><span class="num-combined">${r.totComb}</span></td>
     <th class="sep-col"></th>
-    <td data-label="Must L"><span class="badge badge-must">${opt.addL}</span></td>
+    <td data-label="Must L"><span class="badge badge-must">${opt.lectureDeficit}</span></td>
     ${tutBadge}
-    <td data-label="Min total"><span class="num-muted">${opt.addL + opt.addT}</span></td>
+    <td data-label="Min total"><span class="num-muted">${opt.lectureDeficit + opt.tutorialDeficit}</span></td>
     <th class="sep-col"></th>
     ${makePctCell(r.currentLecPct, false, 'Lec %')}
     ${currentTutCell}
@@ -805,9 +857,9 @@ export function buildTableRow(r) {
     ${forecastTutCell}
     ${makePctCell(r.forecastAvgPct, true, 'Avg %')}
     <th class="sep-col"></th>
-    <td data-label="Skip L">${makeSkipBudgetVisual(opt.skipL_budget, r.missL_done, 'L')}</td>
+    <td data-label="Skip L">${makeSkipBudgetVisual(opt.safeSkipLecture, r.missL_done, 'L')}</td>
     ${tutSkip}
-    <td data-label="Total skip"><span class="num-muted">${opt.skipL_budget + opt.skipT_budget}</span></td>
+    <td data-label="Total skip"><span class="num-muted">${opt.safeSkipLecture + opt.safeSkipTutorial}</span></td>
   </tr>`;
 }
 

@@ -1,7 +1,5 @@
 import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
 
-const TARGET_ATTENDANCE = 0.75;
-
 export function calcCurrentPct(attended, completed) {
   if (!completed || completed <= 0) return null;
   return (attended / completed) * 100;
@@ -30,48 +28,43 @@ export function calcAvgPct(lecPct, tutPct) {
 }
 
 /**
- * Check the eligibility rule using fractions, avoiding rounding errors at 75%.
+ * Check the eligibility rule using fractions, avoiding rounding errors at target.
  * A subject with only one class type is evaluated using that available type.
  */
-export function meetsAttendanceTarget(attL, totL, attT, totT) {
+export function meetsAttendanceTarget(attL, totL, attT, totT, targetPercentage) {
+  const targetFraction = targetPercentage / 100;
   const lecRatio = totL > 0 ? attL / totL : null;
   const tutRatio = totT > 0 ? attT / totT : null;
   if (lecRatio === null && tutRatio === null) return false;
   const average = lecRatio === null ? tutRatio : tutRatio === null ? lecRatio : (lecRatio + tutRatio) / 2;
-  return average + Number.EPSILON >= TARGET_ATTENDANCE;
+  return average + Number.EPSILON >= targetFraction;
 }
 
 /**
- * Determine status badge from forecast average.
- * Status is ALWAYS based on forecast, never current.
- * N/A (no data) uses neutral class.
+ * Domain model representing the output of the optimization engine.
  */
-export function getSubjectStatus(forecastAvgPct) {
-  if (forecastAvgPct === null) return {text: 'N/A',      cls: 'status-warning'};
-  if (forecastAvgPct >= 80)    return {text: 'SAFE',     cls: 'status-safe'};
-  if (forecastAvgPct >= 75)    return {text: 'WARNING',  cls: 'status-warning'};
-  return                              {text: 'CRITICAL', cls: 'status-critical'};
-}
-
-/** Color for a percentage value (green ≥75, amber ≥60, red otherwise). */
-export function pctColor(pct) {
-  if (pct === null) return 'var(--text3)';
-  if (pct >= 75)    return 'var(--green)';
-  if (pct >= 60)    return 'var(--amber)';
-  return 'var(--red)';
-}
-
-/** Bar fill color — same thresholds as pctColor. */
-export function barColor(pct) {
-  return pctColor(pct);
-}
-
-/** Dim background color for average cell highlight. */
-export function dimColor(pct) {
-  if (pct === null) return 'transparent';
-  if (pct >= 75)    return 'var(--green-dim)';
-  if (pct >= 60)    return 'var(--amber-dim)';
-  return 'var(--red-dim)';
+export class OptimizationResult {
+  constructor({
+    targetPercentage,
+    reachable,
+    lectureDeficit,
+    tutorialDeficit,
+    safeSkipLecture,
+    safeSkipTutorial,
+    lecturePercentage,
+    tutorialPercentage,
+    averagePercentage
+  }) {
+    this.targetPercentage = targetPercentage;
+    this.reachable = reachable;
+    this.lectureDeficit = lectureDeficit;
+    this.tutorialDeficit = tutorialDeficit;
+    this.safeSkipLecture = safeSkipLecture;
+    this.safeSkipTutorial = safeSkipTutorial;
+    this.lecturePercentage = lecturePercentage;
+    this.tutorialPercentage = tutorialPercentage;
+    this.averagePercentage = averagePercentage;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -83,9 +76,15 @@ export function dimColor(pct) {
  * Static optimizer — used for pre-computed ALL_DATA reference (no live state).
  * Returns: {attL, attT, skipL, skipT, lecPct, tutPct, avgPct}
  */
-export function optimize(totL, totT) {
+export function optimize(totL, totT, targetPercentage) {
   if (totL <= 0 && totT <= 0) {
-    return {attL: 0, attT: 0, skipL: 0, skipT: 0, lecPct: null, tutPct: null, avgPct: null};
+    return new OptimizationResult({
+      targetPercentage,
+      reachable: true,
+      lectureDeficit: 0, tutorialDeficit: 0,
+      safeSkipLecture: 0, safeSkipTutorial: 0,
+      lecturePercentage: null, tutorialPercentage: null, averagePercentage: null
+    });
   }
 
   let bestAttL  = totL, bestAttT = totT;
@@ -93,7 +92,7 @@ export function optimize(totL, totT) {
 
   for (let attL = 0; attL <= totL; attL++) {
     for (let attT = 0; attT <= totT; attT++) {
-      if (!meetsAttendanceTarget(attL, totL, attT, totT)) continue;
+      if (!meetsAttendanceTarget(attL, totL, attT, totT, targetPercentage)) continue;
       const total = attL + attT;
       // Prefer fewer total; on tie prefer fewer lectures (max lecture skips).
       if (total < bestTotal || (total === bestTotal && attL < bestAttL)) {
@@ -106,11 +105,18 @@ export function optimize(totL, totT) {
 
   const lecPct = totL > 0 ? (bestAttL / totL) * 100 : null;
   const tutPct = totT > 0 ? (bestAttT / totT) * 100 : null;
-  return {
-    attL: bestAttL, attT: bestAttT,
-    skipL: totL - bestAttL, skipT: totT - bestAttT,
-    lecPct, tutPct, avgPct: calcAvgPct(lecPct, tutPct)
-  };
+  
+  return new OptimizationResult({
+    targetPercentage,
+    reachable: true, // For static optimization, assuming possible if attending all, wait, static always reachable if target <= 100 and it's mathematically sound, but anyway this is precomputed reference.
+    lectureDeficit: bestAttL,
+    tutorialDeficit: bestAttT,
+    safeSkipLecture: totL - bestAttL,
+    safeSkipTutorial: totT - bestAttT,
+    lecturePercentage: lecPct,
+    tutorialPercentage: tutPct,
+    averagePercentage: calcAvgPct(lecPct, tutPct)
+  });
 }
 
 /**
@@ -120,29 +126,29 @@ export function optimize(totL, totT) {
  *   attL_done, missL_done, attT_done, missT_done — logged outcomes
  *   pendingL, pendingT — not yet logged (future + unlogged past)
  *
- * Returns: {infeasible, addL, addT, skipL_budget, skipT_budget, lecPct, tutPct, avgPct}
- * Where addL/addT = how many MORE pending classes must be attended to qualify.
+ * Returns: OptimizationResult (lectureDeficit, tutorialDeficit, safeSkipLecture, safeSkipTutorial, etc)
+ * Where lectureDeficit/tutorialDeficit = how many MORE pending classes must be attended to qualify.
  */
-export function optimizeLive(totL, totT, attL_done, missL_done, attT_done, missT_done, pendingL, pendingT) {
+export function optimizeLive(totL, totT, attL_done, missL_done, attT_done, missT_done, pendingL, pendingT, targetPercentage) {
   // Guard: degenerate totals
   if (totL <= 0 && totT <= 0) {
-    return {
-      infeasible: false,
-      addL: 0, addT: 0,
-      skipL_budget: 0, skipT_budget: 0,
-      lecPct: null, tutPct: null, avgPct: null
-    };
+    return new OptimizationResult({
+      targetPercentage,
+      reachable: true,
+      lectureDeficit: 0, tutorialDeficit: 0,
+      safeSkipLecture: 0, safeSkipTutorial: 0,
+      lecturePercentage: null, tutorialPercentage: null, averagePercentage: null
+    });
   }
 
-  // Exhaustive search over every valid remaining combination. This is deliberately
-  // integer-based so 75% boundary cases cannot be altered by floating-point ceil().
+  // Exhaustive search over every valid remaining combination.
   let bestAddL  = pendingL, bestAddT = pendingT;
   let bestTotal = pendingL + pendingT + 1; // sentinel
   let found     = false;
 
   for (let addL = 0; addL <= pendingL; addL++) {
     for (let addT = 0; addT <= pendingT; addT++) {
-      if (!meetsAttendanceTarget(attL_done + addL, totL, attT_done + addT, totT)) continue;
+      if (!meetsAttendanceTarget(attL_done + addL, totL, attT_done + addT, totT, targetPercentage)) continue;
       found = true;
       const total = addL + addT;
       if (total < bestTotal || (total === bestTotal && addL < bestAddL)) {
@@ -157,25 +163,33 @@ export function optimizeLive(totL, totT, attL_done, missL_done, attT_done, missT
     // Even attending every pending class isn't enough
     const bestLecPct = totL > 0 ? ((attL_done + pendingL) / totL) * 100 : null;
     const bestTutPct = totT > 0 ? ((attT_done + pendingT) / totT) * 100 : null;
-    return {
-      infeasible: true,
-      addL: pendingL, addT: pendingT,
-      skipL_budget: 0, skipT_budget: 0,
-      lecPct: bestLecPct, tutPct: bestTutPct,
-      avgPct: calcAvgPct(bestLecPct, bestTutPct)
-    };
+    return new OptimizationResult({
+      targetPercentage,
+      reachable: false,
+      lectureDeficit: pendingL,
+      tutorialDeficit: pendingT,
+      safeSkipLecture: 0,
+      safeSkipTutorial: 0,
+      lecturePercentage: bestLecPct,
+      tutorialPercentage: bestTutPct,
+      averagePercentage: calcAvgPct(bestLecPct, bestTutPct)
+    });
   }
 
   const finalLecPct = totL > 0 ? ((attL_done + bestAddL) / totL) * 100 : null;
   const finalTutPct = totT > 0 ? ((attT_done + bestAddT) / totT) * 100 : null;
-  return {
-    infeasible: false,
-    addL: bestAddL, addT: bestAddT,
-    skipL_budget: Math.max(0, pendingL - bestAddL),
-    skipT_budget: Math.max(0, pendingT - bestAddT),
-    lecPct: finalLecPct, tutPct: finalTutPct,
-    avgPct: calcAvgPct(finalLecPct, finalTutPct)
-  };
+  
+  return new OptimizationResult({
+    targetPercentage,
+    reachable: true,
+    lectureDeficit: bestAddL,
+    tutorialDeficit: bestAddT,
+    safeSkipLecture: Math.max(0, pendingL - bestAddL),
+    safeSkipTutorial: Math.max(0, pendingT - bestAddT),
+    lecturePercentage: finalLecPct,
+    tutorialPercentage: finalTutPct,
+    averagePercentage: calcAvgPct(finalLecPct, finalTutPct)
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -296,22 +310,28 @@ export function computeSubjectStats(code, name, tag, rawData) {
   const forecastTutPct = flat.totT > 0 ? calcForecastPct(flat.attT_done, flat.pendingT, flat.totT) : null;
   const forecastAvgPct = calcAvgPct(forecastLecPct, forecastTutPct);
 
-  // Status always based on forecast (what you'll achieve if you attend everything remaining)
-  const status = getSubjectStatus(forecastAvgPct);
+  // Status is purely a UI concept now; we only return data.
 
-  // Optimizer: how many remaining pending must be attended to just qualify?
+  // Optimizer: how many remaining pending must be attended to just qualify? (Default 75% for main dash)
   const hasLorT = (safeCount('L').tot + safeCount('T').tot) > 0;
-  const optResult = hasLorT ? optimizeLive(
-    flat.totL,      flat.totT,
-    flat.attL_done, flat.missL_done,
-    flat.attT_done, flat.missT_done,
-    flat.pendingL,  flat.pendingT
-  ) : {
-    infeasible: true,
-    addL: 0, addT: 0,
-    skipL_budget: 0, skipT_budget: 0,
-    lecPct: 0, tutPct: 0, avgPct: 0
-  };
+  let optResult = null;
+  if (hasLorT) {
+    optResult = optimizeLive(
+      flat.totL,      flat.totT,
+      flat.attL_done, flat.missL_done,
+      flat.attT_done, flat.missT_done,
+      flat.pendingL,  flat.pendingT,
+      75 // Default dashboard target is 75%
+    );
+  } else {
+    optResult = new OptimizationResult({
+      targetPercentage: 75,
+      reachable: false,
+      lectureDeficit: 0, tutorialDeficit: 0,
+      safeSkipLecture: 0, safeSkipTutorial: 0,
+      lecturePercentage: 0, tutorialPercentage: 0, averagePercentage: 0
+    });
+  }
 
   return {
     code, name, tag,
@@ -321,12 +341,8 @@ export function computeSubjectStats(code, name, tag, rawData) {
     attT_done: flat.attT_done,   missT_done: flat.missT_done,
     pendingL:  flat.pendingL,    pendingT:   flat.pendingT,
     completedL, completedT,
-    // percentages
     currentLecPct, currentTutPct, currentAvgPct,
     forecastLecPct, forecastTutPct, forecastAvgPct,
-    // status
-    status,
-    // optimizer
     optResult
   };
 }
@@ -378,7 +394,7 @@ export function calcForecastImpact(rawData, subjectCode, classType, currentState
   return {
     curAvg,
     newAvg,
-    stillEligible: newAvg !== null && newAvg >= 75
+    stillEligible: newAvg !== null && newAvg >= 75 // (Kept legacy for now if used by simulateMarkingImpact, though simulateMarkingImpact is rarely used for core status. We can keep it hardcoded here for the tooltip, or UI can check). Wait, simulateMarkingImpact is an engine function. Let's parameterize it.
   };
 }
 
@@ -540,8 +556,8 @@ export function computeOverallStats(subjectStats) {
     totalPending += r.pendingL + r.pendingT;
     totalAttended += r.attL_done + r.attT_done;
     totalMissed += r.missL_done + r.missT_done;
-    totalMustAttend += r.optResult.addL + r.optResult.addT;
-    totalSafeSkips += r.optResult.skipL_budget + r.optResult.skipT_budget;
+    totalMustAttend += r.optResult.lectureDeficit + r.optResult.tutorialDeficit;
+    totalSafeSkips += r.optResult.safeSkipLecture + r.optResult.safeSkipTutorial;
   }
 
   return {
