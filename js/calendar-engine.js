@@ -70,12 +70,53 @@ export function initCalendarEngine(calendarData) {
     }
   });
 
+  const timelines = Array.isArray(calendarData.subjectTimelines) ? calendarData.subjectTimelines : [];
+  const subjectCodes = new Set();
+  
+  timelines.forEach(tl => {
+    if (!tl.subjectCode) throw new Error('initCalendarEngine: Timeline missing subjectCode');
+    if (subjectCodes.has(tl.subjectCode)) throw new Error(`initCalendarEngine: Duplicate timeline for subject ${tl.subjectCode}`);
+    subjectCodes.add(tl.subjectCode);
+    
+    if (!isValidDateString(tl.commencementDate)) throw new Error(`initCalendarEngine: Invalid commencementDate for ${tl.subjectCode}`);
+    if (tl.completionDate && !isValidDateString(tl.completionDate)) throw new Error(`initCalendarEngine: Invalid completionDate for ${tl.subjectCode}`);
+    
+    const mIds = new Set();
+    let lastDate = '0000-00-00';
+    let hasFirstLecture = false;
+    let quizBeforeFirstLecture = false;
+
+    (tl.milestones || []).forEach(m => {
+      if (!m.milestoneId) throw new Error(`initCalendarEngine: Milestone missing id in ${tl.subjectCode}`);
+      if (mIds.has(m.milestoneId)) throw new Error(`initCalendarEngine: Duplicate milestoneId ${m.milestoneId} in ${tl.subjectCode}`);
+      mIds.add(m.milestoneId);
+      
+      if (!isValidDateString(m.date)) throw new Error(`initCalendarEngine: Invalid date for milestone ${m.milestoneId}`);
+      if (m.date < lastDate) throw new Error(`initCalendarEngine: Out-of-order milestone ${m.milestoneId} in ${tl.subjectCode}`);
+      lastDate = m.date;
+      
+      if (m.type === 'FIRST_LECTURE') hasFirstLecture = true;
+      if (m.type === 'QUIZ' && !hasFirstLecture) quizBeforeFirstLecture = true;
+    });
+
+    if (quizBeforeFirstLecture) {
+      throw new Error(`initCalendarEngine: Quiz milestone before FIRST_LECTURE in ${tl.subjectCode}`);
+    }
+  });
+
   // Freeze static data to ensure immutability
   l1StaticData = Object.freeze({
     ...calendarData,
     events: Object.freeze(events.map(e => Object.freeze({
       ...e,
       metadata: Object.freeze({ ...e.metadata })
+    }))),
+    subjectTimelines: Object.freeze(timelines.map(tl => Object.freeze({
+      ...tl,
+      milestones: Object.freeze((tl.milestones || []).map(m => Object.freeze({
+        ...m,
+        metadata: Object.freeze({ ...m.metadata })
+      })))
     }))),
     policies: Object.freeze({ ...calendarData.policies })
   });
@@ -291,4 +332,131 @@ export function getWorkingDaysUntil(dateString) {
   const end = dateString > l1StaticData.semesterEnd ? l1StaticData.semesterEnd : dateString;
   
   return getTeachingDaysBetween(start, end).length;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SUBJECT TIMELINE API
+═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Retrieves the timeline for a given subject.
+ */
+export function getSubjectTimeline(subjectCode) {
+  if (!l1StaticData) throw new Error('Calendar Engine not initialized.');
+  const tl = l1StaticData.subjectTimelines.find(t => t.subjectCode === subjectCode);
+  if (!tl) throw new Error(`Unknown subject timeline: ${subjectCode}`);
+  return tl;
+}
+
+/**
+ * Retrieves milestones for a given subject.
+ */
+export function getSubjectMilestones(subjectCode) {
+  const tl = getSubjectTimeline(subjectCode);
+  return tl.milestones;
+}
+
+/**
+ * Retrieves the milestone occurring immediately before the specified milestone.
+ */
+export function getPreviousMilestone(subjectCode, milestoneId) {
+  const milestones = getSubjectMilestones(subjectCode);
+  const idx = milestones.findIndex(m => m.milestoneId === milestoneId);
+  if (idx === -1) throw new Error(`Unknown milestone: ${milestoneId}`);
+  if (idx === 0) return null;
+  return milestones[idx - 1];
+}
+
+/**
+ * Retrieves the milestone occurring immediately after the specified milestone.
+ */
+export function getNextMilestone(subjectCode, milestoneId) {
+  const milestones = getSubjectMilestones(subjectCode);
+  const idx = milestones.findIndex(m => m.milestoneId === milestoneId);
+  if (idx === -1) throw new Error(`Unknown milestone: ${milestoneId}`);
+  if (idx === milestones.length - 1) return null;
+  return milestones[idx + 1];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ATTENDANCE WINDOW API
+═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Resolves the structured attendance window leading up to a specific milestone.
+ */
+export function getAttendanceWindow(subjectCode, milestoneId) {
+  const tl = getSubjectTimeline(subjectCode);
+  const milestone = tl.milestones.find(m => m.milestoneId === milestoneId);
+  if (!milestone) throw new Error(`Unknown milestone: ${milestoneId}`);
+
+  const windowStart = tl.commencementDate;
+  const windowEnd = addDays(milestone.date, -1); // Exactly one day before the milestone event
+
+  if (windowStart > windowEnd) {
+    throw new Error('Window end before window start');
+  }
+
+  const effectiveTeachingDates = getTeachingDaysBetween(windowStart, windowEnd);
+  
+  let holidayCount = 0;
+  let weekendCount = 0;
+
+  let current = windowStart;
+  while (current <= windowEnd) {
+    const day = getAcademicDay(current);
+    if (!day.metadata.isTeachingDay) {
+      if (day.academicEvents.length > 0) {
+        holidayCount++;
+      } else {
+        weekendCount++;
+      }
+    }
+    current = addDays(current, 1);
+  }
+
+  const activeMilestones = tl.milestones.filter(m => m.date >= windowStart && m.date <= windowEnd);
+
+  return Object.freeze({
+    subjectCode,
+    windowStart,
+    windowEnd,
+    teachingDays: effectiveTeachingDates.length,
+    workingDays: effectiveTeachingDates.length, // Aliased to teachingDays for this context
+    holidayCount,
+    weekendCount,
+    effectiveTeachingDates: Object.freeze([...effectiveTeachingDates]),
+    activeMilestones: Object.freeze([...activeMilestones])
+  });
+}
+
+/**
+ * Convenience wrapper to fetch the window leading up to a specific quiz cycle.
+ */
+export function getQuizWindow(subjectCode, quizCycle) {
+  const tl = getSubjectTimeline(subjectCode);
+  const quizMilestone = tl.milestones.find(m => m.type === 'QUIZ' && m.metadata && m.metadata.quizCycle === quizCycle);
+  if (!quizMilestone) throw new Error(`Unknown quiz cycle ${quizCycle} for subject ${subjectCode}`);
+  return getAttendanceWindow(subjectCode, quizMilestone.milestoneId);
+}
+
+/**
+ * Returns the exact teaching days encapsulated by the window.
+ */
+export function getWindowTeachingDays(window) {
+  if (!window || !window.effectiveTeachingDates) throw new Error('Invalid window object');
+  return window.effectiveTeachingDates;
+}
+
+/**
+ * Calculates remaining teaching days from TODAY until the end of the window.
+ * Returns 0 if the window has already passed.
+ */
+export function getRemainingTeachingDays(window) {
+  if (!window || !window.windowEnd) throw new Error('Invalid window object');
+  const today = new Date().toISOString().split('T')[0];
+  if (today > window.windowEnd) return 0;
+  
+  const effectiveStart = today > window.windowStart ? today : window.windowStart;
+  return getTeachingDaysBetween(effectiveStart, window.windowEnd).length;
 }
