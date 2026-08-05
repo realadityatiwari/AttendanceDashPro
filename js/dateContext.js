@@ -8,19 +8,20 @@
    duplicated attendance logic for different date scenarios.
 ═══════════════════════════════════════════════════════════════════════ */
 
-import { getTodayString, getLocalDateString, parseDateString, getTimetable } from './utils.js';
+import { getTimetable } from './utils.js';
 import { AppState, saveStates, loadStates } from './storage.js';
+import { getTodayString } from './calendar-engine.js';
 
 export const MODE = { LIVE: 'LIVE', SIMULATION: 'SIMULATION' };
 
 /**
- * selectedDate   — the Date currently being viewed (always local noon date)
+ * selectedDate   — the Date currently being viewed (as YYYY-MM-DD string)
  * mode           — MODE.LIVE or MODE.SIMULATION
  * simulationAttendance — temporary overlay of classId -> state, ONLY used
  *                        in simulation mode. Never written to Firebase.
  */
 export const dateContext = {
-  selectedDate: new Date(),
+  selectedDate: getTodayString(),
   mode: MODE.LIVE,
   simulationAttendance: {}
 };
@@ -33,10 +34,9 @@ export const dateContext = {
      • Tomorrow ............... SIMULATION
      • Any future date ........ SIMULATION
 ══════════════════════════════════════════════════════════════════════ */
-export function deriveMode(date) {
-  const d = date || dateContext.selectedDate;
+export function deriveMode(dateStr) {
+  const selStr = dateStr || dateContext.selectedDate;
   const todayStr = getTodayString();
-  const selStr   = getLocalDateString(d);
   return selStr > todayStr ? MODE.SIMULATION : MODE.LIVE;
 }
 
@@ -45,14 +45,9 @@ export function isSimulationMode() {
   return dateContext.mode === MODE.SIMULATION;
 }
 
-/** Returns the currently selected date (a Date object, normalized to noon). */
-export function getActiveDate() {
-  return dateContext.selectedDate;
-}
-
 /** Returns the local YYYY-MM-DD string for the selected date. */
 export function getActiveDateString() {
-  return getLocalDateString(dateContext.selectedDate);
+  return dateContext.selectedDate;
 }
 
 /* ─── Effective attendance ──────────────────────────────────────────────
@@ -74,10 +69,9 @@ export function getEffectiveStates() {
    Single entry point for changing the viewed day. Recomputes mode and,
    when leaving simulation mode, discards the temporary overlay.
 ══════════════════════════════════════════════════════════════════════ */
-export function selectDate(date) {
-  const next = parseDateString(getLocalDateString(date)) || parseDateString(getLocalDateString(new Date()));
-  dateContext.selectedDate = next;
-  const newMode = deriveMode(next);
+export function selectDateByString(dateStr) {
+  dateContext.selectedDate = dateStr;
+  const newMode = deriveMode(dateStr);
 
   // Leaving simulation mode clears the temporary memory (nothing persisted).
   if (newMode !== MODE.SIMULATION) {
@@ -86,14 +80,8 @@ export function selectDate(date) {
   dateContext.mode = newMode;
 }
 
-export function selectDateByString(dateStr) {
-  const d = parseDateString(dateStr);
-  if (!d) return;
-  selectDate(d);
-}
-
 export function resetToToday() {
-  selectDate(new Date());
+  selectDateByString(getTodayString());
 }
 
 /* ─── Logging through the context ───────────────────────────────────────
@@ -132,9 +120,8 @@ export function logClassState(dateStr, subjectCode, type, newState) {
 }
 
 /* ─── Classifies a date relative to today (for the navigator UI) ──────── */
-export function classifyDate(date) {
+export function classifyDateStr(dStr) {
   const todayStr = getTodayString();
-  const dStr     = getLocalDateString(date);
   if (dStr === todayStr) return 'today';
   if (dStr < todayStr)   return 'past';
   return 'future';

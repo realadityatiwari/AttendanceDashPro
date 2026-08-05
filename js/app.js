@@ -1,8 +1,9 @@
-import { initTimetable } from './utils.js';
+import { initTimetable, getTimetable } from './utils.js';
+import { initCalendarEngine } from './calendar-engine.js';
 import { auth } from './firebase.js';
 import { AppState, fetchCloudStates, getLocalAttendance, clearLocalAttendance, triggerCloudSync, initLocalState, persistLocalState, isProfileComplete } from './storage.js';
 import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav } from './ui.js';
-import { selectDate } from './dateContext.js';
+
 import { loginUser, signupUser, logoutUser } from './auth.js';
 import { validateSignupForm, validateRollNumber, validatePassword } from './validation.js';
 import * as UI from './ui.js';
@@ -209,6 +210,42 @@ async function bootstrap() {
   try {
     await initTimetable();
     console.log("[app.js] Timetable initialized");
+
+    const timetable = getTimetable();
+    // Bridge: Initialize Calendar Engine dynamically from timetable data
+    const timelines = timetable.subjects.map(s => {
+      return {
+        subjectCode: s.code,
+        commencementDate: timetable.start_date,
+        milestones: timetable.quiz_dates.map((q, idx) => ({
+          milestoneId: `q${idx+1}`,
+          type: 'QUIZ',
+          date: q.date,
+          metadata: { quizCycle: idx + 1 }
+        }))
+      };
+    });
+    timelines.forEach(tl => {
+      tl.milestones.unshift({
+        milestoneId: 'm0',
+        type: 'FIRST_LECTURE',
+        date: tl.commencementDate,
+        metadata: {}
+      });
+    });
+
+    initCalendarEngine({
+      calendarId: 'default',
+      semesterId: 'current',
+      semesterStart: timetable.start_date,
+      semesterEnd: '2030-12-31', // Mock end for now
+      defaultWeekends: [0, 6], // Sunday, Saturday
+      events: [],
+      subjectTimelines: timelines,
+      policies: {}
+    });
+    console.log("[app.js] Calendar Engine initialized");
+
     updateThemeBtn('dark');
   } catch (e) {
     console.error("[app.js] bootstrap initialization error:", e);

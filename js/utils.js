@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.0.1';
+export const APP_VERSION = '2.0.2';
 
 let timetable = null;
 
@@ -58,16 +58,6 @@ export function isValidClassType(type) {
 export async function initTimetable() {
   const res = await fetch('timetable.json');
   timetable = await res.json();
-  
-  // Hydrate dates
-  timetable.start_date = new Date(timetable.start_date);
-  timetable.start_date.setHours(12, 0, 0, 0);
-  
-  timetable.quiz_dates.forEach(q => {
-    q.date = new Date(q.date);
-    q.date.setHours(12, 0, 0, 0);
-  });
-  
   return timetable;
 }
 
@@ -117,9 +107,6 @@ export function getLocalDateString(date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function getTodayString() {
-  return getLocalDateString(new Date());
-}
 
 export function parseDateString(str) {
   const parts = str.split('-');

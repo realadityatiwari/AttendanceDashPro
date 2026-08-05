@@ -1,4 +1,5 @@
 import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
+import { getQuizWindow, getAcademicDay } from './calendar-engine.js';
 
 export function calcCurrentPct(attended, completed) {
   if (!completed || completed <= 0) return null;
@@ -235,39 +236,55 @@ export function getAttendanceData(quizDate, states = {}) {
     });
   });
 
-  const cur   = new Date(getTimetable().start_date);
-  const limit = new Date(quizDate);
-  limit.setHours(12, 0, 0, 0);
+  // Resolve current quiz cycle by matching the passed quizDate (from legacy UI flow)
+  const quizDateStr = typeof quizDate === 'string' ? quizDate : quizDate.toISOString().split('T')[0];
+  const qIdx = getTimetable().quiz_dates.findIndex(q => {
+    const qStr = typeof q.date === 'string' ? q.date : q.date.toISOString().split('T')[0];
+    return qStr === quizDateStr;
+  });
+  const quizCycle = qIdx >= 0 ? qIdx + 1 : 1; // Fallback to 1
 
-  while (cur < limit) {
-    const monIdx  = (cur.getDay() + 6) % 7;
-    const dateStr = getLocalDateString(cur);
-
-    const mergedSchedule = getMergedDaySchedule(monIdx);
-    if (mergedSchedule) {
-      mergedSchedule.forEach(({s, t}) => {
-        // Normalize slot identifier to canonical class type (P1/P2 → P)
-        const statType = normalizeClassType(t);
-        if (!data[s] || !data[s].counts[statType]) return;
-        
-        data[s].counts[statType].tot++;
-
-        // Attendance ID preserves raw slot identifier for storage uniqueness
-        const classId = `${dateStr}:${s}:${t}`;
-        const state   = states[classId] || 'Pending';
-
-        if (state === 'Attended') {
-          data[s].counts[statType].att_done++;
-        } else if (state === 'Missed') {
-          data[s].counts[statType].miss_done++;
-        } else {
-          data[s].counts[statType].pending++;
-        }
-      });
+  // Use Calendar Engine API directly (A2.3 Architecture Lock)
+  getTimetable().subjects.forEach(({code}) => {
+    let window;
+    try {
+      window = getQuizWindow(code, quizCycle);
+    } catch (e) {
+      // Fallback if subject has no timeline (e.g., test mocks)
+      return;
     }
 
-    cur.setDate(cur.getDate() + 1);
-  }
+    window.effectiveTeachingDates.forEach(dateStr => {
+      const academicDay = getAcademicDay(dateStr);
+      
+      // Map originalDayOfWeek to timetable Mon=0 index
+      const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
+      const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
+
+      const mergedSchedule = getMergedDaySchedule(monIdx);
+      if (mergedSchedule) {
+        mergedSchedule.forEach(({s, t}) => {
+          if (s !== code) return; // Process ONLY this subject
+          
+          const statType = normalizeClassType(t);
+          if (!data[s] || !data[s].counts[statType]) return;
+          
+          data[s].counts[statType].tot++;
+
+          const classId = `${dateStr}:${s}:${t}`;
+          const state   = states[classId] || 'Pending';
+
+          if (state === 'Attended') {
+            data[s].counts[statType].att_done++;
+          } else if (state === 'Missed') {
+            data[s].counts[statType].miss_done++;
+          } else {
+            data[s].counts[statType].pending++;
+          }
+        });
+      }
+    });
+  });
 
   // Run consistency checks on every subject
   getTimetable().subjects.forEach(({code}) => assertConsistency(code, data[code]));

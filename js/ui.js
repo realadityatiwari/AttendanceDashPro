@@ -1,5 +1,5 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
-import { getTimetable, formatTodayHeader, getLocalDateString, getTodayString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
+import { getTimetable, formatTodayHeader, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
 
 /**
@@ -37,10 +37,12 @@ export function dimColor(pct, targetPercentage = 75) {
 import { computeLaboratoryDashboard } from './laboratory-engine.js';
 import { computeQuizDashboard } from './quiz-engine.js';
 import {
-  dateContext, MODE, isSimulationMode, getActiveDate, getActiveDateString,
-  selectDate, selectDateByString, resetToToday,
-  getEffectiveStates, logClassState, classifyDate, deriveMode
+  dateContext, MODE, isSimulationMode, getActiveDateString,
+  selectDateByString, resetToToday,
+  getEffectiveStates, logClassState, classifyDateStr, deriveMode
 } from './dateContext.js';
+import { addDays, getTodayString, getAcademicDay } from './calendar-engine.js';
+export { getTodayString };
 
 export let currentQuiz = 0;
 
@@ -116,7 +118,7 @@ export function renderDateNavigator() {
       <div class="nav-picker">
         <label class="nav-picker-label" for="datePickerInput">Pick Date…</label>
         <input type="date" id="datePickerInput" class="nav-picker-input"
-               min="${getLocalDateString(getTimetable().start_date)}"
+               min="${getTimetable().start_date}"
                value="${getActiveDateString()}"
                aria-label="Pick a date" />
       </div>
@@ -126,33 +128,29 @@ export function renderDateNavigator() {
 }
 
 function buildNavigatorOptions() {
-  const today = new Date();
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
-  const tomorrow  = new Date(); tomorrow.setDate(today.getDate() + 1);
-
-  const yMode = deriveMode(yesterday);
-  const tMode = deriveMode(today);
-  const tmMode = deriveMode(tomorrow);
+  const todayStr = getTodayString();
+  const yesterdayStr = addDays(todayStr, -1);
+  const tomorrowStr = addDays(todayStr, 1);
 
   const selStr = getActiveDateString();
 
   return [
     {
       action: 'yesterday', icon: '◀', label: 'Yesterday',
-      dateStr: getLocalDateString(yesterday),
-      active: getLocalDateString(yesterday) === selStr,
+      dateStr: yesterdayStr,
+      active: yesterdayStr === selStr,
       modeText: 'Live', modeClass: 'nav-mode-live'
     },
     {
       action: 'today', icon: '●', label: 'Today',
-      dateStr: getLocalDateString(today),
-      active: getLocalDateString(today) === selStr,
+      dateStr: todayStr,
+      active: todayStr === selStr,
       modeText: 'Live', modeClass: 'nav-mode-live'
     },
     {
       action: 'tomorrow', icon: '▶', label: 'Tomorrow',
-      dateStr: getLocalDateString(tomorrow),
-      active: getLocalDateString(tomorrow) === selStr,
+      dateStr: tomorrowStr,
+      active: tomorrowStr === selStr,
       modeText: 'Sim', modeClass: 'nav-mode-sim'
     }
   ];
@@ -992,24 +990,22 @@ export function logAttendance(dateStr, subjectCode, type, newState) {
 /* ═══════════════════════════════════════════════════════════════════════
    TODAY'S CLASSES RENDERER
 ═══════════════════════════════════════════════════════════════════════ */
-export function renderTodayClasses(targetDate, quizLiveData) {
+export function renderTodayClasses(targetDateStr, quizLiveData) {
   const listContainer = document.getElementById('todayClassList');
   const dateLabel     = document.getElementById('todayDateLabel');
   if (!listContainer || !dateLabel) return;
 
-  dateLabel.innerHTML = formatTodayHeader(targetDate);
+  const academicDay = getAcademicDay(targetDateStr);
+  const dateStr = targetDateStr;
 
-  const dow         = targetDate.getDay();
-  const monIdx      = (dow + 6) % 7; // Mon=0 … Sun=6
-  const dateStr     = getLocalDateString(targetDate);
-  const isWeekend   = dow === 0 || dow === 6;
-  const targetNoon  = new Date(targetDate);
-  targetNoon.setHours(12, 0, 0, 0);
-  const semStart = getTimetable().start_date;
-  const semEnd   = getTimetable().quiz_dates[getTimetable().quiz_dates.length - 1].date;
-  const isWithinSemester = targetNoon >= semStart && targetNoon <= semEnd;
+  // Render header using standard date parsing to string for ui
+  const d = new Date(dateStr);
+  dateLabel.innerHTML = formatTodayHeader(d);
 
-  if (isWeekend || !isWithinSemester || !getMergedDaySchedule(monIdx)) {
+  const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
+  const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
+  
+  if (!academicDay.isWorkingDay || !getMergedDaySchedule(monIdx)) {
     listContainer.innerHTML = `<div class="today-empty">No scheduled classes on this date.</div>`;
     return;
   }
@@ -1153,11 +1149,11 @@ export function renderHistoryLog() {
    RECALCULATE & RENDER — master refresh
 ═══════════════════════════════════════════════════════════════════════ */
 export function recalculateAndRender() {
-  const targetDate  = getActiveDate();
+  const targetDateStr = getActiveDateString();
   const liveData    = getAttendanceData(getTimetable().quiz_dates[currentQuiz].date, getEffectiveStates());
   const isMobile    = window.innerWidth < 768;
 
-  renderTodayClasses(targetDate, liveData);
+  renderTodayClasses(targetDateStr, liveData);
   renderHistoryLog();
   // Also render into mobile history list
   const mobileList = document.getElementById('mobileHistoryList');
@@ -1341,7 +1337,7 @@ export function renderBottomSheetDateNav() {
     <div class="sheet-picker">
       <label class="sheet-picker-label" for="sheetDatePicker">Pick Date…</label>
       <input type="date" id="sheetDatePicker" class="sheet-picker-input"
-             min="${getLocalDateString(getTimetable().start_date)}"
+             min="${getTimetable().start_date}"
              value="${getActiveDateString()}"
              aria-label="Pick a date" />
     </div>`;
