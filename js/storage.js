@@ -9,6 +9,7 @@ export const AppState = {
     theme: 'dark',
     simulationMode: false
   },
+  academicEvents: {}, // YYYY-MM-DD -> AcademicEvent[]
   isDirty: false
 };
 
@@ -35,6 +36,9 @@ if (parsed.attendance && typeof parsed.attendance === 'object' && !Array.isArray
         }
         if (parsed.profile && typeof parsed.profile === 'object' && !Array.isArray(parsed.profile)) {
           AppState.profile = { ...AppState.profile, ...parsed.profile };
+        }
+        if (parsed.academicEvents && typeof parsed.academicEvents === 'object' && !Array.isArray(parsed.academicEvents)) {
+          AppState.academicEvents = parsed.academicEvents;
         }
         console.log("[storage.js] Local state hydrated successfully.");
       }
@@ -96,6 +100,7 @@ export function saveStates(states) {
 export function clearStates() {
   AppState.laboratory = {};
   AppState.attendance = {};
+  AppState.academicEvents = {};
   AppState.isDirty = true;
   
   if (auth.currentUser) {
@@ -149,6 +154,12 @@ export async function fetchCloudStates() {
         AppState.profile = { ...AppState.profile, ...data.profile };
         
         console.log("[PROFILE 3] Local After Merge:", AppState.profile);
+        stateChanged = true;
+      }
+      
+      // Safe merge: Academic Events
+      if (isPlainObject(data.academicEvents)) {
+        AppState.academicEvents = { ...AppState.academicEvents, ...data.academicEvents };
         stateChanged = true;
       }
       
@@ -206,6 +217,10 @@ export function triggerCloudSync(isResetting = false) {
 
       if (isValidSettings(AppState.settings)) {
         payload.settings = AppState.settings;
+      }
+      
+      if (isResetting || Object.keys(AppState.academicEvents).length > 0) {
+        payload.academicEvents = AppState.academicEvents;
       }
 
       // Defensive guard: Never upload an empty attendance object unless explicitly resetting.

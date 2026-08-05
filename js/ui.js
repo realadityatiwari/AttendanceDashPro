@@ -661,13 +661,13 @@ export function buildQuizSubjectCard(item) {
     <div class="quiz-subj-card">
       <div class="quiz-subj-header">
         <span class="subj-card-code">${subject.code}</span>
-        <span class="status-badge ${status.cls}">${status.text}</span>
+        <span class="status-badge ${cls}">${label}</span>
       </div>
       <div class="quiz-subj-name">${subject.name}</div>
       <div class="quiz-subj-stats">
-        ${buildQuizPctRow('Lecture', eligibility.lecturePercentage, targetPct)}
-        ${buildQuizPctRow('Tutorial', eligibility.tutorialPercentage, targetPct)}
-        ${buildQuizPctRow('Average', eligibility.average, targetPct)}
+        ${buildQuizPctRow('Lecture', opt.lecturePercentage, targetPct)}
+        ${buildQuizPctRow('Tutorial', opt.tutorialPercentage, targetPct)}
+        ${buildQuizPctRow('Average', opt.averagePercentage, targetPct)}
         ${requiredLine}
       </div>
       <div style="margin-top: 12px; font-size: 11px;">
@@ -1150,7 +1150,7 @@ export function renderHistoryLog() {
 ═══════════════════════════════════════════════════════════════════════ */
 export function recalculateAndRender() {
   const targetDateStr = getActiveDateString();
-  const liveData    = getAttendanceData(getTimetable().quiz_dates[currentQuiz].date, getEffectiveStates());
+  const liveData    = getAttendanceData(targetDateStr, getEffectiveStates());
   const isMobile    = window.innerWidth < 768;
 
   renderTodayClasses(targetDateStr, liveData);
@@ -1176,7 +1176,8 @@ export function recalculateAndRender() {
   const forecastStats = computeForecastOverallAttendance(liveData, getTimetable().subjects);
 
   // Quiz Dashboard Model — computed once, passed into renderPanel
-  const quizModel = computeQuizDashboard(rows, getTimetable());
+  const quizCycle = currentQuiz + 1; // 1-indexed
+  const quizModel = computeQuizDashboard(getEffectiveStates(), quizCycle, getTimetable());
 
   // Laboratory Dashboard Model
   const labModel = computeLaboratoryDashboard(AppState.laboratory || {}, getEffectiveStates(), rows, getTimetable());

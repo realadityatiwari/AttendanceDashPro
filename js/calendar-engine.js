@@ -12,6 +12,7 @@
 
 let l1StaticData = null;
 let l2MemoryCache = new Map();
+let runtimeEvents = {}; // Date-indexed: YYYY-MM-DD -> AcademicEvent[]
 
 /* ═══════════════════════════════════════════════════════════════════════
    INITIALIZATION & VALIDATION
@@ -139,6 +140,17 @@ export function getPolicy(policyDomain) {
   return l1StaticData.policies[policyDomain] || null;
 }
 
+/**
+ * Retrieves the specific policy for a given quiz cycle.
+ * @param {number} quizCycle - 1-indexed quiz cycle
+ * @returns {Object} Policy for the quiz cycle
+ */
+export function getQuizPolicy(quizCycle) {
+  const quizPolicies = getPolicy('quiz');
+  if (!quizPolicies) return { targetPercentage: 70 }; // Fallback
+  return quizPolicies[`quiz${quizCycle}`] || quizPolicies.default || { targetPercentage: 70 };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    EVENT API
 ═══════════════════════════════════════════════════════════════════════ */
@@ -153,13 +165,99 @@ export function getCalendarEventsByType(eventType) {
   return l1StaticData.events.filter(e => e.type === eventType);
 }
 
+export function syncRuntimeEvents(eventsMap) {
+  runtimeEvents = eventsMap || {};
+  l2MemoryCache.clear();
+}
+
 /**
- * Fetches events occurring on a specific date.
+ * Validates and creates a normalized AcademicEvent.
+ */
+function createAcademicEvent(raw) {
+  if (!raw.id || typeof raw.id !== 'string') throw new Error('Invalid event id');
+  if (!raw.eventType) throw new Error('Invalid eventType');
+  if (!isValidDateString(raw.effectiveDate)) throw new Error('Invalid effectiveDate');
+  
+  return Object.freeze({
+    id: raw.id,
+    version: raw.version || 1,
+    eventType: raw.eventType,
+    subjectCode: raw.subjectCode || null,
+    classType: raw.classType || null,
+    effectiveDate: raw.effectiveDate,
+    metadata: Object.freeze({ ...(raw.metadata || {}) }),
+    createdAt: raw.createdAt || new Date().toISOString(),
+    source: raw.source || 'USER',
+    active: raw.active !== false
+  });
+}
+
+/**
+ * Fetches events occurring on a specific date, merging static L1 events and runtime events.
  */
 function getEventsForDate(dateString) {
-  return l1StaticData.events.filter(e => 
+  const staticEvents = l1StaticData.events.filter(e => 
     dateString >= e.startDate && dateString <= e.endDate
   );
+  const dynamicEvents = runtimeEvents[dateString] ? runtimeEvents[dateString].filter(e => e.active) : [];
+  return [...staticEvents, ...dynamicEvents];
+}
+
+/**
+ * Adds or updates an Academic Event in the runtime events memory.
+ */
+export function addAcademicEvent(raw) {
+  const event = createAcademicEvent(raw);
+  if (!runtimeEvents[event.effectiveDate]) {
+    runtimeEvents[event.effectiveDate] = [];
+  }
+  const idx = runtimeEvents[event.effectiveDate].findIndex(e => e.id === event.id);
+  if (idx >= 0) {
+    runtimeEvents[event.effectiveDate][idx] = event;
+  } else {
+    runtimeEvents[event.effectiveDate].push(event);
+  }
+  l2MemoryCache.clear();
+  return event;
+}
+
+export function removeAcademicEvent(eventId, dateString) {
+  if (runtimeEvents[dateString]) {
+    runtimeEvents[dateString] = runtimeEvents[dateString].filter(e => e.id !== eventId);
+    l2MemoryCache.clear();
+  }
+}
+
+/**
+ * Normalizes event meaning for downstream engines.
+ * Returns an integer delta indicating the shift in required classes (+1, -1, 0).
+ */
+export function getSubjectEventDeltas(dateString, subjectCode, classType) {
+  const events = getEventsForDate(dateString);
+  let delta = 0;
+  
+  // Sort events by priority descending to apply highest precedence
+  const sortedEvents = [...events].sort((a, b) => getEventPriority(b.type || b.eventType) - getEventPriority(a.type || a.eventType));
+  
+  for (const event of sortedEvents) {
+    const type = event.type || event.eventType;
+    // Skip if it doesn't apply to this subject/classType
+    if (event.subjectCode && event.subjectCode !== subjectCode) continue;
+    if (event.classType && event.classType !== classType) continue;
+
+    // High-priority closures skip standard calculation completely; handled by dayType
+    if (['EMERGENCY_CLOSURE', 'PUBLIC_HOLIDAY', 'INSTITUTE_HOLIDAY', 'FESTIVAL_HOLIDAY', 'SEMESTER_BREAK'].includes(type)) {
+      return 0;
+    }
+
+    if (type === 'CLASS_CANCELLED') {
+      delta -= 1;
+    } else if (['EXTRA_LECTURE', 'EXTRA_TUTORIAL', 'EXTRA_PRACTICAL', 'SURPRISE_QUIZ'].includes(type)) {
+      delta += 1;
+    }
+  }
+
+  return delta;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -182,6 +280,12 @@ function getEventPriority(eventType) {
     case 'MID_SEMESTER_BREAK': return 60;
     case 'INSTITUTE_HOLIDAY': return 50;
     case 'FESTIVAL_HOLIDAY': return 40;
+    case 'CLASS_CANCELLED': return 30;
+    case 'EXTRA_LECTURE': return 30;
+    case 'EXTRA_TUTORIAL': return 30;
+    case 'EXTRA_PRACTICAL': return 30;
+    case 'SURPRISE_QUIZ': return 30;
+    case 'QUIZ_DAY': return 30;
     default: return 10;
   }
 }
@@ -215,18 +319,20 @@ export function getAcademicDay(dateString) {
   const events = getEventsForDate(dateString);
 
   // Sort events by priority descending to determine the definitive state
-  const sortedEvents = [...events].sort((a, b) => getEventPriority(b.type) - getEventPriority(a.type));
+  const sortedEvents = [...events].sort((a, b) => getEventPriority(b.type || b.eventType) - getEventPriority(a.type || a.eventType));
 
   if (sortedEvents.length > 0) {
     const dominantEvent = sortedEvents[0];
-    isWorkingDay = dominantEvent.isWorkingDay;
-    workingStatus = isWorkingDay ? 'FULL_DAY' : 'CANCELLED';
-    dayType = isWorkingDay ? 'WORKING_DAY' : 'NON_WORKING_DAY';
     
-    // Check if this dominant event is overriding normal behavior
-    const normallyWorking = !l1StaticData.defaultWeekends.includes(dow);
-    if (isWorkingDay !== normallyWorking) {
-      isOverride = true;
+    if (dominantEvent.isWorkingDay !== undefined) {
+      isWorkingDay = dominantEvent.isWorkingDay;
+      workingStatus = isWorkingDay ? 'FULL_DAY' : 'CANCELLED';
+      dayType = isWorkingDay ? 'WORKING_DAY' : 'NON_WORKING_DAY';
+      
+      const normallyWorking = !l1StaticData.defaultWeekends.includes(dow);
+      if (isWorkingDay !== normallyWorking) {
+        isOverride = true;
+      }
     }
     
     if (dominantEvent.substitutionScheduleOverride) {
@@ -238,9 +344,12 @@ export function getAcademicDay(dateString) {
   // Build the immutable AcademicDay
   const academicDay = Object.freeze({
     date: dateString,
-    dayType,
+    dayOfWeek: dow,
+    isWorkingDay,
     workingStatus,
-    academicEvents: sortedEvents,
+    dayType,
+    isOverride,
+    events: Object.freeze(sortedEvents),
     metadata: Object.freeze({
       isOverride,
       originalDayOfWeek,
@@ -414,7 +523,7 @@ export function getAttendanceWindow(subjectCode, milestoneId) {
   while (current <= windowEnd) {
     const day = getAcademicDay(current);
     if (!day.metadata.isTeachingDay) {
-      if (day.academicEvents.length > 0) {
+      if (day.events.length > 0) {
         holidayCount++;
       } else {
         weekendCount++;

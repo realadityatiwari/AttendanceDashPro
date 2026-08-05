@@ -1,5 +1,5 @@
 import { initTimetable, getTimetable } from './utils.js';
-import { initCalendarEngine } from './calendar-engine.js';
+import { initCalendarEngine, syncRuntimeEvents } from './calendar-engine.js';
 import { auth } from './firebase.js';
 import { AppState, fetchCloudStates, getLocalAttendance, clearLocalAttendance, triggerCloudSync, initLocalState, persistLocalState, isProfileComplete } from './storage.js';
 import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav } from './ui.js';
@@ -205,6 +205,51 @@ function updateProfileUI(profileArg) {
   });
 }
 
+/**
+ * Extracts independent subject timelines from the core timetable.
+ * Designed to separate Weekly Schedule Data from Academic Event Data,
+ * preparing for a future migration to a standalone academic-calendar.json.
+ */
+function buildSubjectTimelines(timetable, academicCalendar = null) {
+  // If an external academic calendar is provided in the future, parse it here.
+  // For now, we process the embedded 'timeline' overrides or fallback to global.
+
+  const timelines = timetable.subjects.map(s => {
+    // 1. Custom Timeline (Future-proof block)
+    if (s.timeline) {
+      return {
+        subjectCode: s.code,
+        commencementDate: s.timeline.commencementDate || timetable.start_date,
+        milestones: s.timeline.milestones ? [...s.timeline.milestones] : []
+      };
+    }
+
+    // 2. Global Fallback (Regression Compatibility)
+    return {
+      subjectCode: s.code,
+      commencementDate: timetable.start_date,
+      milestones: timetable.quiz_dates.map((q, idx) => ({
+        milestoneId: `q${idx+1}`,
+        type: 'QUIZ',
+        date: q.date,
+        metadata: { quizCycle: idx + 1 }
+      }))
+    };
+  });
+
+  // Inject logical FIRST_LECTURE milestone at commencement
+  timelines.forEach(tl => {
+    tl.milestones.unshift({
+      milestoneId: 'm0',
+      type: 'FIRST_LECTURE',
+      date: tl.commencementDate,
+      metadata: {}
+    });
+  });
+
+  return timelines;
+}
+
 async function bootstrap() {
   console.log("[app.js] bootstrap called");
   try {
@@ -212,27 +257,9 @@ async function bootstrap() {
     console.log("[app.js] Timetable initialized");
 
     const timetable = getTimetable();
-    // Bridge: Initialize Calendar Engine dynamically from timetable data
-    const timelines = timetable.subjects.map(s => {
-      return {
-        subjectCode: s.code,
-        commencementDate: timetable.start_date,
-        milestones: timetable.quiz_dates.map((q, idx) => ({
-          milestoneId: `q${idx+1}`,
-          type: 'QUIZ',
-          date: q.date,
-          metadata: { quizCycle: idx + 1 }
-        }))
-      };
-    });
-    timelines.forEach(tl => {
-      tl.milestones.unshift({
-        milestoneId: 'm0',
-        type: 'FIRST_LECTURE',
-        date: tl.commencementDate,
-        metadata: {}
-      });
-    });
+    
+    // Bridge: Initialize Calendar Engine dynamically
+    const timelines = buildSubjectTimelines(timetable);
 
     initCalendarEngine({
       calendarId: 'default',
@@ -242,9 +269,19 @@ async function bootstrap() {
       defaultWeekends: [0, 6], // Sunday, Saturday
       events: [],
       subjectTimelines: timelines,
-      policies: {}
+      policies: {
+        quiz: {
+          quiz1: { targetPercentage: 70 },
+          quiz2: { targetPercentage: 75 },
+          quiz3: { targetPercentage: 75 },
+          default: { targetPercentage: 70 }
+        }
+      }
     });
     console.log("[app.js] Calendar Engine initialized");
+
+    syncRuntimeEvents(AppState.academicEvents);
+    console.log("[app.js] Runtime Academic Events synced");
 
     updateThemeBtn('dark');
   } catch (e) {

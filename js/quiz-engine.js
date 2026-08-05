@@ -1,71 +1,58 @@
-import { getTimetable } from './utils.js';
-import { optimizeLive } from './attendance-engine.js';
+import { getQuizPolicy } from './calendar-engine.js';
+import { getSubjectQuizOptimization } from './attendance-engine.js';
 
 /* ═══════════════════════════════════════════════════════════════════════
    QUIZ ELIGIBILITY ENGINE
    Evaluates a single subject's quiz eligibility against configured rules.
 ═══════════════════════════════════════════════════════════════════════ */
 
-export const QUIZ_RULES = {
-  quiz1: { targetPercentage: 70 },
-  quiz2: { targetPercentage: 75 },
-  quiz3: { targetPercentage: 75 }
-};
-
 /**
  * Domain Result Object for Quiz Eligibility
+ * Contains only structured academic information.
  */
 export class QuizEligibilityResult {
   constructor({
     applicable = false,
     eligible = null,
-    lecturePercentage = null,
-    tutorialPercentage = null,
-    average = null,
+    requiredPercentage = null,
+    policyId = null,
     optResult = null
   } = {}) {
     this.applicable = applicable;
     this.eligible = eligible;
-    this.lecturePercentage = lecturePercentage;
-    this.tutorialPercentage = tutorialPercentage;
-    this.average = average;
+    this.requiredPercentage = requiredPercentage;
+    this.policyId = policyId;
     this.optResult = optResult;
   }
 }
 
 /**
- * Calculates quiz eligibility for a subject based on its raw attendance stats.
+ * Calculates quiz eligibility for a subject based on its Quiz Window raw stats.
  * Independent of the forecast engine's pre-calculated percentages.
  * Returns: QuizEligibilityResult
  */
-export function computeQuizEligibility(subjectStats) {
-  const rules = QUIZ_RULES.quiz1; // Using quiz1 rules per architecture
-
-  // Retrieve subject metadata from the academic model (Single Source of Truth)
-  const timetable = getTimetable();
-  const subjectMeta = timetable.subjects.find(s => s.code === subjectStats.code);
-
+export function computeQuizEligibility(subjectMeta, states, quizCycle) {
   if (!subjectMeta || !subjectMeta.quizApplicable) {
     return new QuizEligibilityResult({ applicable: false });
   }
 
+  const policy = getQuizPolicy(quizCycle);
+  const targetPercentage = policy.targetPercentage;
+
   // Unified Optimizer call replacing duplicate business logic
-  const optResult = optimizeLive(
-    subjectStats.totL, subjectStats.totT,
-    subjectStats.attL_done, subjectStats.missL_done,
-    subjectStats.attT_done, subjectStats.missT_done,
-    subjectStats.pendingL, subjectStats.pendingT,
-    rules.targetPercentage
-  );
+  const optResult = getSubjectQuizOptimization(subjectMeta.code, quizCycle, states, targetPercentage);
+
+  if (!optResult) {
+    return new QuizEligibilityResult({ applicable: false });
+  }
 
   const eligible = optResult.reachable && optResult.lectureDeficit === 0 && optResult.tutorialDeficit === 0;
 
   return new QuizEligibilityResult({
     applicable: true,
     eligible,
-    lecturePercentage: optResult.lecturePercentage,
-    tutorialPercentage: optResult.tutorialPercentage,
-    average: optResult.averagePercentage,
+    requiredPercentage: targetPercentage,
+    policyId: `quiz${quizCycle}`,
     optResult
   });
 }
@@ -97,12 +84,13 @@ export class QuizDashboardModel {
  * Iterates through every subject in the academic model, evaluates eligibility,
  * and compiles a structured Dashboard Model.
  * 
- * @param {Array} subjectStatsArray - Array of precomputed subject stats
+ * @param {Object} states - The local storage attendance states
+ * @param {number} quizCycle - The active quiz cycle (1-indexed)
  * @param {Object} timetable - The academic model
  * @returns {QuizDashboardModel}
  */
-export function computeQuizDashboard(subjectStatsArray, timetable) {
-  const rules = QUIZ_RULES.quiz1;
+export function computeQuizDashboard(states, quizCycle, timetable) {
+  const policy = getQuizPolicy(quizCycle);
   
   const summary = {
     totalSubjects: 0,
@@ -110,7 +98,7 @@ export function computeQuizDashboard(subjectStatsArray, timetable) {
     eligible: 0,
     needsAttendance: 0,
     notApplicable: 0,
-    requiredAverage: rules.targetPercentage
+    requiredAverage: policy.targetPercentage
   };
   
   const subjects = [];
@@ -119,11 +107,8 @@ export function computeQuizDashboard(subjectStatsArray, timetable) {
   for (const subjectMeta of timetable.subjects) {
     summary.totalSubjects++;
 
-    const stats = subjectStatsArray.find(s => s.code === subjectMeta.code);
-    if (!stats) continue;
-
     // Evaluate core eligibility rules
-    const eligibility = computeQuizEligibility(stats);
+    const eligibility = computeQuizEligibility(subjectMeta, states, quizCycle);
 
     // Aggregate summary counts
     if (!eligibility.applicable) {

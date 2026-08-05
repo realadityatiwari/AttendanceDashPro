@@ -21,7 +21,15 @@
       "tag": null,
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-20",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-19", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-16", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-23", "metadata": { "quizCycle": 3 } }
+        ]
+      }
     },
     {
       "code": "BCS-501",
@@ -53,7 +61,14 @@
       "tag": "Elective-I",
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-15",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-17", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-14", "metadata": { "quizCycle": 2 } }
+        ]
+      }
     },
     {
       "code": "BCS-058",
@@ -69,7 +84,13 @@
       "tag": "Lab",
       "category": "lab",
       "quizApplicable": false,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-16",
+        "milestones": [
+          { "type": "LAB_INTERNAL", "milestoneId": "internal1", "date": "2026-09-10", "metadata": {} }
+        ]
+      }
     },
     {
       "code": "BCS-552",

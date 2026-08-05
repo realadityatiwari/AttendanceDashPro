@@ -1,5 +1,5 @@
 import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
-import { getQuizWindow, getAcademicDay } from './calendar-engine.js';
+import { getQuizWindow, getAcademicDay, getSubjectEventDeltas } from './calendar-engine.js';
 
 export function calcCurrentPct(attended, completed) {
   if (!completed || completed <= 0) return null;
@@ -262,6 +262,9 @@ export function getAttendanceData(quizDate, states = {}) {
       const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
 
       const mergedSchedule = getMergedDaySchedule(monIdx);
+      
+      const statTypesToApplyDeltas = new Set(['L', 'T', 'P']);
+
       if (mergedSchedule) {
         mergedSchedule.forEach(({s, t}) => {
           if (s !== code) return; // Process ONLY this subject
@@ -270,6 +273,10 @@ export function getAttendanceData(quizDate, states = {}) {
           if (!data[s] || !data[s].counts[statType]) return;
           
           data[s].counts[statType].tot++;
+          
+          // Mark this stat type as already processed for scheduled classes,
+          // so we don't accidentally double-apply deltas.
+          statTypesToApplyDeltas.delete(t);
 
           const classId = `${dateStr}:${s}:${t}`;
           const state   = states[classId] || 'Pending';
@@ -283,12 +290,122 @@ export function getAttendanceData(quizDate, states = {}) {
           }
         });
       }
+
+      // Now apply Calendar Engine event deltas (extra classes, cancelled classes, etc)
+      // We apply for all valid types for the subject that were scheduled or not.
+      const types = ['L', 'T', 'P'];
+      types.forEach(t => {
+        const delta = getSubjectEventDeltas(dateStr, code, t);
+        if (delta !== 0) {
+          const statType = normalizeClassType(t);
+          if (data[code].counts[statType]) {
+            data[code].counts[statType].tot += delta;
+            if (data[code].counts[statType].tot < 0) {
+              data[code].counts[statType].tot = 0; // Prevent negative scheduled classes
+            }
+            if (delta > 0) {
+              data[code].counts[statType].pending += delta;
+            } else {
+              data[code].counts[statType].pending += delta;
+              if (data[code].counts[statType].pending < 0) {
+                 data[code].counts[statType].pending = 0;
+              }
+            }
+          }
+        }
+      });
     });
   });
 
   // Run consistency checks on every subject
   getTimetable().subjects.forEach(({code}) => assertConsistency(code, data[code]));
   return data;
+}
+
+/**
+ * Specifically computes optimization for a single subject's quiz window.
+ * Used exclusively by the Quiz Engine to prevent recalculating duplicated attendance.
+ */
+export function getSubjectQuizOptimization(subjectCode, quizCycle, states, targetPercentage) {
+  let window;
+  try {
+    window = getQuizWindow(subjectCode, quizCycle);
+  } catch (e) {
+    return null;
+  }
+
+  const counts = {
+    L: { tot: 0, att_done: 0, miss_done: 0, pending: 0 },
+    T: { tot: 0, att_done: 0, miss_done: 0, pending: 0 },
+    P: { tot: 0, att_done: 0, miss_done: 0, pending: 0 }
+  };
+
+  window.effectiveTeachingDates.forEach(dateStr => {
+    const academicDay = getAcademicDay(dateStr);
+    const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
+    const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
+
+    const mergedSchedule = getMergedDaySchedule(monIdx);
+    if (mergedSchedule) {
+      mergedSchedule.forEach(({s, t}) => {
+        if (s !== subjectCode) return;
+        
+        const statType = normalizeClassType(t);
+        if (!counts[statType]) return;
+        
+        counts[statType].tot++;
+
+        const classId = `${dateStr}:${s}:${t}`;
+        const state   = states[classId] || 'Pending';
+
+        if (state === 'Attended') {
+          counts[statType].att_done++;
+        } else if (state === 'Missed') {
+          counts[statType].miss_done++;
+        } else {
+          counts[statType].pending++;
+        }
+      });
+    }
+
+    // Apply event deltas
+    const types = ['L', 'T', 'P'];
+    types.forEach(t => {
+      const delta = getSubjectEventDeltas(dateStr, subjectCode, t);
+      if (delta !== 0) {
+        const statType = normalizeClassType(t);
+        if (counts[statType]) {
+          counts[statType].tot += delta;
+          if (counts[statType].tot < 0) counts[statType].tot = 0;
+          if (delta > 0) {
+            counts[statType].pending += delta;
+          } else {
+            counts[statType].pending += delta;
+            if (counts[statType].pending < 0) counts[statType].pending = 0;
+          }
+        }
+      }
+    });
+  });
+
+  const hasLorT = (counts.L.tot + counts.T.tot) > 0;
+  if (!hasLorT) {
+    return new OptimizationResult({
+      targetPercentage,
+      reachable: false,
+      lectureDeficit: 0, tutorialDeficit: 0,
+      safeSkipLecture: 0, safeSkipTutorial: 0,
+      lecturePercentage: 0, tutorialPercentage: 0, averagePercentage: 0
+    });
+  }
+
+  return optimizeLive(
+    counts.L.tot, counts.T.tot,
+    counts.L.att_done, counts.L.miss_done,
+    counts.T.att_done, counts.T.miss_done,
+    counts.L.pending, counts.T.pending,
+    targetPercentage
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

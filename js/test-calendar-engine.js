@@ -6,7 +6,11 @@ import {
   getNextWorkingDay, 
   getTeachingDaysBetween, 
   getWorkingDaysUntil, 
-  getPolicy 
+  getPolicy,
+  addAcademicEvent,
+  removeAcademicEvent,
+  syncRuntimeEvents,
+  getSubjectEventDeltas
 } from './calendar-engine.js';
 
 let failed = 0;
@@ -112,7 +116,7 @@ assert("Weekend is not teaching day", weekend.metadata.isTeachingDay === false);
 // 3. Public holiday
 const pubHol = getAcademicDay('2024-01-10');
 assert("Public holiday is not teaching day", pubHol.metadata.isTeachingDay === false);
-assert("Public holiday event attached", pubHol.academicEvents[0].type === 'PUBLIC_HOLIDAY');
+assert("Public holiday event attached", pubHol.events[0].type === 'PUBLIC_HOLIDAY');
 
 // 4. Working Saturday
 const workSat = getAcademicDay('2024-01-13'); // Saturday but overridden
@@ -128,7 +132,7 @@ assert("Working day override has override flag", workOvr.metadata.isOverride ===
 // 6. Multiple overlapping events (Emergency Closure vs Working Saturday on 2024-01-20)
 const overlap = getAcademicDay('2024-01-20');
 assert("Emergency Closure overrides Working Saturday", overlap.metadata.isTeachingDay === false);
-assert("Emergency Closure dominant", overlap.academicEvents[0].type === 'EMERGENCY_CLOSURE');
+assert("Emergency Closure dominant", overlap.events[0].type === 'EMERGENCY_CLOSURE');
 
 // 7. Previous working day
 const prev = getPreviousWorkingDay('2024-01-11'); // 11th is Thursday. 10th is Pub Hol. 9th is Tuesday.
@@ -149,8 +153,62 @@ const rangeCount = getTeachingDaysBetween('2024-01-08', '2024-01-14');
 assert("getTeachingDaysBetween counts accurately", rangeCount.length === 5);
 
 // 11. Policy retrieval
-const quizPolicy = getPolicy('quiz');
-assert("Policy retrieved successfully", quizPolicy.targetPercentage === 70);
+const q1Pol = getPolicy('quiz');
+assert('Policy Resolution: Returns specified targetPercentage', q1Pol.targetPercentage === 70);
+
+// Runtime Event Tests
+console.log('--- Runtime Academic Events Tests ---');
+syncRuntimeEvents({});
+
+// 1. Extra Lecture
+addAcademicEvent({
+  id: 'e1',
+  eventType: 'EXTRA_LECTURE',
+  effectiveDate: '2024-01-08',
+  subjectCode: 'CS101',
+  classType: 'L'
+});
+assert('Event API: getSubjectEventDeltas returns +1 for Extra Lecture', getSubjectEventDeltas('2024-01-08', 'CS101', 'L') === 1);
+assert('Event API: getSubjectEventDeltas returns 0 for wrong subject', getSubjectEventDeltas('2024-01-08', 'CS102', 'L') === 0);
+assert('Event API: getSubjectEventDeltas returns 0 for wrong type', getSubjectEventDeltas('2024-01-08', 'CS101', 'T') === 0);
+
+// 2. Class Cancelled
+addAcademicEvent({
+  id: 'e2',
+  eventType: 'CLASS_CANCELLED',
+  effectiveDate: '2024-01-09',
+  subjectCode: 'CS101',
+  classType: 'L'
+});
+assert('Event API: getSubjectEventDeltas returns -1 for Cancelled Class', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === -1);
+
+// 3. Multiple events on same day (Cancel + Extra)
+addAcademicEvent({
+  id: 'e3',
+  eventType: 'EXTRA_TUTORIAL',
+  effectiveDate: '2024-01-09',
+  subjectCode: 'CS101',
+  classType: 'T'
+});
+assert('Event API: Multiple events resolve independently by type (L = -1)', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === -1);
+assert('Event API: Multiple events resolve independently by type (T = +1)', getSubjectEventDeltas('2024-01-09', 'CS101', 'T') === 1);
+
+// 4. Overruled by Closure
+addAcademicEvent({
+  id: 'e4',
+  eventType: 'EMERGENCY_CLOSURE',
+  effectiveDate: '2024-01-09',
+  isWorkingDay: false
+});
+assert('Event API: High priority global closure skips standard math and yields 0 delta', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === 0);
+
+// 5. Remove event
+removeAcademicEvent('e2', '2024-01-09'); // Remove CLASS_CANCELLED
+// Now only EXTRA_TUTORIAL and EMERGENCY_CLOSURE exist
+// But wait, EMERGENCY_CLOSURE still suppresses it mathematically.
+assert('Event API: High priority closure still rules', getSubjectEventDeltas('2024-01-09', 'CS101', 'T') === 0);
+
+console.log('--- Calendar Engine Tests Complete ---');
 
 // 12. Invalid calendar
 expectThrow("Init throws on missing semesterStart", () => {
