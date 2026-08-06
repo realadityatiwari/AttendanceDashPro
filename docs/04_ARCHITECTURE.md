@@ -66,20 +66,16 @@ graph TD
 
 ## Unidirectional Data Flow
 
-```
-User Action
-    ↓
-Controller (EventsController or logAttendance)
-    ↓
-State Mutation (AppState or dateContext)
-    ↓
-Persistence (localStorage + Firestore via triggerCloudSync)
-    ↓
-recalculateAndRender()
-    ↓
-Engine Pipeline (Calendar → Attendance → Quiz → Lab)
-    ↓
-DOM Update
+```mermaid
+sequenceDiagram
+    actor User
+    User->>Controller: Action (e.g. toggle class, create event)
+    Controller->>State: Mutate State (AppState or dateContext)
+    State-->>Persistence: persistLocalState + triggerCloudSync
+    Controller->>UI: recalculateAndRender()
+    UI->>Engines: Execute Pipeline (CE → AE → QE → LE)
+    Engines-->>UI: Return Computed Models
+    UI->>DOM: Update DOM
 ```
 
 This flow is **always** followed. No exceptions. The UI never mutates state directly or calls engine functions independently.
@@ -194,89 +190,96 @@ This is the **single master refresh function**. Every state change triggers this
 
 ## Storage Pipeline
 
-```
-User Writes Attendance
-    ↓
-logAttendance() in ui.js
-    ↓
-logClassState() in dateContext.js
-    ↓
-if LIVE: saveStates() in storage.js → AppState.attendance updated
-    ↓
-persistLocalState(uid) → localStorage.setItem(...)
-    ↓
-triggerCloudSync() → 1000ms debounce → Firestore set({ merge: true })
+```mermaid
+sequenceDiagram
+    actor User
+    User->>UI: logAttendance()
+    UI->>DateContext: logClassState()
+    alt if LIVE mode
+        DateContext->>Storage: saveStates()
+        Storage->>Storage: AppState.attendance updated
+        Storage->>Storage: persistLocalState(uid)
+        Storage->>Firestore: triggerCloudSync() (1000ms debounce, merge: true)
+    end
 ```
 
 ---
 
 ## Calendar Pipeline
 
-```
-Bootstrap (app.js)
-    ↓
-initCalendarEngine(calendarData) → L1 static cache frozen
-    ↓
-syncRuntimeEvents(AppState.academicEvents) → runtime events loaded
-    ↓
-getAcademicDay(dateString)
-    → resolves events for date
-    → applies priority-based conflict resolution
-    → returns immutable AcademicDay (cached in L2 memory)
-    ↓
-getQuizWindow(subjectCode, quizCycle)
-    → finds quiz milestone in subject timeline
-    → computes effective teaching dates
-    → returns AttendanceWindow
+```mermaid
+sequenceDiagram
+    participant Boot as Bootstrap (app.js)
+    participant CE as Calendar Engine
+    participant AE as Attendance Engine
+    
+    Boot->>CE: initCalendarEngine(calendarData)
+    Note over CE: L1 static cache frozen
+    Boot->>CE: syncRuntimeEvents(AppState.academicEvents)
+    Note over CE: runtime events loaded
+    
+    AE->>CE: getAcademicDay(dateString)
+    Note over CE: resolves events for date<br/>applies priority conflict resolution
+    CE-->>AE: immutable AcademicDay (cached in L2)
+    
+    AE->>CE: getQuizWindow(subjectCode, quizCycle)
+    Note over CE: finds quiz milestone<br/>computes effective teaching dates
+    CE-->>AE: AttendanceWindow
 ```
 
 ---
 
 ## Academic Event Pipeline
 
-```
-User Creates Event via Form
-    ↓
-handleEventFormSubmit() in app.js
-    ↓
-createAcademicEvent() in events-controller.js
-    ↓
-validateAcademicEvent() in calendar-engine.js
-    ↓
-uniqueness check in AppState.academicEvents
-    ↓
-addAcademicEvent() in calendar-engine.js → L2 cache cleared
-    ↓
-AppState.academicEvents[date].push(event)
-    ↓
-persistLocalState() + triggerCloudSync()
-    ↓
-recalculateAndRender() → event appears in UI
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as app.js
+    participant Ctrl as EventsController
+    participant CE as Calendar Engine
+    participant Storage as AppState/Storage
+    participant UI as ui.js
+    
+    User->>App: handleEventFormSubmit()
+    App->>Ctrl: createAcademicEvent()
+    Ctrl->>CE: validateAcademicEvent()
+    Ctrl->>Storage: Uniqueness check (AppState.academicEvents)
+    Ctrl->>CE: addAcademicEvent(newEventData)
+    Note over CE: L2 cache cleared
+    Ctrl->>Storage: AppState.academicEvents[date].push(event)
+    Ctrl->>Storage: persistLocalState() + triggerCloudSync()
+    Ctrl->>UI: recalculateAndRender()
+    UI-->>User: Event appears in UI
 ```
 
 ---
 
 ## Bootstrap Sequence
 
-```
-1. DOM ready (DOMContentLoaded)
-2. app.js module loads
-3. initDOMBindings() — attach all event listeners
-4. bootstrap() called
-   a. initTimetable() — fetch timetable.json, parse
-   b. buildSubjectTimelines() — derive timelines from timetable data
-   c. initCalendarEngine(calendarData) — initialize L1 cache
-   d. syncRuntimeEvents(AppState.academicEvents) — load runtime events
-   e. updateThemeBtn() — apply persisted theme
-5. auth.onAuthStateChanged() listener registered
-6. On user login:
-   a. initLocalState(uid) — hydrate AppState from localStorage
-   b. applyTheme(), updateProfileUI()
-   c. recalculateAndRender() — first render with local data
-   d. fetchCloudStates() — background cloud sync
-   e. If cloud changed: applyTheme(), updateProfileUI(), recalculateAndRender()
-   f. checkProfileRecovery() — show recovery modal if profile incomplete
-   g. checkMigration() — show migration modal if legacy V1 data exists
+```mermaid
+sequenceDiagram
+    participant DOM as DOM
+    participant App as app.js
+    participant Auth as auth.js
+    participant UI as ui.js
+    participant Store as storage.js
+    
+    DOM->>App: DOMContentLoaded
+    App->>App: initDOMBindings()
+    App->>App: bootstrap()
+    Note over App: initTimetable, initCalendarEngine,<br/>syncRuntimeEvents, apply theme
+    App->>Auth: onAuthStateChanged() listener registered
+    
+    Note over Auth: On User Login
+    Auth->>Store: initLocalState(uid) (Hydrate from LocalStorage)
+    Auth->>UI: applyTheme(), updateProfileUI(), recalculateAndRender()
+    Auth->>Store: fetchCloudStates() (Background sync)
+    
+    alt if cloud state changed
+        Store->>UI: applyTheme(), updateProfileUI(), recalculateAndRender()
+    end
+    
+    Auth->>Auth: checkProfileRecovery(), checkMigration()
 ```
 
 ---

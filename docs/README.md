@@ -28,6 +28,10 @@ It is written for **AI agents and human developers** who need to continue work o
 | [15](15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md) | Known Bugs and Technical Debt | All confirmed bugs and design debt |
 | [16](16_ROADMAP.md) | Product Roadmap | Immediate priorities, near-term, medium-term, long-term |
 | [17](17_AI_HANDOFF.md) | AI Developer Handoff | Architectural invariants, pitfalls, how to add features |
+| [18](18_ARCHITECTURE_DECISION_RECORDS.md) | Architecture Decision Records | Chronological log of major architectural choices |
+| [19](19_DEPENDENCY_GRAPH.md) | Dependency Graph | Module dependencies, rules, and allowed imports |
+| [20](20_DATA_DICTIONARY.md) | Data Dictionary | Persistent data structures, lifecycles, ownership |
+| [21](21_CHANGELOG.md) | Changelog | Evolution across major phases and feature additions |
 
 ---
 
@@ -42,20 +46,22 @@ It is written for **AI agents and human developers** who need to continue work o
 
 ## Architecture in One Diagram
 
-```
-timetable.json ──► Calendar Engine ──► Attendance Engine ──► Quiz Engine
-                         │                    │
-                         ▼                    ▼
-                   Academic Events      Laboratory Engine
-                         │
-                         ▼
-                   EventsController ──► AppState ──► Firestore
-                                                │
-                                           localStorage
-                                                │
-                                           recalculateAndRender()
-                                                │
-                                              ui.js (DOM)
+```mermaid
+graph TD
+    TT[timetable.json] --> CE[Calendar Engine]
+    CE --> AE[Attendance Engine]
+    AE --> QE[Quiz Engine]
+    
+    CE --> Events[Academic Events]
+    AE --> LE[Laboratory Engine]
+    
+    Events --> EC[EventsController]
+    EC --> AS[AppState]
+    AS --> FS[Firestore]
+    AS --> LS[localStorage]
+    
+    AS --> RR[recalculateAndRender]
+    RR --> UI[ui.js DOM]
 ```
 
 ---
