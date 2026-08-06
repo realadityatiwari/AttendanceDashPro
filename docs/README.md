@@ -32,6 +32,7 @@ It is written for **AI agents and human developers** who need to continue work o
 | [19](19_DEPENDENCY_GRAPH.md) | Dependency Graph | Module dependencies, rules, and allowed imports |
 | [20](20_DATA_DICTIONARY.md) | Data Dictionary | Persistent data structures, lifecycles, ownership |
 | [21](21_CHANGELOG.md) | Changelog | Evolution across major phases and feature additions |
+| [22](22_AI_WORKING_CONTEXT.md) | AI Working Context | Permanent working mindset, rules, and philosophy for future AI |
 
 ---
 
