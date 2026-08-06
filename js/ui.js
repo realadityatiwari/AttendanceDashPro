@@ -41,7 +41,7 @@ import {
   selectDateByString, resetToToday,
   getEffectiveStates, logClassState, classifyDateStr, deriveMode
 } from './dateContext.js';
-import { addDays, getTodayString, getAcademicDay } from './calendar-engine.js';
+import { addDays, getTodayString, getAcademicDay, AcademicEventRegistry } from './calendar-engine.js';
 export { getTodayString };
 
 export let currentQuiz = 0;
@@ -407,6 +407,8 @@ export function buildMobileSubjectCard(r) {
       </div>`
     : '';
 
+  const opt = r.optResult;
+  const status = getSubjectStatus(r.forecastAvgPct, opt.targetPercentage);
   const mustAttend = opt.lectureDeficit + opt.tutorialDeficit;
   const safeSkips = opt.safeSkipLecture + opt.safeSkipTutorial;
   const needText = getRemainingRequirementText(opt);
@@ -719,7 +721,89 @@ export function buildQuizDashboardSection(quizModel) {
     </section>`;
 }
 
-/** Build one table row HTML from computed stats. */
+/* ═══════════════════════════════════════════════════════════════════════
+   ACADEMIC EVENTS RENDERING
+═══════════════════════════════════════════════════════════════════════ */
+
+export function renderAcademicEvents() {
+  const container = document.getElementById('eventsList');
+  if (!container) return;
+
+  const filterBtn = document.querySelector('.events-filter-bar .tab-btn.active');
+  const activeFilter = filterBtn ? filterBtn.getAttribute('data-filter') : 'active';
+
+  let events = [];
+  if (AppState.academicEvents) {
+    Object.values(AppState.academicEvents).forEach(dateEvents => {
+      events.push(...dateEvents);
+    });
+  }
+
+  // Sort chronological
+  events.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+
+  // Filter based on active vs archived
+  const filteredEvents = events.filter(e => {
+    if (activeFilter === 'archived') {
+      return e.archived === true;
+    } else {
+      return e.archived !== true;
+    }
+  });
+
+  if (filteredEvents.length === 0) {
+    container.innerHTML = `<div class="today-empty">No ${activeFilter} events found.</div>`;
+    return;
+  }
+
+  container.innerHTML = filteredEvents.map(e => buildEventCard(e)).join('');
+}
+
+function buildEventCard(event) {
+  const schema = AcademicEventRegistry[event.eventType] || {
+    displayName: event.eventType,
+    icon: 'calendar',
+    color: 'gray',
+    badge: 'Event'
+  };
+
+  const subjectStr = event.subjectCode ? `${event.subjectCode} ${event.classType ? `(${event.classType})` : ''}` : 'Global Event';
+  
+  let toggleBtn = '';
+  if (!event.archived) {
+    toggleBtn = `<button class="theme-btn" data-action="toggleEvent" data-id="${event.id}" data-date="${event.effectiveDate}" data-active="${event.active}" style="padding: 4px 8px; font-size: 11px;">
+      ${event.active ? 'Disable' : 'Enable'}
+    </button>`;
+  }
+
+  let editBtn = '';
+  if (!event.archived) {
+    editBtn = `<button class="theme-btn" data-action="editEvent" data-id="${event.id}" data-date="${event.effectiveDate}" style="padding: 4px 8px; font-size: 11px; background: var(--surface2);">Edit</button>`;
+  }
+
+  let deleteBtn = '';
+  if (!event.archived) {
+    deleteBtn = `<button class="theme-btn" data-action="deleteEvent" data-id="${event.id}" data-date="${event.effectiveDate}" style="padding: 4px 8px; font-size: 11px; background: var(--surface2); color: red;">Delete</button>`;
+  }
+
+  return `
+    <div class="stat-card" style="padding: 16px; border-left: 4px solid var(--${schema.color}); opacity: ${event.active ? 1 : 0.6}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+        <div>
+          <div style="font-weight: 500; font-size: 14px; margin-bottom: 4px;">${schema.displayName}</div>
+          <div style="font-size: 12px; color: var(--text2);">${event.effectiveDate} &bull; ${subjectStr}</div>
+        </div>
+        <span class="badge" style="background: var(--surface2); color: var(--${schema.color}); font-size: 10px;">${schema.badge}</span>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+        ${toggleBtn}
+        ${editBtn}
+        ${deleteBtn}
+      </div>
+    </div>
+  `;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    LABORATORY DASHBOARD UI
    Pure rendering layer — consumes LaboratoryDashboardModel. No calculations.
@@ -1210,7 +1294,7 @@ export function recalculateAndRender() {
 
   updateModeBadge();
   updateViewingLabel();
-
+  renderAcademicEvents();
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

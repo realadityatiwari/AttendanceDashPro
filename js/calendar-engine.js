@@ -170,14 +170,151 @@ export function syncRuntimeEvents(eventsMap) {
   l2MemoryCache.clear();
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ACADEMIC EVENT REGISTRY
+═══════════════════════════════════════════════════════════════════════ */
+
+export const AcademicEventRegistry = {
+  EXTRA_LECTURE: {
+    displayName: 'Extra Lecture',
+    icon: 'plus-circle',
+    color: 'blue',
+    requiresSubject: true,
+    requiresClassType: true,
+    allowedClassTypes: ['L'],
+    badge: 'Extra'
+  },
+  EXTRA_TUTORIAL: {
+    displayName: 'Extra Tutorial',
+    icon: 'plus-circle',
+    color: 'blue',
+    requiresSubject: true,
+    requiresClassType: true,
+    allowedClassTypes: ['T'],
+    badge: 'Extra'
+  },
+  EXTRA_PRACTICAL: {
+    displayName: 'Extra Practical',
+    icon: 'plus-circle',
+    color: 'blue',
+    requiresSubject: true,
+    requiresClassType: true,
+    allowedClassTypes: ['P1', 'P2'],
+    badge: 'Extra'
+  },
+  CLASS_CANCELLED: {
+    displayName: 'Cancelled Class',
+    icon: 'x-circle',
+    color: 'red',
+    requiresSubject: true,
+    requiresClassType: true,
+    allowedClassTypes: ['L', 'T', 'P1', 'P2'],
+    badge: 'Cancelled'
+  },
+  SURPRISE_QUIZ: {
+    displayName: 'Surprise Quiz',
+    icon: 'file-text',
+    color: 'purple',
+    requiresSubject: true,
+    requiresClassType: true,
+    allowedClassTypes: ['L', 'T'],
+    badge: 'Quiz'
+  },
+  QUIZ_DAY: {
+    displayName: 'Quiz Day',
+    icon: 'file-text',
+    color: 'purple',
+    requiresSubject: true,
+    requiresClassType: false,
+    allowedClassTypes: [],
+    badge: 'Quiz'
+  },
+  PUBLIC_HOLIDAY: {
+    displayName: 'Public Holiday',
+    icon: 'calendar',
+    color: 'red',
+    requiresSubject: false,
+    requiresClassType: false,
+    allowedClassTypes: [],
+    badge: 'Holiday'
+  },
+  INSTITUTE_HOLIDAY: {
+    displayName: 'Institute Holiday',
+    icon: 'home',
+    color: 'red',
+    requiresSubject: false,
+    requiresClassType: false,
+    allowedClassTypes: [],
+    badge: 'Holiday'
+  },
+  WORKING_DAY_OVERRIDE: {
+    displayName: 'Working Day Override',
+    icon: 'briefcase',
+    color: 'orange',
+    requiresSubject: false,
+    requiresClassType: false,
+    allowedClassTypes: [],
+    badge: 'Working'
+  },
+  EMERGENCY_CLOSURE: {
+    displayName: 'Emergency Closure',
+    icon: 'alert-triangle',
+    color: 'red',
+    requiresSubject: false,
+    requiresClassType: false,
+    allowedClassTypes: [],
+    badge: 'Emergency'
+  }
+};
+
+/**
+ * Validates an event against the registry schema.
+ */
+export function validateAcademicEvent(raw) {
+  if (!raw.eventType || !AcademicEventRegistry[raw.eventType]) {
+    throw new Error(`Invalid eventType: ${raw.eventType}`);
+  }
+  const schema = AcademicEventRegistry[raw.eventType];
+  
+  if (schema.requiresSubject && !raw.subjectCode) {
+    throw new Error(`${schema.displayName} requires a subjectCode.`);
+  }
+  if (!schema.requiresSubject && raw.subjectCode) {
+    throw new Error(`${schema.displayName} must not have a subjectCode.`);
+  }
+  
+  if (schema.requiresClassType && !raw.classType) {
+    throw new Error(`${schema.displayName} requires a classType.`);
+  }
+  if (!schema.requiresClassType && raw.classType) {
+    throw new Error(`${schema.displayName} must not have a classType.`);
+  }
+  
+  if (schema.requiresClassType && !schema.allowedClassTypes.includes(raw.classType)) {
+    throw new Error(`${schema.displayName} does not support classType ${raw.classType}.`);
+  }
+  
+  return true;
+}
+
 /**
  * Validates and creates a normalized AcademicEvent.
  */
 function createAcademicEvent(raw) {
   if (!raw.id || typeof raw.id !== 'string') throw new Error('Invalid event id');
-  if (!raw.eventType) throw new Error('Invalid eventType');
   if (!isValidDateString(raw.effectiveDate)) throw new Error('Invalid effectiveDate');
   
+  validateAcademicEvent(raw);
+  
+  const history = raw.history && Array.isArray(raw.history) ? [...raw.history] : [];
+  if (history.length === 0) {
+    history.push({
+      action: 'Created',
+      timestamp: new Date().toISOString(),
+      user: 'system' // This could be passed via raw.sourceUser if needed
+    });
+  }
+
   return Object.freeze({
     id: raw.id,
     version: raw.version || 1,
@@ -188,7 +325,9 @@ function createAcademicEvent(raw) {
     metadata: Object.freeze({ ...(raw.metadata || {}) }),
     createdAt: raw.createdAt || new Date().toISOString(),
     source: raw.source || 'USER',
-    active: raw.active !== false
+    active: raw.active !== false,
+    archived: raw.archived === true,
+    history: Object.freeze(history)
   });
 }
 
@@ -221,11 +360,28 @@ export function addAcademicEvent(raw) {
   return event;
 }
 
-export function removeAcademicEvent(eventId, dateString) {
+export function archiveAcademicEvent(eventId, dateString) {
   if (runtimeEvents[dateString]) {
-    runtimeEvents[dateString] = runtimeEvents[dateString].filter(e => e.id !== eventId);
-    l2MemoryCache.clear();
+    const idx = runtimeEvents[dateString].findIndex(e => e.id === eventId);
+    if (idx >= 0) {
+      const event = runtimeEvents[dateString][idx];
+      const newHistory = [...event.history, {
+        action: 'Archived',
+        timestamp: new Date().toISOString(),
+        user: 'system'
+      }];
+      const updatedEvent = Object.freeze({
+        ...event,
+        archived: true,
+        active: false,
+        history: Object.freeze(newHistory)
+      });
+      runtimeEvents[dateString][idx] = updatedEvent;
+      l2MemoryCache.clear();
+      return updatedEvent;
+    }
   }
+  return null;
 }
 
 /**

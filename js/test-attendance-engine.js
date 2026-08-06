@@ -17,7 +17,7 @@ global.fetch = async (url) => {
 // Import everything
 import { initTimetable, getTimetable } from './utils.js';
 import { getAttendanceData, computeSubjectStats, getSubjectQuizOptimization } from './attendance-engine.js';
-import { initCalendarEngine, syncRuntimeEvents, addAcademicEvent, removeAcademicEvent, getSubjectEventDeltas } from './calendar-engine.js';
+import { initCalendarEngine, syncRuntimeEvents, addAcademicEvent, archiveAcademicEvent, getSubjectEventDeltas } from './calendar-engine.js';
 
 let failed = 0;
 
@@ -232,7 +232,7 @@ async function runTests() {
   assert("EXTRA_LECTURE increments pending classes", modifiedData['BCS-501'].counts.L.pending > baseData['BCS-501'].counts.L.pending);
 
   // Replace with CLASS_CANCELLED (on a Tuesday so it actually has a scheduled class to cancel!)
-  removeAcademicEvent('evt1', '2026-07-27');
+  archiveAcademicEvent('evt1', '2026-07-27');
   addAcademicEvent({
     id: 'evt2',
     eventType: 'CLASS_CANCELLED',

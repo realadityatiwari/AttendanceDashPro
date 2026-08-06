@@ -2,7 +2,9 @@ import { initTimetable, getTimetable } from './utils.js';
 import { initCalendarEngine, syncRuntimeEvents } from './calendar-engine.js';
 import { auth } from './firebase.js';
 import { AppState, fetchCloudStates, getLocalAttendance, clearLocalAttendance, triggerCloudSync, initLocalState, persistLocalState, isProfileComplete } from './storage.js';
-import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav } from './ui.js';
+import { recalculateAndRender, updateThemeBtn, renderDateNavigator, renderBottomSheetDateNav, renderAcademicEvents } from './ui.js';
+import { createAcademicEvent, updateAcademicEvent, archiveAcademicEventController, toggleAcademicEvent } from './events-controller.js';
+import { AcademicEventRegistry } from './calendar-engine.js';
 
 import { loginUser, signupUser, logoutUser } from './auth.js';
 import { validateSignupForm, validateRollNumber, validatePassword } from './validation.js';
@@ -499,6 +501,39 @@ function initDOMBindings() {
 
   // ─── Profile Actions ────────────────────────────────────────────
   bindClick('profileThemeToggle', toggleProfileTheme);
+  bindClick('toolAcademicEvents', () => {
+    switchView('events');
+    renderAcademicEvents();
+  });
+  
+  // ─── Academic Events Actions ─────────────────────────────────────────
+  bindClick('btnNewEvent', () => {
+    openEventForm();
+  });
+  
+  bindClick('eventFormClose', () => {
+    document.getElementById('eventFormOverlay').style.display = 'none';
+    document.getElementById('eventFormSheet').style.display = 'none';
+  });
+  
+  bindClick('btnEventCancel', () => {
+    document.getElementById('eventFormOverlay').style.display = 'none';
+    document.getElementById('eventFormSheet').style.display = 'none';
+  });
+
+  document.getElementById('academicEventForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleEventFormSubmit();
+  });
+  
+  document.querySelectorAll('.events-filter-bar .tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.events-filter-bar .tab-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      renderAcademicEvents();
+    });
+  });
+
   bindClick('profileResetBtn', () => {
     console.log("[app.js] profileResetBtn clicked");
     if (confirm('Reset all attendance tracking data? This cannot be undone.')) {
@@ -551,6 +586,21 @@ function initDOMBindings() {
       const type = target.getAttribute('data-t');
       const state = target.getAttribute('data-state');
       UI.logAttendance(dateStr, sCode, type, state);
+    } else if (action === 'toggleEvent') {
+      const id = target.getAttribute('data-id');
+      const date = target.getAttribute('data-date');
+      const active = target.getAttribute('data-active') === 'true';
+      toggleAcademicEvent(id, date, !active);
+    } else if (action === 'deleteEvent') {
+      if (confirm('Are you sure you want to delete this event?')) {
+        const id = target.getAttribute('data-id');
+        const date = target.getAttribute('data-date');
+        archiveAcademicEventController(id, date);
+      }
+    } else if (action === 'editEvent') {
+      const id = target.getAttribute('data-id');
+      const date = target.getAttribute('data-date');
+      openEventForm(id, date);
     }
   });
   console.log("[app.js] Global event delegation set up");
@@ -570,6 +620,127 @@ function initDOMBindings() {
     UI.switchQuiz(next, tabs[next]);
   });
 
+}
+
+// ─── Event Form Logic ──────────────────────────────────────────
+let currentEditOriginalDate = null;
+
+function populateEventFormSelects() {
+  const typeSelect = document.getElementById('eventType');
+  const subjectSelect = document.getElementById('eventSubject');
+
+  if (typeSelect.options.length === 0) {
+    typeSelect.innerHTML = '<option value="">Select Type...</option>' + 
+      Object.keys(AcademicEventRegistry).map(key => 
+        `<option value="${key}">${AcademicEventRegistry[key].displayName}</option>`
+      ).join('');
+      
+    typeSelect.addEventListener('change', () => {
+      const type = typeSelect.value;
+      const schema = AcademicEventRegistry[type];
+      const subjCont = document.getElementById('eventSubjectContainer');
+      const classCont = document.getElementById('eventClassTypeContainer');
+      const classSelect = document.getElementById('eventClassType');
+      
+      if (schema) {
+        subjCont.style.display = schema.requiresSubject ? 'block' : 'none';
+        classCont.style.display = schema.requiresClassType ? 'block' : 'none';
+        if (schema.requiresSubject) subjectSelect.required = true;
+        else { subjectSelect.required = false; subjectSelect.value = ''; }
+        
+        if (schema.requiresClassType) {
+          classSelect.required = true;
+          classSelect.innerHTML = schema.allowedClassTypes.map(c => {
+             const labels = { 'L': 'Lecture (L)', 'T': 'Tutorial (T)', 'P1': 'Practical (P1)', 'P2': 'Practical (P2)' };
+             return `<option value="${c}">${labels[c] || c}</option>`;
+          }).join('');
+        } else {
+          classSelect.required = false;
+          classSelect.value = '';
+        }
+      }
+    });
+  }
+
+  // Populate subjects dynamically from timetable
+  import('./utils.js').then(({ getTimetable }) => {
+    const timetable = getTimetable();
+    subjectSelect.innerHTML = '<option value="">Select Subject...</option>' + 
+      timetable.subjects.map(s => `<option value="${s.code}">${s.code} - ${s.name}</option>`).join('');
+  });
+}
+
+function openEventForm(id = null, date = null) {
+  populateEventFormSelects();
+  
+  const form = document.getElementById('academicEventForm');
+  form.reset();
+  document.getElementById('eventSubjectContainer').style.display = 'none';
+  document.getElementById('eventClassTypeContainer').style.display = 'none';
+  
+  if (id && date) {
+    const event = AppState.academicEvents[date]?.find(e => e.id === id);
+    if (event) {
+      document.getElementById('eventFormTitle').textContent = 'Edit Event';
+      document.getElementById('eventFormId').value = event.id;
+      document.getElementById('eventType').value = event.eventType;
+      document.getElementById('eventType').dispatchEvent(new Event('change')); // trigger display logic
+      
+      document.getElementById('eventDate').value = event.effectiveDate;
+      if (event.subjectCode) document.getElementById('eventSubject').value = event.subjectCode;
+      if (event.classType) document.getElementById('eventClassType').value = event.classType;
+      
+      currentEditOriginalDate = date;
+    }
+  } else {
+    document.getElementById('eventFormTitle').textContent = 'New Event';
+    document.getElementById('eventFormId').value = '';
+    currentEditOriginalDate = null;
+    
+    // Set default date to today
+    import('./ui.js').then(({ getTodayString }) => {
+      document.getElementById('eventDate').value = getTodayString();
+    });
+  }
+  
+  document.getElementById('eventFormOverlay').style.display = 'block';
+  document.getElementById('eventFormSheet').style.display = 'block';
+}
+
+window.openEventForm = openEventForm; // for index.html calls or global access if needed
+
+function handleEventFormSubmit() {
+  const id = document.getElementById('eventFormId').value;
+  const eventType = document.getElementById('eventType').value;
+  const effectiveDate = document.getElementById('eventDate').value;
+  
+  const schema = AcademicEventRegistry[eventType];
+  const subjectCode = schema.requiresSubject ? document.getElementById('eventSubject').value : null;
+  const classType = schema.requiresClassType ? document.getElementById('eventClassType').value : null;
+  
+  const rawEvent = { eventType, effectiveDate, subjectCode, classType };
+  
+  let res;
+  if (id) {
+    rawEvent.id = id;
+    const originalEvent = AppState.academicEvents[currentEditOriginalDate]?.find(e => e.id === id);
+    if (originalEvent) {
+      rawEvent.history = originalEvent.history;
+      rawEvent.version = (originalEvent.version || 1) + 1;
+      rawEvent.active = originalEvent.active;
+      rawEvent.archived = originalEvent.archived;
+    }
+    res = updateAcademicEvent(rawEvent, currentEditOriginalDate);
+  } else {
+    res = createAcademicEvent(rawEvent);
+  }
+  
+  if (res.success) {
+    document.getElementById('eventFormOverlay').style.display = 'none';
+    document.getElementById('eventFormSheet').style.display = 'none';
+  } else {
+    alert('Error saving event: ' + res.error);
+  }
 }
 
 let hasInit = false;

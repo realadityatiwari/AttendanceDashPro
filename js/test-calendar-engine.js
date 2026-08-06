@@ -8,7 +8,7 @@ import {
   getWorkingDaysUntil, 
   getPolicy,
   addAcademicEvent,
-  removeAcademicEvent,
+  archiveAcademicEvent,
   syncRuntimeEvents,
   getSubjectEventDeltas
 } from './calendar-engine.js';
@@ -203,7 +203,7 @@ addAcademicEvent({
 assert('Event API: High priority global closure skips standard math and yields 0 delta', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === 0);
 
 // 5. Remove event
-removeAcademicEvent('e2', '2024-01-09'); // Remove CLASS_CANCELLED
+archiveAcademicEvent('e2', '2024-01-09'); // Archive CLASS_CANCELLED
 // Now only EXTRA_TUTORIAL and EMERGENCY_CLOSURE exist
 // But wait, EMERGENCY_CLOSURE still suppresses it mathematically.
 assert('Event API: High priority closure still rules', getSubjectEventDeltas('2024-01-09', 'CS101', 'T') === 0);

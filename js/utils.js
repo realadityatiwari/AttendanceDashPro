@@ -128,10 +128,22 @@ export function isScheduledClass(dateStr, subjectCode, type) {
   return sched.some(c => c.s === subjectCode && c.t === type);
 }
 
-export function formatTodayHeader(date) {
-  const dName = date.toLocaleDateString('en-US', { weekday: 'long' });
-  const dStr  = date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-  return `${dName} • ${dStr}`;
+export function formatTodayHeader(dateVal) {
+  let date = dateVal;
+  if (typeof dateVal === 'string') {
+    date = parseDateString(dateVal);
+  }
+  if (!date || typeof date.toLocaleDateString !== 'function') {
+    date = new Date(dateVal);
+    if (isNaN(date.getTime())) return String(dateVal);
+  }
+  try {
+    const dName = date.toLocaleDateString('en-US', { weekday: 'long' });
+    const dStr  = date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `${dName} • ${dStr}`;
+  } catch(e) {
+    return String(dateVal);
+  }
 }
 
 export function formatHistoryDate(dateStr) {
