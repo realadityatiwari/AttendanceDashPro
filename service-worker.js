@@ -22,6 +22,7 @@ const STATIC_ASSETS = [
   '/js/firebase.js',
   '/js/feedback.js',
   '/js/pwa.js',
+  '/js/events-controller.js',
   '/manifest.json',
   '/timetable.json',
   '/assets/icons/icon-192.png',

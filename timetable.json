@@ -1,6 +1,8 @@
 {
   "start_date": "2026-07-15",
+  "end_date": "2026-12-31",
   "policies": {
+    "attendance": { "targetPercentage": 75 },
     "quiz": {
       "quiz1": { "targetPercentage": 70 },
       "quiz2": { "targetPercentage": 75 },

@@ -267,18 +267,11 @@ async function bootstrap() {
       calendarId: 'default',
       semesterId: 'current',
       semesterStart: timetable.start_date,
-      semesterEnd: '2030-12-31', // Mock end for now
+      semesterEnd: timetable.end_date || '2030-12-31',
       defaultWeekends: [0, 6], // Sunday, Saturday
       events: [],
       subjectTimelines: timelines,
-      policies: {
-        quiz: {
-          quiz1: { targetPercentage: 70 },
-          quiz2: { targetPercentage: 75 },
-          quiz3: { targetPercentage: 75 },
-          default: { targetPercentage: 70 }
-        }
-      }
+      policies: timetable.policies || {}
     });
     console.log("[app.js] Calendar Engine initialized");
 

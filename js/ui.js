@@ -1,7 +1,7 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
 import { getTimetable, formatTodayHeader, parseDateString, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
-
+import { getPolicy } from './calendar-engine.js';
 /**
  * Determine status badge from forecast average.
  * Status is ALWAYS based on forecast, never current.
@@ -1115,11 +1115,12 @@ export function renderTodayClasses(targetDateStr, quizLiveData) {
     const missPressed = currState === 'Missed' ? 'true' : 'false';
 
     // Build tooltips showing forecast impact of each possible action
+    const policyTarget = getPolicy('attendance').targetPercentage;
     const impactAtt  = quizLiveData
-      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Attended'))
+      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Attended', policyTarget))
       : '';
     const impactMiss = quizLiveData
-      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Missed'))
+      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Missed', policyTarget))
       : '';
 
     const attTooltip  = impactAtt  || 'Mark as attended';

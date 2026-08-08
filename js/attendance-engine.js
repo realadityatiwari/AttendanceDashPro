@@ -1,5 +1,5 @@
 import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
-import { getQuizWindow, getAcademicDay, getSubjectEventDeltas } from './calendar-engine.js';
+import { getQuizWindow, getAcademicDay, getSubjectEventDeltas, getPolicy } from './calendar-engine.js';
 
 export function calcCurrentPct(attended, completed) {
   if (!completed || completed <= 0) return null;
@@ -455,11 +455,11 @@ export function computeSubjectStats(code, name, tag, rawData) {
       flat.attL_done, flat.missL_done,
       flat.attT_done, flat.missT_done,
       flat.pendingL,  flat.pendingT,
-      75 // Default dashboard target is 75%
+      (getPolicy('attendance') || { targetPercentage: 75 }).targetPercentage
     );
   } else {
     optResult = new OptimizationResult({
-      targetPercentage: 75,
+      targetPercentage: (getPolicy('attendance') || { targetPercentage: 75 }).targetPercentage,
       reachable: false,
       lectureDeficit: 0, tutorialDeficit: 0,
       safeSkipLecture: 0, safeSkipTutorial: 0,
@@ -488,7 +488,7 @@ export function computeSubjectStats(code, name, tag, rawData) {
      Attended→Missed,  Attended→Pending
      Missed→Attended,  Missed→Pending
 ═══════════════════════════════════════════════════════════════════════ */
-export function calcForecastImpact(rawData, subjectCode, classType, currentState, newAction) {
+export function calcForecastImpact(rawData, subjectCode, classType, currentState, newAction, targetPercentage) {
   const d = rawData[subjectCode];
   if (!d || !d.counts[classType]) return null;
 
@@ -528,7 +528,7 @@ export function calcForecastImpact(rawData, subjectCode, classType, currentState
   return {
     curAvg,
     newAvg,
-    stillEligible: newAvg !== null && newAvg >= 75 // (Kept legacy for now if used by simulateMarkingImpact, though simulateMarkingImpact is rarely used for core status. We can keep it hardcoded here for the tooltip, or UI can check). Wait, simulateMarkingImpact is an engine function. Let's parameterize it.
+    stillEligible: newAvg !== null && newAvg >= targetPercentage
   };
 }
 
