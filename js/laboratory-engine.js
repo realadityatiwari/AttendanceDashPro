@@ -1,4 +1,4 @@
-import { getTimetable } from './utils.js';
+import { getTimetable, normalizeClassType } from './utils.js';
 
 /* ═══════════════════════════════════════════════════════════════════════
    LABORATORY RULES CONFIGURATION
@@ -108,10 +108,30 @@ export class LaboratoryDashboardModel {
  */
 function getExperimentAttendanceStatus(dateConducted, subjectCode, attendanceDataMap) {
   if (!dateConducted) return null;
-  // Fallback to checking the exact attendance state map if attendanceDataMap is the raw states
-  const classId = `${dateConducted}:${subjectCode}:P`;
-  const state = attendanceDataMap[classId];
-  return state || null;
+  
+  const prefix = `${dateConducted}:${subjectCode}:`;
+  let finalState = null;
+
+  // Resolve normalized P1/P2 records (or direct P) to an aggregate state.
+  // Hierarchy: Attended > Missed > Pending
+  for (const [classId, state] of Object.entries(attendanceDataMap)) {
+    if (classId.startsWith(prefix)) {
+      const type = classId.substring(prefix.length);
+      if (normalizeClassType(type) === 'P') {
+        if (state === 'Attended') {
+          return 'Attended';
+        }
+        if (state === 'Missed') {
+          finalState = 'Missed';
+        }
+        if (state === 'Pending' && !finalState) {
+          finalState = 'Pending';
+        }
+      }
+    }
+  }
+  
+  return finalState;
 }
 
 /**
