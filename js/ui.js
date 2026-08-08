@@ -1,5 +1,5 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
-import { getTimetable, formatTodayHeader, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
+import { getTimetable, formatTodayHeader, parseDateString, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
 
 /**
@@ -78,15 +78,14 @@ export function updateViewingLabel() {
   const dateEl  = document.getElementById('viewingDate');
   if (!dateEl) return;
   const d = dateContext.selectedDate;
-  const dName = d.toLocaleDateString('en-US', { weekday: 'long' });
-  const dStr  = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-  if (label) label.textContent = `Viewing: ${dName} • ${dStr}`;
-  dateEl.textContent = `${dName} • ${dStr}`;
+  const formatted = formatTodayHeader(parseDateString(d));
+  if (label) label.textContent = `Viewing: ${formatted}`;
+  dateEl.textContent = formatted;
   const navTrigger = document.getElementById('navTriggerLabel');
-  if (navTrigger) navTrigger.textContent = formatTodayHeader(d);
+  if (navTrigger) navTrigger.textContent = formatTodayHeader(parseDateString(d));
   // Update mobile date label
   const mobileLabel = document.getElementById('mobileDateLabel');
-  if (mobileLabel) mobileLabel.textContent = formatTodayHeader(d);
+  if (mobileLabel) mobileLabel.textContent = formatTodayHeader(parseDateString(d));
 }
 
 /**
@@ -104,7 +103,7 @@ export function renderDateNavigator() {
   nav.innerHTML = `
     <button class="nav-trigger theme-btn" id="dateNavTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="${menuId}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      <span id="navTriggerLabel">${formatTodayHeader(dateContext.selectedDate)}</span>
+      <span id="navTriggerLabel">${formatTodayHeader(parseDateString(dateContext.selectedDate))}</span>
       <svg class="nav-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
     </button>
     <div class="nav-menu" id="${menuId}" role="menu" hidden>
@@ -306,7 +305,8 @@ export function makePctCell(pct, isAvg = false, label = '') {
 
 export function buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate) {
   const { totalMustAttend, totalSafeSkips, totalClasses, totalSubjects } = overallStats;
-  const dateStr = quizDate.toLocaleDateString('en-US', {day:'numeric', month:'short', year:'numeric'});
+  const parsedQuizDate = typeof quizDate === 'string' ? parseDateString(quizDate) : quizDate;
+  const dateStr = parsedQuizDate ? parsedQuizDate.toLocaleDateString('en-US', {day:'numeric', month:'short', year:'numeric'}) : '';
 
   // ── Section 1: Current Overall ───────────────────────────────────────────
   const curPct      = erpStats.percentage;
@@ -1083,8 +1083,7 @@ export function renderTodayClasses(targetDateStr, quizLiveData) {
   const dateStr = targetDateStr;
 
   // Render header using standard date parsing to string for ui
-  const d = new Date(dateStr);
-  dateLabel.innerHTML = formatTodayHeader(d);
+  dateLabel.innerHTML = formatTodayHeader(parseDateString(dateStr));
 
   const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
   const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);

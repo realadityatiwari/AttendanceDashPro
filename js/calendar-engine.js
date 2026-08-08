@@ -663,7 +663,15 @@ export function getAttendanceWindow(subjectCode, milestoneId) {
   const milestone = tl.milestones.find(m => m.milestoneId === milestoneId);
   if (!milestone) throw new Error(`Unknown milestone: ${milestoneId}`);
 
-  const windowStart = tl.commencementDate;
+  let windowStart = tl.commencementDate;
+  
+  if (milestone.metadata && typeof milestone.metadata.quizCycle === 'number' && milestone.metadata.quizCycle > 1) {
+    const prevQuiz = tl.milestones.find(m => m.type === 'QUIZ' && m.metadata && m.metadata.quizCycle === (milestone.metadata.quizCycle - 1));
+    if (prevQuiz) {
+      windowStart = prevQuiz.date; // Quiz window starts from previous quiz date
+    }
+  }
+
   const windowEnd = addDays(milestone.date, -1); // Exactly one day before the milestone event
 
   if (windowStart > windowEnd) {

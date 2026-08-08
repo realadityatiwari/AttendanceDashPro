@@ -1,5 +1,13 @@
 {
   "start_date": "2026-07-15",
+  "policies": {
+    "quiz": {
+      "quiz1": { "targetPercentage": 70 },
+      "quiz2": { "targetPercentage": 75 },
+      "quiz3": { "targetPercentage": 75 },
+      "default": { "targetPercentage": 75 }
+    }
+  },
   "quiz_dates": [
     {
       "label": "1st Quiz",

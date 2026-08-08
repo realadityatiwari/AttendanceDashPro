@@ -129,3 +129,20 @@ AppState.academicEvents = {
 **Trade-offs**: `localStorage` has a ~5MB limit (plenty for this app, but a hard ceiling). If cloud data differs significantly, the user might see a sudden UI jump (flicker) when the background sync completes.
 
 **Future Implications**: The `AppState` must always remain serializable to JSON (no Sets, Maps, or class instances in state).
+
+## ADR 010: Official Academic Data Reconciliation (S3.3)
+
+**Context**: The application requires an authoritative baseline for Quiz applicability and attendance requirements. The official SRMCEM Attendance Criteria notice dated 14 July 2026 establishes cumulative but strict windows and varying target percentages per quiz cycle (Q1: 70%, Q2/Q3: 75%). Furthermore, specific boundaries dictate that Quiz II begins counting strictly from the Quiz I boundary, rather than from commencement.
+
+**Final Decision**: 
+1. Added `"policies"` configuration to `timetable.json` to centrally enforce varying quiz target percentages per cycle.
+2. Updated `calendar-engine.js` (`getAttendanceWindow`) to properly resolve Quiz II/III windows starting from the previous quiz milestone rather than commencement.
+3. Left BCS-054 explicitly unresolved for Q3 (marked as ACADEMIC VERIFICATION REQUIRED) pending physical proof of its subject-specific applicability, ensuring no unsupported academic assumptions are built into the data layer.
+
+**Why it was chosen**: This preserves the data-driven architecture of the system. Instead of hardcoding cycle percentages in the `attendance-engine.js`, the policy was elevated to configuration (`timetable.json`). The window calculation fix ensures semantic alignment with the official university policy while remaining completely generic for any future branch or semester.
+
+**Trade-offs**: None. This is a pure data-integrity fix conforming to official fact.
+
+**Future Implications**: Future semesters will simply configure their `timetable.json` with the required dates and target percentages, and the engine will seamlessly resolve the logic.
+ 
+ 
