@@ -311,6 +311,9 @@ async function bootstrap() {
         const stateChanged = await fetchCloudStates();
         console.log("[app.js] Cloud states fetched");
         if (stateChanged) {
+          // Re-sync Calendar Engine runtime events from the freshly hydrated AppState.
+          // fetchCloudStates may have merged new academicEvents from Firestore.
+          syncRuntimeEvents(AppState.academicEvents);
           applyTheme(AppState.settings.theme || 'dark');
           console.log("[PROFILE 4] Before Render:", AppState.profile);
           updateProfileUI();
@@ -320,6 +323,7 @@ async function bootstrap() {
       } catch (e) {
         console.error("[app.js] fetchCloudStates failed:", e);
       }
+
 
       try {
         checkProfileRecovery();

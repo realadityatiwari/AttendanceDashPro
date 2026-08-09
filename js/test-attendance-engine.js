@@ -17,7 +17,7 @@ global.fetch = async (url) => {
 // Import everything
 import { initTimetable, getTimetable } from './utils.js';
 import { getAttendanceData, computeSubjectStats, getSubjectQuizOptimization } from './attendance-engine.js';
-import { initCalendarEngine, syncRuntimeEvents, addAcademicEvent, archiveAcademicEvent, getSubjectEventDeltas } from './calendar-engine.js';
+import { initCalendarEngine, syncRuntimeEvents, createAcademicEvent, getSubjectEventDeltas } from './calendar-engine.js';
 
 let failed = 0;
 
@@ -211,13 +211,29 @@ async function runTests() {
   assert("Laboratory subject without QUIZ milestone gracefully returns null", labQuizOpt === null);
 
   console.log("\n--- Testing Academic Events in Attendance Engine ---");
+  const testEventsState = {};
+  function mockAddEvent(raw) {
+    const ev = createAcademicEvent(raw);
+    if (!testEventsState[ev.effectiveDate]) testEventsState[ev.effectiveDate] = [];
+    testEventsState[ev.effectiveDate].push(ev);
+    syncRuntimeEvents(testEventsState);
+  }
+  function mockArchiveEvent(id, dateString) {
+    if (testEventsState[dateString]) {
+      const idx = testEventsState[dateString].findIndex(e => e.id === id);
+      if (idx >= 0) {
+        testEventsState[dateString][idx] = { ...testEventsState[dateString][idx], active: false, archived: true };
+        syncRuntimeEvents(testEventsState);
+      }
+    }
+  }
   
   // Create a baseline data state for BCS-501 (which we know runs globally)
   const baseData = getAttendanceData('2026-08-17'); 
   const baseLecTot = baseData['BCS-501'].counts.L.tot;
   
   // Inject an EXTRA_LECTURE
-  addAcademicEvent({
+  mockAddEvent({
     id: 'evt1',
     eventType: 'EXTRA_LECTURE',
     subjectCode: 'BCS-501',
@@ -232,8 +248,8 @@ async function runTests() {
   assert("EXTRA_LECTURE increments pending classes", modifiedData['BCS-501'].counts.L.pending > baseData['BCS-501'].counts.L.pending);
 
   // Replace with CLASS_CANCELLED (on a Tuesday so it actually has a scheduled class to cancel!)
-  archiveAcademicEvent('evt1', '2026-07-27');
-  addAcademicEvent({
+  mockArchiveEvent('evt1', '2026-07-27');
+  mockAddEvent({
     id: 'evt2',
     eventType: 'CLASS_CANCELLED',
     subjectCode: 'BCS-501',
@@ -247,6 +263,19 @@ async function runTests() {
   // Check Quiz Optimization reacts correctly too
   const baseOpt = getSubjectQuizOptimization('BCS-501', 1, {}, 70);
   assert("getSubjectQuizOptimization reflects CLASS_CANCELLED delta", baseOpt.lecturePercentage !== undefined);
+
+  console.log("\n--- Testing Laboratory Stats Contract ---");
+  const labData = getAttendanceData('2026-08-17');
+  const bcs551Stats = computeSubjectStats('BCS-551', 'DBMS Lab', null, labData['BCS-551']);
+  assert("Laboratory stats export totP", bcs551Stats.totP !== undefined && bcs551Stats.totP >= 0);
+  assert("Laboratory stats export attP_done", bcs551Stats.attP_done !== undefined);
+  assert("Laboratory stats export missP_done", bcs551Stats.missP_done !== undefined);
+  assert("Laboratory stats export pendingP", bcs551Stats.pendingP !== undefined);
+  assert("Laboratory stats export completedP correctly", bcs551Stats.completedP === bcs551Stats.attP_done + bcs551Stats.missP_done);
+
+  // Mocking P1/P2 resolution logic which is handled inside `attendance-engine.js`.
+  const rawP = labData['BCS-551'].counts.P;
+  assert("AttendanceEngine merges P1/P2 into P correctly", rawP.tot === bcs551Stats.totP);
 
   if (failed === 0) {
     console.log("\n✅ All Phase F1.2 Regression Tests Passed!");

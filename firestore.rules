@@ -42,13 +42,27 @@ service cloud.firestore {
       return attendance is map;
     }
 
+    // Validates the laboratory object
+    function isValidLaboratory(laboratory) {
+      // Must be a map (keys are subject codes)
+      return laboratory is map;
+    }
+
+    // Validates the academicEvents object
+    function isValidAcademicEvents(events) {
+      // Must be a map (keys are dates YYYY-MM-DD)
+      return events is map;
+    }
+
     // Main document validation
     function isValidStudentDoc(docData) {
       // Reject any unexpected root fields to prevent malformed writes
-      return docData.keys().hasOnly(['attendance', 'settings', 'profile'])
+      return docData.keys().hasOnly(['attendance', 'settings', 'profile', 'laboratory', 'academicEvents'])
         && (!('profile' in docData) || isValidProfile(docData.profile))
         && (!('settings' in docData) || isValidSettings(docData.settings))
-        && (!('attendance' in docData) || isValidAttendance(docData.attendance));
+        && (!('attendance' in docData) || isValidAttendance(docData.attendance))
+        && (!('laboratory' in docData) || isValidLaboratory(docData.laboratory))
+        && (!('academicEvents' in docData) || isValidAcademicEvents(docData.academicEvents));
     }
 
     function isValidPlatform(platform) {

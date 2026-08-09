@@ -300,7 +300,7 @@ export function validateAcademicEvent(raw) {
 /**
  * Validates and creates a normalized AcademicEvent.
  */
-function createAcademicEvent(raw) {
+export function createAcademicEvent(raw) {
   if (!raw.id || typeof raw.id !== 'string') throw new Error('Invalid event id');
   if (!isValidDateString(raw.effectiveDate)) throw new Error('Invalid effectiveDate');
   
@@ -340,48 +340,6 @@ function getEventsForDate(dateString) {
   );
   const dynamicEvents = runtimeEvents[dateString] ? runtimeEvents[dateString].filter(e => e.active) : [];
   return [...staticEvents, ...dynamicEvents];
-}
-
-/**
- * Adds or updates an Academic Event in the runtime events memory.
- */
-export function addAcademicEvent(raw) {
-  const event = createAcademicEvent(raw);
-  if (!runtimeEvents[event.effectiveDate]) {
-    runtimeEvents[event.effectiveDate] = [];
-  }
-  const idx = runtimeEvents[event.effectiveDate].findIndex(e => e.id === event.id);
-  if (idx >= 0) {
-    runtimeEvents[event.effectiveDate][idx] = event;
-  } else {
-    runtimeEvents[event.effectiveDate].push(event);
-  }
-  l2MemoryCache.clear();
-  return event;
-}
-
-export function archiveAcademicEvent(eventId, dateString) {
-  if (runtimeEvents[dateString]) {
-    const idx = runtimeEvents[dateString].findIndex(e => e.id === eventId);
-    if (idx >= 0) {
-      const event = runtimeEvents[dateString][idx];
-      const newHistory = [...event.history, {
-        action: 'Archived',
-        timestamp: new Date().toISOString(),
-        user: 'system'
-      }];
-      const updatedEvent = Object.freeze({
-        ...event,
-        archived: true,
-        active: false,
-        history: Object.freeze(newHistory)
-      });
-      runtimeEvents[dateString][idx] = updatedEvent;
-      l2MemoryCache.clear();
-      return updatedEvent;
-    }
-  }
-  return null;
 }
 
 /**

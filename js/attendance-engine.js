@@ -422,17 +422,22 @@ export function computeSubjectStats(code, name, tag, rawData) {
   const flat = {
     totL: safeCount('L').tot,
     totT: safeCount('T').tot,
+    totP: safeCount('P').tot,
     attL_done: safeCount('L').att_done,
     missL_done: safeCount('L').miss_done,
     attT_done: safeCount('T').att_done,
     missT_done: safeCount('T').miss_done,
+    attP_done: safeCount('P').att_done,
+    missP_done: safeCount('P').miss_done,
     pendingL: safeCount('L').pending,
-    pendingT: safeCount('T').pending
+    pendingT: safeCount('T').pending,
+    pendingP: safeCount('P').pending
   };
 
   // Completed = classes with a definitive outcome (attended or missed)
   const completedL = flat.attL_done + flat.missL_done;
   const completedT = flat.attT_done + flat.missT_done;
+  const completedP = flat.attP_done + flat.missP_done;
 
   // Current %: only over completed classes. null if nothing done yet.
   const currentLecPct = calcCurrentPct(flat.attL_done, completedL);
@@ -471,10 +476,13 @@ export function computeSubjectStats(code, name, tag, rawData) {
     code, name, tag,
     // raw counts
     totL: flat.totL,    totT: flat.totT,    totComb: flat.totL + flat.totT,
+    totP: flat.totP,
     attL_done: flat.attL_done,   missL_done: flat.missL_done,
     attT_done: flat.attT_done,   missT_done: flat.missT_done,
+    attP_done: flat.attP_done,   missP_done: flat.missP_done,
     pendingL:  flat.pendingL,    pendingT:   flat.pendingT,
-    completedL, completedT,
+    pendingP:  flat.pendingP,
+    completedL, completedT, completedP,
     currentLecPct, currentTutPct, currentAvgPct,
     forecastLecPct, forecastTutPct, forecastAvgPct,
     optResult

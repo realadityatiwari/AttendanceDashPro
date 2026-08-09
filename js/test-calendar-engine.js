@@ -7,9 +7,8 @@ import {
   getTeachingDaysBetween, 
   getWorkingDaysUntil, 
   getPolicy,
-  addAcademicEvent,
-  archiveAcademicEvent,
   syncRuntimeEvents,
+  createAcademicEvent,
   getSubjectEventDeltas
 } from './calendar-engine.js';
 
@@ -160,8 +159,26 @@ assert('Policy Resolution: Returns specified targetPercentage', q1Pol.targetPerc
 console.log('--- Runtime Academic Events Tests ---');
 syncRuntimeEvents({});
 
+// Mock AppState for tests
+const testEventsState = {};
+function mockAddEvent(raw) {
+  const ev = createAcademicEvent(raw);
+  if (!testEventsState[ev.effectiveDate]) testEventsState[ev.effectiveDate] = [];
+  testEventsState[ev.effectiveDate].push(ev);
+  syncRuntimeEvents(testEventsState);
+}
+function mockArchiveEvent(id, dateString) {
+  if (testEventsState[dateString]) {
+    const idx = testEventsState[dateString].findIndex(e => e.id === id);
+    if (idx >= 0) {
+      testEventsState[dateString][idx] = { ...testEventsState[dateString][idx], active: false, archived: true };
+      syncRuntimeEvents(testEventsState);
+    }
+  }
+}
+
 // 1. Extra Lecture
-addAcademicEvent({
+mockAddEvent({
   id: 'e1',
   eventType: 'EXTRA_LECTURE',
   effectiveDate: '2024-01-08',
@@ -173,7 +190,7 @@ assert('Event API: getSubjectEventDeltas returns 0 for wrong subject', getSubjec
 assert('Event API: getSubjectEventDeltas returns 0 for wrong type', getSubjectEventDeltas('2024-01-08', 'CS101', 'T') === 0);
 
 // 2. Class Cancelled
-addAcademicEvent({
+mockAddEvent({
   id: 'e2',
   eventType: 'CLASS_CANCELLED',
   effectiveDate: '2024-01-09',
@@ -183,7 +200,7 @@ addAcademicEvent({
 assert('Event API: getSubjectEventDeltas returns -1 for Cancelled Class', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === -1);
 
 // 3. Multiple events on same day (Cancel + Extra)
-addAcademicEvent({
+mockAddEvent({
   id: 'e3',
   eventType: 'EXTRA_TUTORIAL',
   effectiveDate: '2024-01-09',
@@ -194,7 +211,7 @@ assert('Event API: Multiple events resolve independently by type (L = -1)', getS
 assert('Event API: Multiple events resolve independently by type (T = +1)', getSubjectEventDeltas('2024-01-09', 'CS101', 'T') === 1);
 
 // 4. Overruled by Closure
-addAcademicEvent({
+mockAddEvent({
   id: 'e4',
   eventType: 'EMERGENCY_CLOSURE',
   effectiveDate: '2024-01-09',
@@ -202,8 +219,8 @@ addAcademicEvent({
 });
 assert('Event API: High priority global closure skips standard math and yields 0 delta', getSubjectEventDeltas('2024-01-09', 'CS101', 'L') === 0);
 
-// 5. Remove event
-archiveAcademicEvent('e2', '2024-01-09'); // Archive CLASS_CANCELLED
+// 5. Archiving removes event effect
+mockArchiveEvent('e2', '2024-01-09'); // Archive CLASS_CANCELLED
 // Now only EXTRA_TUTORIAL and EMERGENCY_CLOSURE exist
 // But wait, EMERGENCY_CLOSURE still suppresses it mathematically.
 assert('Event API: High priority closure still rules', getSubjectEventDeltas('2024-01-09', 'CS101', 'T') === 0);

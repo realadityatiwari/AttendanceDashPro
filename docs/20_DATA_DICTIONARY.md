@@ -160,3 +160,67 @@ User-submitted feedback forms.
   status: "open"
 }
 ```
+
+---
+
+## 7. SubjectStats Aggregate (`computeSubjectStats` return value)
+
+Computed per-subject aggregate produced by `attendance-engine.js` and consumed by all downstream engines and the UI. This is **not** persisted — it is recomputed on every render from `AppState.attendance`.
+
+- **Producer**: `attendance-engine.js → computeSubjectStats()`
+- **Consumers**: `ui.js`, `quiz-engine.js`, `laboratory-engine.js`
+
+| Field | Type | Description |
+|---|---|---|
+| `code` | string | Subject code |
+| `name` | string | Subject display name |
+| `tag` | string\|null | Optional tag |
+| `totL` | number | Total scheduled lectures |
+| `totT` | number | Total scheduled tutorials |
+| `totP` | number | Total scheduled practicals (P1+P2 normalized to P) — *added S3.4* |
+| `totComb` | number | `totL + totT` |
+| `attL_done` | number | Attended lectures |
+| `missL_done` | number | Missed lectures |
+| `attT_done` | number | Attended tutorials |
+| `missT_done` | number | Missed tutorials |
+| `attP_done` | number | Attended practicals — *added S3.4* |
+| `missP_done` | number | Missed practicals — *added S3.4* |
+| `pendingL` | number | Future/unlogged lectures |
+| `pendingT` | number | Future/unlogged tutorials |
+| `pendingP` | number | Future/unlogged practicals — *added S3.4* |
+| `completedL` | number | `attL_done + missL_done` |
+| `completedT` | number | `attT_done + missT_done` |
+| `completedP` | number | `attP_done + missP_done` — *added S3.4* |
+| `currentLecPct` | number\|null | Current lecture % (over completed only) |
+| `currentTutPct` | number\|null | Current tutorial % |
+| `currentAvgPct` | number\|null | Weighted average |
+| `forecastLecPct` | number\|null | Best-case forecast % |
+| `forecastTutPct` | number\|null | Best-case forecast % |
+| `forecastAvgPct` | number\|null | Best-case average |
+| `optResult` | OptimizationResult | Optimization result for target % |
+
+> [!IMPORTANT]
+> **Laboratory engine contract**: `laboratory-engine.js` reads `totP`, `attP_done`, and `pendingP` from this aggregate. These fields are **required** and always present as of S3.4. Prior to S3.4, they were missing (DEBT-003), causing permanent 0% laboratory attendance.
+
+---
+
+## 8. Academic Event Ownership Model (S3.4)
+
+```
+AppState.academicEvents   ← sole persistent authority
+        │
+        │  events-controller.js (processEventMutation)
+        │  pipeline: validate → normalize → mutate → persist → sync → render
+        ▼
+Calendar Engine runtimeEvents  ← derived runtime state (never independently persisted)
+        │
+        ▼
+Calendar / Attendance calculations
+```
+
+**Key invariants** (enforced as of S3.4):
+- `AppState.academicEvents` is the **only** place academic events are stored persistently.
+- `runtimeEvents` (Calendar Engine internal) is populated exclusively via `syncRuntimeEvents(AppState.academicEvents)`.
+- `Calendar Engine` does not mutate `AppState.academicEvents` (no circular dependencies).
+- All mutations are atomic: a pre-mutation snapshot allows full rollback if `persistLocalState` fails.
+- After cloud hydration via `fetchCloudStates()`, `syncRuntimeEvents` is immediately re-called to keep the Calendar Engine current.

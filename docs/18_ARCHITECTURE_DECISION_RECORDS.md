@@ -144,5 +144,52 @@ AppState.academicEvents = {
 **Trade-offs**: None. This is a pure data-integrity fix conforming to official fact.
 
 **Future Implications**: Future semesters will simply configure their `timetable.json` with the required dates and target percentages, and the engine will seamlessly resolve the logic.
- 
- 
+
+---
+
+## ADR 011: Academic Event Ownership — AppState as Single Persistent Authority (S3.4)
+
+**Date**: S3.4
+
+**Problem**: The original implementation introduced a dual-write pattern where academic event mutations were independently written to both `AppState.academicEvents` (persistent) and the Calendar Engine's internal `runtimeEvents` map (transient) via the now-removed `addAcademicEvent()` and `archiveAcademicEvent()` functions on the calendar engine. This created two independently mutable authorities for the same data, risking state divergence on any failure path.
+
+**Alternatives Considered**:
+1. Retain dual-write but enforce strict ordering (write to Calendar Engine first, then AppState).
+2. Remove `runtimeEvents` entirely and have the Calendar Engine query `AppState` directly (creates a forbidden circular dependency: Calendar Engine → AppState → Storage).
+3. **Chosen**: Make `AppState.academicEvents` the sole persistent authority and derive `runtimeEvents` from it via a single explicit `syncRuntimeEvents(AppState.academicEvents)` call.
+
+**Final Decision**: All academic event mutations flow through exactly one deterministic pipeline in `events-controller.js`:
+```
+validate → normalize → mutate AppState.academicEvents
+→ persist locally → syncRuntimeEvents → cloud sync → recalculate → render
+```
+`createAcademicEvent()` and `archiveAcademicEvent()` have been **removed** from `calendar-engine.js`. The Calendar Engine is now a pure consumer of runtime state injected by the controller. `createAcademicEvent` on the calendar engine has been renamed internally to its true role: a pure normalizer/validator that returns an immutable, frozen event object.
+
+**Atomicity**: `processEventMutation` snapshots `AppState.academicEvents` before any write. If local persistence fails after mutation, both `AppState.academicEvents` and `runtimeEvents` are rolled back to the pre-mutation snapshot.
+
+**Why it was chosen**: Eliminates state divergence. Provides a single audit point for all event mutations. Maintains the architectural invariant that Calendar Engine never imports or mutates persistent state.
+
+**Trade-offs**: Every mutation now incurs a `JSON.parse(JSON.stringify(...))` snapshot cost. For the small data volumes expected (~O(100) events per student per semester), this is imperceptible.
+
+**Future Implications**: Any future event mutation (e.g., batch import, academic calendar sync) must go through `events-controller.js`, not the Calendar Engine directly.
+
+---
+
+## ADR 012: Laboratory Attendance Statistics Contract (S3.4)
+
+**Date**: S3.4
+
+**Problem**: `computeLaboratoryDashboard` in `laboratory-engine.js` required `stats.totP`, `stats.attP_done`, and `stats.pendingP` from the subject stats aggregate. These fields were never exported by `computeSubjectStats` in `attendance-engine.js`, meaning the laboratory attendance percentage was permanently 0% regardless of logged practical classes.
+
+**Final Decision**: `computeSubjectStats` now explicitly extracts and exports the following practical attendance fields:
+- `totP`: total scheduled practical sessions (P1 + P2 normalized to P)
+- `attP_done`: attended practicals (confirmed)
+- `missP_done`: missed practicals (confirmed)
+- `pendingP`: future/unlogged practicals
+- `completedP`: `attP_done + missP_done`
+
+The existing S3.1 P1/P2 normalization in `attendance-engine.js` (via `normalizeClassType`) ensures P1 and P2 records both resolve into the `P` bucket before these counts are computed.
+
+**Why it was chosen**: The fields were semantically correct but simply not propagated upward. No redesign was required; only explicit extraction and export.
+
+**Future Implications**: Any new class type (e.g., `P3`) must be handled by `normalizeClassType` to automatically participate in practical attendance math.
