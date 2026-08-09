@@ -679,12 +679,12 @@ export function buildQuizSubjectCard(item) {
 }
 
 /** Builds the summary header card for the quiz dashboard. */
-export function buildQuizSummaryCard(summary) {
+export function buildQuizSummaryCard(summary, label = '') {
   return `
     <div class="quiz-summary-card">
       <div class="quiz-summary-header">
         <h2 class="quiz-summary-title">Quiz Eligibility</h2>
-        <span class="quiz-summary-sub">First Quiz · Min ${summary.requiredAverage}% Average</span>
+        <span class="quiz-summary-sub">${label} · Min ${summary.requiredAverage}% Average</span>
       </div>
       <div class="quiz-summary-stats">
         <div class="quiz-summary-stat">
@@ -711,8 +711,8 @@ export function buildQuizSummaryCard(summary) {
  * Builds the full quiz dashboard section — summary card + subject grid.
  * Consumes a QuizDashboardModel directly. Zero business logic inside.
  */
-export function buildQuizDashboardSection(quizModel) {
-  const summaryHTML  = buildQuizSummaryCard(quizModel.summary);
+export function buildQuizDashboardSection(quizModel, label = '') {
+  const summaryHTML  = buildQuizSummaryCard(quizModel.summary, label);
   const subjectsHTML = quizModel.subjects.map(buildQuizSubjectCard).join('');
   return `
     <section class="quiz-dashboard-section" aria-label="Quiz Eligibility Dashboard">
@@ -842,6 +842,15 @@ export function buildLaboratorySubjectCard(item) {
       </div>`;
   }
 
+  // Action controls (record date conducted / toggle signature)
+  const controlsHTML = `
+    <div class="lab-controls" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button class="action-btn" data-action="logLab" data-s="${subject.code}" data-exp="${currentExperiment}"
+        aria-label="Log date conducted for experiment ${currentExperiment} of ${subject.code}">Log Exp ${currentExperiment}</button>
+      <button class="action-btn" data-action="toggleLabSignature" data-s="${subject.code}" data-exp="${currentExperiment}"
+        aria-label="Mark experiment ${currentExperiment} of ${subject.code} as signed">Mark Signed</button>
+    </div>`;
+
   return `
     <div class="quiz-subj-card">
       <div class="quiz-subj-header">
@@ -866,6 +875,7 @@ export function buildLaboratorySubjectCard(item) {
         </div>
       </div>
       ${milestoneHTML}
+      ${controlsHTML}
     </div>`;
 }
 
@@ -974,7 +984,7 @@ export function renderPanel(rows, overallStats, erpStats, forecastStats, label, 
   const cardsHTML     = rows.map(buildSubjectCard).join('');
   const statsHTML     = buildStatsRow(overallStats);
   const rowsHTML      = rows.map(buildTableRow).join('');
-  const quizSectionHTML = quizModel ? buildQuizDashboardSection(quizModel) : '';
+  const quizSectionHTML = quizModel ? buildQuizDashboardSection(quizModel, label) : '';
 
 
   return `
@@ -1051,6 +1061,25 @@ export function logExperiment(subjectCode, expNumber, dateConducted) {
   }
   
   exp.dateConducted = dateConducted;
+  saveLaboratoryStates(AppState.laboratory);
+  recalculateAndRender();
+}
+
+/** Toggles the signature status of a laboratory experiment (pending ↔ signed). */
+export function toggleLabSignature(subjectCode, expNumber) {
+  if (!AppState.laboratory) AppState.laboratory = {};
+  if (!AppState.laboratory[subjectCode]) AppState.laboratory[subjectCode] = [];
+  const exp = AppState.laboratory[subjectCode].find(e => e.experimentNumber === parseInt(expNumber, 10));
+  if (!exp) {
+    console.warn('[toggleLabSignature] Experiment not logged yet; log it first.');
+    return;
+  }
+  exp.signatureStatus = exp.signatureStatus === 'signed' ? 'pending' : 'signed';
+  if (exp.signatureStatus === 'signed') {
+    exp.signedOn = new Date().toISOString();
+  } else {
+    delete exp.signedOn;
+  }
   saveLaboratoryStates(AppState.laboratory);
   recalculateAndRender();
 }
@@ -1275,9 +1304,10 @@ export function recalculateAndRender() {
     }
   }
   document.getElementById('panels').innerHTML = renderPanel(rows, overallStats, erpStats, forecastStats, label, quizDate, quizModel, labModel, isMobile);
+  renderQuizTabs();
 
   if (isMobile) {
-    const quizSectionHTML = buildQuizDashboardSection(quizModel);
+    const quizSectionHTML = buildQuizDashboardSection(quizModel, label);
     const heroHTML  = buildHeroCard(overallStats, erpStats, forecastStats, label, quizDate);
     const statsHTML = buildStatsRow(overallStats);
 
@@ -1371,10 +1401,27 @@ function setupMobileAccordion() {
    TAB SWITCHING
 ═══════════════════════════════════════════════════════════════════════ */
 
+/** Populates the quiz cycle tab strip (#quizTabs) from timetable.quiz_dates. */
+export function renderQuizTabs() {
+  const wrap = document.getElementById('quizTabs');
+  if (!wrap) return;
+  const quizDates = getTimetable().quiz_dates || [];
+  wrap.innerHTML = quizDates.map((q, i) => `
+    <button class="tab-btn ${i === currentQuiz ? 'active' : ''}"
+      role="tab" aria-selected="${i === currentQuiz ? 'true' : 'false'}"
+      aria-controls="panels" aria-label="${q.label} · ${q.date}"
+      data-action="switchQuiz" data-quiz="${i}">
+      <span class="quiz-tab-label">${q.label}</span>
+      <span class="quiz-tab-date">${q.date}</span>
+    </button>`).join('');
+}
+
 export function switchQuiz(idx, btn) {
   if (idx === currentQuiz) return;
+  const quizDates = getTimetable().quiz_dates || [];
+  if (!quizDates[idx]) return;
   currentQuiz = idx;
-  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+  document.querySelectorAll('#quizTabs .tab-btn').forEach((b, i) => {
     b.classList.toggle('active', i === idx);
     b.setAttribute('aria-selected', i === idx ? 'true' : 'false');
   });

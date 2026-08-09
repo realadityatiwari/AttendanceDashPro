@@ -4,6 +4,48 @@ This document tracks the evolution of the AttendanceDash Pro architecture across
 
 ---
 
+## S3.6 — Persistence & Sync Completion Audit
+*Status: Complete (with known limitations)*
+
+**Bug Fixes**:
+- **P0 — Lab experiments poisoned ALL cloud syncs**: experiments created by `logExperiment` carry `undefined` `title/marks/remarks`, which Firestore rejects — the entire `set()` was dropped, silently blocking attendance, events, and lab sync and leaving `isDirty` stuck `true`. Fixed in `js/storage.js`: `saveLaboratoryStates` omits undefined keys; `performCloudSync` recursively strips `undefined` before `set()`.
+- **P1 — Unsynced local mutation lost on hydration**: `initLocalState` now restores `isDirty`, and `fetchCloudStates` flushes dirty local state to cloud BEFORE downloading, so a mutation made offline (or whose 400 ms debounce never fired before reload) is no longer silently overwritten by stale cloud state.
+- **P2 — Stale `signedOn` after un-signing**: `toggleLabSignature` now deletes `signedOn` when toggling back to `pending`.
+
+**Verification**:
+- New regression test `js/test-persistence-sync.js` (17 assertions); full suite = 84 assertions passing.
+- Cross-device Firestore round-trips verified for attendance, laboratory, and academic events.
+- Offline behavior characterized: Firestore offline queue auto-flushes debounce-elapsed writes on reconnect; the reload-before-debounce race is closed by the hydration dirty-flush.
+- Browser sweep 375 / 768 / 1440 px with zero console errors; see `docs/S3.6_PERSISTENCE_SYNC_AUDIT.md`.
+
+**Known Limitations**:
+- No multi-device conflict resolution (naive per-key cloud-wins merge; single-device-primary assumption).
+- `AppState.settings.simulationMode` stored but unused; `AppState.history` is dead.
+- No app-level reconnect flush listener (covered by Firestore queue + hydration dirty-flush).
+
+---
+
+## S3.5 — UI/UX Completion Audit
+*Status: Complete*
+
+**Features Introduced**:
+- Quiz cycle tab strip (`#quizTabs`) populated from `timetable.quiz_dates`; dashboard, hero, and summary now switch between 1st/2nd/3rd Quiz periods (dynamic label + required average).
+- Laboratory card action controls: "Log Exp N" (records `dateConducted`) and "Mark Signed" (toggles `signatureStatus`) — completes the previously display-only lab tracker.
+- Mobile date navigation restored: `#mobileDateTrigger` no longer pinned `display:none` inline; date bottom sheet + picker now drive mobile date changes.
+- Desktop accessibility: `#profileView` (Profile tools + Feedback form) now renders inline at ≥768 px like `#eventsView`.
+
+**Bug Fixes**:
+- Signup profile header race: header/profile now render the fresh account name immediately after signup (previously showed "Student" until reload).
+- Theme/settings reload race: cloud-sync debounce reduced 1000 ms → 400 ms to shrink the "toggle then fast reload loses the change" window.
+
+**Known Regressions / Limitations**:
+- Laboratory completion still requires the subject's physical P-class attendance on `dateConducted` to be `Attended` (engine contract); a logged + signed experiment without that attendance counts as pending by design.
+- BCS-054 Q3 academic resolution remains open (not invented).
+
+---
+
+
+
 ## Phase F1.3 — Academic Event Management System (UI)
 *Status: Code-complete, pending browser validation.*
 

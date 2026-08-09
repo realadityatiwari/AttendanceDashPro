@@ -40,6 +40,9 @@ if (parsed.attendance && typeof parsed.attendance === 'object' && !Array.isArray
         if (parsed.academicEvents && typeof parsed.academicEvents === 'object' && !Array.isArray(parsed.academicEvents)) {
           AppState.academicEvents = parsed.academicEvents;
         }
+        if (parsed.isDirty === true) {
+          AppState.isDirty = true;
+        }
         console.log("[storage.js] Local state hydrated successfully.");
       }
     }
@@ -68,15 +71,16 @@ export function loadLaboratoryStates() {
 export function saveLaboratoryStates(labState) {
   const serialized = {};
   for (const [subjectCode, experiments] of Object.entries(labState)) {
-    serialized[subjectCode] = experiments.map(exp => ({
-      experimentNumber: exp.experimentNumber,
-      title: exp.title,
-      dateConducted: exp.dateConducted,
-      signatureStatus: exp.signatureStatus,
-      signedOn: exp.signedOn,
-      marks: exp.marks,
-      remarks: exp.remarks
-    }));
+    serialized[subjectCode] = experiments.map(exp => {
+      const out = { experimentNumber: exp.experimentNumber };
+      if (exp.title !== undefined) out.title = exp.title;
+      if (exp.dateConducted !== undefined) out.dateConducted = exp.dateConducted;
+      if (exp.signatureStatus !== undefined) out.signatureStatus = exp.signatureStatus;
+      if (exp.signedOn !== undefined) out.signedOn = exp.signedOn;
+      if (exp.marks !== undefined) out.marks = exp.marks;
+      if (exp.remarks !== undefined) out.remarks = exp.remarks;
+      return out;
+    });
   }
   AppState.laboratory = serialized;
   AppState.isDirty = true;
@@ -123,6 +127,14 @@ export async function fetchCloudStates() {
   let stateChanged = false;
 
   try {
+    // If local state has unsynced changes (e.g. a mutation made right before an
+    // offline reload that never reached Firestore), push local to cloud BEFORE
+    // downloading. Otherwise a stale cloud snapshot would silently overwrite the
+    // unflushed local mutation on hydration. Local is authoritative on refresh.
+    if (AppState.isDirty) {
+      await performCloudSync(uid, false);
+    }
+
     const doc = await db.collection('students').doc(uid).get();
     if (doc.exists) {
       const data = doc.data();
@@ -207,44 +219,56 @@ export function triggerCloudSync(isResetting = false) {
   
   if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
   
-  cloudSyncTimeout = setTimeout(async () => {
-    try {
-      const payload = {};
+  cloudSyncTimeout = setTimeout(() => {
+    performCloudSync(uid, isResetting);
+  }, 400);
+}
 
-      if (isProfileComplete(AppState.profile)) {
-        payload.profile = AppState.profile;
-      }
+/**
+ * Serializes current AppState and pushes it to Firestore (merge). Shared by the
+ * debounced triggerCloudSync and the pre-hydration dirty flush in fetchCloudStates.
+ */
+async function performCloudSync(uid, isResetting) {
+  try {
+    const payload = {};
 
-      if (isValidSettings(AppState.settings)) {
-        payload.settings = AppState.settings;
-      }
-      
-      if (isResetting || Object.keys(AppState.academicEvents).length > 0) {
-        payload.academicEvents = AppState.academicEvents;
-      }
-
-      // Defensive guard: Never upload an empty attendance object unless explicitly resetting.
-      // This allows the profile and settings to sync normally for new users without 
-      // accidentally wiping cloud attendance data if local state failed to hydrate.
-            if (isResetting || Object.keys(AppState.laboratory).length > 0) {
-        payload.laboratory = AppState.laboratory;
-      }
-
-      if (isResetting || hasAttendanceData(AppState.attendance)) {
-        payload.attendance = AppState.attendance;
-      }
-
-      if (Object.keys(payload).length > 0) {
-        await db.collection('students').doc(uid).set(payload, { merge: true });
-      }
-      
-      AppState.isDirty = false;
-      persistLocalState(uid); // persist again to clear isDirty flag
-      console.log("[storage.js] Cloud sync complete.");
-    } catch (err) {
-      console.error("[storage.js] Cloud sync failed", err);
+    if (isProfileComplete(AppState.profile)) {
+      payload.profile = AppState.profile;
     }
-  }, 1000);
+
+    if (isValidSettings(AppState.settings)) {
+      payload.settings = AppState.settings;
+    }
+    
+    if (isResetting || Object.keys(AppState.academicEvents).length > 0) {
+      payload.academicEvents = AppState.academicEvents;
+    }
+
+    // Defensive guard: Never upload an empty attendance object unless explicitly resetting.
+    // This allows the profile and settings to sync normally for new users without 
+    // accidentally wiping cloud attendance data if local state failed to hydrate.
+    if (isResetting || Object.keys(AppState.laboratory).length > 0) {
+      payload.laboratory = AppState.laboratory;
+    }
+
+    if (isResetting || hasAttendanceData(AppState.attendance)) {
+      payload.attendance = AppState.attendance;
+    }
+
+    if (Object.keys(payload).length > 0) {
+      // Firestore rejects `undefined` field values, which would reject the ENTIRE
+      // write and silently block all syncs (attendance/events/lab). Strip undefined
+      // recursively so a single missing optional field can never poison the payload.
+      const sanitized = JSON.parse(JSON.stringify(payload));
+      await db.collection('students').doc(uid).set(sanitized, { merge: true });
+    }
+    
+    AppState.isDirty = false;
+    persistLocalState(uid); // persist again to clear isDirty flag
+    console.log("[storage.js] Cloud sync complete.");
+  } catch (err) {
+    console.error("[storage.js] Cloud sync failed", err);
+  }
 }
 
 // ====================================================

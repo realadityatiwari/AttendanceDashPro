@@ -1425,8 +1425,7 @@ table.att td.left { text-align: left; }
   .mobile-date-trigger,
   .mobile-history-card,
   #subjectsView,
-  #historyView,
-  #profileView {
+  #historyView {
     display: none !important;
   }
   .desktop-history-card {

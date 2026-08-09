@@ -71,6 +71,13 @@ async function handleAppSignup() {
       errDiv.style.display = 'block';
     } else {
       console.log("[app.js] Signup success");
+      // The auth-state listener may have rendered before signupUser populated
+      // AppState.profile. Re-render the header and dismiss a prematurely shown
+      // recovery modal so the fresh account shows its real name immediately.
+      updateProfileUI();
+      if (isProfileComplete(AppState.profile)) {
+        document.getElementById('profileRecoveryModal').style.display = 'none';
+      }
     }
   } catch(e) {
     console.error("[app.js] Signup exception:", e);
@@ -577,6 +584,10 @@ function initDOMBindings() {
       if (date) {
         UI.logExperiment(sCode, expNo, date);
       }
+    } else if (action === 'toggleLabSignature') {
+      const sCode = target.getAttribute('data-s');
+      const expNo = target.getAttribute('data-exp');
+      UI.toggleLabSignature(sCode, expNo);
     } else if (action === 'logAttendance') {
       const dateStr = target.getAttribute('data-date');
       const sCode = target.getAttribute('data-s');
@@ -607,7 +618,7 @@ function initDOMBindings() {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     const tabsWrap = document.querySelector('.tabs-wrap');
     if (!tabsWrap || !tabsWrap.contains(document.activeElement)) return;
-    const tabs = [...document.querySelectorAll('.tab-btn')];
+    const tabs = [...document.querySelectorAll('#quizTabs .tab-btn')];
     const current = tabs.indexOf(document.activeElement);
     if (current < 0) return;
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
