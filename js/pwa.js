@@ -1,4 +1,5 @@
 import { APP_VERSION } from './utils.js';
+import { triggerCloudSync } from './storage.js';
 
 let deferredPrompt;
 
@@ -22,6 +23,7 @@ export function initPWA() {
   const updateOnlineStatus = () => {
     if (navigator.onLine) {
       if (offlineBanner) offlineBanner.style.display = 'none';
+      triggerCloudSync();
     } else {
       if (offlineBanner) offlineBanner.style.display = 'block';
     }

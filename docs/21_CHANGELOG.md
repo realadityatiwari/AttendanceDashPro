@@ -4,6 +4,27 @@ This document tracks the evolution of the AttendanceDash Pro architecture across
 
 ---
 
+## S3.10 — Current-Semester Baseline Freeze
+*Status: Complete (documentation-only)*
+
+**Purpose**: Freeze a single authoritative snapshot of the project as it exists today so a future AI agent or developer can resume work with zero context loss. No production code changed.
+
+**Baseline Document**: `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` — version stamp (`APP_VERSION 2.0.3`), current academic data (2026–27 odd semester, SRMCEM `timetable.json`), full architecture (every file + dependency rules), every engine API/domain model, persistence/sync layer, PWA/service worker facts, invariants, deployment facts, and rollback expectations.
+
+**Corrections vs prior documentation**:
+- Assertion baseline corrected: prior docs stated **84** (30/20/17/17); verified runtime count is **95** (28/29/21/17). The four test files are byte-identical to commit `e4d4470` — prior docs undercounted, no test was removed or changed.
+- Bug status corrected: BUG-001 (Firestore rules for `laboratory`/`academicEvents`), BUG-002 (`events-controller.js` missing from `STATIC_ASSETS`), and DEBT-002 (lab attendance `:P` lookup) are **already fixed in the current code** and are recorded as resolved, not open.
+
+**Verification**:
+- Full regression suite re-run as final integrity check: `test-attendance-engine.js` (28), `test-calendar-engine.js` (29), `test-calendar-window.js` (21), `test-persistence-sync.js` (17) = **95 assertions, 0 failures**.
+- Stale-bug claims verified against source: `firestore.rules:58-65` whitelists all five root fields; `service-worker.js:25` precaches `events-controller.js`; `laboratory-engine.js:109-134` matches normalized `P` (P1/P2).
+
+**Known Limitations**:
+- S3.10 is a snapshot; it must be updated whenever the semester, timetable, or architecture changes (see its own "Baseline Maintenance" section).
+- No new features shipped; prior known limitations (no multi-device conflict resolution, `simulationMode`/`history` dead fields, BCS-054 Q3 unresolved) remain unchanged.
+
+---
+
 ## S3.6 — Persistence & Sync Completion Audit
 *Status: Complete (with known limitations)*
 

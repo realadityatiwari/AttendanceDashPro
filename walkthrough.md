@@ -1,11 +1,10 @@
-# S3.6 Persistence & Sync Completion Walkthrough
+# S3.10 Current-Semester Baseline Walkthrough
 
-Date: 2026-08-09 · Browser: Chrome 151 headless via Puppeteer 25.4.0 · Target: http://localhost:8080
-Test account: roll `9000000000002`, uid `Od675BhQ8KSvPv8DAIi140tAJdT2`, real Firebase project `attendancedashpro`.
+Date: 2026-08-09 · Scope: documentation-only baseline freeze (no production code changed)
 
 ## Final Status
 
-> **S3.6 COMPLETE WITH KNOWN LIMITATIONS**
+> **S3.10 COMPLETE** — Current-semester baseline frozen in `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`; supporting project docs updated; 95/95 regression assertions passing.
 
 ---
 
@@ -13,57 +12,50 @@ Test account: roll `9000000000002`, uid `Od675BhQ8KSvPv8DAIi140tAJdT2`, real Fir
 
 | Verification | Label |
 |---|---|
-| Cross-device round-trip: attendance (2 keys) Session A → Session B | **VERIFIED** |
-| Cross-device round-trip: laboratory (BCS-551 exp1) Session A → Session B | **VERIFIED** |
-| Cross-device round-trip: academicEvents (3 dates, rendered in events list) Session A → Session B | **VERIFIED** |
-| Lab local → Firestore after mutation (`isDirty` → `false`, cloud populated) | **VERIFIED** |
-| P0 fix: no `undefined` field values in any sync payload | **VERIFIED** |
-| P1 fix: dirty-local flush happens BEFORE cloud download (`set` before `get`) | **VERIFIED** |
-| P1 fix: reload-before-debounce offline mutation survives re-hydration | **VERIFIED** |
-| Offline → reconnect (debounce elapsed): write queued + auto-flushed by Firestore | **VERIFIED** |
-| P2 fix: un-signing clears stale `signedOn` locally and in Firestore | **VERIFIED** |
-| Simulation mode writes never reach Firestore (in-memory only) | **VERIFIED** |
-| Profile + settings (theme) sync to Firestore and hydrate | **VERIFIED** |
-| `js/test-persistence-sync.js` (new) — 17 assertions | **VERIFIED** |
-| Engine baselines — 67 assertions (unchanged) | **VERIFIED** |
-| Browser sweep 375 px — shell, 9 mobile cards, 3 lab cards, 0 console errors | **VERIFIED** |
-| Browser sweep 768 px — desktop layout, all state, 0 console errors | **VERIFIED** |
-| Browser sweep 1440 px — full dashboard, all state, 0 console errors | **VERIFIED** |
+| Baseline document covers all mandated sections (version, academic data, architecture, engines, persistence, PWA, invariants, tests, deployment) | **VERIFIED** |
+| `APP_VERSION` = `2.0.3` (`js/utils.js:1`) matches the frozen build | **VERIFIED** |
+| Academic data frozen from `timetable.json` (2026–27 odd semester, SRMCEM subjects/timelines/quiz dates) | **VERIFIED** |
+| Architecture section lists every source file with its role and dependency rules | **VERIFIED** |
+| All engine APIs + domain models documented (Calendar, Attendance, Quiz, Laboratory) | **VERIFIED** |
+| Persistence/sync layer documented (localStorage + Firestore lifecycle, merge/conflict behavior) | **VERIFIED** |
+| PWA/service-worker facts documented (`STATIC_ASSETS` incl. `events-controller.js`, cache invalidation) | **VERIFIED** |
+| Firestore rules verified in source: `isValidStudentDoc` whitelists all five root fields (`firestore.rules:58-65`) | **VERIFIED** |
+| Lab attendance lookup verified in source: normalized `P` match handles P1/P2 (`laboratory-engine.js:109-134`) | **VERIFIED** |
+| Assertion count corrected from 84 (30/20/17/17) to verified 95 (28/29/21/17); test files byte-identical to `e4d4470` | **VERIFIED** |
+| `js/test-attendance-engine.js` — 28 assertions | **VERIFIED** |
+| `js/test-calendar-engine.js` — 29 assertions | **VERIFIED** |
+| `js/test-calendar-window.js` — 21 assertions | **VERIFIED** |
+| `js/test-persistence-sync.js` — 17 assertions | **VERIFIED** |
+| Full suite = **95 assertions, 0 failures** (final integrity check) | **VERIFIED** |
+| No production code changed by S3.10 (git diff = docs + pre-existing `js/auth.js`/`js/pwa.js` working-tree edits) | **VERIFIED** |
+| `docs/README.md`, `21_CHANGELOG.md`, `16_ROADMAP.md`, `17_AI_HANDOFF.md`, `22_AI_WORKING_CONTEXT.md` updated | **VERIFIED** |
+| `task.md` and `walkthrough.md` updated (exactly one status line) | **VERIFIED** |
 
-No verification is labelled PARTIALLY VERIFIED or NOT VERIFIED in this walkthrough; every S3.6-in-scope claim was either observed in a live browser, read directly from Firestore, or covered by a passing regression assertion.
-
----
-
-## Defects Found & Fixed
-
-1. **P0 — Lab experiments blocked ALL cloud syncs.** Experiments created by `logExperiment` carry `undefined` `title/marks/remarks`. Firestore rejects any `undefined` field and rejects the **entire** `set()` — so attendance, events, and lab all silently stopped syncing and `isDirty` stuck `true`. Fixed in `js/storage.js`: (a) `saveLaboratoryStates` omits undefined keys; (b) `performCloudSync` recursively strips `undefined` before `set()`. Proven: lab sync completes, `isDirty:false`, cloud populated.
-2. **P1 — Unsynced local mutation silently overwritten by stale cloud.** A mutation made offline (or whose 400 ms debounce never fired before reload) existed only in localStorage; the next online hydration merged cloud-wins and reverted it. Fixed: `initLocalState` restores `isDirty`; `fetchCloudStates` flushes dirty local to cloud **before** downloading. Proven: event toggle pre-fix lost (`active` reverted), post-fix preserved locally + propagated to cloud.
-3. **P2 — Stale `signedOn` after un-signing.** `toggleLabSignature` flipped to `pending` but left `signedOn`. Fixed in `js/ui.js`: `delete exp.signedOn`. Proven through the real UI: signed → pending clears the timestamp locally and in Firestore.
+No verification is labelled PARTIALLY VERIFIED or NOT VERIFIED; every claim above was confirmed against the live source tree or a passing test run.
 
 ---
 
-## Offline & Atomicity Findings
+## What S3.10 Delivered
 
-- Firestore client-side offline persistence (compat SDK) queues `set()` while offline; the write resolves and is auto-flushed on reconnect — **no app-level reconnect listener needed** for debounce-elapsed writes (better than the S3.4 note). No `online` listener exists in app code; `pwa.js` only toggles the banner.
-- The only data-loss window (reload before the 400 ms debounce fires while offline) is now **closed** by the dirty-flush-before-download in `fetchCloudStates`.
-- Event mutations remain atomic (snapshot → mutate → sync runtime → persist local → cloud sync best-effort → render; revert on persist failure) — unchanged, verified by round-trip.
-
----
-
-## Regression Baseline
-
-- `node js/test-attendance-engine.js` - PASS (30)
-- `node js/test-calendar-engine.js` - PASS (20)
-- `node js/test-calendar-window.js` - PASS (17)
-- `node js/test-persistence-sync.js` - PASS (17, new)
-- **Total: 84 assertions, 0 failures.**
+1. **Frozen baseline document** — `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`, a self-contained snapshot a future agent can resume work from without re-reading every source file: version stamp, current academic data, complete architecture with dependency rules, every engine API and domain model, persistence/sync lifecycle, PWA/service-worker facts, architectural invariants, exact test baseline, deployment facts, and rollback expectations (plus a maintenance section for the next rollover).
+2. **Assertion-count correction** — prior docs (S3.6/S3.8/S3.9) recorded **84** assertions as `30 + 20 + 17 + 17`; verified runtime counts are **95** as `28 + 29 + 21 + 17`. The four test files are byte-identical to commit `e4d4470`, so the earlier documentation undercounted; no test was removed or changed.
+3. **Stale-bug correction** — BUG-001 (Firestore rules for `laboratory`/`academicEvents`), BUG-002 (`events-controller.js` missing from the SW cache), and DEBT-002 (lab `:P` lookup) are all **already fixed in the current code**; the baseline records them as resolved and the project docs no longer list them as open blockers.
 
 ---
 
-## Known Limitations (out of scope for S3.6)
+## Regression Baseline (re-run for S3.10)
 
-- **No multi-device conflict resolution** — `fetchCloudStates` is a naive per-key cloud-wins merge (no timestamps). Concurrent two-device edits can clobber each other. Single-device-primary assumption.
-- **`AppState.settings.simulationMode` stored but unused** (date mode is derived from the selected date); `AppState.history` is a dead field never written by any caller.
-- **No app-level reconnect flush listener** — an in-tab (no reload) mutation whose debounce never fired is flushed on the next mutation or the next hydration reload (the reload case is safe via dirty-flush).
-- **No offline mutation queue was built** — not required; Firestore's built-in offline queue plus the hydration dirty-flush covers the behavior. Building a queue would be a new architecture project (out of scope, per task brief).
-- BCS-054 Q3 academic resolution remains open (not invented).
+- `node --experimental-vm-modules js/test-attendance-engine.js` - PASS (28)
+- `node --experimental-vm-modules js/test-calendar-engine.js` - PASS (29)
+- `node --experimental-vm-modules js/test-calendar-window.js` - PASS (21)
+- `node --experimental-vm-modules js/test-persistence-sync.js` - PASS (17)
+- **Total: 95 assertions, 0 failures.**
+
+---
+
+## Known Limitations (unchanged, out of scope for S3.10)
+
+- **S3.10 is a snapshot** — it must be updated on semester rollover or any architecture/timetable/test change (see the baseline's maintenance section).
+- **No new features shipped.** Prior known limitations remain: no multi-device conflict resolution (cloud-wins per key), `AppState.settings.simulationMode` stored but unused, `AppState.history` dead, no app-level reconnect flush listener, and BCS-054 Q3 academically unresolved.
+- **Legacy docs**: `02_TECH_STACK.md`, `09_ACADEMIC_EVENT_SYSTEM.md`, `10_STORAGE_AND_SYNC.md`, `12_PWA_AND_DEPLOYMENT.md`, and `15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` still carry pre-S3.4 notes about BUG-001/BUG-002/DEBT-002; treat `S3.10_CURRENT_SEMESTER_BASELINE.md` as authoritative until those are reconciled.
+- Pre-existing uncommitted working-tree edits (`js/auth.js` logout localStorage cleanup, `js/pwa.js` reconnect `triggerCloudSync`) were present before S3.10 and are not part of this freeze.

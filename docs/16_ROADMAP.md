@@ -1,44 +1,25 @@
 # 16 — Product Roadmap
 
-## Current Status: Phase F1.3 — Academic Event Management System (In Progress)
+## Current Status: Audit Series Complete — Baseline Frozen (S3.10)
 
-Phase F1.3 implementation is code-complete. The backend (registry, controller, storage, engine integration) is fully implemented. The UI (event form, event cards, Academic Tools workspace) is implemented and integrated. Browser-level validation of the complete flow is the immediate next step.
+The S3.x audit series is complete. S3.4 closed the core engine/rule/SW gaps, S3.5–S3.9 audited UI/UX, persistence/sync, mobile/PWA, full regression, and production readiness, and **S3.10 froze the current-semester baseline** in `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`. The previously flagged blockers (BUG-001 Firestore rules, BUG-002 service worker cache, DEBT-002 lab attendance key) are all **resolved in the current code**. Any new feature work must start from the frozen baseline document.
+
+> ✅ **Resolved (do not re-open)**: BUG-001 — `firestore.rules` now whitelists all five root fields incl. `laboratory`/`academicEvents` (`firestore.rules:58-65`). BUG-002 — `events-controller.js` is in `STATIC_ASSETS` (`service-worker.js:25`). DEBT-002 — lab attendance lookup matches normalized `P` (`laboratory-engine.js:109-134`).
 
 ---
 
 ## Immediate Priorities (Before Any New Feature Work)
 
-### 1. Fix BUG-001 — Firestore Rules
+### 1. Confirm Phase F1.3 Browser Validation
 
-Update `firestore.rules` to allow `laboratory` and `academicEvents` fields.
+The Academic Event CRUD flow (create Extra Lecture / Class Cancelled, disable, archive) was browser-validated as part of the S3.x audit series (S3.5–S3.6 verified event creation, rendering, and cross-device round-trip). Confirm the recorded results remain valid against the current baseline before starting new feature work.
 
 **Effort**: 30 minutes  
-**Impact**: Critical — without this, lab data and events are never cloud-synced.
+**Impact**: Closes the last open F1.3 validation item.
 
-### 2. Fix BUG-002 — Service Worker Cache
+### 2. Reset Remaining Technical Debt
 
-Add `events-controller.js` to the service worker static asset allowlist. Bump `APP_VERSION`.
-
-**Effort**: 15 minutes  
-**Impact**: High — Events feature broken offline.
-
-### 3. Complete Phase F1.3 Browser Validation
-
-Open the application in a browser, test the full Academic Event CRUD flow:
-- Create an Extra Lecture event → verify attendance percentage increases.
-- Create a Class Cancelled event → verify attendance count decreases.
-- Disable an event → verify percentages revert.
-- Archive an event → verify it moves to archived tab.
-
-**Effort**: 1–2 hours  
-**Impact**: Close Phase F1.3.
-
-### 4. Fix DEBT-002 — Lab Attendance Key Bug
-
-Fix `getExperimentAttendanceStatus` to use `:P1` instead of `:P`.
-
-**Effort**: 5 minutes  
-**Impact**: Lab attendance status will correctly show Attended/Missed.
+Debt not yet resolved is tracked in `docs/15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` (e.g. DEBT-001 dual-write divergence risk in `events-controller.js`). Re-scan this register against the S3.10 baseline before planning new features.
 
 ---
 

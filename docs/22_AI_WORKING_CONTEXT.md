@@ -84,6 +84,7 @@ Documentation is a core part of the feature, not an afterthought.
 - **New State**: Update `20_DATA_DICTIONARY.md`.
 - **Bugs Fixed**: Update `15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md`.
 - **Major Feature Finished**: Update `21_CHANGELOG.md` and `17_AI_HANDOFF.md`.
+- **Baseline freeze**: `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` is the frozen snapshot of the current semester (version, architecture, engines, persistence, PWA, test baseline). Any change to `timetable.json`, the architecture, the test baseline, or the semester rollover must be reflected there (see its "Baseline Maintenance" section).
 
 ## 11. Things Future AI Should Never Forget
 1. **Think before coding**: Write an implementation plan for architectural changes.

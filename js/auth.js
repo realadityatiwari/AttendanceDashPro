@@ -32,6 +32,9 @@ export async function signupUser(name, rollNumber, password) {
 }
 
 export async function logoutUser() {
+  if (auth.currentUser) {
+    localStorage.removeItem(`app_state_${auth.currentUser.uid}`);
+  }
   await auth.signOut();
   window.location.reload();
 }

@@ -50,6 +50,8 @@ Academic Events are disabled, then archived. They are never permanently deleted 
 
 ## Current State Summary
 
+> **Start here**: `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` is the frozen, authoritative snapshot of the current-semester codebase (version, architecture, engines, persistence, PWA, test baseline, deployment facts). Read it after this document, before touching source.
+
 ### What Is Complete and Production-Stable
 
 | Component | File | Status |
@@ -57,26 +59,22 @@ Academic Events are disabled, then archived. They are never permanently deleted 
 | Calendar Engine (core) | `calendar-engine.js` | ✅ Stable |
 | Attendance Engine (core) | `attendance-engine.js` | ✅ Stable |
 | Quiz Engine | `quiz-engine.js` | ✅ Stable |
-| Laboratory Engine | `laboratory-engine.js` | ✅ Stable (minor bugs) |
-| Academic Event System (backend) | `calendar-engine.js`, `events-controller.js` | ✅ Backend stable |
+| Laboratory Engine | `laboratory-engine.js` | ✅ Stable (DEBT-002 lab lookup fixed) |
+| Academic Event System (backend) | `calendar-engine.js`, `events-controller.js` | ✅ Stable |
 | Authentication | `auth.js`, `firebase.js` | ✅ Stable |
-| Storage + Cloud Sync | `storage.js` | ✅ Stable (rules bug) |
+| Storage + Cloud Sync | `storage.js` | ✅ Stable (BUG-001 rules fixed; P0/P1/P2 persistence fixes from S3.6) |
 | Date Context / Simulation Mode | `dateContext.js` | ✅ Stable |
-| PWA / Service Worker | `service-worker.js`, `pwa.js` | ✅ Stable (cache bug) |
+| PWA / Service Worker | `service-worker.js`, `pwa.js` | ✅ Stable (BUG-002 cache fixed) |
 | UI — Dashboard | `ui.js` | ✅ Stable |
-| UI — Academic Events | `ui.js`, `app.js` | 🟡 Implemented, needs browser validation |
+| UI — Academic Events | `ui.js`, `app.js` | ✅ Stable (browser-validated in S3.5/S3.6) |
 
 ### What Needs Immediate Attention (Before New Features)
 
-See `docs/15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` for the full list. Most critical:
+The three historically flagged blockers — BUG-001 (Firestore rules), BUG-002 (service worker cache), DEBT-002 (lab attendance key) — are **already fixed** and must not be re-opened. Remaining work:
 
-1. **Firestore rules** (`firestore.rules` line 48): Update `isValidStudentDoc()` to allow `laboratory` and `academicEvents` root fields. Without this, lab data and events silently fail to sync to the cloud.
-
-2. **Service worker cache** (`service-worker.js`): Add `events-controller.js` to the `STATIC_ASSETS` array and bump `APP_VERSION`.
-
-3. **Lab attendance key bug** (`laboratory-engine.js` line 112): Change `":P"` to `":P1"`.
-
-4. **Complete Phase F1.3 browser validation**: Test the full Academic Event CRUD flow in a browser before declaring F1.3 complete.
+1. **Re-scan the debt register**: `docs/15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` still lists legacy entries; compare against the S3.10 baseline to confirm which remain live (e.g. DEBT-001 dual-write divergence risk in `events-controller.js`).
+2. **Confirm Phase F1.3 browser validation**: recorded as verified in the S3.x audits; re-confirm against the current baseline before feature work.
+3. **Update the S3.10 baseline**: whenever the semester, `timetable.json`, or architecture changes, refresh `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` per its maintenance section.
 
 ---
 
@@ -171,6 +169,7 @@ No. Call `getAttendanceData()` and `computeSubjectStats()` from `attendance-engi
 | What is the quiz policy? | `app.js` → `initCalendarEngine` → `policies.quiz` |
 | Where is AppState defined? | `storage.js` → `export const AppState` |
 | What does the Firestore document look like? | `docs/10_STORAGE_AND_SYNC.md` |
+| What is the current codebase baseline? | `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` |
 | What bugs exist? | `docs/15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` |
 | What features are next? | `docs/16_ROADMAP.md` |
 
