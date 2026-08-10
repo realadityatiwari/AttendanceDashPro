@@ -46,12 +46,7 @@ async function runTests() {
     return {
       subjectCode: s.code,
       commencementDate: timetable.start_date,
-      milestones: timetable.quiz_dates.map((q, idx) => ({
-        milestoneId: `q${idx+1}`,
-        type: 'QUIZ',
-        date: q.date,
-        metadata: { quizCycle: idx + 1 }
-      }))
+      milestones: []
     };
   });
 
@@ -77,10 +72,8 @@ async function runTests() {
     events: []
   });
 
-  // Baseline test
-  const quiz1 = timetable.quiz_dates[0].date; // 2026-08-17
-  
-  let data = getAttendanceData(quiz1, {});
+  // Baseline test: use quiz cycle 1 (subject-specific dates are in timetable.json)
+  let data = getAttendanceData(1, {});
   let statsBCS501 = computeSubjectStats('BCS-501', 'DBMS', null, data['BCS-501']);
   
   // If it doesn't crash, the API integration works at a basic level
@@ -138,7 +131,7 @@ async function runTests() {
     ]
   });
 
-  const dataWithEvents = getAttendanceData(quiz1, {});
+  const dataWithEvents = getAttendanceData(1, {});
   const newStats = computeSubjectStats('BCS-501', 'DBMS', null, dataWithEvents['BCS-501']);
   
   // Verify totals have dropped due to holidays!
@@ -164,7 +157,7 @@ async function runTests() {
     events: []
   });
   
-  const delayedData = getAttendanceData(quiz1, {});
+  const delayedData = getAttendanceData(1, {});
   const delayedStats = computeSubjectStats('BCS-501', 'DBMS', null, delayedData['BCS-501']);
   
   assert("Subject starting after semester start calculates correctly", delayedStats.totComb < statsBCS501.totComb);
@@ -193,10 +186,10 @@ async function runTests() {
     policies: { quiz: { quiz1: { targetPercentage: 70 }, quiz2: { targetPercentage: 75 }, quiz3: { targetPercentage: 75 } } }
   });
 
-  // Global Fallback Regression
-  // BCS-501 has no timeline property, so it inherits the global quiz 1 date (2026-08-17)
+  // All subjects now have explicit subject-specific timelines.
+  // BCS-501 Q1 = 2026-08-27 per official SRMCEM schedule.
   const bcs501Opt = getSubjectQuizOptimization('BCS-501', 1, {}, 70);
-  assert("Global fallback timeline computes correctly for Quiz 1", bcs501Opt && typeof bcs501Opt.lecturePercentage === 'number');
+  assert("Subject-specific timeline computes correctly for Quiz 1", bcs501Opt && typeof bcs501Opt.lecturePercentage === 'number');
   
   // Custom Timeline (Delayed commencement & Isolated quiz dates)
   // BNC-501 has commencement 2026-07-20 (vs global 2026-07-15) and quiz 1 on 2026-08-19.
@@ -208,9 +201,9 @@ async function runTests() {
   // and returns a different optimization window proves isolation.
 
   // Subject missing a specific quiz cycle
-  // BCS-054 only has q1 and q2. Missing q3.
+  // BCS-054 now has all 3 quiz cycles (Q3 = 2026-10-23 per official SRMCEM schedule)
   const bcs054Q3 = getSubjectQuizOptimization('BCS-054', 3, {}, 75);
-  assert("Subject missing a quiz cycle returns null", bcs054Q3 === null);
+  assert("BCS-054 Q3 now resolves correctly (2026-10-23)", bcs054Q3 !== null && typeof bcs054Q3.lecturePercentage === 'number');
 
   // Laboratory subject with custom timeline
   // BCS-551 has no quizzes, only LAB_INTERNAL. Querying Quiz 1 should return null.
@@ -235,8 +228,8 @@ async function runTests() {
     }
   }
   
-  // Create a baseline data state for BCS-501 (which we know runs globally)
-  const baseData = getAttendanceData('2026-08-17'); 
+  // Create a baseline data state for BCS-501 (cycle 1, official Q1 = 2026-08-27)
+  const baseData = getAttendanceData(1); 
   const baseLecTot = baseData['BCS-501'].counts.L.tot;
   
   // Inject an EXTRA_LECTURE
@@ -249,7 +242,7 @@ async function runTests() {
     active: true
   });
   
-  const modifiedData = getAttendanceData('2026-08-17');
+  const modifiedData = getAttendanceData(1);
   const modLecTot = modifiedData['BCS-501'].counts.L.tot;
   assert("EXTRA_LECTURE increments total scheduled classes in Attendance Engine", modLecTot === baseLecTot + 1);
   assert("EXTRA_LECTURE increments pending classes", modifiedData['BCS-501'].counts.L.pending > baseData['BCS-501'].counts.L.pending);
@@ -264,7 +257,7 @@ async function runTests() {
     effectiveDate: '2026-07-28', // Tuesday has an L class for BCS-501!
     active: true
   });
-  const cancelData = getAttendanceData('2026-08-17');
+  const cancelData = getAttendanceData(1);
   assert("CLASS_CANCELLED decrements total scheduled classes", cancelData['BCS-501'].counts.L.tot === baseLecTot - 1);
 
   // Check Quiz Optimization reacts correctly too
@@ -272,7 +265,7 @@ async function runTests() {
   assert("getSubjectQuizOptimization reflects CLASS_CANCELLED delta", baseOpt.lecturePercentage !== undefined);
 
   console.log("\n--- Testing Laboratory Stats Contract ---");
-  const labData = getAttendanceData('2026-08-17');
+  const labData = getAttendanceData(1);
   const bcs551Stats = computeSubjectStats('BCS-551', 'DBMS Lab', null, labData['BCS-551']);
   assert("Laboratory stats export totP", bcs551Stats.totP !== undefined && bcs551Stats.totP >= 0);
   assert("Laboratory stats export attP_done", bcs551Stats.attP_done !== undefined);

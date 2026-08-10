@@ -1181,7 +1181,7 @@ export function renderHistoryLog() {
 ═══════════════════════════════════════════════════════════════════════ */
 export function recalculateAndRender() {
   const targetDateStr = getActiveDateString();
-  const liveData    = getAttendanceData(targetDateStr, getEffectiveStates());
+  const liveData    = getAttendanceData(currentQuiz + 1, getEffectiveStates());
   const isMobile    = window.innerWidth < 768;
 
   renderTodayClasses(targetDateStr, liveData);
@@ -1196,7 +1196,9 @@ export function recalculateAndRender() {
   }
 
   // PRE-COMPUTE subject rows, overall stats, and ERP overall ONCE here
-  const {label, date: quizDate} = getTimetable().quiz_dates[currentQuiz];
+  const quizCycleMeta = (getTimetable().quiz_cycles || [])[currentQuiz] || { label: `Quiz ${currentQuiz + 1}` };
+  const label = quizCycleMeta.label;
+  const quizDate = null; // Dates are now per-subject — no single global date exists
   const rows = getTimetable().subjects.map(({code, name, tag}) =>
     computeSubjectStats(code, name, tag, liveData[code])
   );
@@ -1319,25 +1321,24 @@ function setupMobileAccordion() {
    TAB SWITCHING
 ═══════════════════════════════════════════════════════════════════════ */
 
-/** Populates the quiz cycle tab strip (#quizTabs) from timetable.quiz_dates. */
+/** Populates the quiz cycle tab strip (#quizTabs) from timetable.quiz_cycles. */
 export function renderQuizTabs() {
   const wrap = document.getElementById('quizTabs');
   if (!wrap) return;
-  const quizDates = getTimetable().quiz_dates || [];
-  wrap.innerHTML = quizDates.map((q, i) => `
+  const quizCycles = getTimetable().quiz_cycles || [];
+  wrap.innerHTML = quizCycles.map((q, i) => `
     <button class="tab-btn ${i === currentQuiz ? 'active' : ''}"
       role="tab" aria-selected="${i === currentQuiz ? 'true' : 'false'}"
-      aria-controls="panels" aria-label="${q.label} · ${q.date}"
+      aria-controls="panels" aria-label="${q.label}"
       data-action="switchQuiz" data-quiz="${i}">
       <span class="quiz-tab-label">${q.label}</span>
-      <span class="quiz-tab-date">${q.date}</span>
     </button>`).join('');
 }
 
 export function switchQuiz(idx, btn) {
   if (idx === currentQuiz) return;
-  const quizDates = getTimetable().quiz_dates || [];
-  if (!quizDates[idx]) return;
+  const quizCycles = getTimetable().quiz_cycles || [];
+  if (!quizCycles[idx]) return;
   currentQuiz = idx;
   document.querySelectorAll('#quizTabs .tab-btn').forEach((b, i) => {
     b.classList.toggle('active', i === idx);

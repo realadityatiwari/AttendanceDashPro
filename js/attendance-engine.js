@@ -221,7 +221,7 @@ export function assertConsistency(code, d) {
    ATTENDANCE DATA LOADER
    Rebuilds per-subject counts from timetable + localStorage states.
 ═══════════════════════════════════════════════════════════════════════ */
-export function getAttendanceData(quizDate, states = {}) {
+export function getAttendanceData(quizCycle, states = {}) {
   const data   = {};
   const validTypes = Object.keys(CLASS_TYPES);
 
@@ -236,13 +236,9 @@ export function getAttendanceData(quizDate, states = {}) {
     });
   });
 
-  // Resolve current quiz cycle by matching the passed quizDate (from legacy UI flow)
-  const quizDateStr = typeof quizDate === 'string' ? quizDate : quizDate.toISOString().split('T')[0];
-  const qIdx = getTimetable().quiz_dates.findIndex(q => {
-    const qStr = typeof q.date === 'string' ? q.date : q.date.toISOString().split('T')[0];
-    return qStr === quizDateStr;
-  });
-  const quizCycle = qIdx >= 0 ? qIdx + 1 : 1; // Fallback to 1
+  // quizCycle is now passed directly (1-indexed). Each subject resolves
+  // its own attendance window through the Calendar Engine's getQuizWindow().
+  if (typeof quizCycle !== 'number' || quizCycle < 1) quizCycle = 1;
 
   // Use Calendar Engine API directly (A2.3 Architecture Lock)
   getTimetable().subjects.forEach(({code}) => {

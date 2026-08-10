@@ -10,19 +10,10 @@
       "default": { "targetPercentage": 75 }
     }
   },
-  "quiz_dates": [
-    {
-      "label": "1st Quiz",
-      "date": "2026-08-17"
-    },
-    {
-      "label": "2nd Quiz",
-      "date": "2026-09-14"
-    },
-    {
-      "label": "3rd Quiz",
-      "date": "2026-10-21"
-    }
+  "quiz_cycles": [
+    { "label": "1st Quiz", "cycle": 1 },
+    { "label": "2nd Quiz", "cycle": 2 },
+    { "label": "3rd Quiz", "cycle": 3 }
   ],
   "subjects": [
     {
@@ -35,9 +26,9 @@
       "timeline": {
         "commencementDate": "2026-07-20",
         "milestones": [
-          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-19", "metadata": { "quizCycle": 1 } },
-          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-16", "metadata": { "quizCycle": 2 } },
-          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-23", "metadata": { "quizCycle": 3 } }
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-24", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-14", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-09", "metadata": { "quizCycle": 3 } }
         ]
       }
     },
@@ -47,7 +38,15 @@
       "tag": null,
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-15",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-27", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-17", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-12", "metadata": { "quizCycle": 3 } }
+        ]
+      }
     },
     {
       "code": "BCS-502",
@@ -55,7 +54,15 @@
       "tag": null,
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-15",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-31", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-21", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-16", "metadata": { "quizCycle": 3 } }
+        ]
+      }
     },
     {
       "code": "BCS-503",
@@ -63,7 +70,15 @@
       "tag": null,
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-15",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-09-03", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-24", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-21", "metadata": { "quizCycle": 3 } }
+        ]
+      }
     },
     {
       "code": "BCS-054",
@@ -75,8 +90,9 @@
       "timeline": {
         "commencementDate": "2026-07-15",
         "milestones": [
-          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-08-17", "metadata": { "quizCycle": 1 } },
-          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-14", "metadata": { "quizCycle": 2 } }
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-09-07", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-09-28", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-23", "metadata": { "quizCycle": 3 } }
         ]
       }
     },
@@ -86,7 +102,15 @@
       "tag": "Elective-II",
       "category": "theory",
       "quizApplicable": true,
-      "attendanceApplicable": true
+      "attendanceApplicable": true,
+      "timeline": {
+        "commencementDate": "2026-07-15",
+        "milestones": [
+          { "type": "QUIZ", "milestoneId": "q1", "date": "2026-09-11", "metadata": { "quizCycle": 1 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-10-02", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-26", "metadata": { "quizCycle": 3 } }
+        ]
+      }
     },
     {
       "code": "BCS-551",

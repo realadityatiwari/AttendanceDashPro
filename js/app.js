@@ -224,7 +224,8 @@ function buildSubjectTimelines(timetable, academicCalendar = null) {
   // For now, we process the embedded 'timeline' overrides or fallback to global.
 
   const timelines = timetable.subjects.map(s => {
-    // 1. Custom Timeline (Future-proof block)
+    // All quiz-applicable subjects must have a subject-specific timeline in timetable.json.
+    // Lab subjects without quiz milestones are still allowed to have partial timelines.
     if (s.timeline) {
       return {
         subjectCode: s.code,
@@ -233,16 +234,12 @@ function buildSubjectTimelines(timetable, academicCalendar = null) {
       };
     }
 
-    // 2. Global Fallback (Regression Compatibility)
+    // Subjects with no timeline at all (e.g., bare lab subjects with no milestones):
+    // return an empty-milestone timeline so the engine can still compute attendance windows.
     return {
       subjectCode: s.code,
       commencementDate: timetable.start_date,
-      milestones: timetable.quiz_dates.map((q, idx) => ({
-        milestoneId: `q${idx+1}`,
-        type: 'QUIZ',
-        date: q.date,
-        metadata: { quizCycle: idx + 1 }
-      }))
+      milestones: []
     };
   });
 
