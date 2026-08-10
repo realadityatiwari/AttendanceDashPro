@@ -102,10 +102,8 @@ export function renderDailyAttendanceHTML(dateStr, effectiveStates) {
 
   if (!vm.isWorkingDay || vm.classes.length === 0) {
     return `
-      <div class="daily-empty-state">
-        <div class="daily-empty-icon">☕</div>
-        <div class="daily-empty-title">${!vm.isWorkingDay ? 'Holiday / Closure' : "You're free today"}</div>
-        <div class="daily-empty-sub">${!vm.isWorkingDay ? vm.closureReason : 'No classes scheduled for this date.'}</div>
+      <div class="today-empty">
+        ${!vm.isWorkingDay ? vm.closureReason : 'No classes scheduled for this date.'}
       </div>
     `;
   }
@@ -113,65 +111,59 @@ export function renderDailyAttendanceHTML(dateStr, effectiveStates) {
   const completionPct = vm.summary.total > 0 ? Math.round((vm.summary.completed / vm.summary.total) * 100) : 0;
 
   let html = `
-    <div class="daily-summary">
-      <div class="daily-progress-text">${vm.summary.completed} / ${vm.summary.total} classes completed</div>
-      <div class="daily-progress-bar">
-        <div class="daily-progress-fill" style="width: ${completionPct}%"></div>
-      </div>
+    <div class="daily-summary" style="display:none;">
     </div>
     <div class="daily-cards">
   `;
 
   vm.classes.forEach(c => {
     const disabledAttr = vm.isBlocked ? 'disabled title="Enable Simulation Mode to log future dates"' : '';
-    const disabledClass = vm.isBlocked ? 'is-blocked' : '';
+    const disabledStyle = vm.isBlocked ? 'opacity:0.4;cursor:not-allowed;' : '';
     
-    const attActive = c.status === 'Attended' ? 'active' : '';
-    const missActive = c.status === 'Missed' ? 'active' : '';
+    const attActive = c.status === 'Attended' ? 'active-attended' : '';
+    const missActive = c.status === 'Missed' ? 'active-missed' : '';
+    const pendActive = c.status === 'Pending' ? 'active-pending' : '';
 
-    let statusBadgeClass = 'status-pending';
-    if (c.uiStatus === 'Present') statusBadgeClass = 'status-present';
-    if (c.uiStatus === 'Absent') statusBadgeClass = 'status-absent';
-    if (c.uiStatus === 'Upcoming') statusBadgeClass = 'status-upcoming';
+    const attPressed = c.status === 'Attended' ? 'true' : 'false';
+    const missPressed = c.status === 'Missed' ? 'true' : 'false';
 
-    const eventBadge = c.eventLabel ? `<span class="daily-event-badge">${c.eventLabel}</span>` : '';
+    const attTooltip = 'Mark as attended';
+    const missTooltip = 'Mark as missed';
+    const tooltipIdAtt = `tt-${vm.dateStr}-${c.subjectCode}-${c.classType}-att`.replace(/:/g, '-');
+    const tooltipIdMiss = `tt-${vm.dateStr}-${c.subjectCode}-${c.classType}-miss`.replace(/:/g, '-');
 
     html += `
-      <div class="daily-card ${disabledClass}">
-        <div class="daily-card-header">
-          <div class="daily-card-tags">
-            <span class="daily-subj-code">${c.subjectCode}</span>
-            <span class="daily-type-code">${c.typeLabel}</span>
-            ${eventBadge}
+      <div class="today-row">
+        <div class="today-row-left">
+          <div class="today-row-subj">
+            <span class="s-code">${c.subjectCode}</span>
+            <span class="today-row-type">${c.typeLabel}</span>
+            <span class="today-row-time">${c.timeSlot}</span>
           </div>
-          <div class="daily-status-badge ${statusBadgeClass}">${c.uiStatus}</div>
+          <div class="today-row-name">${c.subjectName}</div>
         </div>
-        <div class="daily-card-main">
-          <div class="daily-subj-name">${c.subjectName}</div>
-          <div class="daily-time">${c.timeSlot}</div>
-        </div>
-        <div class="daily-card-actions">
-          <div class="segmented-control">
-            <button class="seg-btn ${attActive}" ${disabledAttr}
-              aria-pressed="${c.status === 'Attended' ? 'true' : 'false'}"
+        <div class="today-row-actions">
+          <div class="tooltip-wrap">
+            <button class="action-btn ${attActive}" style="${disabledStyle}"
+              ${disabledAttr}
+              aria-pressed="${attPressed}"
+              aria-describedby="${tooltipIdAtt}"
               aria-label="Mark ${c.subjectCode} ${c.typeLabel} as attended"
-              data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Attended">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              Present
-            </button>
-            <button class="seg-btn ${missActive}" ${disabledAttr}
-              aria-pressed="${c.status === 'Missed' ? 'true' : 'false'}"
-              aria-label="Mark ${c.subjectCode} ${c.typeLabel} as missed"
-              data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Missed">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              Absent
-            </button>
+              data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Attended">✓ Attended</button>
+            <span id="${tooltipIdAtt}" role="tooltip" class="tooltip-text">${attTooltip}</span>
           </div>
-          <button class="daily-reset-btn" ${disabledAttr}
-            aria-label="Reset ${c.subjectCode} ${c.typeLabel}"
-            data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Pending">
-            Reset
-          </button>
+          <div class="tooltip-wrap">
+            <button class="action-btn ${missActive}" style="${disabledStyle}"
+              ${disabledAttr}
+              aria-pressed="${missPressed}"
+              aria-describedby="${tooltipIdMiss}"
+              aria-label="Mark ${c.subjectCode} ${c.typeLabel} as missed"
+              data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Missed">✕ Missed</button>
+            <span id="${tooltipIdMiss}" role="tooltip" class="tooltip-text">${missTooltip}</span>
+          </div>
+          <button class="action-btn ${pendActive}"
+            ${disabledAttr} style="${disabledStyle}" aria-label="Reset ${c.subjectCode} ${c.typeLabel} attendance status"
+            data-action="logAttendance" data-date="${vm.dateStr}" data-s="${c.subjectCode}" data-t="${c.classType}" data-state="Pending">Reset</button>
         </div>
       </div>
     `;

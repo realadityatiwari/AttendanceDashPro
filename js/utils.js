@@ -127,8 +127,8 @@ export function isScheduledClass(dateStr, subjectCode, type) {
   const monIdx = (dow + 6) % 7;
   const sched = timetable.day_schedule[monIdx];
   if (!sched) return false;
-  // Match the raw type string (P1/P2 must match exactly against timetable slots)
-  return sched.some(c => c.s === subjectCode && c.t === type);
+  // Match the raw type string (P1/P2) or the normalized type ('P')
+  return sched.some(c => c.s === subjectCode && (c.t === type || normalizeClassType(c.t) === type));
 }
 
 export function formatTodayHeader(dateVal) {
