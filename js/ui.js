@@ -1,7 +1,7 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
 import { getTimetable, formatTodayHeader, parseDateString, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
-import { getPolicy, getAcademicDay, getEffectiveDaySchedule } from './calendar-engine.js';
+import { getPolicy, getAcademicDay, getEffectiveDaySchedule, addDays, getTodayString, AcademicEventRegistry } from './calendar-engine.js';
 /**
  * Determine status badge from forecast average.
  * Status is ALWAYS based on forecast, never current.
@@ -42,7 +42,6 @@ import {
   selectDateByString, resetToToday,
   getEffectiveStates, logClassState, classifyDateStr, deriveMode
 } from './dateContext.js';
-import { addDays, getTodayString, getAcademicDay, AcademicEventRegistry } from './calendar-engine.js';
 export { getTodayString };
 
 export let currentQuiz = 0;

@@ -16,6 +16,8 @@ const STATIC_ASSETS = [
   '/js/laboratory-engine.js',
   '/js/quiz-engine.js',
   '/js/calendar-engine.js',
+  '/js/daily-attendance.js',
+  '/css/daily-attendance.css',
   '/js/dateContext.js',
   '/js/utils.js',
   '/js/validation.js',
