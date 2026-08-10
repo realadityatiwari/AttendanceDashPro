@@ -69,7 +69,7 @@ function buildDailyViewModel(dateStr, effectiveStates) {
     vm.classes.push({
       classId,
       subjectCode: c.s,
-      subjectName,
+      subjectName: subjName,
       classType: c.t,
       typeLabel,
       timeSlot,

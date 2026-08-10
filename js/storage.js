@@ -167,6 +167,10 @@ export async function fetchCloudStates() {
         
         console.log("[PROFILE 3] Local After Merge:", AppState.profile);
         stateChanged = true;
+      } else if (isProfileComplete(AppState.profile)) {
+        // Cloud is missing profile, but local has a valid one. Sync it up.
+        AppState.isDirty = true;
+        triggerCloudSync();
       }
       
       // Safe merge: Academic Events
@@ -181,8 +185,8 @@ export async function fetchCloudStates() {
       
       return stateChanged;
     } else {
-      // Cloud document doesn't exist. Let's upload local state if it's not empty.
-      if (Object.keys(AppState.attendance).length > 0) {
+      // Cloud document doesn't exist. Let's upload local state if it has data.
+      if (Object.keys(AppState.attendance).length > 0 || isProfileComplete(AppState.profile)) {
         AppState.isDirty = true;
         triggerCloudSync();
       }
