@@ -1,7 +1,7 @@
-import { getAcademicDay, getEffectiveDaySchedule, AcademicEventRegistry } from './calendar-engine.js';
+import { getAcademicDay, getEffectiveDaySchedule, AcademicEventRegistry, getTodayString } from './calendar-engine.js';
 import { getTimetable } from './utils.js';
 import { CLASS_TYPES, normalizeClassType } from './utils.js';
-import { getTodayString, isSimulationMode } from './dateContext.js';
+import { isSimulationMode } from './dateContext.js';
 
 /**
  * Builds the view model for the Daily Attendance UI.
@@ -104,7 +104,7 @@ export function renderDailyAttendanceHTML(dateStr, effectiveStates) {
     return `
       <div class="daily-empty-state">
         <div class="daily-empty-icon">☕</div>
-        <div class="daily-empty-title">${!vm.isWorkingDay ? 'Holiday / Closure' : 'You\\'re free today'}</div>
+        <div class="daily-empty-title">${!vm.isWorkingDay ? 'Holiday / Closure' : "You're free today"}</div>
         <div class="daily-empty-sub">${!vm.isWorkingDay ? vm.closureReason : 'No classes scheduled for this date.'}</div>
       </div>
     `;
