@@ -158,17 +158,18 @@ async function runTests() {
   // getAttendanceData relies purely on AppState.attendance (mocked as {} here). It should just increment pending.
   const attData = getAttendanceData('2026-08-17', AppState.attendance);
   const bcs501stats = computeSubjectStats('BCS-501', 'DBMS', null, attData['BCS-501']);
-  console.log("TEST 16 stats:", { attL: bcs501stats.attL, pendingL: bcs501stats.pendingL });
-  assert("16. events don't create attendance records (only pending changes)", bcs501stats.attL === 0 && bcs501stats.pendingL > 0);
+  assert("16. events don't create attendance records (only pending changes)", bcs501stats.attL_done === 0 && bcs501stats.pendingL > 0);
 
   // 19. current attendance reacts to past/today event appropriately
   // Let's mark the extra lecture as Attended!
+  createTestEvent('2026-08-11', 'EXTRA_LECTURE', 'BCS-501', 'L');
+  effSched = getEffectiveDaySchedule('2026-08-11');
   const extraLec = effSched.find(c => c.s === 'BCS-501' && c.isExtra);
   const extraClassId = extraLec ? `2026-08-11:BCS-501:${extraLec.t}` : 'invalid';
   AppState.attendance[extraClassId] = 'Attended';
   const attData2 = getAttendanceData('2026-08-17', AppState.attendance);
   const bcs501stats2 = computeSubjectStats('BCS-501', 'DBMS', null, attData2['BCS-501']);
-  assert("19. current attendance reacts to past/today event", bcs501stats2.attL === 1);
+  assert("19. current attendance reacts to past/today event", bcs501stats2.attL_done === 1);
 
   // 20. quiz engine receives event-adjusted schedule correctly
   const opt = getSubjectQuizOptimization('BCS-501', 1, AppState.attendance, 75);
