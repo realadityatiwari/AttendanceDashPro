@@ -67,12 +67,7 @@ async function runTests() {
     return {
       subjectCode: s.code,
       commencementDate: s.timeline?.commencementDate || timetable.start_date,
-      milestones: s.timeline?.milestones || timetable.quiz_dates.map((q, idx) => ({
-        milestoneId: `q${idx+1}`,
-        type: 'QUIZ',
-        date: q.date,
-        metadata: { quizCycle: idx + 1 }
-      }))
+      milestones: s.timeline?.milestones || []
     };
   });
 
@@ -156,7 +151,7 @@ async function runTests() {
 
   // 16. events don't create attendance records
   // getAttendanceData relies purely on AppState.attendance (mocked as {} here). It should just increment pending.
-  const attData = getAttendanceData('2026-08-17', AppState.attendance);
+  const attData = getAttendanceData(1, AppState.attendance);
   const bcs501stats = computeSubjectStats('BCS-501', 'DBMS', null, attData['BCS-501']);
   assert("16. events don't create attendance records (only pending changes)", bcs501stats.attL_done === 0 && bcs501stats.pendingL > 0);
 
@@ -167,7 +162,7 @@ async function runTests() {
   const extraLec = effSched.find(c => c.s === 'BCS-501' && c.isExtra);
   const extraClassId = extraLec ? `2026-08-11:BCS-501:${extraLec.t}` : 'invalid';
   AppState.attendance[extraClassId] = 'Attended';
-  const attData2 = getAttendanceData('2026-08-17', AppState.attendance);
+  const attData2 = getAttendanceData(1, AppState.attendance);
   const bcs501stats2 = computeSubjectStats('BCS-501', 'DBMS', null, attData2['BCS-501']);
   assert("19. current attendance reacts to past/today event", bcs501stats2.attL_done === 1);
 
