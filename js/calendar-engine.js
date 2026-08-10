@@ -5,6 +5,7 @@
  * Provides completely stateless, pure functional resolution of dates, holidays,
  * working overrides, and academic events based on a loaded AcademicCalendar.
  */
+import { getMergedDaySchedule, normalizeClassType } from './utils.js';
 
 /* ═══════════════════════════════════════════════════════════════════════
    CACHE & STATE (Internal Singleton)
@@ -474,6 +475,57 @@ export function getAcademicDay(dateString) {
 
   l2MemoryCache.set(dateString, academicDay);
   return academicDay;
+}
+
+/**
+ * Returns the effective schedule for a given date by resolving the base timetable 
+ * against the date's active academic events (e.g. EXTRA_LECTURE, CLASS_CANCELLED).
+ * @param {string} dateString - YYYY-MM-DD
+ * @returns {Array} Array of class occurrence objects
+ */
+export function getEffectiveDaySchedule(dateString) {
+  const day = getAcademicDay(dateString);
+  if (!day.isWorkingDay) return [];
+
+  // Determine the base schedule index
+  const scheduleDayName = day.metadata.substitutionScheduleOverride || day.metadata.originalDayOfWeek;
+  const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDayName);
+  
+  const rawSchedule = getMergedDaySchedule(monIdx);
+  if (!rawSchedule) return [];
+  
+  // clone baseSchedule to avoid mutating static array
+  const baseSchedule = rawSchedule.map(c => ({...c}));
+
+  // Sort events by priority descending to process cancellations deterministically
+  const sortedEvents = [...day.events].sort((a, b) => getEventPriority(b.type || b.eventType) - getEventPriority(a.type || a.eventType));
+
+  sortedEvents.forEach(e => {
+    const type = e.type || e.eventType;
+    
+    // High-priority closures already set isWorkingDay = false in getAcademicDay
+    if (['EMERGENCY_CLOSURE', 'PUBLIC_HOLIDAY', 'INSTITUTE_HOLIDAY', 'FESTIVAL_HOLIDAY', 'SEMESTER_BREAK'].includes(type)) {
+      return;
+    }
+
+    if (type === 'CLASS_CANCELLED') {
+      // Remove one matching class occurrence from the base schedule
+      const idx = baseSchedule.findIndex(c => c.s === e.subjectCode && normalizeClassType(c.t) === normalizeClassType(e.classType));
+      if (idx >= 0) {
+        baseSchedule.splice(idx, 1);
+      }
+    } else if (['EXTRA_LECTURE', 'EXTRA_TUTORIAL', 'EXTRA_PRACTICAL', 'SURPRISE_QUIZ'].includes(type)) {
+      // Inject one class occurrence
+      baseSchedule.push({
+        s: e.subjectCode,
+        t: `${e.classType}_extra_${e.id}`, // Unique ID prevents state collision
+        mergedTimeSlot: AcademicEventRegistry[type]?.displayName || 'Extra Class',
+        isExtra: true
+      });
+    }
+  });
+
+  return baseSchedule;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -45,6 +45,9 @@ export const CLASS_TYPES = {
  */
 export function normalizeClassType(type) {
   if (type === 'P1' || type === 'P2') return 'P';
+  if (type.startsWith('L_extra_')) return 'L';
+  if (type.startsWith('T_extra_')) return 'T';
+  if (type.startsWith('P1_extra_') || type.startsWith('P2_extra_') || type.startsWith('P_extra_')) return 'P';
   return type;
 }
 

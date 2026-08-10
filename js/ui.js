@@ -1,7 +1,7 @@
 import { loadStates, clearStates, AppState, saveLaboratoryStates } from './storage.js';
-import { getTimetable, formatTodayHeader, parseDateString, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType, getMergedDaySchedule } from './utils.js';
+import { getTimetable, formatTodayHeader, parseDateString, getLocalDateString, isScheduledClass, formatHistoryDate, CLASS_TYPES, normalizeClassType } from './utils.js';
 import { computeSubjectStats, computeOverallStats, computeCurrentOverallAttendance, computeForecastOverallAttendance, calcForecastImpact, getAttendanceData } from './attendance-engine.js';
-import { getPolicy } from './calendar-engine.js';
+import { getPolicy, getAcademicDay, getEffectiveDaySchedule } from './calendar-engine.js';
 /**
  * Determine status badge from forecast average.
  * Status is ALWAYS based on forecast, never current.
@@ -1114,15 +1114,14 @@ export function renderTodayClasses(targetDateStr, quizLiveData) {
   // Render header using standard date parsing to string for ui
   dateLabel.innerHTML = formatTodayHeader(parseDateString(dateStr));
 
-  const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
-  const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
+  // Use the Calendar Engine's effective schedule, which merges static timetable with runtime events (extra/cancelled)
+  const classes = getEffectiveDaySchedule(dateStr);
   
-  if (!academicDay.isWorkingDay || !getMergedDaySchedule(monIdx)) {
-    listContainer.innerHTML = `<div class="today-empty">No scheduled classes on this date.</div>`;
+  if (!academicDay.isWorkingDay || !classes || classes.length === 0) {
+    const reason = academicDay.events[0] ? academicDay.events[0].metadata?.reason || academicDay.events[0].eventType : 'No scheduled classes on this date.';
+    listContainer.innerHTML = `<div class="today-empty">${reason}</div>`;
     return;
   }
-
-  const classes      = getMergedDaySchedule(monIdx);
   const states       = getEffectiveStates();
   const isFuture     = dateStr > getTodayString();
   const isBlocked    = isFuture && !isSimulationMode();

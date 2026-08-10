@@ -1,5 +1,5 @@
 import { getTimetable, parseDateString, isScheduledClass, getMergedDaySchedule, getLocalDateString, normalizeClassType, CLASS_TYPES } from './utils.js';
-import { getQuizWindow, getAcademicDay, getSubjectEventDeltas, getPolicy } from './calendar-engine.js';
+import { getQuizWindow, getAcademicDay, getSubjectEventDeltas, getPolicy, getEffectiveDaySchedule } from './calendar-engine.js';
 
 export function calcCurrentPct(attended, completed) {
   if (!completed || completed <= 0) return null;
@@ -257,16 +257,12 @@ export function getAttendanceData(quizDate, states = {}) {
     window.effectiveTeachingDates.forEach(dateStr => {
       const academicDay = getAcademicDay(dateStr);
       
-      // Map originalDayOfWeek to timetable Mon=0 index
-      const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
-      const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
-
-      const mergedSchedule = getMergedDaySchedule(monIdx);
+      const effectiveSchedule = getEffectiveDaySchedule(dateStr);
       
       const statTypesToApplyDeltas = new Set(['L', 'T', 'P']);
 
-      if (mergedSchedule) {
-        mergedSchedule.forEach(({s, t}) => {
+      if (effectiveSchedule) {
+        effectiveSchedule.forEach(({s, t}) => {
           if (s !== code) return; // Process ONLY this subject
           
           const statType = normalizeClassType(t);
@@ -274,10 +270,6 @@ export function getAttendanceData(quizDate, states = {}) {
           
           data[s].counts[statType].tot++;
           
-          // Mark this stat type as already processed for scheduled classes,
-          // so we don't accidentally double-apply deltas.
-          statTypesToApplyDeltas.delete(t);
-
           const classId = `${dateStr}:${s}:${t}`;
           const state   = states[classId] || 'Pending';
 
@@ -290,30 +282,8 @@ export function getAttendanceData(quizDate, states = {}) {
           }
         });
       }
-
-      // Now apply Calendar Engine event deltas (extra classes, cancelled classes, etc)
-      // We apply for all valid types for the subject that were scheduled or not.
-      const types = ['L', 'T', 'P'];
-      types.forEach(t => {
-        const delta = getSubjectEventDeltas(dateStr, code, t);
-        if (delta !== 0) {
-          const statType = normalizeClassType(t);
-          if (data[code].counts[statType]) {
-            data[code].counts[statType].tot += delta;
-            if (data[code].counts[statType].tot < 0) {
-              data[code].counts[statType].tot = 0; // Prevent negative scheduled classes
-            }
-            if (delta > 0) {
-              data[code].counts[statType].pending += delta;
-            } else {
-              data[code].counts[statType].pending += delta;
-              if (data[code].counts[statType].pending < 0) {
-                 data[code].counts[statType].pending = 0;
-              }
-            }
-          }
-        }
-      });
+      
+      // Removed manual getSubjectEventDeltas loop. getEffectiveDaySchedule applies deltas natively.
     });
   });
 
@@ -341,13 +311,10 @@ export function getSubjectQuizOptimization(subjectCode, quizCycle, states, targe
   };
 
   window.effectiveTeachingDates.forEach(dateStr => {
-    const academicDay = getAcademicDay(dateStr);
-    const scheduleDay = academicDay.metadata.substitutionScheduleOverride || academicDay.metadata.originalDayOfWeek;
-    const monIdx = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].indexOf(scheduleDay);
-
-    const mergedSchedule = getMergedDaySchedule(monIdx);
-    if (mergedSchedule) {
-      mergedSchedule.forEach(({s, t}) => {
+    const effectiveSchedule = getEffectiveDaySchedule(dateStr);
+    
+    if (effectiveSchedule) {
+      effectiveSchedule.forEach(({s, t}) => {
         if (s !== subjectCode) return;
         
         const statType = normalizeClassType(t);
@@ -368,24 +335,7 @@ export function getSubjectQuizOptimization(subjectCode, quizCycle, states, targe
       });
     }
 
-    // Apply event deltas
-    const types = ['L', 'T', 'P'];
-    types.forEach(t => {
-      const delta = getSubjectEventDeltas(dateStr, subjectCode, t);
-      if (delta !== 0) {
-        const statType = normalizeClassType(t);
-        if (counts[statType]) {
-          counts[statType].tot += delta;
-          if (counts[statType].tot < 0) counts[statType].tot = 0;
-          if (delta > 0) {
-            counts[statType].pending += delta;
-          } else {
-            counts[statType].pending += delta;
-            if (counts[statType].pending < 0) counts[statType].pending = 0;
-          }
-        }
-      }
-    });
+    // Removed manual event deltas here.
   });
 
   const hasLorT = (counts.L.tot + counts.T.tot) > 0;
