@@ -36,6 +36,7 @@ export function dimColor(pct, targetPercentage = 75) {
 }
 import { computeLaboratoryDashboard } from './laboratory-engine.js';
 import { computeQuizDashboard } from './quiz-engine.js';
+import { renderDailyAttendanceHTML } from './daily-attendance.js';
 import {
   dateContext, MODE, isSimulationMode, getActiveDateString,
   selectDateByString, resetToToday,
@@ -1114,88 +1115,7 @@ export function renderTodayClasses(targetDateStr, quizLiveData) {
   // Render header using standard date parsing to string for ui
   dateLabel.innerHTML = formatTodayHeader(parseDateString(dateStr));
 
-  // Use the Calendar Engine's effective schedule, which merges static timetable with runtime events (extra/cancelled)
-  const classes = getEffectiveDaySchedule(dateStr);
-  
-  if (!academicDay.isWorkingDay || !classes || classes.length === 0) {
-    const reason = academicDay.events[0] ? academicDay.events[0].metadata?.reason || academicDay.events[0].eventType : 'No scheduled classes on this date.';
-    listContainer.innerHTML = `<div class="today-empty">${reason}</div>`;
-    return;
-  }
-  const states       = getEffectiveStates();
-  const isFuture     = dateStr > getTodayString();
-  const isBlocked    = isFuture && !isSimulationMode();
-
-  // Get live attendance data for the currently selected quiz (for tooltips)
-  listContainer.innerHTML = classes.map((c, idx) => {
-    const subj       = getTimetable().subjects.find(s => s.code === c.s);
-    const subjName   = subj ? subj.name : c.s;
-    const classId    = `${dateStr}:${c.s}:${c.t}`;
-    const currState  = states[classId] || 'Pending';
-    const timeSlot   = c.mergedTimeSlot || 'TBD';
-    const typeLabel  = CLASS_TYPES[normalizeClassType(c.t)]?.label ?? c.t;
-
-    const attActive  = currState === 'Attended' ? 'active-attended' : '';
-    const missActive = currState === 'Missed'   ? 'active-missed'   : '';
-    const pendActive = currState === 'Pending'  ? 'active-pending'  : '';
-    
-    const attPressed = currState === 'Attended' ? 'true' : 'false';
-    const missPressed = currState === 'Missed' ? 'true' : 'false';
-
-    // Build tooltips showing forecast impact of each possible action
-    const policyTarget = getPolicy('attendance').targetPercentage;
-    const impactAtt  = quizLiveData
-      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Attended', policyTarget))
-      : '';
-    const impactMiss = quizLiveData
-      ? getImpactTooltipHTML(calcForecastImpact(quizLiveData, c.s, c.t, currState, 'Missed', policyTarget))
-      : '';
-
-    const attTooltip  = impactAtt  || 'Mark as attended';
-    const missTooltip = impactMiss || 'Mark as missed';
-
-    // Disabled state for future dates in normal mode
-    const disabledAttr = isBlocked ? 'disabled title="Enable Simulation Mode to log future dates"' : '';
-    const disabledStyle = isBlocked ? 'opacity:0.4;cursor:not-allowed;' : '';
-    
-    const tooltipIdAtt = `tt-${dateStr}-${c.s}-${c.t}-att`.replace(/:/g, '-');
-    const tooltipIdMiss = `tt-${dateStr}-${c.s}-${c.t}-miss`.replace(/:/g, '-');
-
-    return `
-      <div class="today-row">
-        <div class="today-row-left">
-          <div class="today-row-subj">
-            <span class="s-code">${c.s}</span>
-            <span class="today-row-type">${typeLabel}</span>
-            <span class="today-row-time">${timeSlot}</span>
-          </div>
-          <div class="today-row-name">${subjName}</div>
-        </div>
-        <div class="today-row-actions">
-          <div class="tooltip-wrap">
-            <button class="action-btn ${attActive}" style="${disabledStyle}"
-              ${disabledAttr}
-              aria-pressed="${attPressed}"
-              aria-describedby="${tooltipIdAtt}"
-              aria-label="Mark ${c.s} ${typeLabel} as attended"
-              data-action="logAttendance" data-date="${dateStr}" data-s="${c.s}" data-t="${c.t}" data-state="Attended">✓ Attended</button>
-            <span id="${tooltipIdAtt}" role="tooltip" class="tooltip-text">${attTooltip}</span>
-          </div>
-          <div class="tooltip-wrap">
-            <button class="action-btn ${missActive}" style="${disabledStyle}"
-              ${disabledAttr}
-              aria-pressed="${missPressed}"
-              aria-describedby="${tooltipIdMiss}"
-              aria-label="Mark ${c.s} ${typeLabel} as missed"
-              data-action="logAttendance" data-date="${dateStr}" data-s="${c.s}" data-t="${c.t}" data-state="Missed">✕ Missed</button>
-            <span id="${tooltipIdMiss}" role="tooltip" class="tooltip-text">${missTooltip}</span>
-          </div>
-          <button class="action-btn ${pendActive}"
-            ${disabledAttr} style="${disabledStyle}" aria-label="Reset ${c.s} ${typeLabel} attendance status"
-            data-action="logAttendance" data-date="${dateStr}" data-s="${c.s}" data-t="${c.t}" data-state="Pending">Reset</button>
-        </div>
-      </div>`;
-  }).join('');
+  listContainer.innerHTML = renderDailyAttendanceHTML(dateStr, getEffectiveStates());
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
