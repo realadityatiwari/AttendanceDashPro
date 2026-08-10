@@ -485,7 +485,22 @@ export function computeSubjectStats(code, name, tag, rawData) {
     completedL, completedT, completedP,
     currentLecPct, currentTutPct, currentAvgPct,
     forecastLecPct, forecastTutPct, forecastAvgPct,
-    optResult
+    optResult,
+    
+    // S4.2 Clean Engine Contract: Explicitly separated Current and Forecast domains
+    // Legacy flat fields above are preserved temporarily for ui.js compatibility.
+    current: {
+      lecture: currentLecPct,
+      tutorial: currentTutPct,
+      practical: flat.totP > 0 ? calcCurrentPct(flat.attP_done, completedP) : null,
+      overall: currentAvgPct
+    },
+    forecast: {
+      lecture: forecastLecPct,
+      tutorial: forecastTutPct,
+      practical: flat.totP > 0 ? calcForecastPct(flat.attP_done, flat.pendingP, flat.totP) : null,
+      overall: forecastAvgPct
+    }
   };
 }
 

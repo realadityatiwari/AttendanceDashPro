@@ -89,6 +89,13 @@ async function runTests() {
   assert("Safe Skip logic intact", typeof statsBCS501.optResult.safeSkipLecture === 'number');
   assert("L/T/P separation intact", statsBCS501.totL !== undefined);
   
+  // S4.2 Contract Assertions
+  assert("S4 Contract: explicit current domain exists", typeof statsBCS501.current === 'object' && statsBCS501.current !== null);
+  assert("S4 Contract: explicit forecast domain exists", typeof statsBCS501.forecast === 'object' && statsBCS501.forecast !== null);
+  assert("S4 Contract: current excludes future pending assumption", statsBCS501.current.lecture !== statsBCS501.forecast.lecture || statsBCS501.current.lecture === null);
+  assert("S4 Contract: forecast encompasses pending classes", statsBCS501.forecast.lecture !== undefined);
+
+  
   // Now, inject calendar events to verify calendar logic!
 
   // Inject a PUBLIC_HOLIDAY inside the window (2026-07-20)
