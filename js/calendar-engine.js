@@ -439,8 +439,11 @@ export function getAcademicDay(dateString) {
   if (sortedEvents.length > 0) {
     const dominantEvent = sortedEvents[0];
     
-    if (dominantEvent.isWorkingDay !== undefined) {
-      isWorkingDay = dominantEvent.isWorkingDay;
+    const type = dominantEvent.type || dominantEvent.eventType;
+    const isClosure = ['PUBLIC_HOLIDAY', 'INSTITUTE_HOLIDAY', 'FESTIVAL_HOLIDAY', 'EMERGENCY_CLOSURE', 'SEMESTER_BREAK'].includes(type);
+    
+    if (dominantEvent.isWorkingDay !== undefined || isClosure) {
+      isWorkingDay = isClosure ? false : dominantEvent.isWorkingDay;
       workingStatus = isWorkingDay ? 'FULL_DAY' : 'CANCELLED';
       dayType = isWorkingDay ? 'WORKING_DAY' : 'NON_WORKING_DAY';
       
