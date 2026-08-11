@@ -44,8 +44,9 @@ The eligibility engine has been fundamentally restructured to support the comple
 1.  **Quiz Cycle**: Identify the targeted quiz.
 2.  **Attendance Window**: Calculate the correct start/end date for the specific cycle.
 3.  **Eligibility Policy**: Lookup the threshold (70/75/75).
-4.  **Requirements**: Evaluate both lecture and tutorial thresholds.
-5.  **Result**: Yield an `EligibilityResult` encompassing all applied rules.
+4.  **Requirements**: Evaluate both lecture and tutorial thresholds explicitly as required by the policy.
+5.  **Exclusion**: Explicitly exclude Practical/Lab attendance from quiz eligibility, maintaining a strict distinction between *general attendance* (which includes practicals) and *quiz eligibility* (which only includes lectures/tutorials per the official notice).
+6.  **Result**: Yield an `EligibilityResult` encompassing all applied rules.
 
 ## 8. Future PostgreSQL Requirements
 
@@ -65,4 +66,4 @@ The eligibility engine has been fundamentally restructured to support the comple
 -   **PostgreSQL Schema**: Deferred to Phase 2.
 -   **Data Migration**: Transferring existing Firestore data to PostgreSQL is deferred until the schema is stable.
 -   **Frontend Migration**: The Next.js rebuild (using the Bolt prototype as visual reference) is deferred to a future phase.
--   **Laboratory Engine**: The lab engine porting will be evaluated after the core theory engines are fully tested.
+-   **Laboratory Engine**: While practicals are supported in the core attendance stats, the specialized laboratory experiment tracking engine will be ported after the core theory engines are fully tested.

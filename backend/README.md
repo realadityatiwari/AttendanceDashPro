@@ -11,6 +11,10 @@ The backend strictly separates the **Domain** from the **API** and **Infrastruct
 3.  **API (`app/api/`)**: FastAPI routers that expose the service layer to the frontend.
 4.  **Schemas (`app/schemas/`)**: Pydantic models defining the strong data contracts for the domain.
 
+### Domain Semantics: General Attendance vs Quiz Eligibility
+
+The domain correctly models all class types for general tracking (Lecture, Tutorial, and **Practical/Lab**), preserving statistics for each. However, the `eligibility_engine.py` explicitly segregates these boundaries according to the official academic rules, consuming *only* the required Lecture and Tutorial statistics to evaluate quiz eligibility, ensuring that practical attendance does not accidentally skew official policy requirements.
+
 ## Local Setup (Phase 1)
 
 Currently, the backend consists purely of domain models and scaffolds. There is no active database connection.
