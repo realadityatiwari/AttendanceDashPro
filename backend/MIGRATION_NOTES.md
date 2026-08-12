@@ -31,11 +31,11 @@ This document tracks the strategic decisions, conflicts, and resolutions made du
 - **Institutional Timezone**: `Asia/Kolkata`.
 - **Constraint**: Do NOT represent ordinary academic dates as naive datetimes. Do NOT perform unnecessary UTC conversions on academic dates.
 
-## 6. BCS-054 Q3 Unresolved Status
+## 6. BCS-054 Q3 Unresolved Status (Source-Data Discrepancy)
 
-- **Status**: The official academic sources do not provide a confirmed Q3 date for BCS-054.
-- **Action**: We explicitly model this as "Schedule unavailable" / "Unresolved".
-- **Constraint**: Do NOT invent a date, infer from other subjects, or copy the Bolt UI prototype. The backend will return `is_eligible=False` alongside a `policy_ambiguity_notes` entry stating the data is unavailable.
+- **Status**: The official Quiz Test Schedule confirms that Department Elective-I (BCS-054) is part of the Third Quiz Cycle during Week 15 (19–24 October 2026). However, the official PDF does not explicitly confirm the exact date as `23 October 2026`, whereas the project's `timetable.json` contains `2026-10-23`. We treat this as an insufficiently explicit date confirmation / source-data discrepancy.
+- **Action**: We explicitly model this as "Schedule unavailable" / "Unresolved" in the database to avoid claiming an exact date not proven by the document.
+- **Constraint**: Do NOT invent a date, infer from other subjects, or blindly trust the `timetable.json` fallback. The backend will return `is_eligible=False` alongside a `policy_ambiguity_notes` entry stating the exact date is unconfirmed.
 
 ## 7. Eligibility Policy Architecture
 

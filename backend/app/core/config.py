@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URI: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/attendancedash"
+    DATABASE_URI: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/attendancedash"
     
     # Timezone Strategy
     # As per ADR/Migration notes, the institutional timezone is Asia/Kolkata

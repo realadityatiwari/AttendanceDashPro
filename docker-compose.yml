@@ -1,16 +1,17 @@
 version: '3.8'
 
 services:
-  db:
+  attendancedash_db:
     image: postgres:16
+    container_name: attendancedashpro_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: attendancedash
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - attendancedash_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  attendancedash_data:

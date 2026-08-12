@@ -68,25 +68,31 @@ async def seed_baseline():
             print(f"Created Semester: {semester_name}")
 
         # 3. Quiz Cycles & Policies
-        quiz_targets = data['policies']['quiz_targets']
+        quiz_cycles_data = data['quiz_cycles']
+        quiz_targets = data['policies']['quiz']
         cycles = {}
-        for idx, (label, target) in enumerate(quiz_targets.items(), 1):
+        for q_data in quiz_cycles_data:
+            idx = q_data['cycle']
+            label = q_data['label']
+            target_key = f"quiz{idx}"
+            target_pct = quiz_targets.get(target_key, quiz_targets.get("default", {"targetPercentage": 75}))["targetPercentage"]
+            
             stmt = select(QuizCycle).filter_by(cycle_number=idx)
             result = await db.execute(stmt)
             qc = result.scalars().first()
             if not qc:
-                qc = QuizCycle(cycle_number=idx, label=label.replace('_', ' ').title())
+                qc = QuizCycle(cycle_number=idx, label=label)
                 db.add(qc)
                 await db.flush()
                 
                 policy = EligibilityPolicy(
                     quiz_cycle_id=qc.id,
-                    lecture_threshold=float(target),
-                    combined_threshold=float(target)
+                    lecture_threshold=float(target_pct),
+                    combined_threshold=float(target_pct)
                 )
                 db.add(policy)
                 await db.flush()
-                print(f"Created QuizCycle {idx} with target {target}%")
+                print(f"Created QuizCycle {idx} with target {target_pct}%")
             cycles[f"q{idx}"] = qc
 
         # 4. Subjects
@@ -117,14 +123,19 @@ async def seed_baseline():
                     result = await db.execute(stmt)
                     if not result.scalars().first():
                         # Find milestone
-                        ms = next((m for m in subj['timeline']['milestones'] if m['milestone_id'] == cycle_key), None)
+                        ms = next((m for m in subj['timeline']['milestones'] if m.get('milestoneId') == cycle_key), None)
                         
                         schedule_date = None
                         status = ScheduleStatus.UNRESOLVED
                         
-                        if ms and ms['date']:
+                        if ms and ms.get('date'):
                             schedule_date = date.fromisoformat(ms['date'])
                             status = ScheduleStatus.SCHEDULED
+                        
+                        # Explicit rule: BCS-054 Quiz III is officially unresolved
+                        if subject.code == 'BCS-054' and qc.cycle_number == 3:
+                            schedule_date = None
+                            status = ScheduleStatus.UNRESOLVED
                         
                         schedule = QuizSchedule(
                             subject_id=subject.id,
@@ -137,33 +148,38 @@ async def seed_baseline():
                         print(f"  Created QuizSchedule for {subject.code} Cycle {qc.cycle_number} -> {status.value}")
 
         # 6. Timetable Entries
-        day_schedule = data['day_schedule']
         time_slots = data['time_slots']
-        for day_index_str, classes in day_schedule.items():
-            day_idx = int(day_index_str) # 0 = Monday
-            for cls in classes:
-                subj = subject_map.get(cls['subject'])
-                if subj:
-                    slot = time_slots[cls['timeSlot']]
-                    t_start, t_end = slot.split(' - ')
-                    
-                    stmt = select(TimetableEntry).filter_by(
+        for day, classes in data['day_schedule'].items():
+            for idx, cls in enumerate(classes):
+                subj = subject_map.get(cls['s'])
+                if not subj:
+                    continue
+                
+                # Convert to enum
+                ctype = ClassType.LECTURE
+                if cls['t'] == 'T': ctype = ClassType.TUTORIAL
+                if cls['t'].startswith('P'): ctype = ClassType.PRACTICAL
+                
+                slot = time_slots[idx]
+                t_start, t_end = slot.split(' - ')
+                
+                stmt = select(TimetableEntry).filter_by(
+                    subject_id=subj.id,
+                    day_of_week=int(day),
+                    start_time=parse_time(t_start),
+                    end_time=parse_time(t_end)
+                )
+                result = await db.execute(stmt)
+                if not result.scalars().first():
+                    entry = TimetableEntry(
                         subject_id=subj.id,
-                        day_of_week=day_idx,
+                        day_of_week=int(day),
                         start_time=parse_time(t_start),
-                        end_time=parse_time(t_end)
+                        end_time=parse_time(t_end),
+                        class_type=ctype
                     )
-                    result = await db.execute(stmt)
-                    if not result.scalars().first():
-                        entry = TimetableEntry(
-                            subject_id=subj.id,
-                            day_of_week=day_idx,
-                            start_time=parse_time(t_start),
-                            end_time=parse_time(t_end),
-                            class_type=normalize_class_type(cls['type'])
-                        )
-                        db.add(entry)
-                        print(f"Created TimetableEntry {subj.code} on Day {day_idx}")
+                    db.add(entry)
+                    print(f"Created TimetableEntry {subj.code} on Day {day}")
 
         await db.commit()
         print("Seed baseline completed successfully.")

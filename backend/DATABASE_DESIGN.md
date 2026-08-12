@@ -60,12 +60,12 @@ We expand beyond a simple `target_percentage`:
 - **`EligibilityPolicy`**: Linked to the cycle. Stores `lecture_threshold`, `combined_threshold`, and applies globally to that cycle.
 - **`QuizSchedule`**: Links a `Subject` to a `QuizCycle`. Contains `date` (DATE) and `schedule_status` (Enum: `SCHEDULED`, `UNRESOLVED`, `CANCELLED`).
 
-## 6. BCS-054 Q3 Representation
+## 6. BCS-054 Q3 Representation (Source-Data Discrepancy)
 
 - It is explicitly modeled in `QuizSchedule` for subject BCS-054 and Cycle 3 with:
   - `date`: `NULL`
   - `schedule_status`: `UNRESOLVED`
-- This ensures the database accurately reflects "we know this cycle exists for this subject, but the date is officially unknown."
+- **Reason:** The official Quiz Test Schedule PDF confirms Department Elective-I (BCS-054) happens during Week 15 (19-24 Oct) but lacks an explicit date, whereas `timetable.json` asserts `2026-10-23`. We treat this as a source-data discrepancy and leave it UNRESOLVED so the database accurately reflects "we know this cycle exists for this subject, but the exact date is insufficiently confirmed."
 
 ## 7. Section/Cohort Decision
 
