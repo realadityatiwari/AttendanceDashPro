@@ -4,6 +4,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AttendanceDash Pro"
     API_V1_STR: str = "/api/v1"
     
+    # CORS
+    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    
     # Database
     DATABASE_URI: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/attendancedash"
     
