@@ -2,7 +2,11 @@ from typing import AsyncGenerator
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+import firebase_admin
+from firebase_admin import auth
 from app.db.session import AsyncSessionLocal
+from app.models.user import User
 
 security = HTTPBearer()
 
@@ -14,53 +18,47 @@ async def get_firebase_identity(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """
-    Returns the Firebase UID and email without requiring the user to exist in the database.
-    Used for profile synchronization (get-or-create).
+    Returns the verified Firebase UID and email without requiring the user to exist in the database.
+    Used for profile synchronization (update).
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Firebase authentication is not yet connected to the backend. Setup Firebase Admin SDK to proceed."
-    )
-    
-    # FUTURE IMPLEMENTATION:
-    # token = credentials.credentials
-    # try:
-    #     decoded_token = auth.verify_id_token(token)
-    #     return {
-    #         "uid": decoded_token['uid'],
-    #         "email": decoded_token.get('email', '')
-    #     }
-    # except Exception:
-    #     raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    if not firebase_admin._apps:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Firebase Admin SDK is not initialized. Authentication is unavailable."
+        )
+
+    token = credentials.credentials
+    try:
+        decoded_token = auth.verify_id_token(token, check_revoked=True)
+        return {
+            "uid": decoded_token['uid'],
+            "email": decoded_token.get('email', '')
+        }
+    except auth.RevokedIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+    except auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+    except auth.InvalidIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    firebase_identity: dict = Depends(get_firebase_identity),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Firebase Authentication Boundary.
     
-    This is a structural dependency for verifying a Firebase ID token
-    and returning the associated User from the database.
-    
-    Currently, Firebase Admin is not configured in this Phase 3 environment.
-    To avoid insecure fake authentication, this endpoint safely fails with 501.
+    Verifies a Firebase ID token and returns the associated User from the database.
+    Returns 404 if the verified Firebase user does not exist in the database.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Firebase authentication is not yet connected to the backend. Setup Firebase Admin SDK to proceed."
-    )
+    firebase_uid = firebase_identity['uid']
     
-    # FUTURE IMPLEMENTATION:
-    # token = credentials.credentials
-    # try:
-    #     decoded_token = auth.verify_id_token(token)
-    #     firebase_uid = decoded_token['uid']
-    # except Exception:
-    #     raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    #
-    # user = await db.execute(select(User).filter_by(firebase_uid=firebase_uid))
-    # user = user.scalars().first()
-    # if not user:
-    #     raise HTTPException(status_code=404, detail="User not found")
-    # return user
+    result = await db.execute(select(User).filter_by(firebase_uid=firebase_uid))
+    user = result.scalars().first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in application database. Account may not have been migrated.")
+        
+    return user

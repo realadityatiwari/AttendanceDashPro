@@ -28,17 +28,15 @@ async def sync_student_profile(
     result = await db.execute(select(User).filter_by(firebase_uid=uid))
     user = result.scalars().first()
     
-    if user:
-        # Update mutable profile fields only — firebase_uid is immutable.
-        user.name = request.display_name
-        user.roll_number = request.roll_number
-    else:
-        user = User(
-            firebase_uid=uid,
-            name=request.display_name,
-            roll_number=request.roll_number
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in PostgreSQL database. Account was not part of the Phase 5 migration cohort."
         )
-        db.add(user)
+
+    # Update mutable profile fields only — firebase_uid is immutable.
+    user.name = request.display_name
+    user.roll_number = request.roll_number
     
     await db.commit()
     await db.refresh(user)

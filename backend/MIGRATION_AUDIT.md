@@ -131,3 +131,38 @@ The current backend has `deps.py` stubbed out with `HTTP 501 Not Implemented`. F
 1. Generate Firebase Admin Service Account credentials securely.
 2. Implement `auth.verify_id_token` in `backend/app/api/dependencies/deps.py`.
 3. Design the Python migration CLI script architecture to address the quarantine/reconciliation requirements.
+
+## 16. Post-Migration Integrity Audit (Phase 5.5)
+**Status:** VERIFIED
+
+The Firebase to PostgreSQL live migration has been executed and the state independently verified.
+
+**PostgreSQL Post-Migration State:**
+- Users: 29 (Migrated)
+- AttendanceRecords: 83 (Migrated)
+- LaboratoryRecords: 0
+- ClassSessions: 684
+- LaboratoryExperiments: 0
+- PostgreSQL Writes: 112 (29 users + 83 attendance)
+- Failed Users: 0
+
+**BCS-054 Invariant:**
+- Subject: BCS-054 Quiz Cycle 3
+- Preserved State: `date = NULL`, `status = UNRESOLVED`
+
+**Unresolved/Quarantined Records (Requires Manual Product Decision):**
+*Laboratory (1 record):*
+- `Od675BhQ8KSvPv8DAIi140tAJdT2` - `BCS-551` (UNKNOWN_EXPERIMENT - Missing authoritative curriculum data)
+
+*Attendance Missing Session (2 records):*
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-07-17:BCS-058:T` (MISSING_SESSION - ClassSession does not exist)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-07-16:BCS-054:T` (MISSING_SESSION - ClassSession does not exist)
+
+*Attendance Ambiguous (7 records):*
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-07-30:BCS-552:P2` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-08-10:BCS-551:P` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-08-03:BCS-551:P1` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-08-06:BCS-552:P2` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-08-03:BCS-551:P2` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-08-06:BCS-552:P1` (AMBIGUOUS - Found 2 candidate ClassSessions)
+- `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` - `2026-07-30:BCS-552:P1` (AMBIGUOUS - Found 2 candidate ClassSessions)
