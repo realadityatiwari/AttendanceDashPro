@@ -167,7 +167,7 @@ async def run_extraction():
                 report["bcs_054"]["quiz_iii_date"] = str(q3.date) if q3.date else "NULL"
                 report["bcs_054"]["quiz_iii_status"] = q3.schedule_status.value
                 
-                if q3.date is not None or q3.schedule_status.value != "unresolved":
+                if q3.date is not None or q3.schedule_status.value != "UNRESOLVED":
                     print("CRITICAL BASELINE DISCREPANCY: BCS-054 Quiz III is not UNRESOLVED/NULL.")
                     sys.exit(1)
             else:

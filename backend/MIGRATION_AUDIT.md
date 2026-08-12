@@ -93,7 +93,7 @@ The PostgreSQL `LaboratoryRecord` requires `user_id` and `experiment_id`. It has
 - **Legacy Attendance on 2026-10-23:** The existence of legacy attendance facts on `2026-10-23` for BCS-054 simply means a class occurred on that date. It must NOT automatically mean that 2026-10-23 is the official Quiz III date.
 
 ## 10. Validation Strategy Correction
-**Status:** REQUIRES DESIGN (Future Execution)
+**Status:** PLANNED
 Validation must produce a detailed reconciliation report rather than a simple count match:
 - **Successfully Resolved Records:** Count of attendance/lab records successfully mapped.
 - **Quarantined/Conflicting Records:** Log of unknown subjects, missing class sessions, ambiguous sessions, or duplicate roll numbers.
@@ -102,14 +102,14 @@ Validation must produce a detailed reconciliation report rather than a simple co
 - **Identity Mapping:** 1:1 linkage between `firebase_uid` and `users.id`.
 
 ## 11. Idempotency Correction
-**Status:** REQUIRES DESIGN (Future Execution)
+**Status:** PLANNED
 A rerun of the migration script must not blindly overwrite or duplicate data. Idempotency keys must be strictly defined:
 - **User:** Unique on `firebase_uid`. `ON CONFLICT (firebase_uid) DO UPDATE SET name = EXCLUDED.name`.
 - **AttendanceRecord:** Unique constraint `uq_user_class_session` (`user_id`, `class_session_id`). `ON CONFLICT ON CONSTRAINT uq_user_class_session DO UPDATE SET status = EXCLUDED.status`.
 - **LabRecord:** Unique constraint `uq_user_experiment` (`user_id`, `experiment_id`). `ON CONFLICT ON CONSTRAINT uq_user_experiment DO UPDATE`.
 
 ## 12. Rollback Strategy Correction
-**Status:** REQUIRES DESIGN (Future Execution)
+**Status:** PLANNED
 A single global transaction for thousands of users is too risky and prevents partial success.
 - **Per-User Transaction Boundaries:** Wrap the migration of a *single user* (UPSERT User + INSERT Attendance + INSERT Lab) inside its own `BEGIN ... COMMIT`.
 - If one user's data is corrupted, `ROLLBACK` just that user and log them in the reconciliation report, allowing the rest of the cohort to migrate successfully.
@@ -118,6 +118,7 @@ A single global transaction for thousands of users is too risky and prevents par
 ## 13. Firebase Admin Dependency
 **Status:** BLOCKED
 The current backend has `deps.py` stubbed out with `HTTP 501 Not Implemented`. Firebase Admin SDK *must* be integrated into the FastAPI backend (with a service account JSON).
+**Note:** Successful Firebase/Firestore extraction has NOT been runtime-verified because valid Firebase Admin credentials are unavailable.
 
 ## 14. Migration Blockers
 **Status:** BLOCKED
