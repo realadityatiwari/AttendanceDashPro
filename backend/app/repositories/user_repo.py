@@ -18,6 +18,6 @@ class UserRepository:
         return result.scalars().first()
 
     async def get_enrolled_subjects(self, user_id: UUID) -> List[Subject]:
-        stmt = select(Subject).join(StudentEnrollment).filter(StudentEnrollment.student_id == user_id)
+        stmt = select(Subject).join(StudentEnrollment).filter(StudentEnrollment.user_id == user_id)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

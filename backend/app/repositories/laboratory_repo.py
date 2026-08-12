@@ -15,7 +15,7 @@ class LaboratoryRepository:
 
     async def get_student_records(self, user_id: UUID, subject_id: UUID) -> List[LaboratoryRecord]:
         stmt = select(LaboratoryRecord).join(LaboratoryExperiment).filter(
-            LaboratoryRecord.student_id == user_id,
+            LaboratoryRecord.user_id == user_id,
             LaboratoryExperiment.subject_id == subject_id
         )
         result = await self.db.execute(stmt)

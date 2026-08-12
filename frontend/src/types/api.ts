@@ -19,7 +19,6 @@ export interface SubjectResponse {
   name: string;
   tag: string | null;
   category: SubjectCategory;
-  credits: number;
   quiz_applicable: boolean;
   attendance_applicable: boolean;
 }

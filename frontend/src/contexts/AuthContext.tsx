@@ -41,8 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/student/sync`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${token}`
-            }
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              display_name: user.displayName ?? "",
+              roll_number: ""
+            })
           });
         } catch (error) {
           console.error("Failed to sync user with backend", error);

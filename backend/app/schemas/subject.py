@@ -9,7 +9,6 @@ class SubjectResponse(BaseModel):
     name: str
     tag: Optional[str] = None
     category: SubjectCategory
-    credits: int
     quiz_applicable: bool
     attendance_applicable: bool
 
