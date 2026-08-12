@@ -53,8 +53,7 @@ export function Header() {
           />
 
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="-m-1.5 flex items-center p-1.5">
+            <DropdownMenuTrigger className="-m-1.5 flex items-center p-1.5 hover:bg-accent hover:text-accent-foreground rounded-md transition-colors outline-none ring-0 focus:ring-0 focus:outline-none">
                 <span className="sr-only">Open user menu</span>
                 <Avatar className="h-8 w-8 bg-surface2 border border-border">
                   <AvatarImage src={user?.photoURL || undefined} alt={displayName} />
@@ -68,7 +67,6 @@ export function Header() {
                     {isLoading ? "Loading..." : displayName}
                   </span>
                 </span>
-              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>

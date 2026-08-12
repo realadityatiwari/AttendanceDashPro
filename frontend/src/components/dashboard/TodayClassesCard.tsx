@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { useCalendarDay, useTimetable } from "@/hooks/useApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,9 @@ import { Calendar, AlertCircle } from "lucide-react";
 import { ClassType } from "@/types/api";
 
 export function TodayClassesCard() {
-  const todayDate = format(new Date(), "yyyy-MM-dd");
+  const today = new Date();
+  const todayDate = today.toISOString().split("T")[0];
+  const formattedToday = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }).format(today);
   
   const { calendarDay, isLoading: calLoading, isError: calError } = useCalendarDay(todayDate);
   const { timetable, isLoading: ttLoading, isError: ttError } = useTimetable();
@@ -75,7 +76,7 @@ export function TodayClassesCard() {
             </CardTitle>
             <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" />
-              {format(new Date(), "EEEE, MMM d, yyyy")}
+              {formattedToday}
               {calendarDay?.substitution_schedule_override && (
                 <span className="text-amber-400 ml-1">
                   (Following {calendarDay.substitution_schedule_override.toLowerCase()} schedule)
