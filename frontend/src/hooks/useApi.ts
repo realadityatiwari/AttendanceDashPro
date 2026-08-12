@@ -62,7 +62,7 @@ export function useCalendarDay(date: string) {
   const { data, error, isLoading, mutate } = useSWR<AcademicDayResponse>(
     date ? `/api/v1/calendar/${date}` : null,
     fetcher,
-    LONG_CACHE
+    STANDARD_CACHE
   );
   return {
     calendarDay: data,
