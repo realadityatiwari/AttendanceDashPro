@@ -7,14 +7,29 @@ import {
   AcademicDayResponse,
   SubjectAttendanceSummary,
   EligibilityResult,
-  AttendanceHistoryResponse
+  AttendanceHistoryResponse,
+  AcademicEventResponse,
+  LaboratoryExperimentResponse,
+  LaboratoryRecordResponse
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
 const fetcher = (url: string) => apiFetch(url);
 
+// Caching strategies
+const LONG_CACHE = {
+  revalidateOnFocus: false,
+  revalidateIfStale: false,
+  dedupingInterval: 3600000 // 1 hour
+};
+
+const STANDARD_CACHE = {
+  revalidateOnFocus: true,
+  dedupingInterval: 60000 // 1 minute
+};
+
 export function useProfile() {
-  const { data, error, isLoading, mutate } = useSWR<StudentProfile>('/api/v1/student/me', fetcher);
+  const { data, error, isLoading, mutate } = useSWR<StudentProfile>('/api/v1/student/me', fetcher, STANDARD_CACHE);
   return {
     profile: data,
     isLoading,
@@ -24,7 +39,7 @@ export function useProfile() {
 }
 
 export function useSubjects() {
-  const { data, error, isLoading, mutate } = useSWR<SubjectResponse[]>('/api/v1/subjects', fetcher);
+  const { data, error, isLoading, mutate } = useSWR<SubjectResponse[]>('/api/v1/subjects', fetcher, LONG_CACHE);
   return {
     subjects: data,
     isLoading,
@@ -34,7 +49,7 @@ export function useSubjects() {
 }
 
 export function useTimetable() {
-  const { data, error, isLoading, mutate } = useSWR<TimetableEntryResponse[]>('/api/v1/timetable', fetcher);
+  const { data, error, isLoading, mutate } = useSWR<TimetableEntryResponse[]>('/api/v1/timetable', fetcher, LONG_CACHE);
   return {
     timetable: data,
     isLoading,
@@ -44,10 +59,10 @@ export function useTimetable() {
 }
 
 export function useCalendarDay(date: string) {
-  // If date is empty, we don't fetch
   const { data, error, isLoading, mutate } = useSWR<AcademicDayResponse>(
     date ? `/api/v1/calendar/${date}` : null,
-    fetcher
+    fetcher,
+    LONG_CACHE
   );
   return {
     calendarDay: data,
@@ -60,7 +75,8 @@ export function useCalendarDay(date: string) {
 export function useSubjectSummary(subjectCode: string | null) {
   const { data, error, isLoading, mutate } = useSWR<SubjectAttendanceSummary>(
     subjectCode ? `/api/v1/attendance/summary/${subjectCode}` : null,
-    fetcher
+    fetcher,
+    STANDARD_CACHE
   );
   return {
     summary: data,
@@ -73,7 +89,8 @@ export function useSubjectSummary(subjectCode: string | null) {
 export function useQuizEligibility(subjectCode: string | null, cycle: number | null) {
   const { data, error, isLoading, mutate } = useSWR<EligibilityResult>(
     subjectCode && cycle !== null ? `/api/v1/quiz-eligibility/${subjectCode}/${cycle}` : null,
-    fetcher
+    fetcher,
+    STANDARD_CACHE
   );
   return {
     eligibility: data,
@@ -84,9 +101,47 @@ export function useQuizEligibility(subjectCode: string | null, cycle: number | n
 }
 
 export function useAttendanceHistory() {
-  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>('/api/v1/attendance/history', fetcher);
+  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>('/api/v1/attendance/history', fetcher, STANDARD_CACHE);
   return {
     history: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useEvents() {
+  const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>('/api/v1/events', fetcher, STANDARD_CACHE);
+  return {
+    events: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useLabExperiments(subjectCode: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<LaboratoryExperimentResponse[]>(
+    subjectCode ? `/api/v1/laboratory/${subjectCode}/experiments` : null,
+    fetcher,
+    LONG_CACHE
+  );
+  return {
+    experiments: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useLabRecords(subjectCode: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<LaboratoryRecordResponse[]>(
+    subjectCode ? `/api/v1/laboratory/${subjectCode}/records` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    records: data,
     isLoading,
     isError: error,
     mutate

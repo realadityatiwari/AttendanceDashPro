@@ -135,3 +135,27 @@ export interface AcademicDayResponse {
   substitution_schedule_override: string | null;
   events: AcademicEventResponse[];
 }
+
+// Laboratory
+export enum SignatureStatus {
+  NONE = "NONE",
+  DONE = "DONE",
+  PENDING_REWORK = "PENDING_REWORK"
+}
+
+export interface LaboratoryExperimentResponse {
+  id: string;
+  subject_id: string;
+  experiment_number: number;
+  title: string;
+}
+
+export interface LaboratoryRecordResponse {
+  id: string;
+  student_id: string;
+  experiment_id: string;
+  signature_status: SignatureStatus;
+  date_conducted: string | null;
+  marks: number | null;
+  remarks: string | null;
+}
