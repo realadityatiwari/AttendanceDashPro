@@ -28,115 +28,105 @@ Not all legacy data is authoritative. This hierarchy dictates conflict resolutio
 | **Email/Roll Number** | Firebase Auth | Created identically as `[rollNumber]@student.app`. Roll number can be reliably parsed from this. |
 | **Student Name** | Firestore (`profile.name`) | Only captured in the Firestore profile document. |
 | **Academic Rules** | PostgreSQL Baseline | Replaces legacy client-side math and `timetable.json`. |
-| **Attendance Facts** | Firestore (`attendance`) | Single source of truth for user-marked attendance. |
-| **Lab Records** | Firestore (`laboratory`) | Single source of truth for signatures. |
-| **Academic Events** | PostgreSQL Baseline | Replaces legacy student-created events, which are now globally defined. |
+| **Attendance Facts** | Firestore (`attendance`) | **Server-side authoritative source.** (Note: `localStorage` may contain newer unflushed mutations). |
+| **Lab Records** | Firestore (`laboratory`) | **Server-side authoritative source.** |
+| **Academic Events** | PostgreSQL Baseline / REQUIRES PRODUCT DECISION | Baseline replaces legacy student-created events, which are now globally defined. The decision to completely discard legacy student-created events requires a formal product decision. |
 | **UI Settings** | N/A (Discarded) | Theme and simulation flags are not migrated to PostgreSQL. |
 
-## 5. Firebase Auth Audit
-**Status:** SOURCE INSPECTED
-- **Account Creation:** `signupUser(name, rollNumber, password)` creates an account.
-- **Email format:** `${rollNumber}@student.app`. This is a pseudo-email. The Roll Number can be cleanly extracted by stripping `@student.app`.
-- **Passwords:** Exist only in Firebase. They cannot be extracted or migrated to Postgres. Postgres will not store passwords.
-- **Identity Linkage:** Multiple Firebase accounts could theoretically be created with different roll numbers if someone manipulates the API, but normal usage enforces a 1:1 UID to Roll Number mapping. The Firebase UID is the immutable primary key for linkage.
+**Firestore vs localStorage Authority (KNOWN LIMITATION / MIGRATION RISK):**
+Firestore is the authoritative **SERVER-SIDE** legacy source available for migration. `localStorage` acts as a client-side cache and is potentially newer. The legacy code does *not* strictly guarantee that every local mutation reaches Firestore before the browser closes (e.g., offline usage or network failure). Any unflushed `localStorage` state is unrecoverable server-side. The two stores are NOT guaranteed identical.
 
-## 6. Firestore Data Model
-**Status:** SOURCE INSPECTED
-Firestore stores documents in the `students` collection, keyed by `uid`.
-Document structure (`AppState`):
-- `profile`: `{ name, rollNumber, createdAt }` -> Maps to `User`.
-- `attendance`: `{"YYYY-MM-DD:SUBJECT:TYPE": "Attended" | "Missed" | "Pending"}` -> Maps to `AttendanceRecord`.
-- `laboratory`: `{"SUBJECT": [{experimentNumber, signatureStatus, dateConducted, marks, remarks}]}` -> Maps to `LabRecord`.
-- `academicEvents`: `{"YYYY-MM-DD": [events]}` -> **DISCARDED** (Student-created events are obsolete).
-- `settings`: `{ theme, simulationMode }` -> **DISCARDED**.
+## 5. Firebase Admin vs Firestore Access Separation
+**Status:** REQUIRES DESIGN
+The future migration tooling requires distinct capabilities:
+- **A. Firebase Authentication Administration:** Required by migration scripts to extract the user list, extract `email` (to parse `roll_number`), and link to `uid`.
+- **B. Firebase ID-token verification:** Required by the FastAPI `deps.py` for runtime authentication (`verify_id_token`).
+- **C. Firestore Data Extraction:** Required by migration scripts to extract legacy `students` documents.
+*Note: Implementing token verification (B) for the frontend does NOT automatically give the migration tool access to all legacy Firestore data (C). The migration tool will need a Python script using `firebase-admin` and a service account to query Firestore and Auth.*
 
-## 7. localStorage Data Model
-**Status:** SOURCE INSPECTED
-- `app_state_${uid}`: Contains the exact `AppState` structure as Firestore, but acts as a fast local cache.
-- `attendance_tracker_states`: V1 legacy cache.
-**Rule:** `localStorage` is volatile and client-bound. The migration script will ONLY read from Firestore. If a user has unflushed `localStorage` data, it cannot be migrated server-side.
+## 6. Migration User Identity Mapping
+**Status:** CONFLICT / REQUIRES DESIGN
+Mapping legacy identity to the PostgreSQL `User` model:
+- **PostgreSQL `User.id`**: A native `UUID`. This is NOT the Firebase UID.
+- **PostgreSQL `User.firebase_uid`**: Stores the string Firebase UID. This is the immutable linkage key. It has a UNIQUE constraint.
+- **PostgreSQL `User.roll_number`**: Must be extracted from the Firebase Auth pseudo-email (`[rollNumber]@student.app`). It has a UNIQUE constraint.
+- **PostgreSQL `User.name`**: Derived from Firestore `profile.name`.
 
-## 8. Attendance Mapping
+**Conflict Resolution Strategy (Future):**
+- **Missing Firestore Profile:** The user has an Auth account but no Firestore doc. Create a `User` using the `roll_number` as a fallback `name`.
+- **Profile Roll Number conflicts with Firebase Email:** Trust the Firebase Auth Email as authoritative.
+- **Duplicate Roll Numbers:** If two Firebase UIDs map to the same `roll_number`, quarantine the second account (CONFLICT).
+- **Malformed Pseudo-emails:** Quarantine if it cannot be cleanly parsed to a roll number.
+
+## 7. Attendance Mapping
+**Status:** REQUIRES DESIGN
+The PostgreSQL `AttendanceRecord` schema uses `user_id`, `class_session_id`, and `status`. It does NOT store `date, subject, class_type` directly.
+
+**Conceptual Migration Mapping:**
+1. Parse legacy key `YYYY-MM-DD:SUBJECT:TYPE`.
+2. Extract `date`, map subject code to `Subject.id`, map type to `ClassType`.
+3. **Resolve `ClassSession`**: Query PostgreSQL `class_sessions` for `(date, subject_id, class_type)`.
+4. If found, insert `AttendanceRecord(user_id, class_session_id, status)`.
+
+**Edge Cases & Classifications:**
+- **Standard 1:1 Match**: SUPPORTED.
+- **Multiple sessions (same subject, same type, same date)**: AMBIGUOUS (Legacy keys cannot distinguish them).
+- **Lecture + Tutorial on same date**: SUPPORTED (Types differ).
+- **Practical sessions**: SUPPORTED.
+- **Unknown subject**: CONFLICT / REQUIRES MANUAL REVIEW. (Do NOT discard. Quarantine the record).
+- **Session does not exist in baseline (e.g. substitutions, makeups)**: CONFLICT / REQUIRES DESIGN (Should the migration script dynamically generate `ClassSession` records? Currently NO, unless designed to do so).
+
+## 8. Laboratory Mapping
+**Status:** REQUIRES DESIGN
+The PostgreSQL `LaboratoryRecord` requires `user_id` and `experiment_id`. It has a UNIQUE constraint on `(user_id, experiment_id)`.
+
+**Conceptual Migration Mapping:**
+1. From legacy `laboratory` object, iterate over subject codes.
+2. Resolve subject code to `Subject.id`.
+3. For each legacy experiment, resolve `Subject.id` + `experimentNumber` to `LaboratoryExperiment.id`.
+4. If missing/unknown `experimentNumber`, quarantine (CONFLICT).
+5. Map `signatureStatus`, `dateConducted`, `marks`, `remarks`.
+
+## 9. BCS-054 Handling
 **Status:** VERIFIED
-Legacy attendance keys are `dateStr:subjectCode:classType` (e.g., `2026-10-23:BCS-054:L`).
-Values are `Attended`, `Missed`, `Pending`.
+- **PostgreSQL Baseline for BCS-054 Quiz III:** Preserved as `date = NULL`, `status = UNRESOLVED`. Do not change this.
+- **Legacy Attendance on 2026-10-23:** The existence of legacy attendance facts on `2026-10-23` for BCS-054 simply means a class occurred on that date. It must NOT automatically mean that 2026-10-23 is the official Quiz III date.
 
-**Mapping Strategy:**
-1. Parse Date from key -> `date`
-2. Parse Subject from key -> Lookup `Subject.id`
-3. Parse Type from key (`L`, `T`, `P1`, `P2`) -> Map to `ClassType` Enum.
-4. Value -> Map to `AttendanceStatus` Enum.
-5. Create `AttendanceRecord(user_id, date, subject_id, class_type, status)`.
-
-**Safety:** This is a lossless 1:1 fact mapping. 
-
-## 9. Derived vs Source Facts
-**Status:** VERIFIED
-Only **Source Facts** will be migrated.
-- **Migrate:** Profile names, raw attendance states (`Attended/Missed`), lab signatures.
-- **Discard/Recompute:** `total`, `completed`, `pending`, `present`, `absent`, quiz eligibility flags, percentage scores, optimization projections. The FastAPI engines will recalculate these dynamically from the migrated source facts.
-
-## 10. Reset Tracker Analysis
-**Status:** BLOCKED — REQUIRES DESIGN
-The legacy JS app allows `clearStates()` which destructively empties the Firestore `attendance` and `laboratory` objects.
-PostgreSQL relies on persistent fact tables. Destructively deleting foreign-keyed rows is anti-pattern.
-**Recommendation:** The migration will ignore reset history. A future Phase must implement a non-destructive "Epoch" or "Soft Delete" mechanism in the DB if resetting is still desired.
-
-## 11. Conflict Matrix
-**Status:** SOURCE INSPECTED
-| Conflict | Detection | Resolution |
-|---|---|---|
-| Mismatched Roll Number (Auth vs Profile) | Compare `email.split('@')[0]` vs `profile.rollNumber` | Trust Firebase Auth Email as the authoritative identity. |
-| Attendance for unknown subject | Subject Code not in DB baseline | Discard the record (orphan). |
-| Attendance on non-working day | Date conflicts with DB `AcademicEvent` | Keep record (could be a makeup class), or flag for manual review. |
-| Duplicate Firestore Documents | Unlikely (keyed by UID) | Merge or take latest `updated_at`. |
-
-## 12. BCS-054 Handling
-**Status:** VERIFIED
-Legacy `timetable.json` asserted BCS-054 Quiz III is `2026-10-23`.
-PostgreSQL officially asserts this is `UNRESOLVED` (`date=NULL`).
-**Action:** No attendance or quiz records need to be modified. The PostgreSQL baseline already correctly represents the unresolved state, and the new eligibility engine handles it seamlessly.
-
-## 13. Proposed Migration Dependency Order
-**Status:** VERIFIED (Design Only)
-1. Firebase Admin SDK extracts all Auth Users.
-2. Firestore export extracts all `students` documents.
-3. For each user:
-   a. Extract `uid`, parse `roll_number` from email.
-   b. Extract `name` from Firestore profile.
-   c. UPSERT `User` in PostgreSQL.
-4. For each user's `attendance` object:
-   a. Parse keys, lookup `Subject` IDs.
-   b. INSERT `AttendanceRecord` batch.
-5. For each user's `laboratory` object:
-   a. Parse keys, lookup `Subject` IDs and `LabExperiment` IDs.
-   b. INSERT `LabRecord` batch.
-
-## 14. Validation Strategy
+## 10. Validation Strategy Correction
 **Status:** REQUIRES DESIGN (Future Execution)
-- Count matching: `Firestore attendance keys == Postgres AttendanceRecord rows`.
-- Idempotency: Running migration twice must result in identical state (using `ON CONFLICT DO UPDATE`).
-- Null checks: Ensure no `AttendanceRecord` links to a non-existent `Subject`.
+Validation must produce a detailed reconciliation report rather than a simple count match:
+- **Successfully Resolved Records:** Count of attendance/lab records successfully mapped.
+- **Quarantined/Conflicting Records:** Log of unknown subjects, missing class sessions, ambiguous sessions, or duplicate roll numbers.
+- **Intentionally Skipped Records:** Derived data that is intentionally dropped.
+- **Foreign-Key Integrity:** No orphaned records.
+- **Identity Mapping:** 1:1 linkage between `firebase_uid` and `users.id`.
 
-## 15. Rollback Strategy
+## 11. Idempotency Correction
 **Status:** REQUIRES DESIGN (Future Execution)
-- Enclose the entire migration inside a single PostgreSQL Transaction (`BEGIN ... COMMIT`).
-- On any data corruption exception, `ROLLBACK`.
-- Do not modify or delete the source Firestore documents.
+A rerun of the migration script must not blindly overwrite or duplicate data. Idempotency keys must be strictly defined:
+- **User:** Unique on `firebase_uid`. `ON CONFLICT (firebase_uid) DO UPDATE SET name = EXCLUDED.name`.
+- **AttendanceRecord:** Unique constraint `uq_user_class_session` (`user_id`, `class_session_id`). `ON CONFLICT ON CONSTRAINT uq_user_class_session DO UPDATE SET status = EXCLUDED.status`.
+- **LabRecord:** Unique constraint `uq_user_experiment` (`user_id`, `experiment_id`). `ON CONFLICT ON CONSTRAINT uq_user_experiment DO UPDATE`.
 
-## 16. Firebase Admin Dependency
+## 12. Rollback Strategy Correction
+**Status:** REQUIRES DESIGN (Future Execution)
+A single global transaction for thousands of users is too risky and prevents partial success.
+- **Per-User Transaction Boundaries:** Wrap the migration of a *single user* (UPSERT User + INSERT Attendance + INSERT Lab) inside its own `BEGIN ... COMMIT`.
+- If one user's data is corrupted, `ROLLBACK` just that user and log them in the reconciliation report, allowing the rest of the cohort to migrate successfully.
+- Ensures retryability for failed users.
+
+## 13. Firebase Admin Dependency
 **Status:** BLOCKED
-The current backend has `deps.py` stubbed out with `HTTP 501 Not Implemented`.
-**CRITICAL:** Firebase Admin SDK *must* be integrated into the FastAPI backend (with a service account JSON) before the migration scripts can securely verify tokens or extract the Auth user list.
+The current backend has `deps.py` stubbed out with `HTTP 501 Not Implemented`. Firebase Admin SDK *must* be integrated into the FastAPI backend (with a service account JSON).
 
-## 17. Migration Blockers
+## 14. Migration Blockers
 **Status:** BLOCKED
 1. **Firebase Admin SDK is not configured.**
-2. Migration CLI/scripts do not yet exist.
+2. Migration tooling (capable of Firestore extraction, Auth extraction, and Postgres reconciliation) does not exist.
+3. ClassSession dynamic generation vs. quarantine policy is not yet designed.
 
-## 18. Recommended Phase 5.1 Scope
+## 15. Recommended Phase 5.1 Scope
 **Status:** REQUIRES DESIGN
 1. Generate Firebase Admin Service Account credentials securely.
 2. Implement `auth.verify_id_token` in `backend/app/api/dependencies/deps.py`.
-3. Verify the frontend can successfully authenticate.
-4. Write the Python migration CLI script (`migrate_firestore.py`).
+3. Design the Python migration CLI script architecture to address the quarantine/reconciliation requirements.
