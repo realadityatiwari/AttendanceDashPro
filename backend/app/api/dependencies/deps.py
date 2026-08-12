@@ -10,6 +10,29 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 
+async def get_firebase_identity(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """
+    Returns the Firebase UID and email without requiring the user to exist in the database.
+    Used for profile synchronization (get-or-create).
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Firebase authentication is not yet connected to the backend. Setup Firebase Admin SDK to proceed."
+    )
+    
+    # FUTURE IMPLEMENTATION:
+    # token = credentials.credentials
+    # try:
+    #     decoded_token = auth.verify_id_token(token)
+    #     return {
+    #         "uid": decoded_token['uid'],
+    #         "email": decoded_token.get('email', '')
+    #     }
+    # except Exception:
+    #     raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)

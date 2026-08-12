@@ -7,10 +7,29 @@ from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.models.enums import AttendanceStatus
 from app.services.attendance_service import AttendanceService
-from app.schemas.attendance import SubjectAttendanceSummary
+from app.schemas.attendance import SubjectAttendanceSummary, AttendanceHistoryResponse
 from app.repositories.subject_repo import SubjectRepository
 
 router = APIRouter()
+
+@router.get("/history", response_model=AttendanceHistoryResponse)
+async def get_attendance_history(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns a chronological log of attendance facts recorded by the student.
+    Does not include future or pending sessions.
+    """
+    service = AttendanceService(db)
+    history = await service.get_history(
+        user_id=current_user.id,
+        limit=limit,
+        offset=offset
+    )
+    return history
 
 class AttendanceMutationRequest(BaseModel):
     class_session_id: UUID

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
-from datetime import date
+from typing import List, Optional
+from datetime import date, datetime
 from app.models.enums import ClassType, AttendanceStatus
 
 class AttendanceRecord(BaseModel):
@@ -8,6 +8,18 @@ class AttendanceRecord(BaseModel):
     subject_code: str
     class_type: ClassType
     status: AttendanceStatus
+    
+class AttendanceHistoryItem(BaseModel):
+    id: str
+    date: date
+    subject_code: str
+    class_type: ClassType
+    status: AttendanceStatus
+    marked_at: datetime
+    
+class AttendanceHistoryResponse(BaseModel):
+    items: List[AttendanceHistoryItem]
+    total_count: int
 
 class ClassCounts(BaseModel):
     total: int = 0

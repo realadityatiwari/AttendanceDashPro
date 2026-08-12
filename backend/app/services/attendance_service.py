@@ -49,7 +49,7 @@ class AttendanceService:
             record.status = status
         else:
             record = AttendanceRecord(
-                student_id=user_id,
+                user_id=user_id,
                 class_session_id=class_session_id,
                 status=status
             )
@@ -57,3 +57,23 @@ class AttendanceService:
             
         await self.db.commit()
         return record
+
+    async def get_history(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        records, total = await self.repo.get_history(user_id, limit, offset)
+        
+        # Convert raw records dicts to AttendanceHistoryItem compatible
+        items = []
+        for r in records:
+            items.append({
+                "id": str(r["id"]),
+                "date": r["date"],
+                "subject_code": r["subject_code"],
+                "class_type": r["class_type"],
+                "status": r["status"],
+                "marked_at": r["marked_at"]
+            })
+            
+        return {
+            "items": items,
+            "total_count": total
+        }
