@@ -52,6 +52,36 @@ class AttendanceRepository:
         result = await self.db.execute(stmt)
         return list(result.all())
 
+    async def get_sessions_with_status(self, user_id: UUID, start_date: date, end_date: date) -> List[dict]:
+        """
+        Read-only dashboard aggregation source: every class session in the
+        given date range joined with its subject and the user's attendance
+        record status (None when the class has not been logged).
+        """
+        from app.models.academic import Subject
+
+        stmt = select(
+            ClassSession.id,
+            ClassSession.date,
+            ClassSession.class_type,
+            ClassSession.is_extra,
+            ClassSession.is_cancelled,
+            Subject.code.label('subject_code'),
+            Subject.name.label('subject_name'),
+            AttendanceRecord.status,
+        ).join(
+            Subject, ClassSession.subject_id == Subject.id
+        ).outerjoin(
+            AttendanceRecord,
+            (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).filter(
+            ClassSession.date >= start_date,
+            ClassSession.date <= end_date,
+        ).order_by(ClassSession.date, ClassSession.class_type)
+
+        result = await self.db.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
     async def get_history(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
         from app.models.academic import Subject
         

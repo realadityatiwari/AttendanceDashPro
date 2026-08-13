@@ -10,7 +10,8 @@ import {
   AttendanceHistoryResponse,
   AcademicEventResponse,
   LaboratoryExperimentResponse,
-  LaboratoryRecordResponse
+  LaboratoryRecordResponse,
+  DashboardSummaryResponse
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -142,6 +143,20 @@ export function useLabRecords(subjectCode: string | null) {
   );
   return {
     records: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useDashboardSummary() {
+  const { data, error, isLoading, mutate } = useSWR<DashboardSummaryResponse>(
+    '/api/v1/dashboard/summary',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    summary: data,
     isLoading,
     isError: error,
     mutate

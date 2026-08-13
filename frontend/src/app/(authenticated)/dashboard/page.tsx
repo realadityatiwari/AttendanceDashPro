@@ -1,30 +1,54 @@
 "use client";
 
-import { FormulaCard } from "@/components/dashboard/FormulaCard";
-import { TodayClassesCard } from "@/components/dashboard/TodayClassesCard";
-import { SubjectAttendanceGrid } from "@/components/dashboard/SubjectAttendanceGrid";
+import { useDashboardSummary } from "@/hooks/useApi";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { GreetingHeader } from "@/components/dashboard/home/GreetingHeader";
+import { TodayAttendanceCard, TodayAttendanceCardSkeleton } from "@/components/dashboard/home/TodayAttendanceCard";
+import { OverallAttendanceCard, OverallAttendanceCardSkeleton } from "@/components/dashboard/home/OverallAttendanceCard";
+import { WeeklyAttendanceCard, WeeklyAttendanceCardSkeleton } from "@/components/dashboard/home/WeeklyAttendanceCard";
+import { QuizSnapshotCard, QuizSnapshotCardSkeleton } from "@/components/dashboard/home/QuizSnapshotCard";
+import { AttentionRequiredCard, AttentionRequiredCardSkeleton } from "@/components/dashboard/home/AttentionRequiredCard";
+import { UpcomingEventsCard, UpcomingEventsCardSkeleton } from "@/components/dashboard/home/UpcomingEventsCard";
 
 export default function DashboardPage() {
-  return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Track your attendance and quiz eligibility across all subjects.
-        </p>
+  const { summary, isLoading, isError } = useDashboardSummary();
+
+  if (isError) {
+    return (
+      <div className="w-full">
+        <GreetingHeader />
+        <ErrorState
+          title="Failed to load dashboard"
+          message="The dashboard summary could not be retrieved from the server."
+        />
       </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Today's Classes & Formula */}
-        <div className="lg:col-span-1 space-y-6">
-          <TodayClassesCard />
-          <FormulaCard />
-        </div>
+  return (
+    <div className="w-full">
+      <GreetingHeader />
 
-        {/* Right Column - Subject Grid */}
-        <div className="lg:col-span-2">
-          <SubjectAttendanceGrid />
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {isLoading || !summary ? (
+          <>
+            <TodayAttendanceCardSkeleton />
+            <OverallAttendanceCardSkeleton />
+            <WeeklyAttendanceCardSkeleton />
+            <QuizSnapshotCardSkeleton />
+            <AttentionRequiredCardSkeleton />
+            <UpcomingEventsCardSkeleton />
+          </>
+        ) : (
+          <>
+            <TodayAttendanceCard today={summary.today} />
+            <OverallAttendanceCard overall={summary.overall} />
+            <WeeklyAttendanceCard weekly={summary.weekly} />
+            <QuizSnapshotCard quiz={summary.quiz_snapshot} />
+            <AttentionRequiredCard items={summary.attention_required} />
+            <UpcomingEventsCard events={summary.upcoming_events} />
+          </>
+        )}
       </div>
     </div>
   );

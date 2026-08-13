@@ -72,6 +72,51 @@ Status: **IMPLEMENTED** (see individual BLOCKED markers below)
 
 ---
 
+## PHASE 3 — HOME DASHBOARD
+
+Status: **IMPLEMENTED** (see individual BLOCKED markers below)
+
+### Completed
+
+- **Read-only dashboard aggregation endpoint** — `GET /api/v1/dashboard/summary` composes the full Home read model in one call: today's sessions with per-session status, overall semester attendance with status classification, current-week strip (Mon–Fri) with week-over-week delta, quiz snapshot (next upcoming quiz cycle, threshold, eligible/attention/not-eligible counts), attention-required subjects, and upcoming academic events. (backend `app/api/v1/endpoints/dashboard.py`, `app/services/dashboard_service.py`, `app/schemas/dashboard.py`)
+- **Reuses existing logic — no engine/schema changes** — the service calls the existing `AttendanceService.get_summary` (which uses the frozen `compute_subject_stats`), `EligibilityService.get_quiz_eligibility` (frozen `determine_quiz_threshold`), `CalendarService`/`CalendarRepository`, and `QuizRepository`. Only one additive read-only repository method was needed: `AttendanceRepository.get_sessions_with_status` (date-range session + subject + record join). No business rules duplicated, no mutations.
+- **Status classification (reconciled)** — SAFE ≥ 80, WATCH ≥ 60, CRITICAL < 60, based on **current** pct (not forecast), per S4.1 reconciliation and the legacy `pctColor`/`getSubjectStatus` banding in `docs/11_UI_ARCHITECTURE.md` (target 75: +5 and −15 bands).
+- **Home page rebuilt** — two-column bento (left: Today's Attendance + This Week; right: Overall Attendance + Quiz Snapshot + Attention Required + Upcoming Events) inside the AppShell `max-w-5xl`, with greeting header (`Good Morning/Afternoon/Evening, {first name}` + `Thursday · 13 Aug 2026`), per-section loading skeletons, a full-page error state, and empty states for every section (no events today, no quiz scheduled, nothing needs attention, no upcoming events). (frontend `src/app/(authenticated)/dashboard/page.tsx`, `src/components/dashboard/home/*`)
+- **Real navigation actions** — Open Tracker → `/tools/laboratory`; View Quiz Eligibility → `/tools/quiz-schedule`; View All Events → `/tools/events`; View Strategy (per attention item) → `/tools/laboratory`.
+- **Date handling** — browser-local dates on the client (`src/lib/date.ts`), server-local `date.today()` on the backend (same convention as existing endpoints).
+
+### BLOCKED / BACKEND REQUIRED
+
+- **Dedicated strategy view** — "View Strategy" routes to `/tools/laboratory` because no per-subject strategy route exists yet; a dedicated strategy page is Track-phase work.
+- **Upcoming Events** — the `academic_events` table currently has zero rows, so the section renders its empty state. It will populate automatically once real events are seeded; no code change required.
+- **Quiz snapshot when no quiz scheduled** — if no future SCHEDULED quiz exists for the user's subjects, the snapshot renders an empty state (`has_snapshot: false`).
+
+### Verification
+
+- Backend `py_compile` — **PASS**; live `GET /api/v1/dashboard/summary` (minted JWT, real user `2401220100027`) — **PASS** (today 6 classes all PENDING, overall 69.2% WATCH, weekly +21.5 pts vs last week, Quiz1 snapshot cycle 1 ≥70% with 6/6 eligible, 4 attention items, events empty).
+- `npx tsc --noEmit` — **PASS** (0 errors)
+- No attendance/quiz/lab engines, migrations, auth architecture, frozen UI primitives (Card/Badge/Progress/Button/Skeleton), TopNav/UserMenu/AppShell, or Phase 1 tokens modified.
+
+### Files changed (Phase 3)
+
+| File | Change |
+|---|---|
+| `backend/app/repositories/attendance_repo.py` | Additive `get_sessions_with_status()` (read-only date-range join) |
+| `backend/app/schemas/dashboard.py` | New dashboard read model |
+| `backend/app/services/dashboard_service.py` | New aggregation service (reuses existing services/engines) |
+| `backend/app/api/v1/endpoints/dashboard.py` | New `GET /summary` endpoint |
+| `backend/app/api/api.py` | Dashboard router registered under `/api/v1/dashboard` |
+| `frontend/src/types/api.ts` | Dashboard types added |
+| `frontend/src/hooks/useApi.ts` | `useDashboardSummary()` added |
+| `frontend/src/lib/date.ts` | New local-date/format/greeting utilities |
+| `frontend/src/components/dashboard/home/*` | New: GreetingHeader, TodayAttendanceCard, OverallAttendanceCard, WeeklyAttendanceCard, QuizSnapshotCard, AttentionRequiredCard, UpcomingEventsCard (+ skeletons) |
+| `frontend/src/app/(authenticated)/dashboard/page.tsx` | Rebuilt around the summary endpoint |
+| `implementation_plan.md` | This file |
+| `task.md` | Phase 3 status |
+| `walkthrough.md` | Phase 3 walkthrough |
+
+---
+
 ## DO NOT TOUCH AGAIN
 
 - Phase 0 audit

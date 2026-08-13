@@ -174,3 +174,110 @@ export interface LaboratoryRecordResponse {
   marks: number | null;
   remarks: string | null;
 }
+
+// Dashboard (Phase 3 Home read model)
+export enum DashboardClassStatus {
+  ATTENDED = "ATTENDED",
+  MISSED = "MISSED",
+  PENDING = "PENDING",
+  CANCELLED = "CANCELLED",
+}
+
+export type AttendanceStatusLabel = "SAFE" | "WATCH" | "CRITICAL";
+
+export interface DashboardClassItem {
+  session_id: string;
+  subject_code: string;
+  subject_name: string;
+  class_type: ClassType;
+  status: DashboardClassStatus;
+  is_extra: boolean;
+}
+
+export interface TodaySection {
+  date: string;
+  is_working_day: boolean;
+  is_teaching_day: boolean;
+  day_note: string | null;
+  classes: DashboardClassItem[];
+  attended: number;
+  total: number;
+}
+
+export interface OverallSection {
+  semester_start: string | null;
+  overall_pct: number | null;
+  attended: number;
+  recorded: number;
+  pending: number;
+  status: AttendanceStatusLabel | null;
+  weekly_delta_pct: number | null;
+}
+
+export interface WeekDayItem {
+  date: string;
+  day_label: string;
+  is_today: boolean;
+  is_future: boolean;
+  classes: number;
+  attended: number;
+  recorded: number;
+}
+
+export interface SubjectBrief {
+  subject_code: string;
+  subject_name: string;
+  pct: number | null;
+}
+
+export interface WeeklySection {
+  week_start: string;
+  week_end: string;
+  days: WeekDayItem[];
+  weekly_pct: number | null;
+  recorded: number;
+  previous_week_pct: number | null;
+  delta_pct: number | null;
+  best_subject: SubjectBrief | null;
+  needs_attention_subject: SubjectBrief | null;
+}
+
+export interface QuizSnapshotSection {
+  quiz_cycle: number | null;
+  quiz_label: string | null;
+  quiz_date: string | null;
+  threshold: number | null;
+  eligible: number;
+  attention: number;
+  not_eligible: number;
+  total_theory: number;
+  has_snapshot: boolean;
+}
+
+export interface AttentionItem {
+  subject_code: string;
+  subject_name: string;
+  current_pct: number | null;
+  forecast_pct: number | null;
+  status: "WATCH" | "CRITICAL";
+}
+
+export interface UpcomingEventItem {
+  id: string;
+  event_type: EventType;
+  start_date: string;
+  end_date: string;
+  subject_code: string | null;
+  subject_name: string | null;
+  class_type: ClassType | null;
+}
+
+export interface DashboardSummaryResponse {
+  generated_at: string;
+  today: TodaySection;
+  overall: OverallSection;
+  weekly: WeeklySection;
+  quiz_snapshot: QuizSnapshotSection;
+  attention_required: AttentionItem[];
+  upcoming_events: UpcomingEventItem[];
+}
