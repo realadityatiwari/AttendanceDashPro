@@ -9,7 +9,7 @@ export function GlassCard({ children, className, ...props }: GlassCardProps) {
   return (
     <Card 
       className={cn(
-        "bg-surface/50 border-border/50 backdrop-blur-sm overflow-hidden", 
+        "bg-card border-border shadow-none", 
         className
       )} 
       {...props}
