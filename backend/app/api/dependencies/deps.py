@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.core.config import settings
@@ -38,7 +39,9 @@ async def get_current_user(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID format in token")
 
-    result = await db.execute(select(User).filter_by(id=user_id))
+    result = await db.execute(
+        select(User).options(selectinload(User.section)).filter_by(id=user_id)
+    )
     user = result.scalars().first()
     
     if not user:
