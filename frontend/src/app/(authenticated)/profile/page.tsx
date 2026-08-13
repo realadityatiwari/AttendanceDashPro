@@ -18,13 +18,14 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      // Use the logout from local AuthContext
+      // signOut(auth) is no longer required
     } catch (error) {
       console.error("Error signing out", error);
     }
   };
 
-  const displayName = profile?.display_name || user?.displayName || "Student";
+  const displayName = profile?.display_name || user?.display_name || "Student";
   const initials = displayName.charAt(0).toUpperCase();
 
   if (isError) {
@@ -35,7 +36,7 @@ export default function ProfilePage() {
         <div className="mt-8 flex justify-center">
           <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
-            Sign Out of Firebase
+            Sign Out
           </Button>
         </div>
       </div>
@@ -56,7 +57,6 @@ export default function ProfilePage() {
             
             <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
               <Avatar className="h-24 w-24 bg-surface2 border-2 border-border/50">
-                <AvatarImage src={user?.photoURL || undefined} alt={displayName} />
                 <AvatarFallback className="text-3xl font-semibold">{initials}</AvatarFallback>
               </Avatar>
               
@@ -114,20 +114,13 @@ export default function ProfilePage() {
           <div className="p-6 sm:p-8">
             <h3 className="text-lg font-medium text-foreground mb-6 flex items-center gap-2">
               <Key className="h-5 w-5 text-accent" />
-              Authentication (Firebase)
+              Authentication Identity
             </h3>
             
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5" /> Email Address
-                </label>
-                <p className="text-base font-medium mt-1">{user?.email}</p>
-              </div>
-              
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Firebase UID</label>
-                <p className="text-sm font-mono text-muted-foreground mt-1 break-all">{user?.uid}</p>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Account Identifier</label>
+                <p className="text-sm font-mono text-muted-foreground mt-1 break-all">{user?.firebase_uid || user?.id}</p>
               </div>
               
               <div className="pt-4">

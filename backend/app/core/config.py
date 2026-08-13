@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # Timezone Strategy
     # As per ADR/Migration notes, the institutional timezone is Asia/Kolkata
     INSTITUTION_TIMEZONE: str = "Asia/Kolkata"
+    
+    # JWT Authentication
+    JWT_SECRET_KEY: str = "supersecret_development_key_change_in_production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200 # 30 days
 
     class Config:
         env_file = ".env"

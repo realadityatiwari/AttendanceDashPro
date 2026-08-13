@@ -1,6 +1,11 @@
 from fastapi import APIRouter
 
+from app.api.v1.endpoints import auth
+
 api_router = APIRouter()
+
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
+auth_router.include_router(auth.router)
 
 # Placeholder routers for future implementation
 attendance_router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -12,6 +17,7 @@ eligibility_router = APIRouter(prefix="/eligibility", tags=["eligibility"])
 events_router = APIRouter(prefix="/events", tags=["events"])
 student_router = APIRouter(prefix="/student", tags=["student"])
 
+api_router.include_router(auth_router)
 api_router.include_router(attendance_router)
 api_router.include_router(calendar_router)
 api_router.include_router(subjects_router)

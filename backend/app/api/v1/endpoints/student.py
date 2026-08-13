@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.api.dependencies.deps import get_db, get_current_user, get_firebase_identity
+from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.schemas.student import StudentProfile, StudentSyncRequest
 
@@ -10,30 +10,15 @@ router = APIRouter()
 @router.post("/sync", response_model=StudentProfile)
 async def sync_student_profile(
     request: StudentSyncRequest,
-    firebase_identity: dict = Depends(get_firebase_identity),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Synchronizes the Firebase Auth profile with the PostgreSQL database.
-    Performs a get-or-create operation based on the firebase_uid.
-    Requires a valid Firebase ID token but does not require the user to already exist in DB.
-    The firebase_uid is sourced exclusively from the verified token; it cannot be
-    supplied or spoofed by the request body.
+    Local authentication sync endpoint.
+    Maintains compatibility with legacy frontend sync call without relying on Firebase.
     """
-    uid = firebase_identity.get("uid")
-    # Email comes from the verified Firebase token only — not from the request body.
-    # It is not stored in PostgreSQL (the User model has no email column).
-    # Firebase Auth is the single source of truth for email.
+    user = current_user
     
-    result = await db.execute(select(User).filter_by(firebase_uid=uid))
-    user = result.scalars().first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in PostgreSQL database. Account was not part of the Phase 5 migration cohort."
-        )
-
     # Update mutable profile fields ONLY if they are not already set.
     # PostgreSQL remains the authoritative source for identity.
     if not user.name:

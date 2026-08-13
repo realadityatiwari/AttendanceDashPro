@@ -17,13 +17,10 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
   requestHeaders.set("Content-Type", "application/json");
 
   if (requireAuth) {
-    const user = auth.currentUser;
-    if (!user) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    if (!token) {
       throw new Error("Authentication required for this request");
     }
-    
-    // Always get a fresh token (Firebase caches it anyway)
-    const token = await user.getIdToken();
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
 
@@ -35,6 +32,13 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('access_token');
+      // Redirect to login if not already there
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
     let errorMessage = "API request failed";
     try {
       const errorData = await response.json();

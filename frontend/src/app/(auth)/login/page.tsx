@@ -1,30 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [rollNumber, setRollNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { refreshUser } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    // Using legacy app convention to transform roll number into email
-    const email = `${rollNumber.trim()}@student.app`;
-
     try {
-      if (auth) {
-        await signInWithEmailAndPassword(auth, email, password);
-        // AuthContext automatically handles redirect on success
-      } else {
-        setError("Firebase auth is not initialized.");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ roll_number: rollNumber.trim(), password }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to log in.";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {}
+        throw new Error(errorMessage);
       }
+
+      const data = await response.json();
+      localStorage.setItem("access_token", data.access_token);
+      
+      // Update auth context state
+      await refreshUser();
+      
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Failed to log in.");
     } finally {

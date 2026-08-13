@@ -33,7 +33,7 @@ export function Header() {
   };
 
   // Safe fallback if profile is missing
-  const displayName = profile?.display_name || user?.displayName || "Student";
+  const displayName = profile?.display_name || user?.display_name || "Student";
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
@@ -56,7 +56,6 @@ export function Header() {
             <DropdownMenuTrigger className="-m-1.5 flex items-center p-1.5 hover:bg-accent hover:text-accent-foreground rounded-md transition-colors outline-none ring-0 focus:ring-0 focus:outline-none">
                 <span className="sr-only">Open user menu</span>
                 <Avatar className="h-8 w-8 bg-surface2 border border-border">
-                  <AvatarImage src={user?.photoURL || undefined} alt={displayName} />
                   <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
                 </Avatar>
                 <span className="hidden lg:flex lg:items-center">
