@@ -1,10 +1,13 @@
 from uuid import UUID
 from typing import Optional, List
+from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from app.models.user import User
-from app.models.academic import StudentEnrollment, Subject
+from sqlalchemy import func
+from app.models.user import User, Section
+from app.models.academic import StudentEnrollment, Subject, Semester, AcademicSession
+from app.models.quiz import QuizSchedule, ScheduleStatus
 
 class UserRepository:
     def __init__(self, db: AsyncSession):
@@ -21,3 +24,44 @@ class UserRepository:
         stmt = select(Subject).join(StudentEnrollment).filter(StudentEnrollment.user_id == user_id)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_academic_context(self, user: User) -> dict:
+        """
+        Resolves read-only academic context for the Profile UI:
+        semester/session names, semester start date, and the student's
+        first scheduled quiz date. Returns None-safe values; no data is
+        invented when the academic chain is incomplete.
+        """
+        semester_name: Optional[str] = None
+        academic_session: Optional[str] = None
+        semester_start: Optional[date] = None
+
+        if user.section is not None and user.section.semester_id is not None:
+            semester = await self.db.get(Semester, user.section.semester_id)
+            if semester is not None:
+                semester_name = semester.name
+                semester_start = semester.start_date
+                session = await self.db.get(AcademicSession, semester.session_id)
+                if session is not None:
+                    academic_session = session.name
+
+        first_quiz_date: Optional[date] = None
+        if user.id is not None:
+            stmt = select(func.min(QuizSchedule.date)).join(
+                StudentEnrollment,
+                StudentEnrollment.subject_id == QuizSchedule.subject_id,
+            ).where(
+                StudentEnrollment.user_id == user.id,
+                QuizSchedule.date.is_not(None),
+                QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED,
+            )
+            result = await self.db.execute(stmt)
+            first_quiz_date = result.scalar_one_or_none()
+
+        return {
+            "program": None,
+            "semester_name": semester_name,
+            "academic_session": academic_session,
+            "semester_start": semester_start,
+            "first_quiz_date": first_quiz_date,
+        }

@@ -4,6 +4,11 @@ export interface StudentProfile {
   display_name: string;
   roll_number: string | null;
   section_name: string | null;
+  program?: string | null;
+  semester_name?: string | null;
+  academic_session?: string | null;
+  semester_start?: string | null;
+  first_quiz_date?: string | null;
 }
 
 export enum SubjectCategory {

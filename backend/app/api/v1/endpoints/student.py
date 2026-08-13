@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.schemas.student import StudentProfile, StudentSyncRequest
+from app.repositories.user_repo import UserRepository
 
 router = APIRouter()
 
@@ -39,15 +40,23 @@ async def sync_student_profile(
     )
 
 @router.get("/me", response_model=StudentProfile)
-async def get_student_profile(current_user: User = Depends(get_current_user)):
+async def get_student_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
-    Returns the authenticated student's profile.
+    Returns the authenticated student's profile, including read-only
+    academic context resolved from the section -> semester -> session
+    chain and the student's quiz schedules.
     """
+    repo = UserRepository(db)
+    academic_context = await repo.get_academic_context(current_user)
     section_name = current_user.section.name if current_user.section else None
     return StudentProfile(
         id=current_user.id,
         firebase_uid=current_user.firebase_uid,
         display_name=current_user.name,
         roll_number=current_user.roll_number,
-        section_name=section_name
+        section_name=section_name,
+        **academic_context
     )

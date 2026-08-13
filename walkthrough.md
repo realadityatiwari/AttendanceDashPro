@@ -1,61 +1,44 @@
-# S3.10 Current-Semester Baseline Walkthrough
+# AttendanceDash Pro — Phase 2 Walkthrough
 
-Date: 2026-08-09 · Scope: documentation-only baseline freeze (no production code changed)
+Date: 2026-08-13 · Scope: Desktop shell & global UX on the Next.js app
 
-## Final Status
-
-> **S3.10 COMPLETE** — Current-semester baseline frozen in `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`; supporting project docs updated; 95/95 regression assertions passing.
-
----
+> **PHASE 2 COMPLETE** — top navigation, user menu, and Profile/Appearance/Feedback/Settings/Install App modals implemented on a shared dialog foundation. Features that cannot be genuinely functional are explicitly marked BLOCKED / BACKEND REQUIRED rather than faked.
+>
+> (Legacy S3.x JS-PWA baseline history remains in `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`; the app has since been rewritten in Next.js + FastAPI.)
 
 ## Verification Summary (every item labelled)
 
 | Verification | Label |
 |---|---|
-| Baseline document covers all mandated sections (version, academic data, architecture, engines, persistence, PWA, invariants, tests, deployment) | **VERIFIED** |
-| `APP_VERSION` = `2.0.3` (`js/utils.js:1`) matches the frozen build | **VERIFIED** |
-| Academic data frozen from `timetable.json` (2026–27 odd semester, SRMCEM subjects/timelines/quiz dates) | **VERIFIED** |
-| Architecture section lists every source file with its role and dependency rules | **VERIFIED** |
-| All engine APIs + domain models documented (Calendar, Attendance, Quiz, Laboratory) | **VERIFIED** |
-| Persistence/sync layer documented (localStorage + Firestore lifecycle, merge/conflict behavior) | **VERIFIED** |
-| PWA/service-worker facts documented (`STATIC_ASSETS` incl. `events-controller.js`, cache invalidation) | **VERIFIED** |
-| Firestore rules verified in source: `isValidStudentDoc` whitelists all five root fields (`firestore.rules:58-65`) | **VERIFIED** |
-| Lab attendance lookup verified in source: normalized `P` match handles P1/P2 (`laboratory-engine.js:109-134`) | **VERIFIED** |
-| Assertion count corrected from 84 (30/20/17/17) to verified 95 (28/29/21/17); test files byte-identical to `e4d4470` | **VERIFIED** |
-| `js/test-attendance-engine.js` — 28 assertions | **VERIFIED** |
-| `js/test-calendar-engine.js` — 29 assertions | **VERIFIED** |
-| `js/test-calendar-window.js` — 21 assertions | **VERIFIED** |
-| `js/test-persistence-sync.js` — 17 assertions | **VERIFIED** |
-| Full suite = **95 assertions, 0 failures** (final integrity check) | **VERIFIED** |
-| No production code changed by S3.10 (git diff = docs + pre-existing `js/auth.js`/`js/pwa.js` working-tree edits) | **VERIFIED** |
-| `docs/README.md`, `21_CHANGELOG.md`, `16_ROADMAP.md`, `17_AI_HANDOFF.md`, `22_AI_WORKING_CONTEXT.md` updated | **VERIFIED** |
-| `task.md` and `walkthrough.md` updated (exactly one status line) | **VERIFIED** |
+| `npx tsc --noEmit` passes with 0 errors | **VERIFIED** |
+| Backend changed files compile (`py_compile`) | **VERIFIED** |
+| Legacy sidebar removed; AppShell renders TopNav + centered `max-w-5xl` content region | **VERIFIED** |
+| Nav labels map to existing routes only (Home→`/dashboard`, Track→`/tools/laboratory`, Quiz Eligibility→`/tools/quiz-schedule`, Attendance→`/subjects`, History→`/history`, Events→`/tools/events`); no URLs invented, no routes duplicated | **VERIFIED** |
+| Active route highlighted with compact dark surface (`bg-secondary`) + `aria-current` | **VERIFIED** |
+| User menu opens/closes via Base UI Menu (outside click, Escape, selection, keyboard) | **VERIFIED** |
+| User identity (name/initials/roll number) comes from `useProfile`/`useAuth`, never hardcoded | **VERIFIED** |
+| Profile modal renders academic context (semester, session, semester start, first quiz date) from the extended `GET /student/me` | **VERIFIED** |
+| Profile modal `Program` row shows unavailable state; backend has no program column | **BLOCKED / BACKEND REQUIRED** |
+| Appearance modal: Dark selected; Light/System disabled — Phase 1 tokens are dark-locked, no fake switching or persistence | **VERIFIED** (as designed) |
+| Settings modal: all controls disabled with persistence notice; no fake local-only persistence | **VERIFIED** (as designed) |
+| Feedback modal: validation + loading/error/success states; posts to `POST /api/v1/feedback` which does not exist yet — surfaced as explicit error, success state reachable only when the endpoint lands | **BLOCKED / BACKEND REQUIRED** |
+| Install App: `beforeinstallprompt` captured app-wide, `display-mode: standalone` detected; no manifest/service worker in build → honest explainer; no fake installed state | **BLOCKED / BACKEND REQUIRED** |
+| Sign Out uses existing `AuthContext.logout()` (JWT removal + redirect to `/login`) | **VERIFIED** |
+| No attendance/quiz/lab engines, migrations, auth architecture, or Phase 1 design tokens modified | **VERIFIED** |
+| No dead code: `Header.tsx`/`Sidebar.tsx` deleted, no remaining imports | **VERIFIED** |
 
-No verification is labelled PARTIALLY VERIFIED or NOT VERIFIED; every claim above was confirmed against the live source tree or a passing test run.
+## What Phase 2 Delivered
 
----
+1. **Shell**: full-width compact dark top nav (brand, six primary links, user area) replacing the desktop sidebar; content constrained to `max-w-5xl`; navigation links hidden below `md` pending the dedicated mobile phase.
+2. **Global modal foundation** (`ShellDialog`): shared backdrop/focus/Escape/scroll-lock/width/header/close conventions used by all five modals.
+3. **User menu**: Profile, Appearance, Install App, Send Feedback, Settings, Sign Out — real authenticated data, correct focus and dismissal behavior.
+4. **Profile modal**: identity + academic context resolved from the real profile chain (section → semester → session, quiz schedules). One additive read-only backend contract change (`GET /student/me`).
+5. **Honest feature boundaries**: feedback (no endpoint → explicit error, never fake success), settings (no persistence → disabled + documented), appearance (dark-only → Light/System disabled), install (no PWA infra → explainer). Backend work required is recorded in `implementation_plan.md`.
 
-## What S3.10 Delivered
+## Remaining Work
 
-1. **Frozen baseline document** — `docs/S3.10_CURRENT_SEMESTER_BASELINE.md`, a self-contained snapshot a future agent can resume work from without re-reading every source file: version stamp, current academic data, complete architecture with dependency rules, every engine API and domain model, persistence/sync lifecycle, PWA/service-worker facts, architectural invariants, exact test baseline, deployment facts, and rollback expectations (plus a maintenance section for the next rollover).
-2. **Assertion-count correction** — prior docs (S3.6/S3.8/S3.9) recorded **84** assertions as `30 + 20 + 17 + 17`; verified runtime counts are **95** as `28 + 29 + 21 + 17`. The four test files are byte-identical to commit `e4d4470`, so the earlier documentation undercounted; no test was removed or changed.
-3. **Stale-bug correction** — BUG-001 (Firestore rules for `laboratory`/`academicEvents`), BUG-002 (`events-controller.js` missing from the SW cache), and DEBT-002 (lab `:P` lookup) are all **already fixed in the current code**; the baseline records them as resolved and the project docs no longer list them as open blockers.
-
----
-
-## Regression Baseline (re-run for S3.10)
-
-- `node --experimental-vm-modules js/test-attendance-engine.js` - PASS (28)
-- `node --experimental-vm-modules js/test-calendar-engine.js` - PASS (29)
-- `node --experimental-vm-modules js/test-calendar-window.js` - PASS (21)
-- `node --experimental-vm-modules js/test-persistence-sync.js` - PASS (17)
-- **Total: 95 assertions, 0 failures.**
-
----
-
-## Known Limitations (unchanged, out of scope for S3.10)
-
-- **S3.10 is a snapshot** — it must be updated on semester rollover or any architecture/timetable/test change (see the baseline's maintenance section).
-- **No new features shipped.** Prior known limitations remain: no multi-device conflict resolution (cloud-wins per key), `AppState.settings.simulationMode` stored but unused, `AppState.history` dead, no app-level reconnect flush listener, and BCS-054 Q3 academically unresolved.
-- **Legacy docs**: `02_TECH_STACK.md`, `09_ACADEMIC_EVENT_SYSTEM.md`, `10_STORAGE_AND_SYNC.md`, `12_PWA_AND_DEPLOYMENT.md`, and `15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md` still carry pre-S3.4 notes about BUG-001/BUG-002/DEBT-002; treat `S3.10_CURRENT_SEMESTER_BASELINE.md` as authoritative until those are reconciled.
-- Pre-existing uncommitted working-tree edits (`js/auth.js` logout localStorage cleanup, `js/pwa.js` reconnect `triggerCloudSync`) were present before S3.10 and are not part of this freeze.
+- Dedicated page phases: Home, Track, Quiz Eligibility, Attendance, History, Events content.
+- Events phase: list/calendar view, Upcoming/Today/Past, Add Event modal, type/subject selection, date handling, persistence.
+- Mobile navigation phase (nav currently hidden below `md`).
+- Backend: feedback table + `POST /api/v1/feedback`; `user_preferences` table + settings endpoints; program column on sections; Light/System palette in Phase 1 tokens; PWA manifest/service worker.
+- Daily attendance marking (Track intent) — TodayClassesCard remains read-only.

@@ -1,27 +1,40 @@
-# AttendanceDash Pro - S3.10 Task Brief
+# AttendanceDash Pro — Task Brief
 
-Status: **COMPLETE**
+## PHASE 2 — DESKTOP SHELL & GLOBAL UX
+
+Status: **COMPLETE** (13 Aug 2026) — see BLOCKED markers in `implementation_plan.md`
 
 ## Objective
-Freeze the current-semester technical baseline so any future AI agent (or human) can continue work on AttendanceDash Pro with zero context loss. Produce a single frozen snapshot document (`docs/S3.10_CURRENT_SEMESTER_BASELINE.md`) capturing every architecturally relevant fact about the codebase as it exists today, then update the supporting project documents to point at it.
 
-## Scope
-- S3.9 (Production Readiness Audit) is CLOSED. Do **not** reopen prior S3.x audits.
-- Do **not** begin S3.7-future architecture work (multi-semester / branch / college-wide) or any new feature work.
-- S3.10 is a **documentation-only** baseline freeze. No production code was written, edited, or deleted.
+Reproduce the desktop reference interface (compact top navigation, profile dropdown, Profile/Appearance/Feedback/Settings/Install modals) on the Next.js app using real application data — without faking functionality.
 
-## Architectural Invariants (never violated)
-- Calendar Engine = sole temporal authority; Attendance Engine = sole attendance-math authority; Quiz Engine = quiz rules authority; Laboratory Engine = lab calculations authority; UI never becomes business-rule authority.
-- `AppState.academicEvents` = persistent event authority; calendar-engine `runtimeEvents` = derived runtime state; `events-controller.js` = Academic Event mutation authority.
-- `timetable.json` = current-semester config; Firestore rules must not be weakened; no duplicated business rules; no wholesale `ui.js` rewrite; no new framework; no unnecessary abstraction.
-- Local is authoritative on refresh (dirty local state flushes before cloud download).
-- Never invent university policy; BCS-054 Q3 remains academically unresolved.
+## Delivered
 
-## Deliverables
-- [x] `docs/S3.10_CURRENT_SEMESTER_BASELINE.md` - frozen snapshot of the entire project as of today: version stamp, academic data, complete architecture (all files + dependencies), engines (all APIs + domain models), persistence/sync layer, PWA/service worker, invariants, test baseline, deployment facts, rollback expectations.
-- [x] Assertion-count discrepancy resolved: prior docs recorded **84** (30/20/17/17); verified runtime count is **95** (28/29/21/17). Test files byte-identical to commit `e4d4470`; documentation undercounted, no test removed or changed.
-- [x] Stale-bug verification: BUG-001 (Firestore rules for `laboratory`/`academicEvents`), BUG-002 (`events-controller.js` missing from SW cache), and DEBT-002 (lab `:P` lookup) are all **fixed in the current code**; the baseline records them as resolved, not open.
-- [x] `docs/README.md` document index updated with the S3.10 entry.
-- [x] `docs/21_CHANGELOG.md`, `docs/16_ROADMAP.md`, `docs/17_AI_HANDOFF.md`, `docs/22_AI_WORKING_CONTEXT.md` updated to reflect the S3.10 baseline and the resolved bugs.
-- [x] Full regression suite re-run as the final integrity check: **95 assertions passing, 0 failures.**
-- [x] `walkthrough.md` final walkthrough with exactly one status line (VERIFIED labels on every verification).
+- [x] Desktop top navigation (TopNav) replacing the legacy sidebar; active route highlighted; route labels mapped to existing routes only
+- [x] Authenticated user area (avatar + name) + Profile dropdown with Profile / Appearance / Install App / Send Feedback / Settings / Sign Out
+- [x] Shared modal foundation (`ShellDialog`) — backdrop, focus, Escape, scroll lock, responsive width, dialog semantics, consistent header/close/spacing
+- [x] Profile modal from real `/student/me` data (identity + academic context)
+- [x] Appearance modal — Dark selected; Light/System explicitly disabled (BLOCKED: Phase 1 tokens are dark-locked)
+- [x] Feedback modal — validation, loading, success, error, duplicate-submission guard; posts to `POST /api/v1/feedback` (BLOCKED: endpoint not implemented; error surfaced honestly, no fake success)
+- [x] Settings modal — controls disabled + persistence notice (BLOCKED: no user-preferences backend)
+- [x] Install App — beforeinstallprompt capture + standalone detection; explains missing PWA infra (BLOCKED: no manifest/service worker); no fake installed state
+- [x] Sign Out via existing `AuthContext.logout()` (JWT removal + redirect), auth architecture untouched
+- [x] Backend: `GET /student/me` extended with read-only academic context (additive contract change; no schema/DB/engine changes)
+
+## Not in this phase
+
+- Home / Track / Quiz Eligibility / Attendance / History / Events page content redesigns (dedicated phases)
+- Events functionality (list/calendar, Upcoming/Today/Past, Add Event, persistence) — dedicated Events phase
+- Mobile navigation — dedicated later phase (nav hidden below `md`)
+- Program field, feedback persistence, settings persistence, Light/System themes, PWA infra — see BLOCKED markers in `implementation_plan.md`
+
+## Validation
+
+- `npx tsc --noEmit` — PASS
+- Backend `py_compile` on changed files — PASS
+
+## Do Not Touch Again
+
+- Phase 0 audit · Phase 1 design tokens · Card · Badge · Progress
+- backend architecture · database architecture · attendance engine · quiz engine
+- authentication architecture · Firebase migration boundary
