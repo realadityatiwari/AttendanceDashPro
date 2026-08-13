@@ -38,7 +38,7 @@ class AttendanceRepository:
         return list(result.all())
 
     async def get_history(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
-        from app.models.subject import Subject
+        from app.models.academic import Subject
         
         # Base statement for records
         stmt = select(
