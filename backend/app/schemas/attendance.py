@@ -10,16 +10,38 @@ class AttendanceRecord(BaseModel):
     status: AttendanceStatus
     
 class AttendanceHistoryItem(BaseModel):
+    """One scheduled class session in the authenticated student's semester,
+    with the student's canonical attendance state (no record = Pending)."""
     id: str
     date: date
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     subject_code: str
+    subject_name: str
     class_type: ClassType
     status: AttendanceStatus
-    marked_at: datetime
-    
+    is_cancelled: bool = False
+    is_extra: bool = False
+    marked_at: Optional[datetime] = None
+
+class HistorySummary(BaseModel):
+    """Counts over the filtered history result set (same canonical semantics
+    as Track: cancelled sessions are their own state, never absent)."""
+    total: int = 0
+    attended: int = 0
+    missed: int = 0
+    pending: int = 0
+    cancelled: int = 0
+    pct: Optional[float] = None
+
 class AttendanceHistoryResponse(BaseModel):
+    semester_start: Optional[date] = None
+    semester_end: Optional[date] = None
+    range_start: Optional[date] = None
+    range_end: Optional[date] = None
     items: List[AttendanceHistoryItem]
     total_count: int
+    summary: HistorySummary = Field(default_factory=HistorySummary)
 
 class ClassCounts(BaseModel):
     total: int = 0

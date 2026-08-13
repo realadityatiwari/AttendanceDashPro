@@ -1,3 +1,64 @@
+# AttendanceDash Pro — Phase 5 Walkthrough
+
+Date: 2026-08-14 · Scope: Attendance History (production-quality, canonical data)
+
+> **PHASE 5 COMPLETE** — the History page is rebuilt as a session-based view over the
+> exact canonical records Track uses: every scheduled class session of the student's
+> enrolled subjects from the real semester start through today, with server-side
+> subject/state/date/search filtering, limit/offset pagination, a server-computed
+> summary strip, and truthful loading/error/empty states. No second attendance source,
+> no React-side calculations, no data mutations. `GET /api/v1/attendance/history` was
+> extended in place — same path, same `items`/`total_count` envelope.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| Backend changed files compile (`python -m compileall backend/app`) | **VERIFIED** |
+| Frontend `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| Live default query (real user `2401220100027`, minted dev JWT): 129 sessions, summary 55 Attended / 24 Missed / 50 Pending / 0 Cancelled, pct 69.6% (= 55/79 recorded, matches the dashboard's overall) | **VERIFIED** |
+| Semester range from real academic context: 2026-07-15 → 2026-12-31, effective range clamped to 2026-07-15 → 2026-08-14 (today) | **VERIFIED** |
+| Track cross-check 2026-07-15: exactly 6 sessions, BNC-501/BCS-503/BCS-054 Present, BCS-054T/BCS-058/BCS-502 Absent — identical to the Track daily view | **VERIFIED** |
+| Lab records appear: BCS-553 status=Attended → exactly 2026-07-17 PRACTICAL (the user's manual Track mark); practical search → 28 sessions | **VERIFIED** |
+| Status filters: Pending=50, Missed=24, Attended=55, Cancelled=0 (no cancelled sessions exist); invalid status → 422 pattern rejection | **VERIFIED** |
+| Search: `BCS-55`=28, `practical`=28, `lecture`=79, `2026-07-15`=6 (code/type-label/date) | **VERIFIED** |
+| Pagination: limit=10&offset=0 vs offset=10 → 10+10 rows, zero id overlap | **VERIFIED** |
+| Date clamps: date_from=2026-01-01 → 2026-07-15; date_to=2026-12-31 → 2026-08-14; date_from=2026-09-01 → 0 results | **VERIFIED** |
+| Authorization: second account (`9999999999999`) → 0 Attended / 0 Missed / 129 Pending (record isolation); unenrolled subject code → 0 | **VERIFIED** |
+| No attendance rows created/modified/deleted; Aditya's 79 records untouched; no engines/auth/migrations changed | **VERIFIED** |
+
+## What Phase 5 Delivered
+
+1. **Canonical history, not a facts log**: the endpoint now returns scheduled sessions
+   (missing record = Pending; cancelled = its own state) instead of only recorded rows —
+   the same `class_sessions` + `attendance_records` pipeline Track reads. One endpoint,
+   extended in place; no second attendance source.
+2. **Real semester bounds**: range resolved from the student's academic context via the
+   same repository `/student/me` uses, clamped to today; date inputs share the bounds.
+   No hardcoded dates.
+3. **Server-side summary**: aggregate `FILTER` query over the full filtered set —
+   Total/Present/Absent/Pending/Cancelled + % — so pagination never distorts the strip.
+4. **Real filtering**: subject (from enrolled subjects), state, date range, and search
+   (code, name, class type label, ISO date) — all validated, enrollment-scoped, and
+   enforced in SQL.
+5. **Clean pagination**: "Load more" appends with id-deduplication; any filter change
+   resets offset and never mixes old/new result sets; the list stays visible while the
+   next page loads.
+6. **One found-and-fixed defect**: the page-count query referenced the attendance table
+   without joining it (cross-join) — `total_count` was corrupted under status filters
+   (e.g. 3225 vs 24). The count query now mirrors the page joins exactly.
+7. **Consistency with Track proven on real data**: 2026-07-15 and the manual lab mark
+   agree across both views; the summary's 69.6% equals the dashboard's overall pct.
+
+## Remaining Work
+
+- Phase 6 — Calendar & Academic Events (next per roadmap; `academic_events` is still empty).
+- Session-detail affordance was deliberately kept minimal (the row already exposes date,
+  times, subject, type, status, and marked-at time — a modal would duplicate data).
+- Phase 14 — Firebase Retirement; Phase 2 blockers carried forward as before.
+
+---
+
 # AttendanceDash Pro — Phase 4.5.3 Walkthrough
 
 Date: 2026-08-14 · Scope: Real Sign Up + Account Creation (PostgreSQL-native registration)

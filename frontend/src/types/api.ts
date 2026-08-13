@@ -58,16 +58,47 @@ export interface AttendanceRecord {
 
 export interface AttendanceHistoryItem {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD, local calendar date
+  start_time: string | null;
+  end_time: string | null;
   subject_code: string;
+  subject_name: string;
   class_type: ClassType;
   status: AttendanceStatus;
-  marked_at: string;
+  is_cancelled: boolean;
+  is_extra: boolean;
+  marked_at: string | null;
+}
+
+export interface HistorySummary {
+  total: number;
+  attended: number;
+  missed: number;
+  pending: number;
+  cancelled: number;
+  pct: number | null;
 }
 
 export interface AttendanceHistoryResponse {
+  semester_start: string | null;
+  semester_end: string | null;
+  range_start: string | null;
+  range_end: string | null;
   items: AttendanceHistoryItem[];
   total_count: number;
+  summary: HistorySummary;
+}
+
+export type HistoryStatusFilter = "" | AttendanceStatus | "Cancelled";
+
+export interface AttendanceHistoryParams {
+  subject_code?: string;
+  status?: HistoryStatusFilter;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface DailySessionResponse {

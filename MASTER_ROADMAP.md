@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 4.5 complete (audit ✅ · Track ✅ · Sign Up ✅) → **Phase 5 (Attendance History) is next**.
+> **Current position:** Phase 5 complete (Attendance History ✅) → **Phase 6 (Calendar & Academic Events) is next**.
 
 ---
 
@@ -46,8 +46,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 3 | Home Dashboard | 🟢 Complete / Frozen |
 | 4 | Track Attendance | 🟢 Complete / Frozen |
 | 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
-| **5** | **Attendance History** | 🟡 **NEXT** |
-| 6 | Calendar & Academic Events | ⚪ Planned |
+| 5 | Attendance History | 🟢 Complete / Frozen |
+| **6** | **Calendar & Academic Events** | 🟡 **NEXT** |
 | 7 | Quiz Eligibility & Schedule UX | ⚪ Planned |
 | 8 | Attendance Analytics / Intelligence | ⚪ Planned |
 | 9 | Laboratory System | ⚪ Planned |
@@ -290,32 +290,42 @@ The data itself is sufficiently unreliable that a clean development baseline is 
 
 ---
 
-# 🟡 Phase 5 — Attendance History
+# 🟢 Phase 5 — Attendance History
 
-**Status: NEXT** (after Phase 4.5 froze).
+**Status: COMPLETE / FROZEN** (2026-08-14).
 
-Turn the existing history functionality into a production-quality experience.
+The History page is now a production-quality, session-based view of the
+student's real attendance history:
 
-Build/polish:
-
-- Complete historical list
-- Subject filtering
-- Date filtering
-- Attendance-state filtering
-- Search
-- Pagination/infinite loading
-- Session details
-- Correct Present/Absent display
-- Semester-start history
-- Loading states
-- Error states
-- Empty states
+- **Canonical data**: `GET /api/v1/attendance/history` (single endpoint, reused and
+  extended in place) returns every scheduled class session of the student's enrolled
+  subjects from the real semester start through today — the same `class_sessions` +
+  `attendance_records` pipeline Track consumes. Missing record = **Pending**; cancelled
+  sessions are their own state (never absent). No duplicate attendance source; no
+  React-side calculation.
+- **Semester bounds**: range resolved from the authenticated student's academic context
+  (`/student/me` semantics via the same repository), clamped to `semester_start` and today
+  (never the future), date inputs bounded the same way. No hardcoded dates.
+- **Summary strip**: Total / Present / Absent / Pending / Cancelled / % computed
+  server-side over the full filtered result set (aggregate FILTER query), not per page.
+- **Filters (server-side)**: enrolled-subject select, attendance-state select
+  (Attended/Missed/Pending/Cancelled), date-from/to (timezone-safe YYYY-MM-DD), and
+  debounced search across subject code, subject name, class type, and date.
+- **Pagination**: existing `limit`/`offset`/`total_count` contract extended with the new
+  filters; "Load more" appends pages with id-based deduplication; filters reset offset and
+  never mix result sets.
+- **States**: loading skeletons, full error state, and truthful empty states
+  (no classes in semester vs no matches for filters).
+- **Authorization**: reads scoped to the authenticated user's enrollments end-to-end
+  (`user_id` filter + `StudentEnrollment` join + subject filter on enrollments).
+- **Consistency verified**: 2026-07-15 history (6 sessions, 3 Present / 3 Absent) matches
+  Track's daily view exactly; Aditya's manual 07-17 BCS-553 practical mark appears
+  Attended in both; summary pct 69.6% = 55/79 recorded (matches the dashboard).
 
 ### Architectural rule
 
-History and Track must consume the **same canonical attendance records**.
-
-No duplicate attendance source.
+History and Track consume the **same canonical attendance records** — satisfied, with
+the `GET /attendance/history` endpoint being the single session-history source.
 
 ---
 
@@ -910,15 +920,15 @@ PHASE 1
 PHASE 2
    ↓
 PHASE 3
-   ↓
+    ↓
 PHASE 4
-   ↓
-PHASE 4.5  ← CURRENT
-   ↓
-PHASE 5
-   ↓
+    ↓
+PHASE 4.5
+    ↓
+PHASE 5  ← COMPLETE
+    ↓
 PHASE 6
-   ↓
+    ↓
 PHASE 7
    ↓
 PHASE 8
@@ -1172,8 +1182,9 @@ PHASE 3  ████████████████████  COMPLETE 
 PHASE 4  ████████████████████  COMPLETE 🔒
 
 PHASE 4.5 ████████████████████  COMPLETE 🔒 (audit · Track · Sign Up)
+PHASE 5  ████████████████████  COMPLETE 🔒 (Attendance History)
 
-PHASE 5  ██░░░░░░░░░░░░░░░░░░  CURRENT 🟡
+PHASE 6  ██░░░░░░░░░░░░░░░░░░  CURRENT 🟡
 PHASE 6  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 7  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 ...
@@ -1183,14 +1194,13 @@ PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
 
 ## Immediate Next Action
 
-**Phase 5: Attendance History**
+**Phase 6: Calendar & Academic Events**
 
-Phase 4.5 is frozen. The audit (4.5.1) reached verdict **B — PRESERVE WITH MANUAL CORRECTION**;
-Track (4.5.2) covers the full semester history with practical attendance flowing through the
-canonical pipeline; registration (4.5.3) creates PostgreSQL-native accounts with transactional
-enrollment and immediate JWT authentication.
+Phase 5 is frozen. History is now a session-based, filterable, paginated view over the
+same canonical records Track uses (semester-bounded, authorization-scoped, verified
+consistent: 2026-07-15 and lab practicals agree across both views).
 
-Next: turn the existing history functionality into a production-quality experience (complete
-historical list, subject/date/state filtering, search, pagination/infinite loading, session
-details, correct Present/Absent display, semester-start history, loading/error/empty states).
-History and Track must consume the same canonical attendance records.
+Next: build the complete calendar/event experience — month/day navigation, working
+days/weekends/holidays, academic events, class schedule, event indicators; events
+Upcoming/Today/Past with details; controlled event mutation (admin → events →
+engines) feeding the existing engines instead of parallel rules.

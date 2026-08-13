@@ -181,3 +181,30 @@ Not changed:
 - `backend/app/engines/*`, attendance/quiz/dashboard/calendar engines, Track behavior, laboratory subsystem
 - Login endpoint, token mechanism, protected-route enforcement
 - Aditya's account/data (verified by query); no database reset; no automatic test-user creation in code (one manual disposable verification account created and reported)
+
+## PHASE 5 - ATTENDANCE HISTORY
+
+Backend (one endpoint, extended in place - no second data system):
+
+- `backend/app/schemas/attendance.py` - `AttendanceHistoryItem` redefined session-based (session id, date, start/end time, subject code/name, class type, status, is_cancelled, is_extra, marked_at nullable); `HistorySummary` added (total/attended/missed/pending/cancelled/pct); `AttendanceHistoryResponse` extended (semester_start/end, effective range_start/end, items, total_count, summary)
+- `backend/app/repositories/attendance_repo.py` - `get_history` rewritten: session-based query (ClassSession + Subject + StudentEnrollment scope + TimetableEntry times + outer AttendanceRecord), shared `_history_conditions` helper, `get_history_summary` aggregate (FILTER clauses) over the full filtered set; count query mirrors the page joins (fixes a cross-join when status filters reference AttendanceRecord)
+- `backend/app/services/attendance_service.py` - `get_history(user, ...)` resolves semester bounds via the same academic-context repository used by `/student/me`; clamps to [semester_start, min(date_to, semester_end, today)]; builds items + full-set summary
+- `backend/app/api/v1/endpoints/attendance.py` - `GET /attendance/history` gains query params: `subject_code`, `status` (regex-validated `Attended|Missed|Pending|Cancelled`), `date_from`/`date_to` (YYYY-MM-DD), `search` (subject code/name, class type label, date string); existing `limit`/`offset` contract preserved
+
+Filtering semantics:
+
+- Pending = no attendance row for that user (excludes cancelled); Cancelled = `is_cancelled` session state (never counted absent, mirrors Track)
+- Search = case-insensitive match on subject code, subject name, class-type label (LECTURE/TUTORIAL/PRACTICAL), and ISO date
+- Subject filter operates on the student's enrollments (bogus/unenrolled codes return 0)
+
+Frontend:
+
+- `frontend/src/types/api.ts` - history types updated to the new contract + `AttendanceHistoryParams`/`HistoryStatusFilter`
+- `frontend/src/hooks/useApi.ts` - `useAttendanceHistory(params)` builds the SWR key from all filter params
+- `frontend/src/app/(authenticated)/history/page.tsx` - rebuilt: header with semester/date context (from the real academic contract), server-side summary strip (5 counters + pct, labelled "filtered" when filters active), filter card (enrolled-subject select from `/api/v1/subjects`, state select, date-from/to bounded by semester, debounced search, reset), high-density rows (date chip, subject code + name, LECTURE/TUTORIAL/PRACTICAL + EXTRA badges, time, Present/Absent/Pending/Cancelled semantic badges), "Load more" pagination with id-deduplication and filter reset, distinct loading/error/empty states (no classes in semester vs no filter matches)
+
+Not changed:
+
+- `backend/app/engines/*`, attendance/eligibility/dashboard/calendar engines, Track behavior/mutation, auth architecture, signup, migrations, database schema
+- No new attendance source: History and Track both read the canonical `class_sessions` + `attendance_records` pipeline; the summary is an aggregate of the same records (no analytics engine introduced)
+- No attendance rows created/modified/deleted; Aditya's data untouched; no new indexes (existing PK/FK indexes suffice at this scale)

@@ -1,7 +1,8 @@
 from datetime import date
 from uuid import UUID
+from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
@@ -18,22 +19,38 @@ router = APIRouter()
 
 @router.get("/history", response_model=AttendanceHistoryResponse)
 async def get_attendance_history(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    subject_code: Optional[str] = Query(None, description="Restrict to an enrolled subject code"),
+    status: Optional[str] = Query(
+        None,
+        pattern="^(Attended|Missed|Pending|Cancelled)$",
+        description="Restrict to an attendance state; Cancelled is a session state, not a record value",
+    ),
+    date_from: Optional[date] = Query(None, description="Inclusive range start (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="Inclusive range end (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, max_length=100, description="Search subject code/name, class type, or date"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Returns a chronological log of attendance facts recorded by the student.
-    Does not include future or pending sessions.
+    Returns every scheduled class session of the authenticated student's
+    enrolled subjects from the semester start through the current date
+    (clamped to their real academic context), with their canonical attendance
+    state: Attended / Missed / Pending (no record) / Cancelled. Same records
+    Track consumes. Supports filtering and limit/offset pagination.
     """
     service = AttendanceService(db)
-    history = await service.get_history(
-        user_id=current_user.id,
+    return await service.get_history(
+        user=current_user,
         limit=limit,
-        offset=offset
+        offset=offset,
+        subject_code=subject_code,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
     )
-    return history
 
 @router.get("/daily/{target_date}", response_model=DailySessionsResponse)
 async def get_daily_sessions(

@@ -8,6 +8,7 @@ import {
   SubjectAttendanceSummary,
   EligibilityResult,
   AttendanceHistoryResponse,
+  AttendanceHistoryParams,
   AcademicEventResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
@@ -103,8 +104,16 @@ export function useQuizEligibility(subjectCode: string | null, cycle: number | n
   };
 }
 
-export function useAttendanceHistory() {
-  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>('/api/v1/attendance/history', fetcher, STANDARD_CACHE);
+export function useAttendanceHistory(params: AttendanceHistoryParams = {}) {
+  const query = new URLSearchParams();
+  (Object.entries(params) as [string, string | number | undefined][]).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const queryString = query.toString();
+  const url = queryString ? `/api/v1/attendance/history?${queryString}` : "/api/v1/attendance/history";
+  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>(url, fetcher, STANDARD_CACHE);
   return {
     history: data,
     isLoading,

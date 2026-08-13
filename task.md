@@ -153,3 +153,39 @@ Implement a legitimate student registration flow: frontend `/signup` + backend `
 
 - Registration flow and provisioning rule from this phase (reopen only for a genuine defect or a section-selection product decision)
 - The enrollment auto-provisioning rule is documented; multi-section handling requires a roadmap decision before implementation
+
+## PHASE 5 - ATTENDANCE HISTORY
+
+## Objective
+
+Turn the existing /history page into a production-quality Attendance History experience: the student's real attendance history from semester start through the current date, consuming the SAME canonical attendance data as Track - no second attendance source, no React-side calculations.
+
+## Delivered
+
+- [x] Single endpoint `GET /api/v1/attendance/history` extended in place (no second data system): session-based items (date, times, subject code+name, class type, status, cancelled/extra flags, marked_at), effective semester range, and a server-side summary over the full filtered set
+- [x] Semester bounds from the authenticated student's real academic context (semester_start -> min(date_to, semester_end, today)); no hardcoded dates; date inputs bounded by the same contract
+- [x] Pending = no attendance row (same semantics as Track); Cancelled is a session state, never counted absent; summary matches Track's daily counting convention
+- [x] Server-side filters: enrolled-subject select, state select (Present/Absent/Pending/Cancelled), date-from/to, debounced search across code/name/class type/date - all validated and enrollment-scoped
+- [x] Pagination: existing limit/offset/total_count contract; "Load more" with id-deduplicated append; filters reset offset and never mix result sets; list stays visible while the next page loads
+- [x] Summary strip: Total/Present/Absent/Pending/Cancelled + overall % (aggregate query, truthful when filters are active)
+- [x] Semantic Badge mapping: Present -> success, Absent -> danger, Pending -> warning, Cancelled -> neutral (existing system, no new visual language)
+- [x] Distinct states: loading skeletons, API error, "no classes in semester" vs "no sessions match your filters"
+- [x] Authorization: reads scoped to the authenticated user + enrollments (repository join + user_id filter); unenrolled subject codes return 0; cross-user records isolated (verified with a second account)
+- [x] SQL: single query + aggregate FILTER summary, no N+1; no new indexes needed at current scale
+- [x] No attendance rows created/modified/deleted; no engines/track/auth/signup/migrations touched
+
+## Validation
+
+- Backend `python -m compileall backend/app` - PASS
+- Frontend `npx tsc --noEmit` - PASS (0 errors)
+- Live (real user 2401220100027, minted dev JWT): default query -> 129 sessions (55 Attended / 24 Missed / 50 Pending, pct 69.6% = 55/79 recorded, consistent with the dashboard); range clamped 2026-07-15 -> 2026-08-14
+- Track cross-check 2026-07-15 -> exactly 6 sessions, 3 Present / 3 Absent, identical to the Track daily view; Aditya's manual BCS-553 2026-07-17 practical mark shows Attended in both
+- Filters: Pending=50, Missed=24, Attended=55 (pct 100 of filtered set), Cancelled=0 (none exist), invalid status -> 422; search BCS-55=28, practical=28, lecture=79, 2026-07-15=6
+- Pagination: limit=10&offset=0 and offset=10 -> 10+10, zero id overlap
+- Clamps: date_from=2026-01-01 -> range_start 2026-07-15; date_to=2026-12-31 -> range_end 2026-08-14; date_from=2026-09-01 -> 0 results
+- Authorization: second account (9999999999999) sees 0 attended/0 missed/129 pending (record isolation); bogus subject -> 0
+
+## Do Not Touch Again
+
+- The history endpoint contract, filtering/pagination behavior, and summary semantics from this phase (reopen only for a genuine defect)
+- The canonical attendance pipeline remains frozen; History is a presentation/query feature, not an analytics engine
