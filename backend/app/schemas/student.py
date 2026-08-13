@@ -9,7 +9,9 @@ class StudentSyncRequest(BaseModel):
 
 class StudentProfile(BaseModel):
     id: UUID
-    firebase_uid: str
+    # Firebase identity is retired (Phase 4.5.3): null for PostgreSQL-native
+    # registrations, preserved for legacy accounts.
+    firebase_uid: Optional[str] = None
     # NOTE: email is not stored in PostgreSQL. It is owned by Firebase Auth.
     # The backend does not persist or return email from the DB.
     display_name: str

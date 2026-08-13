@@ -30,6 +30,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except Exception:
         return False
 
+def hash_password(password: str) -> str:
+    """
+    Creates a pbkdf2_sha256 hash in the exact format verify_password expects
+    (salt$hash, 100000 iterations). Registration and login share this single
+    verifier; no second password format exists.
+    """
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    )
+    return f"pbkdf2_sha256${salt}${key.hex()}"
+
 def create_access_token(subject: str, roll_number: str) -> str:
     """Creates a standard JWT access token."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)

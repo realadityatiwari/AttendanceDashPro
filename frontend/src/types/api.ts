@@ -1,6 +1,6 @@
 export interface StudentProfile {
   id: string;
-  firebase_uid: string;
+  firebase_uid: string | null;
   display_name: string;
   roll_number: string | null;
   section_name: string | null;

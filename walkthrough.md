@@ -1,3 +1,45 @@
+# AttendanceDash Pro — Phase 4.5.3 Walkthrough
+
+Date: 2026-08-14 · Scope: Real Sign Up + Account Creation (PostgreSQL-native registration)
+
+> **PHASE 4.5.3 COMPLETE** — the application now has a real student registration flow:
+> `POST /api/v1/auth/register` creates a PostgreSQL user with transactional academic
+> enrollment and immediately issues the same JWT login uses, and `/signup` provides the
+> full UX (name, 13-digit roll number, password + confirm, show/hide, Create Account,
+> login link). Firebase identity is no longer required: `firebase_uid` is nullable, legacy
+> UIDs preserved, removal deferred to Phase 14. No second auth mechanism was created.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| Backend changed files compile (`python -m compileall backend/app`) | **VERIFIED** |
+| Frontend `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| Alembic `upgrade head` → `c3d4e5f6a7b8`; `users.firebase_uid` now nullable; 29/29 legacy UIDs intact (Aditya's `HCRbV7Kld3Wo9IHLJHRGlBau4Mq2` preserved) | **VERIFIED** |
+| Live `POST /auth/register` invalid roll → 422 "Roll number must be 13 digits" | **VERIFIED** |
+| Live short password → 422 "Password must be at least 8 characters" | **VERIFIED** |
+| Live duplicate roll (Aditya's) → 409 "An account with this roll number already exists" (full pipeline + rollback; no data created) | **VERIFIED** |
+| Live registration of disposable account (roll `9999999999999`, reported): 201 + JWT; `/student/me` → section CSE-51, `firebase_uid` null; dashboard usable with new token; 9 enrollments created | **VERIFIED** |
+| Aditya's account/attendance/enrollments untouched (DB query) | **VERIFIED** |
+
+## What Phase 4.5.3 Delivered
+
+1. **Registration contract**: name required; roll number must be exactly 13 digits (backend-authoritative, frontend mirrors for UX); password ≥ 8 characters; hashed with the same `pbkdf2_sha256` format login verifies — one verifier, no second password format, never logged.
+2. **Transactional account creation**: User + `StudentEnrollment` rows committed together; duplicate roll number races are caught by the unique index (`IntegrityError` → 409 → rollback); any failure rolls back — no partial users, no orphan enrollments.
+3. **Enrollment provisioning rule** (explicit, no guessing): active `AcademicSession` → its semester (must be unique) → its section (auto-assign only when exactly one) → enroll in all semester subjects. The client cannot choose section/semester/subjects. Multi-section ambiguity is rejected with a clear 409 until a section-selection product decision exists.
+4. **firebase_uid treatment**: minimal migration `c3d4e5f6a7b8` makes the column nullable; unique index retained; existing values untouched; column removal deferred to Phase 14 (Firebase Retirement). New registrations store `NULL`.
+5. **JWT after registration**: issued with the exact `create_access_token` mechanism used by login; the frontend stores it under the same `access_token` key and enters the app shell via the existing `refreshUser()` path — signup is not a second authentication flow.
+6. **Signup UX**: matches the login page's visual system; show/hide password toggles; client validation (13-digit roll, min-8 password, matching confirmation); friendly server-error mapping (duplicate roll, validation, generic failure); success → dashboard. Auth routing treats `/signup` as public and redirects authenticated visitors away from both auth pages.
+
+## Remaining Work
+
+- Phase 5 — Attendance History (next per roadmap; canonical records already shared with Track).
+- Section selection / multi-section registration policy (requires a product decision before implementation).
+- Password reset / email identity (schema stores no email).
+- Phase 14 — Firebase Retirement owns final `firebase_uid` column removal.
+
+---
+
 # AttendanceDash Pro — Phase 4.5.2 Walkthrough
 
 Date: 2026-08-14 · Scope: Historical Track completion on the Next.js app (real data)

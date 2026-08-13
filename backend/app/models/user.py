@@ -15,7 +15,9 @@ class Section(Base):
 
 class User(Base):
     __tablename__ = "users"
-    firebase_uid: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Firebase identity is retired: nullable since 4.5.3 so PostgreSQL-native
+    # registrations can exist without a Firebase UID. Legacy values preserved.
+    firebase_uid: Mapped[str | None] = mapped_column(String, unique=True, index=True, nullable=True)
     roll_number: Mapped[str] = mapped_column(String, unique=True, index=True)
     name: Mapped[str] = mapped_column(String)
     hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)

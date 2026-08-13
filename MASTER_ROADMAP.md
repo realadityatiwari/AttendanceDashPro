@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 4.5.1 (audit) and 4.5.2 (historical Track completion) are complete → **Phase 4.5.3 (Real Sign Up) is next**.
+> **Current position:** Phase 4.5 complete (audit ✅ · Track ✅ · Sign Up ✅) → **Phase 5 (Attendance History) is next**.
 
 ---
 
@@ -45,8 +45,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 2 | Desktop Shell & Global UX | 🟢 Complete / Frozen |
 | 3 | Home Dashboard | 🟢 Complete / Frozen |
 | 4 | Track Attendance | 🟢 Complete / Frozen |
-| **4.5** | **Data Integrity & Account Foundation** | 🟡 **IN PROGRESS** — 4.5.1 ✅ · 4.5.2 ✅ · **4.5.3 next** |
-| 5 | Attendance History | ⚪ Planned |
+| 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
+| **5** | **Attendance History** | 🟡 **NEXT** |
 | 6 | Calendar & Academic Events | ⚪ Planned |
 | 7 | Quiz Eligibility & Schedule UX | ⚪ Planned |
 | 8 | Attendance Analytics / Intelligence | ⚪ Planned |
@@ -207,9 +207,9 @@ The attendance architecture is considered foundational. Do not rewrite it to sol
 
 ---
 
-# 🟡 Phase 4.5 — Data Integrity & Account Foundation
+# 🟢 Phase 4.5 — Data Integrity & Account Foundation
 
-**Status: IN PROGRESS** — 4.5.1 audit ✅ · 4.5.2 historical Track ✅ · **4.5.3 Real Sign Up next**.
+**Status: COMPLETE / FROZEN** — 4.5.1 audit ✅ · 4.5.2 historical Track ✅ · 4.5.3 Real Sign Up ✅.
 
 ## 4.5.1 — Historical Attendance Audit
 
@@ -269,44 +269,30 @@ The data itself is sufficiently unreliable that a clean development baseline is 
 
 ## 4.5.3 — Real Sign Up
 
-The application currently lacks a proper Sign Up page.
+**Status: COMPLETE** (2026-08-14).
 
-Build a real registration flow using the existing:
-
-```text
-PostgreSQL + JWT
-```
-
-architecture.
-
-Target flow:
-
-```text
-Sign Up
-   ↓
-Name
-Roll Number
-Password
-Confirm Password
-   ↓
-Validation
-   ↓
-Create PostgreSQL user
-   ↓
-Associate academic/enrollment data
-   ↓
-JWT authentication
-   ↓
-Dashboard
-```
-
-Before implementation, determine which academic information is centrally configured versus user-provided.
+- `POST /api/v1/auth/register` + `/signup` page (Full Name, 13-digit Roll Number, Password,
+  Confirm Password, show/hide, Create Account, link to Login).
+- **Enrollment provisioning**: academic context resolved from authoritative configuration only —
+  active `AcademicSession` → its `Semester` → its `Section` → all semester `Subject` rows — created
+  transactionally with the user. The client cannot submit section/semester/session/subject IDs.
+  Single-section semesters auto-assign; ambiguous configurations are rejected explicitly.
+- **firebase_uid**: made NULLABLE (migration `c3d4e5f6a7b8`) for PostgreSQL-native identity;
+  all 29 legacy UIDs preserved; column retained for Phase 14 (Firebase Retirement).
+- **Passwords**: same `pbkdf2_sha256` format/verifier as login (`hash_password` added to
+  `app/core/security.py`); never logged or echoed.
+- **JWT**: issued immediately after registration through the exact `create_access_token` used by
+  login (no second auth flow); student enters the app shell directly.
+- Duplicate roll number → 409 (`IntegrityError` race guard); validation 422; ambiguous academic
+  config 409/503; all failures roll back — no partial accounts, no orphan enrollments.
 
 **Firebase must not return.**
 
 ---
 
 # 🟡 Phase 5 — Attendance History
+
+**Status: NEXT** (after Phase 4.5 froze).
 
 Turn the existing history functionality into a production-quality experience.
 
@@ -1185,9 +1171,9 @@ PHASE 2  ████████████████████  COMPLETE 
 PHASE 3  ████████████████████  COMPLETE 🔒
 PHASE 4  ████████████████████  COMPLETE 🔒
 
-PHASE 4.5 ██████░░░░░░░░░░░░  CURRENT 🟡 (4.5.1 audit ✅ · 4.5.2 Track ✅ · 4.5.3 Sign Up next)
+PHASE 4.5 ████████████████████  COMPLETE 🔒 (audit · Track · Sign Up)
 
-PHASE 5  ░░░░░░░░░░░░░░░░░░░░  PLANNED
+PHASE 5  ██░░░░░░░░░░░░░░░░░░  CURRENT 🟡
 PHASE 6  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 7  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 ...
@@ -1197,13 +1183,14 @@ PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
 
 ## Immediate Next Action
 
-**Phase 4.5 → Step 3: Real Sign Up (4.5.3)**
+**Phase 5: Attendance History**
 
-The audit (4.5.1) reached verdict **B — PRESERVE WITH MANUAL CORRECTION** and Track (4.5.2) now covers the
-full semester history with practical/lab attendance flowing through the canonical pipeline. Historical truth
-for the 26 lab sessions is established by the user through Track, not by automation.
+Phase 4.5 is frozen. The audit (4.5.1) reached verdict **B — PRESERVE WITH MANUAL CORRECTION**;
+Track (4.5.2) covers the full semester history with practical attendance flowing through the
+canonical pipeline; registration (4.5.3) creates PostgreSQL-native accounts with transactional
+enrollment and immediate JWT authentication.
 
-Next: build a real registration flow (name, roll number, password, confirmation, validation, PostgreSQL user
-creation, academic enrollment association, JWT, dashboard) per the 4.5.3 target flow below. Determine which
-academic information is centrally configured versus user-provided before implementation. **Firebase must not
-return.**
+Next: turn the existing history functionality into a production-quality experience (complete
+historical list, subject/date/state filtering, search, pagination/infinite loading, session
+details, correct Present/Absent display, semester-start history, loading/error/empty states).
+History and Track must consume the same canonical attendance records.

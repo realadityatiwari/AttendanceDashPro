@@ -151,3 +151,33 @@ Not changed:
 - `backend/app/models/*`, migrations, `attendance_records` schema - no schema change required (Step 6/11)
 - No new endpoints - Track reuses `GET /api/v1/attendance/daily/{date}` and `POST /api/v1/attendance` (Step 5)
 - No database data created/modified/deleted (Step 11); `laboratory_experiments`/`laboratory_records` untouched
+
+## PHASE 4.5.3 - REAL SIGN UP + ACCOUNT CREATION
+
+Backend:
+
+- `backend/alembic/versions/c3d4e5f6a7b8_make_firebase_uid_nullable.py` - NEW migration: `users.firebase_uid` nullable; legacy values preserved; unique index retained (PostgreSQL allows multiple NULLs); column not dropped (Phase 14 owns removal)
+- `backend/app/models/user.py` - `firebase_uid` mapped nullable
+- `backend/app/core/security.py` - `hash_password` added, producing the exact `pbkdf2_sha256\\` format `verify_password` consumes (single verifier for register + login)
+- `backend/app/api/v1/endpoints/auth.py` - `POST /auth/register`: validation -> academic context resolution -> transactional User + StudentEnrollment creation -> IntegrityError rollback (409) -> JWT via `create_access_token`
+- `backend/app/schemas/student.py` - `firebase_uid` optional
+
+Frontend:
+
+- `frontend/src/app/(auth)/signup/page.tsx` - NEW: full signup form, show/hide password, client UX validation (13-digit roll, min 8 password, match confirm), friendly server-error mapping, success -> store token -> `refreshUser()` -> `/dashboard`
+- `frontend/src/app/(auth)/login/page.tsx` - link to `/signup`
+- `frontend/src/contexts/AuthContext.tsx` - `/signup` added to public routes; authenticated users redirected to dashboard from both auth pages
+- `frontend/src/types/api.ts` - `firebase_uid: string | null`
+
+Enrollment provisioning rule (documented decision):
+
+- Resolve `academic_sessions WHERE is_active` (must exist, else 503)
+- Resolve that session's semesters (must be exactly 1, else 409 ambiguity)
+- Resolve the semester's sections (exactly 1 -> auto-assign; 0 -> 503; >1 -> 409 until a section-selection product decision exists)
+- Enroll in ALL subjects of that semester (matches the `setup_single_user.py` convention); client submits no academic IDs; duplicates impossible for a fresh user
+
+Not changed:
+
+- `backend/app/engines/*`, attendance/quiz/dashboard/calendar engines, Track behavior, laboratory subsystem
+- Login endpoint, token mechanism, protected-route enforcement
+- Aditya's account/data (verified by query); no database reset; no automatic test-user creation in code (one manual disposable verification account created and reported)

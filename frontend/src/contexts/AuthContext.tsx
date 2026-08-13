@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 // Assuming User type from backend schema (StudentProfile)
 export interface User {
   id: string;
-  firebase_uid: string;
+  firebase_uid: string | null;
   display_name: string;
   roll_number: string;
   section_name: string | null;
@@ -59,9 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      if (user && pathname === "/login") {
+      const isPublicRoute = pathname === "/login" || pathname === "/signup";
+      if (user && isPublicRoute) {
         router.push("/dashboard");
-      } else if (!user && pathname !== "/login") {
+      } else if (!user && !isPublicRoute) {
         router.push("/login");
       }
     }
