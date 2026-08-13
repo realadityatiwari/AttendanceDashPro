@@ -2,24 +2,30 @@
 
 import { useProfile } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
-import { auth } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Mail, ShieldAlert, Key } from "lucide-react";
+import { LogOut, User, ShieldAlert, Key } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, loading, logout } = useAuth();
   const { profile, isLoading, isError } = useProfile();
+
+  if (loading) {
+    return (
+      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
+        <PageHeader title="Profile Settings" />
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </div>
+    );
+  }
 
   const handleLogout = async () => {
     try {
-      // Use the logout from local AuthContext
-      // signOut(auth) is no longer required
+      logout();
     } catch (error) {
       console.error("Error signing out", error);
     }

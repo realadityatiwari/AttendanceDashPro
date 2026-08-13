@@ -2,8 +2,6 @@
 
 import { Moon, Sun, Monitor, Bell, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { auth } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
 import { useProfile } from "@/hooks/useApi";
 import {
   DropdownMenu,
@@ -17,12 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Header() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { profile, isLoading, isError } = useProfile();
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      logout();
     } catch (error) {
       console.error("Error signing out", error);
     }
