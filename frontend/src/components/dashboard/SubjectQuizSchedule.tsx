@@ -64,6 +64,20 @@ export function SubjectQuizSchedule({ subjectCode }: { subjectCode: string }) {
                     {cycle.data.policy_ambiguity_notes}
                   </p>
                 )}
+                {cycle.data.optimization && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 max-w-xs text-xs">
+                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
+                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase">Must Attend</p>
+                      <p className="text-foreground">Lecture: <span className="font-bold">{cycle.data.optimization.lecture_deficit}</span></p>
+                      <p className="text-foreground">Tutorial: <span className="font-bold">{cycle.data.optimization.tutorial_deficit}</span></p>
+                    </div>
+                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
+                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase">Safe Skip</p>
+                      <p className="text-foreground">Lecture: <span className="font-bold">{cycle.data.optimization.safe_skip_lecture}</span></p>
+                      <p className="text-foreground">Tutorial: <span className="font-bold">{cycle.data.optimization.safe_skip_tutorial}</span></p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="text-sm font-medium text-accent flex items-center gap-2">
                 <Calendar className="h-4 w-4" />

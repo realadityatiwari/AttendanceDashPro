@@ -9,7 +9,7 @@ export interface StudentProfile {
 export enum SubjectCategory {
   CORE = "CORE",
   ELECTIVE = "ELECTIVE",
-  LAB = "LAB",
+  LAB = "lab",
   MANDATORY = "MANDATORY"
 }
 
