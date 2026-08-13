@@ -59,3 +59,16 @@ export function formatDelta(value: number | null | undefined): string {
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(1)}`;
 }
+
+export function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+export function isToday(date: Date): boolean {
+  const today = new Date();
+  return date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear();
+}

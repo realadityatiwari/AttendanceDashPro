@@ -11,7 +11,9 @@ import {
   AcademicEventResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
-  DashboardSummaryResponse
+  DashboardSummaryResponse,
+  DailySessionsResponse,
+  AttendanceMutationRequest
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -161,4 +163,29 @@ export function useDashboardSummary() {
     isError: error,
     mutate
   };
+}
+
+export function useDailySessions(dateStr: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<DailySessionsResponse>(
+    dateStr ? `/api/v1/attendance/daily/${dateStr}` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    dailySessions: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useMutateAttendance() {
+  const mutateAttendance = async (request: AttendanceMutationRequest) => {
+    return apiFetch('/api/v1/attendance', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    });
+  };
+
+  return { mutateAttendance };
 }

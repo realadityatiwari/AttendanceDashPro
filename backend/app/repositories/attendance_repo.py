@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import date
 from app.models.attendance import AttendanceRecord
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.enums import AttendanceStatus
 
 class AttendanceRepository:
@@ -24,6 +24,15 @@ class AttendanceRepository:
         stmt = select(ClassSession).filter(ClassSession.id == class_session_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    async def is_enrolled(self, user_id: UUID, subject_id: UUID) -> bool:
+        from app.models.academic import StudentEnrollment
+        stmt = select(StudentEnrollment).filter(
+            StudentEnrollment.user_id == user_id,
+            StudentEnrollment.subject_id == subject_id
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first() is not None
 
     async def save_attendance(self, record: AttendanceRecord):
         self.db.add(record)
@@ -78,6 +87,34 @@ class AttendanceRepository:
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
         ).order_by(ClassSession.date, ClassSession.class_type)
+
+        result = await self.db.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
+    async def get_daily_sessions(self, user_id: UUID, target_date: date) -> List[dict]:
+        from app.models.academic import Subject
+
+        stmt = select(
+            ClassSession.id,
+            ClassSession.date,
+            ClassSession.class_type,
+            ClassSession.is_extra,
+            ClassSession.is_cancelled,
+            Subject.code.label('subject_code'),
+            Subject.name.label('subject_name'),
+            AttendanceRecord.status,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+        ).join(
+            Subject, ClassSession.subject_id == Subject.id
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            AttendanceRecord,
+            (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).filter(
+            ClassSession.date == target_date,
+        ).order_by(TimetableEntry.start_time.nulls_last(), ClassSession.class_type)
 
         result = await self.db.execute(stmt)
         return [dict(row._mapping) for row in result.all()]

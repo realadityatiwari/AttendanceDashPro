@@ -7,7 +7,11 @@ from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.models.enums import AttendanceStatus
 from app.services.attendance_service import AttendanceService
-from app.schemas.attendance import SubjectAttendanceSummary, AttendanceHistoryResponse
+from app.schemas.attendance import (
+    SubjectAttendanceSummary, 
+    AttendanceHistoryResponse,
+    DailySessionsResponse
+)
 from app.repositories.subject_repo import SubjectRepository
 
 router = APIRouter()
@@ -30,6 +34,22 @@ async def get_attendance_history(
         offset=offset
     )
     return history
+
+@router.get("/daily/{target_date}", response_model=DailySessionsResponse)
+async def get_daily_sessions(
+    target_date: date,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns all class sessions scheduled for a given date along with 
+    their current attendance state for the authenticated student.
+    """
+    service = AttendanceService(db)
+    return await service.get_daily_sessions(
+        user_id=current_user.id,
+        target_date=target_date
+    )
 
 class AttendanceMutationRequest(BaseModel):
     class_session_id: UUID

@@ -7,7 +7,7 @@ from app.repositories.attendance_repo import AttendanceRepository
 from app.models.attendance import AttendanceRecord
 from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import compute_subject_stats, normalize_class_type
-from app.schemas.attendance import SubjectAttendanceSummary
+from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
 
 class AttendanceService:
     def __init__(self, db: AsyncSession):
@@ -44,6 +44,10 @@ class AttendanceService:
         if not session:
             raise HTTPException(status_code=404, detail="Class session not found")
             
+        enrolled = await self.repo.is_enrolled(user_id, session.subject_id)
+        if not enrolled:
+            raise HTTPException(status_code=403, detail="Not enrolled in this subject")
+            
         record = await self.repo.get_attendance_for_session(user_id, class_session_id)
         if record:
             record.status = status
@@ -77,3 +81,30 @@ class AttendanceService:
             "items": items,
             "total_count": total
         }
+
+    async def get_daily_sessions(self, user_id: UUID, target_date: date) -> DailySessionsResponse:
+        records = await self.repo.get_daily_sessions(user_id, target_date)
+        
+        sessions = []
+        for r in records:
+            # Format time if available
+            start_time = r["start_time"].strftime("%I:%M %p") if r["start_time"] else None
+            end_time = r["end_time"].strftime("%I:%M %p") if r["end_time"] else None
+            
+            # Resolve status (None becomes Pending)
+            status = r["status"] if r["status"] else AttendanceStatus.PENDING
+            
+            sessions.append(DailySessionResponse(
+                id=str(r["id"]),
+                date=r["date"],
+                start_time=start_time,
+                end_time=end_time,
+                subject_code=r["subject_code"],
+                subject_name=r["subject_name"],
+                class_type=r["class_type"],
+                status=status,
+                is_cancelled=r["is_cancelled"],
+                is_extra=r["is_extra"]
+            ))
+            
+        return DailySessionsResponse(date=target_date, sessions=sessions)

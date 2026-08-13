@@ -64,3 +64,19 @@ class EligibilityResult(BaseModel):
     
     # Document potential conflicts or ambiguities
     policy_ambiguity_notes: Optional[str] = None
+
+class DailySessionResponse(BaseModel):
+    id: str
+    date: date
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    subject_code: str
+    subject_name: str
+    class_type: ClassType
+    status: AttendanceStatus
+    is_cancelled: bool
+    is_extra: bool
+
+class DailySessionsResponse(BaseModel):
+    date: date
+    sessions: List[DailySessionResponse]

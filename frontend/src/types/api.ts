@@ -69,6 +69,29 @@ export interface AttendanceHistoryResponse {
   total_count: number;
 }
 
+export interface DailySessionResponse {
+  id: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  subject_code: string;
+  subject_name: string;
+  class_type: ClassType;
+  status: AttendanceStatus;
+  is_cancelled: boolean;
+  is_extra: boolean;
+}
+
+export interface DailySessionsResponse {
+  date: string;
+  sessions: DailySessionResponse[];
+}
+
+export interface AttendanceMutationRequest {
+  class_session_id: string;
+  status: AttendanceStatus;
+}
+
 export interface ClassCounts {
   total: number;
   attended: number;
