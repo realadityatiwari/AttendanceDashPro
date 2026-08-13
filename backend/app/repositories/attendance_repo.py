@@ -92,7 +92,7 @@ class AttendanceRepository:
         return [dict(row._mapping) for row in result.all()]
 
     async def get_daily_sessions(self, user_id: UUID, target_date: date) -> List[dict]:
-        from app.models.academic import Subject
+        from app.models.academic import Subject, StudentEnrollment
 
         stmt = select(
             ClassSession.id,
@@ -107,6 +107,10 @@ class AttendanceRepository:
             TimetableEntry.end_time,
         ).join(
             Subject, ClassSession.subject_id == Subject.id
+        ).join(
+            # Scope every read to the authenticated student's enrolled subjects
+            StudentEnrollment,
+            (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(

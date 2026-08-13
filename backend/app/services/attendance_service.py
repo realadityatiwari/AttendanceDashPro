@@ -43,7 +43,10 @@ class AttendanceService:
         session = await self.repo.get_session_by_id(class_session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Class session not found")
-            
+
+        if session.is_cancelled:
+            raise HTTPException(status_code=409, detail="Cannot mark attendance for a cancelled class session")
+
         enrolled = await self.repo.is_enrolled(user_id, session.subject_id)
         if not enrolled:
             raise HTTPException(status_code=403, detail="Not enrolled in this subject")

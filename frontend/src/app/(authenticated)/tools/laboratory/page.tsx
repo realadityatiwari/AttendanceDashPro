@@ -4,51 +4,97 @@ import { useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { useDailySessions, useMutateAttendance, useDashboardSummary } from "@/hooks/useApi";
-import { getLocalDateString, formatLongDate, addDays, isToday, formatShortDate } from "@/lib/date";
-import { AttendanceStatus, ClassType, AttendanceMutationRequest } from "@/types/api";
+import { useDailySessions, useMutateAttendance, useDashboardSummary, useProfile } from "@/hooks/useApi";
+import { getLocalDateString, formatLongDate, addDays, isToday, formatShortDate, parseLocalDate } from "@/lib/date";
+import { AttendanceStatus, AttendanceMutationRequest } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { TrackSessionCard } from "@/components/dashboard/TrackSessionCard";
-import { ChevronLeft, ChevronRight, Loader2, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Calendar, AlertTriangle } from "lucide-react";
 
 export default function TrackAttendancePage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const dateStr = getLocalDateString(selectedDate);
-  
+
+  const { profile } = useProfile();
+  const semesterStart = profile?.semester_start ?? null;
+  const semesterEnd = profile?.semester_end ?? null;
+
   const { dailySessions, isLoading, isError, mutate } = useDailySessions(dateStr);
   const { mutateAttendance } = useMutateAttendance();
   const { mutate: mutateDashboard } = useDashboardSummary();
 
-  const handlePreviousDay = () => setSelectedDate(addDays(selectedDate, -1));
-  const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
-  const handleToday = () => setSelectedDate(new Date());
+  const atSemesterStart = semesterStart ? dateStr <= semesterStart : false;
+  const atSemesterEnd = semesterEnd ? dateStr >= semesterEnd : false;
+
+  const clampToSemester = (d: Date) => {
+    if (semesterStart) {
+      const start = parseLocalDate(semesterStart);
+      if (getLocalDateString(d) < semesterStart) return start;
+    }
+    if (semesterEnd) {
+      const end = parseLocalDate(semesterEnd);
+      if (getLocalDateString(d) > semesterEnd) return end;
+    }
+    return d;
+  };
+
+  const handlePreviousDay = () => {
+    if (atSemesterStart) return;
+    setMutationError(null);
+    setSelectedDate(prev => clampToSemester(addDays(prev, -1)));
+  };
+  const handleNextDay = () => {
+    if (atSemesterEnd) return;
+    setMutationError(null);
+    setSelectedDate(prev => clampToSemester(addDays(prev, 1)));
+  };
+  const handleToday = () => {
+    setMutationError(null);
+    setSelectedDate(clampToSemester(new Date()));
+  };
+  const handleDatePick = (value: string) => {
+    if (!value) return;
+    setMutationError(null);
+    setSelectedDate(clampToSemester(parseLocalDate(value)));
+  };
 
   const handleMutate = async (request: AttendanceMutationRequest) => {
     try {
       await mutateAttendance(request);
+      setMutationError(null);
       await mutate();
       mutateDashboard(); // invalidate dashboard cache silently
     } catch (err) {
       console.error("Failed to mutate attendance", err);
+      setMutationError(err instanceof Error ? err.message : "Failed to update attendance");
     }
   };
 
   const handleMarkAllPresent = async () => {
     if (!dailySessions || isMarkingAll) return;
     setIsMarkingAll(true);
+    setMutationError(null);
     try {
       const pendingSessions = dailySessions.sessions.filter(
         s => !s.is_cancelled && s.status === AttendanceStatus.PENDING
       );
-      
-      const promises = pendingSessions.map(s => 
-        mutateAttendance({ class_session_id: s.id, status: AttendanceStatus.ATTENDED })
+
+      const results = await Promise.allSettled(
+        pendingSessions.map(s =>
+          mutateAttendance({ class_session_id: s.id, status: AttendanceStatus.ATTENDED })
+        )
       );
-      
-      await Promise.allSettled(promises);
+
+      const failed = results.filter(r => r.status === "rejected").length;
+      if (failed > 0) {
+        setMutationError(`${failed} session${failed > 1 ? "s" : ""} could not be marked.`);
+      }
+
       await mutate();
       mutateDashboard();
     } finally {
@@ -67,43 +113,57 @@ export default function TrackAttendancePage() {
 
   const sessions = dailySessions?.sessions || [];
   const validSessions = sessions.filter(s => !s.is_cancelled);
-  
+
   const total = validSessions.length;
   const present = validSessions.filter(s => s.status === AttendanceStatus.ATTENDED).length;
   const absent = validSessions.filter(s => s.status === AttendanceStatus.MISSED).length;
   const recorded = present + absent;
   const pending = total - recorded;
-  
+
   const progressValue = total > 0 ? (recorded / total) * 100 : 0;
 
   return (
     <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-2xl mx-auto w-full flex flex-col gap-6">
-      
+
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Track Attendance</h1>
-        <p className="text-sm text-muted-foreground">{formatLongDate(selectedDate)}</p>
+        <p className="text-sm text-muted-foreground">
+          {formatLongDate(selectedDate)}
+          {atSemesterStart && <span className="text-primary"> · Semester start</span>}
+        </p>
       </div>
 
       {/* Date Navigation */}
-      <div className="flex items-center justify-between w-full">
-        <Button variant="outline" size="icon" onClick={handlePreviousDay}>
+      <div className="flex items-center justify-between w-full gap-2">
+        <Button variant="outline" size="icon" onClick={handlePreviousDay} disabled={atSemesterStart} aria-label="Previous day">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-medium w-28 text-center">{formatShortDate(selectedDate)}</span>
-          <Button 
+        <div className="flex flex-col sm:flex-row items-center gap-2">
+          <Input
+            type="date"
+            aria-label="Jump to date"
+            value={dateStr}
+            min={semesterStart ?? undefined}
+            max={semesterEnd ?? undefined}
+            onChange={e => handleDatePick(e.target.value)}
+            className="h-8 w-40 [color-scheme:dark] text-xs"
+          />
+          <Button
             variant={isToday(selectedDate) ? "secondary" : "outline"}
-            size="sm" 
+            size="sm"
             className="text-xs uppercase tracking-wider h-8"
             onClick={handleToday}
           >
             Today
           </Button>
         </div>
-        <Button variant="outline" size="icon" onClick={handleNextDay}>
+        <Button variant="outline" size="icon" onClick={handleNextDay} disabled={atSemesterEnd} aria-label="Next day">
           <ChevronRight className="h-4 w-4" />
         </Button>
+      </div>
+      <div className="text-center -mt-2">
+        <span className="text-xs text-muted-foreground">{formatShortDate(selectedDate)}</span>
       </div>
 
       {isLoading ? (
@@ -112,13 +172,20 @@ export default function TrackAttendancePage() {
           <div className="h-40 animate-pulse bg-muted rounded-xl border border-border" />
         </div>
       ) : sessions.length === 0 ? (
-        <EmptyState 
-          title="No classes scheduled" 
+        <EmptyState
+          title="No classes scheduled"
           message="Enjoy your free day! There are no classes in the timetable."
           icon={<Calendar className="h-10 w-10 text-muted-foreground mb-4" />}
         />
       ) : (
         <>
+          {mutationError && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{mutationError}</span>
+            </div>
+          )}
+
           {/* Top Summary Card */}
           <Card className="p-4 bg-muted border-border flex flex-col gap-4">
             <div className="flex justify-between items-end">
@@ -129,9 +196,9 @@ export default function TrackAttendancePage() {
               <span className="text-sm font-bold">{recorded}/{total}</span>
             </div>
             <Progress value={progressValue} variant="default" className="h-2" />
-            
+
             {pending > 0 && (
-              <Button 
+              <Button
                 onClick={handleMarkAllPresent}
                 disabled={isMarkingAll}
                 className="w-full bg-success hover:bg-success/90 text-success-foreground"

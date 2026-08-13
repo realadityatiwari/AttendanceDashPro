@@ -23,6 +23,7 @@ class StudentProfile(BaseModel):
     semester_name: Optional[str] = None
     academic_session: Optional[str] = None
     semester_start: Optional[date] = None
+    semester_end: Optional[date] = None
     first_quiz_date: Optional[date] = None
 
     class Config:

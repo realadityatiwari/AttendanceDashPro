@@ -130,3 +130,24 @@ Status: **IMPLEMENTED** (see individual BLOCKED markers below)
 - quiz engine
 - authentication architecture
 - Firebase migration boundary
+## PHASE 4.5.2 - HISTORICAL TRACK COMPLETION
+
+Backend (minimal, additive):
+
+- `backend/app/schemas/student.py` - `StudentProfile.semester_end` added
+- `backend/app/repositories/user_repo.py` - `get_academic_context` resolves and returns `semester_end`
+- `backend/app/repositories/attendance_repo.py` - `get_daily_sessions` joined to `StudentEnrollment` so reads are scoped to the authenticated student's enrolled subjects
+- `backend/app/services/attendance_service.py` - `record_attendance` rejects cancelled sessions (409) before enrollment check
+
+Frontend:
+
+- `frontend/src/types/api.ts` - `AttendanceStatus` values corrected to `Attended`/`Missed`/`Pending`; `ClassType.PRACTICAL = "P"` (was `"P1"` - backend never returns P1/P2); `StudentProfile.semester_end` added
+- `frontend/src/app/(authenticated)/tools/laboratory/page.tsx` (Track page) - navigation clamped to semester bounds from `/student/me` (no hardcoded dates), native date picker with min/max, inline mutation error banner, semester-start indicator
+- `frontend/src/components/dashboard/TrackSessionCard.tsx` - no change needed; corrected enums restored its status rendering (Present/Absent/Change vs Pending Present/Absent)
+
+Not changed:
+
+- `backend/app/engines/*` - attendance/eligibility/dashboard/forecast/safe-skip engines untouched (Step 9)
+- `backend/app/models/*`, migrations, `attendance_records` schema - no schema change required (Step 6/11)
+- No new endpoints - Track reuses `GET /api/v1/attendance/daily/{date}` and `POST /api/v1/attendance` (Step 5)
+- No database data created/modified/deleted (Step 11); `laboratory_experiments`/`laboratory_records` untouched

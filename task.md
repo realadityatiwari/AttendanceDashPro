@@ -78,3 +78,41 @@ Rebuild the authenticated Home/Dashboard page to match the desktop reference com
 
 - All Phase 2 items above, plus: `backend/app/engines/*` · `backend/app/models/*` · migrations
 - `frontend/src/components/ui/*` primitives · `TopNav` · `UserMenu` · `AppShell` · `TodayClassesCard` · `FormulaCard` · `SubjectAttendanceGrid` (other pages use them)
+## PHASE 4.5.2 - HISTORICAL TRACK COMPLETION
+
+## Objective
+
+Finish the Track Attendance experience so the student can navigate the entire semester attendance history from 2026-07-15 (semester start) through the current date, with every scheduled class session visible - lecture, tutorial, practical/lab, pending, attended, missed, cancelled - and markable through the existing canonical attendance mutation endpoint.
+
+## Delivered
+
+- [x] Frontend enum contract fix: `AttendanceStatus` = `Attended`/`Missed`/`Pending` and `ClassType.PRACTICAL = "P"` now match the live backend serialization (previously the Track UI compared against `ATTENDED`/`P1` - every session rendered as PENDING and every mutation was rejected with 422)
+- [x] Backend: `StudentProfile` + `get_academic_context` now expose `semester_end` (alongside existing `semester_start`) so the UI can bound navigation without hardcoding dates
+- [x] Backend: `record_attendance` rejects mutations on cancelled class sessions (409)
+- [x] Backend: `get_daily_sessions` read scoped to the authenticated student's enrolled subjects
+- [x] Track page: previous/next navigation clamped to `[semester_start, semester_end]`; native date picker (dark-styled) for direct date jumps; Today button preserved; semester-start indicator
+- [x] Track page: mutation errors surfaced inline (previously only console.error - failures were silent)
+- [x] Practical/lab sessions (BCS-551/552/553, class_type P) verified present in Track and counted as PENDING by analytics (no quiz-window dependency - the legacy bug is not repeated)
+- [x] PENDING requires no attendance_records row (sessions LEFT JOIN records, None = Pending); cancelled sessions protected client-side and server-side; unique (user, session) constraint preserved via get-then-update mutation
+
+## Not in this phase
+
+- Real Sign Up (Phase 4.5.3)
+- Lab experiment management (Phase 9) - no laboratory_experiments/laboratory_records rows created
+- History redesign (Phase 5)
+- Visual polish beyond Track usability requirements
+
+## Validation
+
+- Backend `python -m compileall backend/app` - PASS
+- Frontend `npx tsc --noEmit` - PASS (0 errors)
+- Live `GET /api/v1/student/me` - PASS: `semester_start 2026-07-15` / `semester_end 2026-12-31`
+- Live `GET /api/v1/attendance/daily` - PASS: 07-15 (6 sessions, Attended/Missed), 07-16 (BCS-552 P x2 Pending), 07-17 (BCS-553 P x2 Pending), 07-14/07-19 (empty)
+- Live mutation contract - PASS: POST status=`Attended` + bogus session -> 404 (validation OK, no data touched); POST status=`ATTENDED` -> 422 (old broken contract proven)
+- Live `GET /api/v1/attendance/summary/BCS-551` - PASS: practical total=8, pending=8 (labs flow through canonical analytics)
+- No database rows created, modified, or deleted during implementation
+
+## Do Not Touch Again
+
+- Track navigation, date bounds, and marking behavior from this phase (reopen only for a genuine defect)
+- The attendance engines remain frozen - analytics integrity verified, not modified

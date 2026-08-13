@@ -1,3 +1,40 @@
+# AttendanceDash Pro — Phase 4.5.2 Walkthrough
+
+Date: 2026-08-14 · Scope: Historical Track completion on the Next.js app (real data)
+
+> **PHASE 4.5.2 COMPLETE** — Track now navigates the full semester history (2026-07-15 semester start → today) with every scheduled session visible — lecture, tutorial, and practical/lab — and markable through the single canonical `POST /api/v1/attendance` endpoint. Practical sessions are no longer confusable with quiz-window eligibility: they flow through the normal `class_sessions` + `attendance_records` pipeline (PENDING by missing row), exactly as the legacy system intended but failed to do. No engines, models, migrations, or database data were changed.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| Backend changed files compile (`python -m compileall backend/app`) | **VERIFIED** |
+| Frontend `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| Live `GET /api/v1/student/me` — `semester_start 2026-07-15`, `semester_end 2026-12-31` exposed for navigation bounds | **VERIFIED** |
+| Live `GET /api/v1/attendance/daily/2026-07-15` — 6 sessions, 3 Attended / 3 Missed (semester start reachable and stateful) | **VERIFIED** |
+| Live `GET /api/v1/attendance/daily/2026-07-16` — BCS-552 practical ×2 sessions present, Pending (labs appear in Track) | **VERIFIED** |
+| Live `GET /api/v1/attendance/daily/2026-07-17` — BCS-553 practical ×2 present, 2 Pending / 3 Missed | **VERIFIED** |
+| Live `GET /api/v1/attendance/daily/2026-07-14` and `2026-07-19` — 0 sessions (empty state; bounds prevent navigating here) | **VERIFIED** |
+| Mutation contract — POST status=`Attended` (bogus session) → 404, proving corrected payload passes validation; POST status=`ATTENDED` → 422, proving the old frontend value was rejected | **VERIFIED** |
+| Live `GET /api/v1/attendance/summary/BCS-551` — practical total=8, pending=8: labs counted by canonical analytics (no silent exclusion) | **VERIFIED** |
+| No attendance rows created/modified/deleted; laboratory tables untouched | **VERIFIED** |
+
+## What Phase 4.5.2 Delivered
+
+1. **Root-cause fix**: the frontend `AttendanceStatus` enum (`"ATTENDED"`) and `ClassType.PRACTICAL` (`"P1"`) did not match the backend's serialized contract (`"Attended"` / `"P"`). Track rendered every session as PENDING and every mutation was rejected with 422. Enum values corrected to the live contract; `TrackSessionCard`, the Track page summary, Mark-All-Present, and the History page now compare correctly without any component rewrites.
+2. **Semester-bounded navigation**: the Track page reads `semester_start`/`semester_end` from `GET /student/me` (no hardcoded dates), clamps previous/next navigation to the semester, and provides a native date picker (dark-styled, min/max clamped) so the user can jump straight to 15 July 2026 — no URL manipulation, no dozens of arrow clicks.
+3. **Security hardening (minimal)**: daily-session reads are scoped to the student's enrolled subjects via `StudentEnrollment`; mutations on cancelled sessions are rejected server-side (409) in addition to the existing enrollment check and unique-constraint-preserving update.
+4. **Honest error surfacing**: mutation failures (network/validation) now render an inline banner instead of disappearing into `console.error`.
+
+## Remaining Work
+
+- Phase 4.5.3 — Real Sign Up (next).
+- Phase 5 — Attendance History redesign (canonical records already shared with Track).
+- Phase 9 — Laboratory experiment management (0 experiments; separate subsystem).
+- Phase 2 blockers carried forward: feedback persistence, settings persistence, program column, Light/System palette, PWA infra.
+
+---
+
 # AttendanceDash Pro — Phase 3 Walkthrough
 
 Date: 2026-08-13 · Scope: Home dashboard on the Next.js app (real data)

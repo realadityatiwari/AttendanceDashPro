@@ -35,12 +35,14 @@ class UserRepository:
         semester_name: Optional[str] = None
         academic_session: Optional[str] = None
         semester_start: Optional[date] = None
+        semester_end: Optional[date] = None
 
         if user.section is not None and user.section.semester_id is not None:
             semester = await self.db.get(Semester, user.section.semester_id)
             if semester is not None:
                 semester_name = semester.name
                 semester_start = semester.start_date
+                semester_end = semester.end_date
                 session = await self.db.get(AcademicSession, semester.session_id)
                 if session is not None:
                     academic_session = session.name
@@ -63,5 +65,6 @@ class UserRepository:
             "semester_name": semester_name,
             "academic_session": academic_session,
             "semester_start": semester_start,
+            "semester_end": semester_end,
             "first_quiz_date": first_quiz_date,
         }

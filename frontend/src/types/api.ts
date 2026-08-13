@@ -8,6 +8,7 @@ export interface StudentProfile {
   semester_name?: string | null;
   academic_session?: string | null;
   semester_start?: string | null;
+  semester_end?: string | null;
   first_quiz_date?: string | null;
 }
 
@@ -31,8 +32,8 @@ export interface SubjectResponse {
 export enum ClassType {
   LECTURE = "L",
   TUTORIAL = "T",
-  PRACTICAL = "P1", // using strings as they map to enum in backend
-  PRACTICAL2 = "P2"
+  PRACTICAL = "P",
+  PRACTICAL2 = "P2" // legacy alias, not returned by the current backend
 }
 
 export interface TimetableEntryResponse {
@@ -43,9 +44,9 @@ export interface TimetableEntryResponse {
 }
 
 export enum AttendanceStatus {
-  ATTENDED = "ATTENDED",
-  MISSED = "MISSED",
-  PENDING = "PENDING"
+  ATTENDED = "Attended",
+  MISSED = "Missed",
+  PENDING = "Pending"
 }
 
 export interface AttendanceRecord {
