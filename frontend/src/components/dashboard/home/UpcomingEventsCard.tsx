@@ -65,7 +65,7 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
       </CardContent>
 
       <CardFooter className="justify-end">
-        <Button variant="ghost" size="sm" render={<Link href="/tools/events" />}>
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/events" />}>
           View All Events
         </Button>
       </CardFooter>

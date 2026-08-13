@@ -88,7 +88,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
       </CardContent>
 
       <CardFooter className="justify-end">
-        <Button variant="ghost" size="sm" render={<Link href="/tools/quiz-schedule" />}>
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/quiz-schedule" />}>
           View Quiz Eligibility
         </Button>
       </CardFooter>

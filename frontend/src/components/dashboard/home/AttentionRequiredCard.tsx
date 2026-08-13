@@ -66,7 +66,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
       </CardContent>
 
       <CardFooter className="justify-end">
-        <Button variant="ghost" size="sm" render={<Link href="/tools/laboratory" />}>
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/laboratory" />}>
           View Strategy
         </Button>
       </CardFooter>

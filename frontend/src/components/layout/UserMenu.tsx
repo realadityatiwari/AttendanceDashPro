@@ -13,6 +13,7 @@ import { useProfile } from "@/hooks/useApi";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -63,14 +64,16 @@ export function UserMenu({ onOpenModal }: UserMenuProps) {
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel>
-          <div className="flex flex-col gap-0.5 py-1">
-            <p className="text-sm font-medium text-foreground">{displayName}</p>
-            <p className="font-mono text-xs text-muted-foreground">
-              {rollNumber || "No roll number"}
-            </p>
-          </div>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <div className="flex flex-col gap-0.5 py-1">
+              <p className="text-sm font-medium text-foreground">{displayName}</p>
+              <p className="font-mono text-xs text-muted-foreground">
+                {rollNumber || "No roll number"}
+              </p>
+            </div>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => onOpenModal("profile")}>
           <CircleUserRound className="mr-2 size-4" aria-hidden="true" />
