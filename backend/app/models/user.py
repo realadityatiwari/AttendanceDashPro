@@ -18,6 +18,7 @@ class User(Base):
     firebase_uid: Mapped[str] = mapped_column(String, unique=True, index=True)
     roll_number: Mapped[str] = mapped_column(String, unique=True, index=True)
     name: Mapped[str] = mapped_column(String)
+    hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
     
     section_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("sections.id"), nullable=True)
     

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
     # Database
-    DATABASE_URI: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/attendancedash"
+    DATABASE_URI: str = "postgresql+asyncpg://postgres:postgres@localhost:55432/attendancedash"
     
     # Timezone Strategy
     # As per ADR/Migration notes, the institutional timezone is Asia/Kolkata

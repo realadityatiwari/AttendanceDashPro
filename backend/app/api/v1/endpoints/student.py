@@ -34,9 +34,12 @@ async def sync_student_profile(
             detail="User not found in PostgreSQL database. Account was not part of the Phase 5 migration cohort."
         )
 
-    # Update mutable profile fields only — firebase_uid is immutable.
-    user.name = request.display_name
-    user.roll_number = request.roll_number
+    # Update mutable profile fields ONLY if they are not already set.
+    # PostgreSQL remains the authoritative source for identity.
+    if not user.name:
+        user.name = request.display_name
+    if not user.roll_number:
+        user.roll_number = request.roll_number
     
     await db.commit()
     await db.refresh(user)
