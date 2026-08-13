@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from datetime import date
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
+from app.models.academic import StudentEnrollment, Semester
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityResult
 from app.repositories.subject_repo import SubjectRepository
@@ -23,10 +26,26 @@ async def get_quiz_eligibility(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
         
+    # Scope to the authenticated student's enrollments
+    enrollment = await db.execute(select(StudentEnrollment).filter_by(
+        user_id=current_user.id, subject_id=subject.id
+    ))
+    if not enrollment.scalars().first():
+        raise HTTPException(status_code=404, detail="Subject not found")
+        
+    # Resolve the attendance-window start from the active semester (section -> semester).
+    # Falls back to today when the section has no semester assignment.
+    semester_start = date.today()
+    if current_user.section_id:
+        semester = await db.get(Semester, current_user.section.semester_id)
+        if semester:
+            semester_start = semester.start_date
+        
     service = EligibilityService(db)
     result = await service.get_quiz_eligibility(
         user_id=current_user.id,
         subject_id=subject.id,
-        quiz_cycle=quiz_cycle
+        quiz_cycle=quiz_cycle,
+        semester_start=semester_start,
     )
     return result

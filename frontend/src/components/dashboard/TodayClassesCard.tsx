@@ -91,7 +91,7 @@ export function TodayClassesCard() {
           <div className="p-8 text-center">
             <h3 className="text-base font-medium text-foreground mb-1">No Classes Today</h3>
             <p className="text-sm text-muted-foreground">
-              {calendarDay?.events?.find(e => e.is_holiday)?.title || "It's a non-working day"}
+              {calendarDay?.events?.find(e => e.event_type.endsWith("HOLIDAY"))?.event_type || "It's a non-working day"}
             </p>
           </div>
         ) : todaysClasses.length === 0 ? (

@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional, Dict, Any
 from app.schemas.academic import Subject, QuizCycle
 from app.schemas.attendance import EligibilityResult, OptimizationResult
-from app.engines.attendance_engine import optimize_attendance
+from app.engines.attendance_engine import optimize_attendance, meets_attendance_target
 from app.engines.calendar_engine import get_attendance_window
 
 def determine_quiz_threshold(quiz_cycle: int) -> float:
@@ -64,11 +64,14 @@ def evaluate_quiz_eligibility(
         target_pct
     )
     
-    # For eligibility at exactly the boundary (no pending classes left), 
-    # if deficit > 0, they are not eligible.
-    is_eligible = opt_result.lecture_deficit == 0 and opt_result.tutorial_deficit == 0
+    # For eligibility at exactly the boundary (no pending classes left),
+    # the current attendance percentage must itself satisfy the target.
     if l_data['pending'] > 0 or t_data['pending'] > 0:
         is_eligible = opt_result.is_reachable
+    else:
+        lec_pct = (l_data['att'] / l_data['tot'] * 100.0) if l_data['tot'] > 0 else 0.0
+        tut_pct = (t_data['att'] / t_data['tot'] * 100.0) if t_data['tot'] > 0 else None
+        is_eligible = meets_attendance_target(lec_pct, tut_pct, target_pct)
     
     return EligibilityResult(
         quiz_cycle=quiz_cycle,

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.services.calendar_service import CalendarService
-from app.schemas.calendar import AcademicDayResponse
+from app.schemas.calendar import AcademicDayResponse, AcademicEventResponse
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ async def get_today_calendar(
         is_teaching_day=day.is_teaching_day,
         original_day_of_week=day.original_day_of_week,
         substitution_schedule_override=day.substitution_schedule_override,
-        events=[] # The engine returns dictionaries in this setup, let's map it below.
+        events=[AcademicEventResponse.model_validate(e) for e in day.events]
     )
 
 @router.get("/{target_date}", response_model=AcademicDayResponse)
@@ -46,5 +46,5 @@ async def get_calendar_by_date(
         is_teaching_day=day.is_teaching_day,
         original_day_of_week=day.original_day_of_week,
         substitution_schedule_override=day.substitution_schedule_override,
-        events=[]
+        events=[AcademicEventResponse.model_validate(e) for e in day.events]
     )

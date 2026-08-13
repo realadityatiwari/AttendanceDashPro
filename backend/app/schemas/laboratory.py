@@ -8,14 +8,14 @@ class LaboratoryExperimentResponse(BaseModel):
     id: UUID
     subject_id: UUID
     experiment_number: int
-    title: str
+    title: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 class LaboratoryRecordResponse(BaseModel):
     id: UUID
-    student_id: UUID
+    user_id: UUID
     experiment_id: UUID
     signature_status: SignatureStatus
     date_conducted: Optional[date] = None

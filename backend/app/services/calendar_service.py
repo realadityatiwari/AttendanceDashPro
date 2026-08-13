@@ -10,9 +10,7 @@ class CalendarService:
         self.repo = CalendarRepository(db)
         
     async def get_day_schedule(self, target_date: date) -> AcademicDay:
-        events_models = await self.repo.get_all_events()
-        # Mocking to dict for engine compatibility
-        events = [{"date": e.start_date, "type": e.event_type.value} for e in events_models]
+        events = await self.repo.get_all_events()
         default_weekends = [5, 6] # Saturday, Sunday
         
         return get_academic_day(target_date, events, default_weekends)

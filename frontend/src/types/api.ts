@@ -109,20 +109,32 @@ export interface EligibilityResult {
 }
 
 export enum EventType {
-  HOLIDAY = "HOLIDAY",
-  EXTRA_CLASS = "EXTRA_CLASS",
-  EXAM = "EXAM",
-  OTHER = "OTHER"
+  EXTRA_LECTURE = "EXTRA_LECTURE",
+  EXTRA_TUTORIAL = "EXTRA_TUTORIAL",
+  EXTRA_PRACTICAL = "EXTRA_PRACTICAL",
+  CLASS_CANCELLED = "CLASS_CANCELLED",
+  SURPRISE_QUIZ = "SURPRISE_QUIZ",
+  QUIZ_DAY = "QUIZ_DAY",
+  PUBLIC_HOLIDAY = "PUBLIC_HOLIDAY",
+  INSTITUTE_HOLIDAY = "INSTITUTE_HOLIDAY",
+  WORKING_DAY_OVERRIDE = "WORKING_DAY_OVERRIDE",
+  WORKING_SATURDAY = "WORKING_SATURDAY",
+  EMERGENCY_CLOSURE = "EMERGENCY_CLOSURE",
+  FESTIVAL_HOLIDAY = "FESTIVAL_HOLIDAY",
+  SEMESTER_BREAK = "SEMESTER_BREAK",
+  MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK"
 }
 
 export interface AcademicEventResponse {
   id: string;
-  title: string;
-  description: string | null;
   event_type: EventType;
   start_date: string;
   end_date: string;
-  is_holiday: boolean;
+  subject_id: string | null;
+  class_type: ClassType | null;
+  is_working_day: boolean | null;
+  substitution_schedule_override: string | null;
+  active: boolean;
 }
 
 export interface AcademicDayResponse {
@@ -137,9 +149,8 @@ export interface AcademicDayResponse {
 
 // Laboratory
 export enum SignatureStatus {
-  NONE = "NONE",
-  DONE = "DONE",
-  PENDING_REWORK = "PENDING_REWORK"
+  PENDING = "pending",
+  SIGNED = "signed"
 }
 
 export interface LaboratoryExperimentResponse {
@@ -151,7 +162,7 @@ export interface LaboratoryExperimentResponse {
 
 export interface LaboratoryRecordResponse {
   id: string;
-  student_id: string;
+  user_id: string;
   experiment_id: string;
   signature_status: SignatureStatus;
   date_conducted: string | null;

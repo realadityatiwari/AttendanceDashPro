@@ -37,6 +37,21 @@ class AttendanceRepository:
         result = await self.db.execute(stmt)
         return list(result.all())
 
+    async def get_subject_counts_between(self, user_id: UUID, subject_id: UUID, start_date: date, end_date: date) -> List[Tuple[str, AttendanceStatus]]:
+        # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
+        # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
+        # attendance from the previous quiz boundary through the day before the quiz).
+        stmt = select(ClassSession.class_type, AttendanceRecord.status)\
+            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id))\
+            .filter(
+                ClassSession.subject_id == subject_id,
+                ClassSession.date >= start_date,
+                ClassSession.date <= end_date
+            )
+            
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
     async def get_history(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
         from app.models.academic import Subject
         

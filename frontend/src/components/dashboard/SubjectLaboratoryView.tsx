@@ -48,25 +48,25 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
       <div className="bg-surface2/50 px-4 py-3 border-b border-border/50 flex justify-between items-center">
         <h3 className="font-bold text-foreground text-base">{subjectCode} Experiments</h3>
         <Badge variant="outline" className="bg-surface border-border">
-          {recList.filter(r => r.signature_status === SignatureStatus.DONE).length} / {expList.length} Completed
+          {recList.filter(r => r.signature_status === SignatureStatus.SIGNED).length} / {expList.length} Completed
         </Badge>
       </div>
       <div className="divide-y divide-border/50">
         {expList.map((exp) => {
           const record = recList.find(r => r.experiment_id === exp.id);
-          const status = record?.signature_status || SignatureStatus.NONE;
+          const status = record?.signature_status ?? null;
           
           let statusIcon = <Circle className="h-5 w-5 text-muted-foreground/50" />;
           let statusText = "Not Started";
           let statusColor = "text-muted-foreground";
 
-          if (status === SignatureStatus.DONE) {
+          if (status === SignatureStatus.SIGNED) {
             statusIcon = <CheckCircle2 className="h-5 w-5 text-emerald-400" />;
             statusText = "Signed";
             statusColor = "text-emerald-400";
-          } else if (status === SignatureStatus.PENDING_REWORK) {
+          } else if (status === SignatureStatus.PENDING) {
             statusIcon = <Clock className="h-5 w-5 text-amber-400" />;
-            statusText = "Rework";
+            statusText = "Pending";
             statusColor = "text-amber-400";
           }
 

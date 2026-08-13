@@ -1,6 +1,7 @@
 "use client";
 
 import { useEvents } from "@/hooks/useApi";
+import { ClassType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -61,29 +62,41 @@ export default function EventsPage() {
               ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(new Date(event.end_date))
               : null;
 
+            const humanizedType = event.event_type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            const isHoliday = event.event_type.endsWith("HOLIDAY");
+            const classTypeLabel = event.class_type === ClassType.LECTURE ? "Lecture" : event.class_type === ClassType.TUTORIAL ? "Tutorial" : event.class_type ? "Practical" : null;
+
             return (
               <GlassCard key={event.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 border-l-accent">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-foreground text-lg">{event.title}</h3>
-                    {event.is_holiday && (
+                    <h3 className="font-bold text-foreground text-lg">{humanizedType}</h3>
+                    {isHoliday && (
                       <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25">
                         Holiday
                       </Badge>
                     )}
+                    {event.substitution_schedule_override && (
+                      <Badge variant="outline" className="uppercase text-[10px] tracking-wider border-border/60">
+                        Follows {event.substitution_schedule_override.toLowerCase()} schedule
+                      </Badge>
+                    )}
                   </div>
-                  {event.description && (
-                    <p className="text-sm text-muted-foreground mb-2">{event.description}</p>
-                  )}
                   <div className="text-sm font-medium text-accent flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
                     {startDate} {endDate ? `- ${endDate}` : ""}
                   </div>
                 </div>
                 <div className="sm:text-right">
-                  <Badge variant="outline" className="uppercase text-[10px] tracking-wider border-border/60">
-                    {event.event_type.replace("_", " ")}
-                  </Badge>
+                  {classTypeLabel ? (
+                    <Badge variant="outline" className="uppercase text-[10px] tracking-wider border-border/60">
+                      {classTypeLabel}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {event.active ? "Active" : "Inactive"}
+                    </span>
+                  )}
                 </div>
               </GlassCard>
             );

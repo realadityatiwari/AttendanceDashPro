@@ -11,7 +11,7 @@ class QuizRepository:
         
     async def get_quiz_cycle_with_policy(self, cycle_number: int) -> Optional[QuizCycle]:
         stmt = select(QuizCycle).options(
-            selectinload(QuizCycle.eligibility_policy)
+            selectinload(QuizCycle.policy)
         ).filter(QuizCycle.cycle_number == cycle_number)
         result = await self.db.execute(stmt)
         return result.scalars().first()
