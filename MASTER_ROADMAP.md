@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 5 complete (Attendance History ✅) → **Phase 6 (Calendar & Academic Events) is next**.
+> **Current position:** Phase 6.3 complete (Calendar UI ✅) → **Phase 6.4 (Events page upgrade) is next**.
 
 ---
 
@@ -47,7 +47,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 4 | Track Attendance | 🟢 Complete / Frozen |
 | 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
 | 5 | Attendance History | 🟢 Complete / Frozen |
-| **6** | **Calendar & Academic Events** | 🟡 **IN PROGRESS** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI NEXT |
+| **6** | **Calendar & Academic Events** | 🟡 **IN PROGRESS** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade NEXT |
 | 7 | Quiz Eligibility & Schedule UX | ⚪ Planned |
 | 8 | Attendance Analytics / Intelligence | ⚪ Planned |
 | 9 | Laboratory System | ⚪ Planned |
@@ -331,7 +331,7 @@ the `GET /attendance/history` endpoint being the single session-history source.
 
 # 🟡 Phase 6 — Calendar & Academic Events
 
-**Status: IN PROGRESS** — 6.0 audit (docs/phase_6_0_calendar_events_audit.md) ✅ · 6.1 foundational corrections ✅ (weekend convention, MID_SEMESTER_BREAK closure, /events read contract, dashboard enrollment scoping) · 6.2 calendar read model & API ✅ (`GET /api/v1/calendar?year=&month=`) · next: 6.3 calendar UI.
+**Status: IN PROGRESS** — 6.0 audit (docs/phase_6_0_calendar_events_audit.md) ✅ · 6.1 foundational corrections ✅ (weekend convention, MID_SEMESTER_BREAK closure, /events read contract, dashboard enrollment scoping) · 6.2 calendar read model & API ✅ (`GET /api/v1/calendar?year=&month=`) · 6.3 calendar UI ✅ (`/calendar` route rendering the read model directly) · next: 6.4 events page upgrade.
 
 Build the complete calendar/event experience.
 
@@ -1186,7 +1186,7 @@ PHASE 4  ████████████████████  COMPLETE 
 PHASE 4.5 ████████████████████  COMPLETE 🔒 (audit · Track · Sign Up)
 PHASE 5  ████████████████████  COMPLETE 🔒 (Attendance History)
 
-PHASE 6  ██░░░░░░░░░░░░░░░░░░  CURRENT 🟡
+PHASE 6  ███████████░░░░░░░░░  CURRENT 🟡
 PHASE 6  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 7  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 ...
@@ -1194,15 +1194,14 @@ PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
 ```## Immediate Next Action
 
-**Phase 6.3 — Calendar UI**
+**Phase 6.4 — Events page upgrade**
 
-Phase 6.2 is complete: `GET /api/v1/calendar?year=YYYY&month=M` returns a
-semester-bounded, calendar-engine-resolved, enrollment-scoped month read model
-(`CalendarMonthResponse` → per-day working status, `non_working_reason`, active
-`events[]`, `session_count`) that the UI must render directly without recomputing
-weekends, closures, semester bounds, or session counts.
+Phase 6.3 is complete: the `/calendar` route is the production Calendar UI
+(calendar grid, month navigation, selected-day detail) rendering the Phase 6.2
+`CalendarMonthResponse` read model directly — working/non-working state,
+`non_working_reason`, active `events[]`, and `session_count` are all displayed
+exactly as the backend provides them, with no frontend calendar calculations.
 
-Next: the calendar route + month/day navigation, Today shortcut, selected date,
-working/non-working indicators, and event cards consuming that read model. Then the
-Events page upgrade (6.4) and controlled admin-owned event mutation feeding the
-existing engines (6.5/6.6) instead of parallel rules.
+Next: the Events page upgrade (6.4) — Upcoming/Today/Past grouping, filters,
+event details, keeping the read-only contract. Then controlled admin-owned event
+mutation feeding the existing engines (6.5/6.6) instead of parallel rules.

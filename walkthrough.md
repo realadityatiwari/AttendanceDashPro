@@ -330,3 +330,51 @@ Date: 2026-08-14 · Scope: Calendar Read Model & API (backend only, no UI)
 - Phase 6.3 — Calendar UI (route, month/day navigation, working/non-working indicators, event cards) rendering the 6.2 read model directly.
 - Phase 6.4 — Events page upgrade · 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
 - Standing deferrals unchanged (event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration).
+
+---
+
+# AttendanceDash Pro — Phase 6.3 Walkthrough
+
+Date: 2026-08-14 · Scope: Calendar UI (frontend only)
+
+> **PHASE 6.3 COMPLETE** — the authenticated `/calendar` route is the production
+> Calendar UI. It renders the frozen Phase 6.2 `CalendarMonthResponse` read model
+> directly: month grid with working/non-working state, academic-event indicators,
+> session counts, month navigation (Previous/Next/Today), a selected-day detail
+> card, and truthful loading/error/empty states. Zero calendar semantics computed
+> in React; zero backend changes; no event CRUD; no database mutations.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| `git diff` — no backend files changed (Phase 6.2 contract files untouched) | **VERIFIED** |
+| No migrations/schema changes; no attendance/eligibility engine changes | **VERIFIED** |
+| No event CRUD, no admin, no seeding; `academic_events` untouched | **VERIFIED** |
+| Route lives under the existing `(authenticated)` AppShell group — no new shell | **VERIFIED** |
+| `useCalendarMonth(year, month)` — one SWR request per month, stable cache key | **VERIFIED** |
+| No frontend weekday/holiday/session-count calculations (reviewed grid + detail code) | **VERIFIED** |
+| Month arithmetic is local-time safe; Jan↔Dec rollover handled (reviewed) | **VERIFIED** |
+| Navigation disabled beyond backend `semester_start`/`semester_end` when known (reviewed) | **VERIFIED** |
+| Placeholder cells vs backend `CalendarDayItem`s are distinct (reviewed) | **VERIFIED** |
+| Day cells are native buttons with `aria-label`/`aria-pressed`; focus rings present (reviewed) | **VERIFIED** |
+| No browser testing performed (deferred to user) | **AS DESIGNED** |
+
+## What Phase 6.3 Delivered
+
+1. **Route**: `/calendar` inside the existing authenticated AppShell layout — same header/nav/auth, no duplication.
+2. **API hook + types**: `useCalendarMonth(year, month)` (SWR, per-month cache key, `mutate` for retry) and `CalendarMonthResponse`/`CalendarDayItem` types added next to the existing API surface.
+3. **Calendar grid**: Sunday-first monthly grid on the real local month. Backend day items are placed in their date cells; every cell outside the API's effective range is an empty layout placeholder. Working days show date + session count; non-working days are muted with `non_working_reason`; event days show an accent dot/count; selected day uses the accent ring; today is subtly ringed.
+4. **Month navigation**: Previous/Next/Today, month-based, local-time arithmetic (no UTC shifts; January ↔ December correct). When the backend supplies semester bounds, navigating to a month that cannot contain a single academic day is disabled. Today goes to the current local month; out-of-semester months show the truthful empty state.
+5. **Selected-day behavior**: on a fresh month load, today is selected when the API returned it, otherwise the first effective day, otherwise nothing. Manual selections persist while the month is unchanged and can never leak across a month switch (selection is keyed by month).
+6. **Detail card**: full date, working/non-working badge, `non_working_reason`, `is_teaching_day`, `substitution_schedule_override`, scheduled-class count ("3 classes" / "No classes"), and the day's active events (type, holiday/class-type badges, date range) with a link to the existing read-only Events page.
+7. **States**: skeleton on first load; retained (dimmed) grid with a loading hint during month switches; a calendar-specific error card with "Try again" (retry = `mutate`); a truthful "No academic days in this period" empty state for `days.length === 0`.
+8. **Accessibility**: day cells are semantic buttons with descriptive `aria-label` and `aria-pressed`; focus-visible rings from the design system. No div-as-button patterns and no button-as-link composition, so the Base UI `nativeButton={false}` warning cannot reappear.
+9. **Navigation**: a single `Calendar` primary item added to `TopNav` (between History and Events). Nothing replaced or redesigned; `/tools/events` remains untouched for Phase 6.4.
+
+## Remaining Work
+
+- Phase 6.4 — Events page upgrade (Upcoming/Today/Past grouping, filters, details; keep read-only).
+- Phase 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
+- Standing deferrals unchanged (event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration).

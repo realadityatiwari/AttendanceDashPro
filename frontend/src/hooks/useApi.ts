@@ -10,6 +10,7 @@ import {
   AttendanceHistoryResponse,
   AttendanceHistoryParams,
   AcademicEventResponse,
+  CalendarMonthResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
   DashboardSummaryResponse,
@@ -126,6 +127,24 @@ export function useEvents() {
   const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>('/api/v1/events', fetcher, STANDARD_CACHE);
   return {
     events: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useCalendarMonth(year: number, month: number) {
+  // Stable SWR key per requested month — changing month naturally fetches and
+  // caches the correct backend read model, one logical request per month.
+  // keepPreviousData retains the last loaded month while the next one fetches,
+  // so the grid never blanks during navigation.
+  const { data, error, isLoading, mutate } = useSWR<CalendarMonthResponse>(
+    `/api/v1/calendar?year=${year}&month=${month}`,
+    fetcher,
+    { ...STANDARD_CACHE, keepPreviousData: true }
+  );
+  return {
+    calendarMonth: data,
     isLoading,
     isError: error,
     mutate

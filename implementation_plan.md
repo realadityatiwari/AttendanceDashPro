@@ -279,3 +279,63 @@ Status: **COMPLETE** (2026-08-14). Backend-only month-bounded calendar read mode
 ### Not changed / deferred
 
 - Engines, Track/History/Dashboard math, auth, migrations, schema unchanged. Deferred: calendar UI (6.3), events page upgrade (6.4), persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7), plus the standing 6.1 deferrals.
+
+---
+
+## PHASE 6.3 — CALENDAR UI
+
+Status: **COMPLETE** (2026-08-14). Production `/calendar` route rendering the frozen Phase 6.2 read model. Frontend-only; no backend changes; no event CRUD; no admin; no seeding; no event→session integration.
+
+### Route
+
+- `frontend/src/app/(authenticated)/calendar/page.tsx` — authenticated route under the existing AppShell route group (no new shell, no duplicated auth).
+
+### API integration
+
+- `useCalendarMonth(year, month)` in `frontend/src/hooks/useApi.ts` — SWR hook with a stable per-month cache key (`/api/v1/calendar?year=&month=`), standard cache semantics, `mutate` exposed for retry. One logical request per month; no per-day requests.
+- Types `CalendarMonthResponse` / `CalendarDayItem` (extends the existing `AcademicDayResponse`) added to `frontend/src/types/api.ts`.
+
+### Calendar grid architecture
+
+- `frontend/src/components/calendar/CalendarGrid.tsx` — presentation-only monthly grid. Backend `CalendarDayItem`s are placed on the real local calendar month (Sunday-first alignment matching the backend `getDay()` convention); cells outside the API's effective range are empty layout placeholders, never academic days. Grid renders only `is_working_day`, `non_working_reason`, `events`, `session_count` — zero calendar semantics computed client-side.
+- `frontend/src/components/calendar/DayDetail.tsx` — selected-day detail card: full date, working/non-working badge, `non_working_reason`, `is_teaching_day`, `substitution_schedule_override`, session count, and the day's `events[]` (type, holiday badge, class-type badge, date range). Links to the existing read-only Events page.
+
+### Month navigation
+
+- Previous/Next month + Today, all month-based and timezone-safe (local `Date` arithmetic with explicit year/month state; `January ↔ December` rollover handled). Navigation beyond the backend-provided `semester_start`/`semester_end` is disabled when bounds are known; no hardcoded dates. Today → current local month; months outside the semester truthfully render the empty state using backend bounds.
+- During a month switch the last successfully loaded month stays visible (dimmed, `Loading …` hint) until the new read model arrives — the page never blanks.
+
+### Selected-day behavior
+
+- Fresh month → select today when the backend returned it, else the first effective day, else nothing. Manual selection is never overridden while the month is unchanged (selection is tracked per month key so stale grids cannot leak selections forward).
+
+### Loading / error / empty states
+
+- First load → skeleton grid + skeleton detail card. Month switch → retained grid with loading hint. API failure → calendar-specific error card with a working retry action (`mutate`). `days.length === 0` → truthful "No academic days in this period" empty state (never treated as an API failure, never faked).
+
+### Accessibility
+
+- Day cells are native buttons (`Button` primitive, not divs) with descriptive `aria-label` and `aria-pressed`; focus-visible rings from the design system. No Base UI button-as-link composition, so no `nativeButton={false}` needed. No new date helpers — existing `lib/date.ts` utilities reused (`getLocalDateString`, `parseLocalDate`, `formatLongDate`).
+
+### Navigation
+
+- `Calendar` added to `TopNav` as a single primary item (`CalendarRange`, `/calendar`, between History and Events). Nothing replaced or redesigned; `/tools/events` untouched (belongs to Phase 6.4).
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `frontend/src/app/(authenticated)/calendar/page.tsx` | New authenticated `/calendar` route: nav controls, month state, selection logic, loading/error/empty states |
+| `frontend/src/components/calendar/CalendarGrid.tsx` | New presentation-only monthly grid |
+| `frontend/src/components/calendar/DayDetail.tsx` | New selected-day detail card |
+| `frontend/src/hooks/useApi.ts` | `useCalendarMonth(year, month)` SWR hook |
+| `frontend/src/types/api.ts` | `CalendarMonthResponse`, `CalendarDayItem` types |
+| `frontend/src/components/layout/TopNav.tsx` | Minimal `Calendar` nav item |
+
+### Verification
+
+- `npx tsc --noEmit` — PASS (0 errors). No backend files touched (`git diff` backend: none). No migrations/schema changes; no attendance/eligibility engine changes; no event CRUD; no fake events seeded. Browser testing deferred to the user.
+
+### Not changed / deferred
+
+- Backend (Phase 6.2 contract frozen), Track, History, auth, migrations, schema, attendance/eligibility engines, `/tools/events` page. Deferred: events page upgrade (6.4), persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7).

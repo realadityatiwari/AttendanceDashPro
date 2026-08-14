@@ -207,6 +207,24 @@ export interface AcademicDayResponse {
   events: AcademicEventResponse[];
 }
 
+// Calendar month read model (Phase 6.2 / Phase 6.3). The backend is the sole
+// authority for working/non-working state, semester bounds, events, and
+// session counts — the UI renders these fields and never recomputes them.
+export interface CalendarDayItem extends AcademicDayResponse {
+  non_working_reason: string | null;
+  session_count: number;
+}
+
+export interface CalendarMonthResponse {
+  year: number;
+  month: number;
+  semester_start: string | null;
+  semester_end: string | null;
+  effective_start: string | null;
+  effective_end: string | null;
+  days: CalendarDayItem[];
+}
+
 // Laboratory
 export enum SignatureStatus {
   PENDING = "pending",

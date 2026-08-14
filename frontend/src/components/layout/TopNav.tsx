@@ -10,6 +10,7 @@ import {
   BookOpen,
   History,
   CalendarDays,
+  CalendarRange,
   Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { label: "Quiz Eligibility", href: "/tools/quiz-schedule", icon: CalendarClock },
   { label: "Attendance", href: "/subjects", icon: BookOpen },
   { label: "History", href: "/history", icon: History },
+  { label: "Calendar", href: "/calendar", icon: CalendarRange },
   { label: "Events", href: "/tools/events", icon: CalendarDays },
 ];
 

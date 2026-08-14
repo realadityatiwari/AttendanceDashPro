@@ -340,3 +340,71 @@ Status: **COMPLETE** (2026-08-14). Backend-only calendar read model for the futu
 ## Deferred (intentionally NOT done here)
 
 - Calendar UI/route, month navigation, date selection, event forms, Upcoming/Today/Past redesign, admin interface — Phase 6.3+. Also deferred: event CRUD, admin roles, validation registry, seeding, event→class_sessions integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.
+
+---
+
+## PHASE 6.3 — CALENDAR UI
+
+Status: **COMPLETE** (2026-08-14). Production Calendar UI at `/calendar`, rendering the frozen Phase 6.2 read model directly. Frontend-only; no backend changes; no event CRUD, admin roles, seeding, or event→session integration.
+
+## Route & shell
+
+- `frontend/src/app/(authenticated)/calendar/page.tsx` — authenticated route inside the existing AppShell route group (no second shell, no duplicated auth).
+- `TopNav` gains a single `Calendar` item (`CalendarRange`, `/calendar`, between History and Events). Nothing replaced/redesigned; `/tools/events` untouched (Phase 6.4 owns it).
+
+## API integration
+
+- `useCalendarMonth(year, month)` in `frontend/src/hooks/useApi.ts` — SWR hook with stable per-month cache key `GET /api/v1/calendar?year=&month=`; standard cache settings; exposes `mutate` for the retry action. One logical request per month (no per-day requests).
+- Types in `frontend/src/types/api.ts`: `CalendarMonthResponse` (year, month, semester_start/end, effective_start/end, days) and `CalendarDayItem` (extends existing `AcademicDayResponse`, adds `non_working_reason`, `session_count`).
+
+## Calendar grid
+
+- `frontend/src/components/calendar/CalendarGrid.tsx` — presentation-only grid. Backend day items are placed on the real local month (Sunday-first alignment matching the backend `getDay()` convention). Cells outside the API's effective range are empty layout placeholders, clearly not academic days.
+- Day cells are native buttons: date number, session count when > 0 (working days), event dot/count, non-working reason text; selected state uses the accent ring; today uses a restrained primary ring.
+- Zero calendar semantics computed client-side — the UI renders `is_working_day`, `non_working_reason`, `events`, `session_count` exactly as returned. No weekday checks, no holiday inference, no `MID_SEMESTER_BREAK` special-casing, no session counting.
+
+## Month navigation
+
+- Previous/Next/Today, all month-based and timezone-safe (explicit local year/month state; Jan ↔ Dec rollover correct). Navigation beyond backend `semester_start`/`semester_end` is disabled when bounds are known — no hardcoded dates.
+- Today navigates to the current local month. Months outside the semester render the truthful empty state using the backend-provided bounds.
+- While a month fetches, the last successful month stays visible (dimmed, `Loading <month>` hint) instead of blanking the page.
+
+## Selected-day behavior
+
+- Fresh month: select today if the backend returned it, else the first effective day, else nothing. Manual selections are tracked per month key and never overridden while the month is unchanged.
+
+## Loading / error / empty states
+
+- First load: skeleton grid + skeleton detail. Month switch: retained grid + hint. API failure: calendar-specific error card with retry (`mutate`). `days.length === 0`: truthful "No academic days in this period" empty state (not an API failure, no fake days).
+
+## Accessibility
+
+- Day cells are real buttons with descriptive `aria-label` and `aria-pressed`; focus-visible rings provided by the design system. No button-as-link composition, so no `nativeButton={false}` requirement arises. Reuses existing `lib/date.ts` helpers (`getLocalDateString`, `parseLocalDate`, `formatLongDate`).
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `frontend/src/app/(authenticated)/calendar/page.tsx` | New `/calendar` route (nav controls, month state, selection, states) |
+| `frontend/src/components/calendar/CalendarGrid.tsx` | New presentation-only monthly grid |
+| `frontend/src/components/calendar/DayDetail.tsx` | New selected-day detail card |
+| `frontend/src/hooks/useApi.ts` | `useCalendarMonth(year, month)` |
+| `frontend/src/types/api.ts` | `CalendarMonthResponse`, `CalendarDayItem` |
+| `frontend/src/components/layout/TopNav.tsx` | Minimal `Calendar` nav item |
+
+## Verification (static only; no browser testing)
+
+- `npx tsc --noEmit` — PASS (0 errors).
+- `git diff` — backend: no changes (Phase 6.2 contract files untouched); no migrations/schema changes; no attendance/eligibility engine changes; no event CRUD; no fake database events.
+
+## Database mutation status
+
+- **ZERO INSERT/UPDATE/DELETE persisted.** No seeding, no test data, no schema changes.
+
+## Do Not Touch Again (from this phase)
+
+- The `/calendar` route + grid + detail + `useCalendarMonth` hook are the Phase 6.3 UI surface; the Phase 6.2 backend contract remains frozen. `/tools/events` is untouched and owned by Phase 6.4.
+
+## Deferred (intentionally NOT done here)
+
+- Events page upgrade (Upcoming/Today/Past, filters, details) — Phase 6.4. Also deferred: event CRUD, admin roles, validation registry, seeding, event→class_sessions integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.
