@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { AcademicEventResponse, ClassType, EventType } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { parseLocalDate } from "@/lib/date";
-import { CalendarDays, CalendarRange, Info } from "lucide-react";
+import { CalendarDays, CalendarRange, Info, Pencil, Power } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const EVENT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", year: "numeric" });
@@ -32,14 +34,20 @@ const HOLIDAY_TYPES = new Set([EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOL
 interface EventRowProps {
   event: AcademicEventResponse;
   isToday?: boolean;
+  /** Admin controls (Phase 6.5) — rendered only when provided by the page. */
+  onEdit?: (event: AcademicEventResponse) => void;
+  onDeactivate?: (event: AcademicEventResponse) => void;
 }
 
 /**
  * Compact read-only event row. Every label is derived directly from the
  * backend AcademicEventResponse — no holiday/working-day/session semantics are
- * computed here.
+ * computed here. Admin actions are optional props; the page decides whether
+ * they are shown (backend role), and the backend remains authoritative.
  */
-export function EventRow({ event, isToday = false }: EventRowProps) {
+export function EventRow({ event, isToday = false, onEdit, onDeactivate }: EventRowProps) {
+  const [confirming, setConfirming] = useState(false);
+  const isAdmin = onEdit !== undefined || onDeactivate !== undefined;
   const title = humanizeEventType(event.event_type);
   const isHoliday = HOLIDAY_TYPES.has(event.event_type);
   const isExtra = event.event_type.startsWith("EXTRA_");
@@ -91,7 +99,55 @@ export function EventRow({ event, isToday = false }: EventRowProps) {
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center">
+      <div className="flex shrink-0 items-center gap-1.5">
+        {isAdmin && (
+          <>
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => onEdit(event)}
+              >
+                <Pencil className="size-3.5" aria-hidden />
+                Edit
+              </Button>
+            )}
+            {onDeactivate && event.active && (
+              confirming ? (
+                <>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => { setConfirming(false); onDeactivate(event); }}
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setConfirming(false)}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirming(true)}
+                  title="Deactivate this event (safe deactivation, reversible via edit)"
+                >
+                  <Power className="size-3.5" aria-hidden />
+                  Deactivate
+                </Button>
+              )
+            )}
+          </>
+        )}
         <Link
           href="/calendar"
           aria-label="Open the calendar"

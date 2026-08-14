@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
+from app.models.enums import UserRole
 from app.core.config import settings
 import uuid
 
@@ -48,4 +49,19 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         
     return user
+
+async def require_admin(current_user: User = Depends(get_current_user)):
+    """
+    Authorization boundary for admin-only mutations (Phase 6.5).
+
+    The role is resolved from the database for every request (never from the
+    token, request body, query parameters, or frontend state) so a role change
+    takes effect immediately and the backend remains authoritative.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+    return current_user
 

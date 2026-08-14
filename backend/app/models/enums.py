@@ -26,6 +26,10 @@ class EventType(str, Enum):
     SEMESTER_BREAK = "SEMESTER_BREAK"
     MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK"
 
+class UserRole(str, Enum):
+    STUDENT = "STUDENT"
+    ADMIN = "ADMIN"
+
 class SubjectCategory(str, Enum):
     THEORY = "theory"
     LAB = "lab"

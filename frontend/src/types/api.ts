@@ -1,6 +1,9 @@
 export interface StudentProfile {
   id: string;
   firebase_uid: string | null;
+  // Authorization role (Phase 6.5): "STUDENT" or "ADMIN". Backend is
+  // authoritative; this drives admin-control visibility only.
+  role: string;
   display_name: string;
   roll_number: string | null;
   section_name: string | null;
@@ -203,6 +206,20 @@ export interface EventsParams {
   date_from?: string;
   date_to?: string;
   upcoming?: boolean;
+}
+
+// Admin mutation payloads for POST/PATCH /api/v1/events (Phase 6.5).
+// Only fields the AcademicEvent model actually has. Server validation
+// (event validation registry) remains authoritative.
+export interface AcademicEventPayload {
+  event_type: EventType;
+  start_date: string;
+  end_date: string;
+  subject_id?: string | null;
+  class_type?: ClassType | null;
+  is_working_day?: boolean | null;
+  substitution_schedule_override?: string | null;
+  active?: boolean;
 }
 
 export interface AcademicDayResponse {

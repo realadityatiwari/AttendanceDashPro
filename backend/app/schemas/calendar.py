@@ -18,6 +18,31 @@ class AcademicEventResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class AcademicEventCreate(BaseModel):
+    """
+    Admin-only create payload (Phase 6.5). Structural shape only; business
+    rules live in the event validation registry (EventService).
+    """
+    event_type: EventType
+    start_date: date
+    end_date: date
+    subject_id: Optional[UUID] = None
+    class_type: Optional[ClassType] = None
+    is_working_day: Optional[bool] = None
+    substitution_schedule_override: Optional[str] = None
+    active: bool = True
+
+class AcademicEventUpdate(BaseModel):
+    """Admin-only partial update payload. Absent fields are left unchanged."""
+    event_type: Optional[EventType] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    subject_id: Optional[UUID] = None
+    class_type: Optional[ClassType] = None
+    is_working_day: Optional[bool] = None
+    substitution_schedule_override: Optional[str] = None
+    active: Optional[bool] = None
+
 class AcademicDayResponse(BaseModel):
     date: date
     is_working_day: bool

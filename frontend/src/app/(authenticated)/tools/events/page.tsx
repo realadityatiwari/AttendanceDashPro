@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useEvents } from "@/hooks/useApi";
+import { useEvents, useProfile, useCalendarMonth, useEventMutations } from "@/hooks/useApi";
 import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
@@ -12,30 +12,41 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventRow, humanizeEventType } from "@/components/events/EventRow";
+import { EventFormDialog } from "@/components/events/EventFormDialog";
 import { getLocalDateString } from "@/lib/date";
-import { AlertCircle, CalendarX2, RefreshCw } from "lucide-react";
+import { AlertCircle, CalendarX2, Plus, RefreshCw } from "lucide-react";
 
 type ActiveFilter = "active" | "inactive";
 
 const TYPE_OPTIONS = Object.values(EventType);
 
 /**
- * Read-only Academic Events presentation page (Phase 6.4).
+ * Academic Events page (Phase 6.4 read experience, frozen) + the smallest
+ * admin-only management surface (Phase 6.5).
  *
  * The backend /events endpoint is authoritative for event existence, dates,
- * types, holiday metadata, class-type metadata, and active state. The page
- * only: (1) passes server-side filters (active, date range) to that endpoint,
- * (2) applies the event-type filter to the already-returned set for
- * presentation, and (3) groups events by whether today falls inside their date
- * range. No academic calendar semantics are computed here.
+ * types, holiday metadata, class-type metadata, and active state. Admin
+ * controls render only when the backend-provided role says ADMIN (frontend
+ * visibility is UX only; the backend enforces authorization on every
+ * mutation).
  */
 export default function EventsPage() {
   const todayStr = getLocalDateString();
+  const { profile } = useProfile();
+  const isAdmin = profile?.role === "ADMIN";
 
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
   const [typeFilter, setTypeFilter] = useState<EventType | "">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<AcademicEventResponse | null>(null);
+
+  // Revalidate the current calendar month after an event mutation so the
+  // calendar reflects the change without a separate event cache.
+  const now = new Date();
+  const { mutate: mutateCalendar } = useCalendarMonth(now.getFullYear(), now.getMonth() + 1);
 
   // Guard against an inverted server-side range (which the API rejects with
   // 422) — show a hint instead of letting the request fail.
@@ -51,6 +62,35 @@ export default function EventsPage() {
   );
 
   const { events, isLoading, isError, mutate } = useEvents(params);
+  const { deactivateEvent } = useEventMutations();
+
+  const handleSaved = () => {
+    setFormOpen(false);
+    setEditingEvent(null);
+    mutate();
+    mutateCalendar();
+  };
+
+  const openCreate = () => {
+    setEditingEvent(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = (event: AcademicEventResponse) => {
+    setEditingEvent(event);
+    setFormOpen(true);
+  };
+
+  const handleDeactivate = async (event: AcademicEventResponse) => {
+    try {
+      await deactivateEvent(event.id);
+      mutate();
+      mutateCalendar();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to deactivate the event.";
+      window.alert(message);
+    }
+  };
 
   const hasFilters = activeFilter !== "active" || Boolean(typeFilter || dateFrom || dateTo);
 
@@ -103,9 +143,28 @@ export default function EventsPage() {
       <GlassCard className="border-amber-500/20 bg-amber-500/10 p-4">
         <p className="flex items-start gap-2 text-sm text-amber-400">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-          Event creation is restricted to administrators. This is a read-only view of scheduled events.
+          {isAdmin
+            ? "Admin view: you can add, edit, and deactivate academic events. Deactivation is safe — the event can be re-enabled later."
+            : "Event creation is restricted to administrators. This is a read-only view of scheduled events."}
         </p>
       </GlassCard>
+
+      {/* Admin-only management surface (Phase 6.5) — visible only when the
+          backend-provided role is ADMIN; the backend enforces authorization. */}
+      {isAdmin && (
+        <Card className="flex items-center justify-between gap-3 border-border p-4">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
+            <p className="text-xs text-muted-foreground">
+              Create subject-scoped or global events. Validation rules are enforced by the server.
+            </p>
+          </div>
+          <Button size="sm" onClick={openCreate} className="shrink-0">
+            <Plus className="size-3.5" aria-hidden />
+            Add Event
+          </Button>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card className="flex flex-col gap-3 border-border p-4">
@@ -224,6 +283,9 @@ export default function EventsPage() {
             count={groups.upcoming.length}
             events={groups.upcoming}
             emptyLabel="No upcoming events."
+            isAdmin={isAdmin}
+            onEdit={openEdit}
+            onDeactivate={handleDeactivate}
           />
           <EventSection
             id="events-today"
@@ -232,6 +294,9 @@ export default function EventsPage() {
             events={groups.today}
             emptyLabel="No events happening today."
             isTodaySection
+            isAdmin={isAdmin}
+            onEdit={openEdit}
+            onDeactivate={handleDeactivate}
           />
           <EventSection
             id="events-past"
@@ -239,9 +304,19 @@ export default function EventsPage() {
             count={groups.past.length}
             events={groups.past}
             emptyLabel="No past events."
+            isAdmin={isAdmin}
+            onEdit={openEdit}
+            onDeactivate={handleDeactivate}
           />
         </div>
       )}
+
+      <EventFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        event={editingEvent}
+        onSaved={handleSaved}
+      />
     </div>
   );
 }
@@ -253,6 +328,9 @@ function EventSection({
   events,
   emptyLabel,
   isTodaySection = false,
+  isAdmin,
+  onEdit,
+  onDeactivate,
 }: {
   id: string;
   title: string;
@@ -260,6 +338,9 @@ function EventSection({
   events: AcademicEventResponse[];
   emptyLabel: string;
   isTodaySection?: boolean;
+  isAdmin: boolean;
+  onEdit?: (event: AcademicEventResponse) => void;
+  onDeactivate?: (event: AcademicEventResponse) => void;
 }) {
   return (
     <section aria-labelledby={id}>
@@ -274,7 +355,13 @@ function EventSection({
       ) : (
         <div className="flex flex-col gap-3">
           {events.map(event => (
-            <EventRow key={event.id} event={event} isToday={isTodaySection} />
+            <EventRow
+              key={event.id}
+              event={event}
+              isToday={isTodaySection}
+              onEdit={isAdmin ? onEdit : undefined}
+              onDeactivate={isAdmin ? onDeactivate : undefined}
+            />
           ))}
         </div>
       )}

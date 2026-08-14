@@ -11,6 +11,7 @@ import {
   AttendanceHistoryParams,
   AcademicEventResponse,
   EventsParams,
+  AcademicEventPayload,
   CalendarMonthResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
@@ -143,6 +144,26 @@ export function useEvents(params: EventsParams = {}) {
     isError: error,
     mutate
   };
+}
+
+// Admin event mutations (Phase 6.5). Each call returns the created/updated/
+// deactivated AcademicEventResponse; the server enforces ADMIN (403 for
+// students). Callers revalidate the events + calendar SWR caches after a
+// successful mutation — there is no separate event cache.
+export function useEventMutations() {
+  const createEvent = async (payload: AcademicEventPayload): Promise<AcademicEventResponse> => {
+    return apiFetch('/api/v1/events', { method: 'POST', body: JSON.stringify(payload) });
+  };
+
+  const updateEvent = async (eventId: string, payload: Partial<AcademicEventPayload>): Promise<AcademicEventResponse> => {
+    return apiFetch(`/api/v1/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  };
+
+  const deactivateEvent = async (eventId: string): Promise<AcademicEventResponse> => {
+    return apiFetch(`/api/v1/events/${eventId}`, { method: 'DELETE' });
+  };
+
+  return { createEvent, updateEvent, deactivateEvent };
 }
 
 export function useCalendarMonth(year: number, month: number) {

@@ -384,3 +384,65 @@ Status: **COMPLETE** (2026-08-14). Production read-only Academic Events page at 
 ### Not changed / deferred
 
 - Backend contract (Phase 6.1 events + Phase 6.2 calendar frozen), Track, History, Dashboard, auth, migrations, schema, attendance/eligibility engines, `/calendar` route. Deferred: persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7).
+
+---
+
+## PHASE 6.5 — EVENT PERSISTENCE, ADMIN AUTHENTICATION & SEEDING
+
+Status: **COMPLETE** (2026-08-14). Admin role system, admin-only event mutation API, centralized validation registry, minimal admin event UI, controlled idempotent seeding. Backend is authoritative for authorization and validation; Phase 6.1/6.2 read contracts untouched.
+
+### Admin authorization
+
+- `UserRole` enum (`STUDENT`/`ADMIN`) in `backend/app/models/enums.py`; `users.role` column in `backend/app/models/user.py` (default `STUDENT`, `server_default` too); migration `backend/alembic/versions/d4e5f6a7b8c9_add_user_role.py` **applied** — existing 30 users backfilled to STUDENT, no data loss.
+- `require_admin` dependency in `backend/app/api/dependencies/deps.py` → 403 "Admin privileges required" for non-ADMIN tokens.
+- Role is resolved from the DB per request (authoritative); never trusted from JWT/localStorage/body/query/hardcoded identity. No self-assignment path — only `backend/scripts/provision_admin.py` grants ADMIN (run for 2401220100027).
+- Read contract extended: `role` in `StudentProfile` (`backend/app/schemas/student.py`) and returned by `/student/me` + `/student/sync` (`backend/app/api/v1/endpoints/student.py`).
+
+### Validation registry
+
+- `backend/app/services/event_registry.py`: `EVENT_TYPE_RULES` for all 14 `EventType`s — `requires_subject`, `requires_class_type`, `allowed_class_types`, `is_closure`, `is_global` — ported from the legacy `AcademicEventRegistry` (js/calendar-engine.js) + engine closure semantics (MID_SEMESTER_BREAK etc. are closures → always non-working). `validate_event()` raises `EventValidationError`; `VALID_SUBSTITUTION_DAYS` from engine `DAY_NAMES`.
+
+### Persistence & mutation API (admin-only)
+
+- `backend/app/repositories/event_repo.py`: `EventRepository` (`get_by_id`, `subject_exists`, `exists_active_duplicate`), `EventNotFound`, `EventConflict`.
+- `backend/app/services/event_service.py`: `create_event` / `update_event` (partial via `model_fields_set`, pydantic 2.13) / `deactivate_event` — one transaction per mutation.
+- Endpoints in `backend/app/api/v1/endpoints/events.py`: `POST /api/v1/events` (201), `PATCH /api/v1/events/{event_id}`, `DELETE /api/v1/events/{event_id}` — all `Depends(require_admin)`; error mapping 422 (validation) / 404 (missing event or subject) / 409 (identical ACTIVE duplicate on `(event_type, subject_id, class_type, start_date, end_date)`, ported from legacy js/events-controller.js).
+- Deletion = **safe deactivation** (`active=false`, legacy ADR 004 soft-delete); re-enable via PATCH `{"active": true}`. No hard deletes.
+- Schemas `AcademicEventCreate` / `AcademicEventUpdate` in `backend/app/schemas/calendar.py`. `GET /api/v1/events` read contract unchanged (still list-only; `GET /events/{id}` → 405 by design).
+
+### Admin UI (minimal, additive — Phase 6.4 surface preserved)
+
+- `frontend/src/components/events/eventRules.ts` (NEW): registry mirror (`EVENT_TYPE_RULES`, `SUBSTITUTION_DAYS`, `CLASS_TYPE_LABELS`, `getRule`) — presentation of field visibility only; the backend registry is authoritative.
+- `frontend/src/components/events/EventFormDialog.tsx` (NEW): create/edit dialog driven by the registry mirror; fields only for model attributes (no title/description); client start≤end + required-subject/class checks; handles loading and 422/403/404/409; success → `onSaved()`.
+- `frontend/src/components/events/EventRow.tsx`: optional `onEdit` / `onDeactivate` props — admin actions render only when the page passes them (Edit opens the dialog; Deactivate uses a two-step inline confirm).
+- `frontend/src/app/(authenticated)/tools/events/page.tsx`: `useProfile()` → `role === "ADMIN"` gates the Add Event toolbar, row actions, and dialog; after a mutation, `mutate()` (events) + revalidate the current calendar month via `useCalendarMonth`. Students see the unchanged Phase 6.4 read experience.
+- `frontend/src/hooks/useApi.ts`: `useEventMutations()` (createEvent/updateEvent/deactivateEvent via `apiFetch`); `frontend/src/types/api.ts`: `AcademicEventPayload`, `StudentProfile.role`.
+
+### Seeding (controlled, idempotent)
+
+- Audit finding: **no authoritative institutional dates** (holidays, breaks, working Saturdays) exist anywhere in the repo — documented data gap; nothing invented.
+- Authoritative source = `quiz_schedules` (17 SCHEDULED rows; BCS-054 Q3 UNRESOLVED) → `backend/scripts/seed_academic_events.py` seeds exactly **17 QUIZ_DAY events** (matching legacy `AcademicEventRegistry.QUIZ_DAY` → requiresSubject + requiresClassType). Idempotency key `(event_type, subject_id, start_date, end_date)`; verified 17 created then 17 skipped on rerun; deactivated rows never resurrected.
+- `backend/scripts/provision_admin.py` — role grant script.
+
+### Verification
+
+- `compileall` backend PASS; `alembic upgrade head` applied (head `d4e5f6a7b8c9`); seed run twice → 17/17 idempotent.
+- `backend/scripts/verify_phase_6_5.py` — **23/23 PASS**: security matrix (STUDENT 403 on POST/PATCH/DELETE, ADMIN ok, unauth 401), creation, duplicate 409, subject 404, PATCH partial/absent-vs-null, deactivation + re-enable, read-contract regression (student + calendar), seeding idempotency, cleanup of test rows.
+- Frontend: `npx tsc --noEmit` PASS, ESLint PASS on changed files, `npm run build` PASS. Browser testing deferred to the user (no E2E).
+
+### Files changed
+
+| Layer | Files |
+|---|---|
+| Backend | `models/enums.py` (UserRole), `models/user.py` (role), `alembic/versions/d4e5f6a7b8c9_add_user_role.py`, `api/dependencies/deps.py` (require_admin), `schemas/student.py` (role), `schemas/calendar.py` (Create/Update), `api/v1/endpoints/student.py` (role), `api/v1/endpoints/events.py` (POST/PATCH/DELETE), `services/event_registry.py` (NEW), `repositories/event_repo.py` (NEW), `services/event_service.py` (NEW) |
+| Scripts | `scripts/provision_admin.py` (NEW), `scripts/seed_academic_events.py` (NEW), `scripts/verify_phase_6_5.py` (NEW) |
+| Frontend | `types/api.ts` (AcademicEventPayload, role), `hooks/useApi.ts` (useEventMutations), `components/events/eventRules.ts` (NEW), `components/events/EventFormDialog.tsx` (NEW), `components/events/EventRow.tsx` (admin actions), `app/(authenticated)/tools/events/page.tsx` (admin mode) |
+
+### Database state after 6.5
+
+- 17 seeded QUIZ_DAY events (`academic_events`), 1 ADMIN user (2401220100027), 30 users all others STUDENT. **Not touched:** attendance_records, class_sessions (684 rows intact), student_enrollment, subjects, quiz_schedules, any user history. Test rows removed by the verifier.
+
+### Not changed / deferred
+
+- Frozen areas unchanged (attendance/eligibility engines, dashboard, Track, History, auth flow, Phase 1 design system, AppShell, TopNav, Phase 6.1 events + 6.2 calendar contracts, 6.3 calendar UI, 6.4 student experience, attendance schema, Firebase boundary).
+- Deferred: event→engine integration (6.6 — event→class_sessions, holiday→cancellation, extra/substitution lecture generation, quiz-window mutation), verification/freeze (6.7), the data gap (institutional holiday/break dates) pending authoritative input.
