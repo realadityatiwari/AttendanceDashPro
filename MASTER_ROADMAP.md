@@ -47,7 +47,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 4 | Track Attendance | 🟢 Complete / Frozen |
 | 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
 | 5 | Attendance History | 🟢 Complete / Frozen |
-| **6** | **Calendar & Academic Events** | 🟡 **NEXT** |
+| **6** | **Calendar & Academic Events** | 🟡 **IN PROGRESS** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model NEXT |
 | 7 | Quiz Eligibility & Schedule UX | ⚪ Planned |
 | 8 | Attendance Analytics / Intelligence | ⚪ Planned |
 | 9 | Laboratory System | ⚪ Planned |
@@ -330,6 +330,8 @@ the `GET /attendance/history` endpoint being the single session-history source.
 ---
 
 # 🟡 Phase 6 — Calendar & Academic Events
+
+**Status: IN PROGRESS** — 6.0 audit (docs/phase_6_0_calendar_events_audit.md) ✅ · 6.1 foundational corrections ✅ (weekend convention, MID_SEMESTER_BREAK closure, /events read contract, dashboard enrollment scoping) · next: 6.2 calendar read model/API.
 
 Build the complete calendar/event experience.
 
@@ -1190,17 +1192,18 @@ PHASE 7  ░░░░░░░░░░░░░░░░░░░░  PLANNED
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
-```
+```## Immediate Next Action
 
-## Immediate Next Action
+**Phase 6.2 — Calendar read model & API**
 
-**Phase 6: Calendar & Academic Events**
+Phase 6.0 (audit) and 6.1 (foundational corrections) are complete: the weekend
+convention is now a single engine-owned constant (JS getDay `[0, 6]`), Friday/Saturday/
+Sunday resolve correctly, MID_SEMESTER_BREAK is a closure, `GET /api/v1/events` has a
+server-side active/date/upcoming filter contract, and dashboard session aggregation is
+enrollment-scoped.
 
-Phase 5 is frozen. History is now a session-based, filterable, paginated view over the
-same canonical records Track uses (semester-bounded, authorization-scoped, verified
-consistent: 2026-07-15 and lab practicals agree across both views).
-
-Next: build the complete calendar/event experience — month/day navigation, working
-days/weekends/holidays, academic events, class schedule, event indicators; events
-Upcoming/Today/Past with details; controlled event mutation (admin → events →
-engines) feeding the existing engines instead of parallel rules.
+Next: a month-bounded calendar read model/API (events + working-day resolution +
+per-day class-session counts) bounded to the real semester, validated against the
+corrected engine, so the calendar UI (6.3) renders instead of computes. Then events
+Upcoming/Today/Past UX (6.4) and controlled admin-owned event mutation feeding the
+existing engines (6.5/6.6) instead of parallel rules.

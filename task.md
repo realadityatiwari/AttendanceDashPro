@@ -189,3 +189,73 @@ Turn the existing /history page into a production-quality Attendance History exp
 
 - The history endpoint contract, filtering/pagination behavior, and summary semantics from this phase (reopen only for a genuine defect)
 - The canonical attendance pipeline remains frozen; History is a presentation/query feature, not an analytics engine
+
+---
+
+## PHASE 6.1 - FOUNDATIONAL CALENDAR CORRECTIONS
+
+Status: **COMPLETE** (2026-08-14)
+
+## Objective
+
+Correct the calendar/event defects PROVEN in the Phase 6.0 audit (`docs/phase_6_0_calendar_events_audit.md`) so later Calendar/Event work is built on correct temporal semantics. No calendar UI, no event CRUD, no admin system, no seeding, no event→session integration in this phase.
+
+## Root causes
+
+1. **Weekend mapping**: `CalendarService` and `EligibilityService` passed `default_weekends=[5, 6]` (Python weekday indices) but `calendar_engine.get_academic_day` converts dates to JS `getDay()` indices before testing membership — Friday resolved non-working, Sunday working.
+2. **MID_SEMESTER_BREAK**: absent from the engine's closure list despite priority 60 (same tier as SEMESTER_BREAK) — it did not flip days non-working.
+3. **/events read contract**: `GET /api/v1/events` → `CalendarRepository.get_all_events()` returned every row (inactive + fully past included) with no filtering.
+4. **Dashboard aggregation scope**: `AttendanceRepository.get_sessions_with_status` had no `StudentEnrollment` join — Dashboard Today/Overall/Weekly aggregated all class sessions, not just the student's enrolled subjects.
+
+## Exact fixes
+
+- `backend/app/engines/calendar_engine.py` — new canonical constant `DEFAULT_WEEKENDS = [0, 6]` (JS `getDay()`: Sunday=0, Saturday=6; matches legacy `js/calendar-engine.js` and the engine's own conversion), used as the parameter default of `get_academic_day`; `MID_SEMESTER_BREAK` added to the closure-event list.
+- `backend/app/services/calendar_service.py` — `get_day_schedule` now passes the shared `DEFAULT_WEEKENDS` (removed the local `[5, 6]`).
+- `backend/app/services/eligibility_service.py` — same shared constant for `get_attendance_window` / `evaluate_quiz_eligibility` (window bounds math unchanged; teaching-day counts now use the corrected convention).
+- `backend/app/repositories/calendar_repo.py` — `get_all_events(active=None, date_from=None, date_to=None, upcoming=False)` optional server-side filters (repo default remains no-filter for internal dashboard/eligibility callers).
+- `backend/app/api/v1/endpoints/events.py` — `GET /api/v1/events` query params: `active` (default `true`), `date_from`, `date_to` (inclusive range-overlap), `upcoming` (default `false`, `end_date >= today`); 422 when `date_from > date_to`.
+- `backend/app/repositories/attendance_repo.py` — `get_sessions_with_status` now joins `StudentEnrollment` (mirrors `get_daily_sessions` / `get_history`).
+- `backend/scripts/expand_baseline.py` — uses the shared `DEFAULT_WEEKENDS` constant (was an inline `[0, 6]`).
+
+## Final GET /api/v1/events contract
+
+- Default: **active events only** (`active=true`); pass `active=false` for inactive events only.
+- `date_from` / `date_to` (YYYY-MM-DD): inclusive range-overlap on the event's `[start_date, end_date]` (`event.start_date <= date_to AND event.end_date >= date_from`).
+- `upcoming=true`: `end_date >= today` (date-only; combine with `active` for "current/upcoming active" events).
+- `date_from > date_to` → 422. Still read-only; mutation remains out of scope for students.
+- Backwards compatibility: internal consumers (dashboard `_build_upcoming_events`, eligibility service) call the repository directly with no filters and are unchanged; the only HTTP consumer (Events page) keeps working and now receives only active events.
+
+## Weekend behavior (before vs after)
+
+| Date | Before ([5,6] interpreted as JS) | After (DEFAULT_WEEKENDS [0,6]) |
+|---|---|---|
+| 2026-08-13 Thu | working | working |
+| 2026-08-14 Fri | **non-working** | **working** ✅ |
+| 2026-08-15 Sat | non-working | non-working |
+| 2026-08-16 Sun | **working** | **non-working** ✅ |
+
+## MID_SEMESTER_BREAK behavior
+
+Now a closure (same tier as SEMESTER_BREAK, priority 60): an active MID_SEMESTER_BREAK event spanning a date forces that date non-working regardless of `is_working_day`, consistent with the documented break/closure family (`docs/05_CALENDAR_ENGINE.md` priority table groups SEMESTER_BREAK/MID_SEMESTER_BREAK at 60). No new semantics invented.
+
+## Verification (static / in-process only; no browser testing)
+
+- `backend/.venv/Scripts/python -m compileall backend/app backend/scripts` — **PASS**
+- `npx tsc --noEmit` (frontend) — **PASS** (0 errors)
+- In-process engine/service execution (real `calendar_engine.py` + `CalendarService` with stubbed repo + `get_attendance_window`) — **17/17 PASS**: Fri working, Sat/Sun non-working; CalendarService + EligibilityService import the shared constant; MID_SEMESTER_BREAK closure; inactive event ignored; date-range bounding; quiz-window bounds unchanged (Q1 from commencement, day before quiz) with corrected teaching-day dates.
+- Read-only DB checks (representative ORM rows inside a rolled-back transaction): /events filters (active/inactive/upcoming/date-range, 8 cases) and dashboard enrollment scoping (temp unenrolled subject ZZZ-999 excluded; 2026-07-15 control still exactly 6 sessions for both test user and Aditya). All transactions rolled back.
+- Live read-only SQL confirms DB untouched: academic_events 0 · subjects 9 · class_sessions 684 · attendance_records 84 · enrollments 18 · users 30.
+
+## Database mutation status
+
+- **No INSERT/UPDATE/DELETE persisted.** `academic_events`, `class_sessions`, `attendance_records`, `subjects`, `users`, `student_enrollments` all unchanged. Test rows existed only inside rolled-back transactions. The `attendancedashpro_db` container was started (no data change) for read-only checks.
+
+## Do Not Touch Again (from this phase)
+
+- The weekend convention (`DEFAULT_WEEKENDS` in `calendar_engine.py`) — single source of truth; services must import it, never re-invent literals.
+- The /events read contract (active default true, range-overlap dates, upcoming) and the repo's filter semantics.
+- The enrollment-scoped dashboard aggregation join.
+
+## Deferred (intentionally NOT done here)
+
+- Calendar UI / month-day calendar / calendar route · Events CRUD · admin role system · event validation registry · event seeding · event→class_sessions integration · EXTRA/CLASS_CANCELLED session mutation · substitution schedule implementation · quiz/event integration · semester/section event scoping · timetable section schema redesign · TodayClassesCard cleanup · engine type-hint refactor · legacy attendance-window field restoration.

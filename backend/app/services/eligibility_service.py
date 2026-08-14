@@ -9,7 +9,7 @@ from app.repositories.subject_repo import SubjectRepository
 from app.repositories.calendar_repo import CalendarRepository
 from app.schemas.attendance import EligibilityResult
 from app.engines.eligibility_engine import evaluate_quiz_eligibility
-from app.engines.calendar_engine import get_attendance_window
+from app.engines.calendar_engine import get_attendance_window, DEFAULT_WEEKENDS
 from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import normalize_class_type
 from app.schemas.academic import Subject as SubjectSchema, Milestone, Timeline
@@ -59,7 +59,11 @@ class EligibilityService:
         
         # 3. Fetch Events (needed to resolve the attendance window)
         events = await self.calendar_repo.get_all_events()
-        default_weekends = [5, 6] # Saturday, Sunday
+        # Single source of truth from the calendar engine (JS getDay() indices:
+        # 0=Sunday, 6=Saturday). Previously a local [5, 6] (Python weekday
+        # indices) was passed here, which the engine interpreted as JS indices
+        # and caused Friday to resolve non-working and Sunday working.
+        default_weekends = DEFAULT_WEEKENDS
         
         # 4. Fetch Attendance — strictly bounded to the quiz's attendance window
         #    (ADR 010 / reference engine: Quiz N counts from the previous quiz

@@ -208,3 +208,38 @@ Not changed:
 - `backend/app/engines/*`, attendance/eligibility/dashboard/calendar engines, Track behavior/mutation, auth architecture, signup, migrations, database schema
 - No new attendance source: History and Track both read the canonical `class_sessions` + `attendance_records` pipeline; the summary is an aggregate of the same records (no analytics engine introduced)
 - No attendance rows created/modified/deleted; Aditya's data untouched; no new indexes (existing PK/FK indexes suffice at this scale)
+
+---
+
+## PHASE 6.1 — FOUNDATIONAL CALENDAR CORRECTIONS
+
+Status: **COMPLETE** (2026-08-14). Scope: the four defects PROVEN in `docs/phase_6_0_calendar_events_audit.md`. No calendar UI, no event CRUD, no admin system, no seeding, no event→session integration.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `backend/app/engines/calendar_engine.py` | New canonical `DEFAULT_WEEKENDS = [0, 6]` constant (JS getDay indices: Sun=0, Sat=6) used as the `get_academic_day` default; `MID_SEMESTER_BREAK` added to the closure list |
+| `backend/app/services/calendar_service.py` | `get_day_schedule` passes shared `DEFAULT_WEEKENDS` (removed local `[5, 6]`) |
+| `backend/app/services/eligibility_service.py` | Same shared constant for window/eligibility calls (eligibility math untouched) |
+| `backend/app/repositories/calendar_repo.py` | `get_all_events(active=None, date_from=None, date_to=None, upcoming=False)` optional server-side filters; repo default stays no-filter for internal callers |
+| `backend/app/api/v1/endpoints/events.py` | `GET /api/v1/events` query params: `active` (default true), `date_from`, `date_to` (inclusive range-overlap), `upcoming` (default false); 422 on `date_from > date_to` |
+| `backend/app/repositories/attendance_repo.py` | `get_sessions_with_status` joins `StudentEnrollment` (dashboard aggregation now enrollment-scoped, mirroring `get_daily_sessions`/`get_history`) |
+| `backend/scripts/expand_baseline.py` | Uses the shared `DEFAULT_WEEKENDS` constant (was inline `[0, 6]`) |
+
+### Final /events contract
+
+- Default **active only**; `active=false` for inactive only.
+- `date_from`/`date_to` inclusive range-overlap on `[start_date, end_date]`; `upcoming=true` → `end_date >= today` (combine with `active` for current/upcoming active events); `date_from > date_to` → 422.
+- Internal consumers (dashboard `_build_upcoming_events`, eligibility) use the repo directly with no filters — unchanged. Only HTTP consumer (Events page) now receives active events by default.
+
+### Verification
+
+- `compileall backend/app backend/scripts` — PASS; `npx tsc --noEmit` — PASS.
+- In-process engine/service checks — 17/17 PASS (weekends, constant usage, MID_SEMESTER_BREAK closure, inactive ignored, date ranges, quiz-window bounds unchanged with corrected teaching dates).
+- Read-only DB checks in rolled-back transactions — /events filter cases (8) and enrollment scoping (temp unenrolled subject excluded; 2026-07-15 control = 6 sessions for both users) PASS.
+- No browser testing performed (per Phase 6.1 instruction).
+
+### Not changed / deferred
+
+- Attendance/eligibility engines, Track/History/Dashboard calculations, auth, migrations, schema. Deferred: calendar UI, event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.

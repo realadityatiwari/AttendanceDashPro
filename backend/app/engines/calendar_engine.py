@@ -8,6 +8,15 @@ from app.schemas.academic import AcademicEvent, TimetableEntry, Subject
 
 DAY_NAMES = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']
 
+# Canonical weekend representation for the calendar engine (single source of truth).
+# Convention: JavaScript getDay() indices — 0=Sunday, 6=Saturday. This matches the
+# legacy engine (js/calendar-engine.js defaultWeekends: [0, 6]) and is the space the
+# engine itself tests against, because get_academic_day converts Python weekday()
+# (0=Monday) to JS getDay() indices before checking weekend membership.
+# Callers (CalendarService, EligibilityService) must use this constant rather than
+# inventing their own literals.
+DEFAULT_WEEKENDS = [0, 6]  # Sunday, Saturday
+
 def get_event_priority(event_type: EventType) -> int:
     priorities = {
         EventType.EMERGENCY_CLOSURE: 100,
@@ -49,7 +58,7 @@ class AcademicDay:
 def get_academic_day(
     target_date: date, 
     events: List[AcademicEvent], 
-    default_weekends: List[int] # 0 = Monday, 6 = Sunday in Python, whereas JS was 0=Sun. JS: [0, 6] meaning Sun/Sat. In Python, Monday is 0, Sunday is 6.
+    default_weekends: List[int] = DEFAULT_WEEKENDS  # JS getDay() indices (0=Sun .. 6=Sat) — see DEFAULT_WEEKENDS
 ) -> AcademicDay:
     # Python weekday(): 0=Mon, 1=Tue, ..., 5=Sat, 6=Sun
     # JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
@@ -67,9 +76,12 @@ def get_academic_day(
     
     if sorted_events:
         dominant_event = sorted_events[0]
+        # Closure event types force the day non-working regardless of is_working_day.
+        # MID_SEMESTER_BREAK shares SEMESTER_BREAK's priority tier (60) and semantic
+        # family (a break with no classes), so it is treated as a closure as well.
         is_closure = dominant_event.event_type in [
             EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY, EventType.FESTIVAL_HOLIDAY, 
-            EventType.EMERGENCY_CLOSURE, EventType.SEMESTER_BREAK
+            EventType.EMERGENCY_CLOSURE, EventType.SEMESTER_BREAK, EventType.MID_SEMESTER_BREAK
         ]
         
         if dominant_event.is_working_day is not None or is_closure:

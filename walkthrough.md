@@ -223,3 +223,54 @@ Date: 2026-08-13 · Scope: Desktop shell & global UX on the Next.js app
 - Mobile navigation phase (nav currently hidden below `md`).
 - Backend: feedback table + `POST /api/v1/feedback`; `user_preferences` table + settings endpoints; program column on sections; Light/System palette in Phase 1 tokens; PWA manifest/service worker.
 - Daily attendance marking (Track intent) — TodayClassesCard remains read-only.
+
+---
+
+# AttendanceDash Pro — Phase 6.1 Walkthrough
+
+Date: 2026-08-14 · Scope: Foundational Calendar Corrections (Phase 6.0 defects, no UI/CRUD/seeding)
+
+> **PHASE 6.1 COMPLETE** — the four calendar/event defects PROVEN in the Phase 6.0 audit
+> (`docs/phase_6_0_calendar_events_audit.md`) are corrected on correct temporal semantics:
+> a single engine-owned weekend constant, MID_SEMESTER_BREAK as a closure, a server-side
+> /events read contract, and enrollment-scoped dashboard aggregation. Static/in-process
+> verification only — no browser testing (per instruction), no database mutations.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| `backend/.venv/Scripts/python -m compileall backend/app backend/scripts` — PASS | **VERIFIED** |
+| Frontend `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| In-process engine/service execution: 2026-08-14 Fri → working · 2026-08-15 Sat → non-working · 2026-08-16 Sun → non-working | **VERIFIED** |
+| CalendarService + EligibilityService use the shared `DEFAULT_WEEKENDS` (import verified) | **VERIFIED** |
+| MID_SEMESTER_BREAK (ORM-shaped event) → non-working closure on its dates | **VERIFIED** |
+| Inactive event does not affect day resolution; event range bounds only its own dates | **VERIFIED** |
+| Quiz-window bounds unchanged (Q1 from commencement, day before quiz); teaching dates exclude Sat/Sun | **VERIFIED** |
+| /events repo filters (active/inactive/upcoming/date-range overlap, 8 cases) against ORM rows in a rolled-back transaction | **VERIFIED** |
+| Dashboard aggregation scoping: unenrolled temp subject (ZZZ-999) excluded; 2026-07-15 control = 6 sessions for test user and Aditya | **VERIFIED** |
+| Live read-only SQL: academic_events 0 · subjects 9 · class_sessions 684 · attendance_records 84 · enrollments 18 · users 30 | **VERIFIED** |
+| No browser testing performed (deferred to user) | **AS DESIGNED** |
+
+## What Phase 6.1 Delivered
+
+1. **Weekend convention (single source of truth)**: `calendar_engine.DEFAULT_WEEKENDS = [0, 6]`
+   (JS `getDay()` indices: Sunday=0, Saturday=6 — matching the legacy `js/calendar-engine.js` and
+   the engine's own Python→JS weekday conversion). `CalendarService` and `EligibilityService` now
+   import it instead of passing local `[5, 6]` literals; `expand_baseline.py` uses it too.
+2. **MID_SEMESTER_BREAK closure**: added to the engine's closure list (priority 60, same tier as
+   SEMESTER_BREAK; documented grouping in `docs/05_CALENDAR_ENGINE.md`). An active break event now
+   forces its date range non-working.
+3. **/events read contract**: `GET /api/v1/events` defaults to active events only, with optional
+   `date_from`/`date_to` (inclusive range-overlap) and `upcoming` (`end_date >= today`) server-side
+   filters; 422 on inverted date range. Repository stays no-filter by default for internal
+   dashboard/eligibility consumers — no existing consumer broke.
+4. **Dashboard enrollment scoping**: `get_sessions_with_status` joins `StudentEnrollment` exactly
+   like `get_daily_sessions`/`get_history`; Dashboard Today/Overall/Weekly now only count the
+   authenticated student's enrolled subjects. Formulas, statuses, and thresholds untouched.
+
+## Remaining Work
+
+- Phase 6.2 — Calendar read model & API (month-bounded, semester-bounded; next per roadmap).
+- Phase 6.3 — Calendar UI · 6.4 — Events page upgrade · 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
+- Deferred per Phase 6.1 scope: event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.

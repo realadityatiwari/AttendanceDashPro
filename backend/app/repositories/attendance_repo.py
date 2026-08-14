@@ -66,8 +66,11 @@ class AttendanceRepository:
         Read-only dashboard aggregation source: every class session in the
         given date range joined with its subject and the user's attendance
         record status (None when the class has not been logged).
+
+        Scoped to the authenticated student's enrolled subjects (StudentEnrollment
+        join), mirroring get_daily_sessions and get_history.
         """
-        from app.models.academic import Subject
+        from app.models.academic import Subject, StudentEnrollment
 
         stmt = select(
             ClassSession.id,
@@ -80,6 +83,10 @@ class AttendanceRepository:
             AttendanceRecord.status,
         ).join(
             Subject, ClassSession.subject_id == Subject.id
+        ).join(
+            # Scope every read to the authenticated student's enrolled subjects
+            StudentEnrollment,
+            (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
         ).outerjoin(
             AttendanceRecord,
             (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)

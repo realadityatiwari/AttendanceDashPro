@@ -12,7 +12,7 @@ from app.models.timetable import TimetableEntry, ClassSession
 from app.models.event import AcademicEvent
 from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.enums import ClassType
-from app.engines.calendar_engine import get_academic_day
+from app.engines.calendar_engine import get_academic_day, DEFAULT_WEEKENDS
 from sqlalchemy import select, and_
 
 TIMETABLE_PATH = os.path.join(os.path.dirname(__file__), '../../timetable.json')
@@ -24,12 +24,10 @@ async def expand_baseline():
 
     start_date = date.fromisoformat(data['start_date'])
     end_date = date.fromisoformat(data['end_date'])
-    # default weekends from JSON
-    # Wait, timetable.json doesn't have default_weekends. Let's assume [0, 6] (Sun, Sat) as mentioned in calendar_engine
-    default_weekends = [0, 6] 
-    
-    # We map JS day to python weekday in calendar_engine
-    # calendar_engine uses JS day logic: JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
+    # default weekends from the calendar engine's single source of truth
+    # (JS getDay() indices: 0=Sunday, 6=Saturday). The engine maps Python
+    # weekday() to JS getDay() before checking weekend membership.
+    default_weekends = DEFAULT_WEEKENDS
 
     async with AsyncSessionLocal() as db:
         # Pre-flight Check: BCS-054 invariant
