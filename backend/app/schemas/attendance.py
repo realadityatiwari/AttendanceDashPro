@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date, datetime
+from enum import Enum
 from app.models.enums import ClassType, AttendanceStatus
 
 class AttendanceRecord(BaseModel):
@@ -70,19 +71,70 @@ class OptimizationResult(BaseModel):
     safe_skip_tutorial: int = 0
     is_reachable: bool = True
 
+class EligibilityState(str, Enum):
+    """Canonical quiz eligibility state for a subject/cycle pair.
+
+    ELIGIBLE      — the current attendance percentage satisfies the policy.
+    RECOVERABLE   — currently below the requirement but reachable by attending
+                    the remaining (pending) classes.
+    NOT_ELIGIBLE  — the requirement cannot be reached within the remaining
+                    attendance window.
+    UNRESOLVED    — no confirmed quiz date/policy (e.g. an unresolved cycle),
+                    so no result can be determined.
+    """
+    ELIGIBLE = "ELIGIBLE"
+    RECOVERABLE = "RECOVERABLE"
+    NOT_ELIGIBLE = "NOT_ELIGIBLE"
+    UNRESOLVED = "UNRESOLVED"
+
+class CriterionResult(BaseModel):
+    """One qualifying route of the official policy (S4 PRODUCT SPEC §5):
+    Criterion I — Lecture attendance; Criterion II — Combined average."""
+    name: str
+    value: Optional[float] = None
+    threshold: float
+    passed: bool
+    explanation: str
+
+class FinalCriterionResult(BaseModel):
+    """Combination of the qualifying routes:
+    (Criterion 1 qualifies) OR (Criterion 2 qualifies) = Eligible."""
+    combination: str
+    passed: bool
+    explanation: str
+
 class EligibilityResult(BaseModel):
     quiz_cycle: int
     subject_code: str
+    subject_name: Optional[str] = None
+    category: Optional[str] = None
+    quiz_date: Optional[date] = None
     window_start: date
     window_end: date
     
     # Policy evaluation
     lecture_threshold: Optional[float] = None
     combined_threshold: Optional[float] = None
+    required_percentage: Optional[float] = None
+    
+    # Window analytics (same canonical counting as Track)
+    lecture: ClassCounts = Field(default_factory=ClassCounts)
+    tutorial: ClassCounts = Field(default_factory=ClassCounts)
+    lecture_pct: Optional[float] = None
+    tutorial_pct: Optional[float] = None
+    average_pct: Optional[float] = None
+    
+    # Canonical eligibility state + qualifying routes
+    state: EligibilityState = EligibilityState.UNRESOLVED
+    recoverable: bool = False
+    criterion_i: Optional[CriterionResult] = None
+    criterion_ii: Optional[CriterionResult] = None
+    final_criterion: Optional[FinalCriterionResult] = None
     
     # Results
     is_eligible: bool
     optimization: Optional[OptimizationResult] = None
+    explanation: Optional[str] = None
     
     # Document potential conflicts or ambiguities
     policy_ambiguity_notes: Optional[str] = None

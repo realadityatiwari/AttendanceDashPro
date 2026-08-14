@@ -40,12 +40,17 @@ class EligibilityService:
                     metadata={"quizCycle": sched.quiz_cycle.cycle_number}
                 ))
         
+        # Practicals/labs are strictly excluded from quiz eligibility
+        # (S4 PRODUCT SPEC §5). The persisted subject flag is authoritative.
+        if not subject_model.quiz_applicable:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        
         domain_subject = SubjectSchema(
             code=subject_model.code,
             name=subject_model.name,
-            category="theory",
-            quiz_applicable=True,
-            attendance_applicable=True,
+            category=subject_model.category,
+            quiz_applicable=subject_model.quiz_applicable,
+            attendance_applicable=subject_model.attendance_applicable,
             timeline=Timeline(commencement_date=semester_start or date.today(), milestones=milestones)
         )
         
@@ -54,8 +59,6 @@ class EligibilityService:
         cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(quiz_cycle)
         if not cycle_model or not cycle_model.policy:
             raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
-        
-        target_pct = cycle_model.policy.lecture_threshold
         
         # 3. Fetch Events (needed to resolve the attendance window)
         events = await self.calendar_repo.get_all_events()
@@ -94,13 +97,21 @@ class EligibilityService:
             else:
                 counts[t]['pending'] += 1
         
-        # 5. Evaluate
-        result = evaluate_quiz_eligibility(domain_subject, quiz_cycle, counts, events, default_weekends)
+        # 5. Evaluate (persisted policy thresholds are authoritative for both
+        #    qualifying routes; the engine's hardcoded 70/75/75 is the fallback)
+        result = evaluate_quiz_eligibility(
+            domain_subject, quiz_cycle, counts, events, default_weekends,
+            policy_thresholds={
+                'lecture_threshold': cycle_model.policy.lecture_threshold,
+                'combined_threshold': cycle_model.policy.combined_threshold or cycle_model.policy.lecture_threshold,
+            },
+        )
         
-        # Override the engine's fallback target_pct with the DB one
-        result.lecture_threshold = target_pct
-        if result.combined_threshold is not None:
-            result.combined_threshold = target_pct
-            
+        # Enrich with subject identity + the confirmed quiz date (None when the
+        # cycle is unresolved — the engine then emits the UNRESOLVED state).
+        result.subject_name = subject_model.name
+        result.category = subject_model.category.value
+        result.quiz_date = milestone.date if milestone else None
+        
         return result
 

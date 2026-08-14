@@ -10,16 +10,20 @@ directly exercise, plus the cross-phase invariants:
 - Phase 6.2: calendar read model — truthful empty month outside semester,
   July/December clamping to real semester bounds, weekend correctness,
   active closure vs inactive event behavior, enrollment-scoped session counts.
-- Phase 6.5: seeding integrity (17 authoritative QUIZ_DAY events, nothing
+- Phase 6.5: seeding integrity (18 authoritative QUIZ_DAY events, nothing
   fabricated), re-enable via PATCH converges (create -> deactivate -> reactivate
   each syncs the pipeline).
 - Phase 6.6: every closure type cancels the day's sessions; EXTRA_TUTORIAL /
   EXTRA_PRACTICAL materialize exactly one extra; WORKING_DAY_OVERRIDE is
   calendar/read-only (working day, zero session mutation); cancelled sessions
   reject attendance with 409.
-- Database baseline: exact restoration at the end (events=17, sessions=684,
+- Database baseline: exact restoration at the end (events=18, sessions=684,
   cancelled=0, extra=0, records=89, enrollments=18, subjects=9,
   quiz_schedules=18, users=30, admins=1).
+
+Note (Phase 7.1): the authoritative quiz schedule now includes BCS-054
+Quiz III (2026-10-23), so the expected counts are 18 QUIZ_DAY events and 18
+SCHEDULED quiz_schedules.
 
 Like the 6.6 verifier: httpx ASGITransport + real DB + minted JWTs; test
 event rows are deactivated then hard-deleted; startup cleanup removes stale
@@ -146,14 +150,14 @@ async def main() -> int:
             # --- Phase 6.1 /events read contract (student) ----------------------
             r = await client.get("/api/v1/events", headers=student_headers)
             events = r.json()
-            check("4. GET /events default = active only (all 17 seeded active)",
-                  r.status_code == 200 and len(events) == 17 and all(e["active"] for e in events),
+            check("4. GET /events default = active only (all 18 seeded active)",
+                  r.status_code == 200 and len(events) == 18 and all(e["active"] for e in events),
                   f"count={len(events)}")
             r = await client.get("/api/v1/events?date_from=2026-11-01&date_to=2026-10-01", headers=student_headers)
             check("5. inverted date range on /events -> 422", r.status_code == 422, f"got {r.status_code}")
             r = await client.get("/api/v1/events?upcoming=true", headers=student_headers)
-            check("6. upcoming=true keeps end_date >= today (all 17 quiz days)",
-                  r.status_code == 200 and len(r.json()) == 17 and all(e["end_date"] >= "2026-08-14" for e in r.json()),
+            check("6. upcoming=true keeps end_date >= today (all 18 quiz days)",
+                  r.status_code == 200 and len(r.json()) == 18 and all(e["end_date"] >= "2026-08-14" for e in r.json()),
                   f"count={len(r.json())}")
 
             # --- Phase 6.5 seeding integrity (before any test events exist) -----
@@ -165,11 +169,11 @@ async def main() -> int:
                 scheduled_quizzes = (await db.execute(
                     select(func.count()).select_from(QuizSchedule).where(
                         QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED))).scalar()
-            check("7. seeding integrity: 17 events, ALL QUIZ_DAY, all active, no fabricated dates",
-                  sum(c for _, c in types) == 17 and dict(types) == {EventType.QUIZ_DAY: 17} and inactive == 0,
+            check("7. seeding integrity: 18 events, ALL QUIZ_DAY, all active, no fabricated dates",
+                  sum(c for _, c in types) == 18 and dict(types) == {EventType.QUIZ_DAY: 18} and inactive == 0,
                   f"types={dict((k.value, v) for k, v in types)} inactive={inactive}")
             check("8. seed count matches authoritative SCHEDULED quiz_schedules",
-                  scheduled_quizzes == 17, f"scheduled_quizzes={scheduled_quizzes}")
+                  scheduled_quizzes == 18, f"scheduled_quizzes={scheduled_quizzes}")
 
             # --- Phase 6.2 calendar read model ----------------------------------
             r = await client.get("/api/v1/calendar?year=2026&month=1", headers=student_headers)

@@ -131,12 +131,7 @@ async def seed_baseline():
                         if ms and ms.get('date'):
                             schedule_date = date.fromisoformat(ms['date'])
                             status = ScheduleStatus.SCHEDULED
-                        
-                        # Explicit rule: BCS-054 Quiz III is officially unresolved
-                        if subject.code == 'BCS-054' and qc.cycle_number == 3:
-                            schedule_date = None
-                            status = ScheduleStatus.UNRESOLVED
-                        
+
                         schedule = QuizSchedule(
                             subject_id=subject.id,
                             quiz_cycle_id=qc.id,

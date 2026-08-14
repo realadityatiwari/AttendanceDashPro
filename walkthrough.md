@@ -552,3 +552,29 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 ## What's Next
 
 - Decisions Q-D1…Q-D10 from the product owner, then **Phase 7.1**: eligibility payload extension (window counts/percentages/criteria/quiz date/tri-state status/explanation) + reference subject-card UI + verifier `verify_phase_7_1.py` + 90/90 regression + baseline restore. No implementation until authorized.
+
+---
+
+# AttendanceDash Pro — Phase 7.1 Walkthrough
+
+> **PHASE 7.1 COMPLETE — CANONICAL QUIZ ELIGIBILITY CONTRACT + REFERENCE SUBJECT CARDS.**
+> Report: `docs/phase_7_1_implementation_report.md`.
+
+## What Phase 7.1 Did
+
+1. **Completed the quiz schedule.** BCS-054 Quiz III was the last unresolved quiz. The seed pipeline's own authoritative source (`timetable.json`) carries the date **2026-10-23**, but `seed_academic_baseline.py` hardcoded an "officially unresolved" override. The override was removed, the live `quiz_schedules` row updated (2026-10-23, SCHEDULED), and the canonical `seed_academic_events.py` created the matching 18th QUIZ_DAY event (calendar/read-only — zero session mutation). The canonical schedule is now 18/18 dated SCHEDULED, byte-exact vs the authoritative source. BCS-054 Q1/Q2 windows unchanged; Q3 gains the real window [2026-09-28 … 2026-10-22].
+2. **Built the canonical eligibility contract on the existing API** (additive extension, no parallel system). `EligibilityResult` now exposes: `state` (ELIGIBLE / RECOVERABLE / NOT_ELIGIBLE / UNRESOLVED), window lecture/tutorial counts + percentages, combined average, `required_percentage`, `quiz_date`, `subject_name`, `category`, Criterion I/II (value, threshold, passed, explanation), the final "(Criterion I) OR (Criterion II)" combination, `recoverable`, `explanation`. `is_eligible` now means *currently eligible* — the Q-D1 divergence is fixed, and the dashboard quiz snapshot corrects itself with zero dashboard changes.
+3. **Implemented the official policy route logic** (`S4_PRODUCT_SPEC.md:32-33`): Criterion I (Lecture % ≥ required) OR Criterion II (Combined average ≥ required) = Eligible; both thresholds come from the persisted `eligibility_policies` (Q-D5 fixed). Labs are excluded via the authoritative `subjects.quiz_applicable` flag → 404 (Q-D4 fixed).
+4. **Reused the engine, didn't rewrite it.** State derivation evaluates the same counts/formulas at the current scenario (pending not yet attended) and the best-case scenario (pending all attended); RECOVERABLE = best case passes, NOT_ELIGIBLE = neither passes. `optimize_attendance`/`meets_attendance_target`/`get_attendance_window` are untouched; must-attend/safe-skip remain the optimizer's exact output.
+5. **Rebuilt `/tools/quiz-schedule` as "Quiz Eligibility"** with the reference subject-card design: cycle tabs (Quiz I/II/III per the product spec), one card per quiz-applicable subject — code, THEORY badge, name, status badge, Lecture/Tutorial attended-total-%, Average vs Required, expandable **View Calculation** (Criterion I, Criterion II, Final Result, Must Attend / Safe Skip), explanation. Loading skeletons, per-card error + Retry, empty and Unresolved variants included. React is presentation-only; every value renders the backend contract.
+6. **Verified everything.** New `verify_phase_7_1.py` — 26/26 checks (canonical schedule vs timetable.json, BCS-054 Q3, cycles, practical exclusion, QUIZ_DAY calendar-only, 18 upcoming events, windows, formulas, all four states incl. rollback scenarios, criteria + final OR, optimizer parity, UI analytics contract, labs 404, per-user scoping, history intact, quiz-day + surprise-quiz canonicality, exact baseline restore). Frozen regression: 6.5 23/23, 6.6 36/36, 6.7 31/31 (its four authoritative-count assertions maintained 17→18 — the schedule genuinely changed; assertion strength unchanged). Static gates green (compileall, tsc, ESLint, production build).
+
+## Database State After 7.1
+
+- New baseline (verified after every verifier run): events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN).
+- The only mutation: the BCS-054 Q3 `quiz_schedules` row (2026-10-23, SCHEDULED) plus the canonical 18th QUIZ_DAY event — minimal, documented, reversible (exact reversal steps in the implementation report).
+
+## What's Next
+
+- **Phase 7.2 (requires authorization):** Q-D6 teaching-day counting · Q-D8 overall denominator · Q-D7 student event-mutation capability · date-aware default cycle tab · further reference-UI polish. Each change must be its own phase with its own verifier + full regression (6.5/6.6/6.7 + 7.1).
+- **HARD STOP after Phase 7.1** — no Phase 7.2 work starts without explicit authorization.

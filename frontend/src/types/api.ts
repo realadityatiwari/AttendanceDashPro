@@ -157,17 +157,55 @@ export interface OptimizationResult {
   is_reachable: boolean;
 }
 
+export enum EligibilityState {
+  ELIGIBLE = "ELIGIBLE",
+  RECOVERABLE = "RECOVERABLE",
+  NOT_ELIGIBLE = "NOT_ELIGIBLE",
+  UNRESOLVED = "UNRESOLVED",
+}
+
+export interface CriterionResult {
+  name: string;
+  value: number | null;
+  threshold: number;
+  passed: boolean;
+  explanation: string;
+}
+
+export interface FinalCriterionResult {
+  combination: string;
+  passed: boolean;
+  explanation: string;
+}
+
 export interface EligibilityResult {
   quiz_cycle: number;
   subject_code: string;
+  subject_name: string | null;
+  category: string | null;
+  quiz_date: string | null;
   window_start: string;
   window_end: string;
-  
+
   lecture_threshold: number | null;
   combined_threshold: number | null;
-  
+  required_percentage: number | null;
+
+  lecture: ClassCounts;
+  tutorial: ClassCounts;
+  lecture_pct: number | null;
+  tutorial_pct: number | null;
+  average_pct: number | null;
+
+  state: EligibilityState;
+  recoverable: boolean;
+  criterion_i: CriterionResult | null;
+  criterion_ii: CriterionResult | null;
+  final_criterion: FinalCriterionResult | null;
+
   is_eligible: boolean;
   optimization: OptimizationResult | null;
+  explanation: string | null;
   policy_ambiguity_notes: string | null;
 }
 

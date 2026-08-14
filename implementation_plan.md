@@ -581,3 +581,32 @@ Status: **COMPLETE** (2026-08-15). Read-only audit — no implementation, no DB 
 - Frontend: reference subject-card UI rendering that contract verbatim (badge, attended/total/%, average, required, expandable "View Calculation", recoverable state).
 - Verifier `verify_phase_7_1.py`; regression 6.5/6.6/6.7 (90/90); baseline restore; docs update.
 - Any post-freeze improvement must be a new phase with its own verification.
+
+---
+
+## PHASE 7.1 — CANONICAL QUIZ ELIGIBILITY CONTRACT + REFERENCE SUBJECT CARDS
+
+Status: **COMPLETE (2026-08-15) — PASS.** Report: `docs/phase_7_1_implementation_report.md`.
+
+### What Phase 7.1 delivered
+
+1. **Complete quiz schedule:** BCS-054 Quiz III resolved to 2026-10-23 from `timetable.json` (override removed from `seed_academic_baseline.py`); live `quiz_schedules` row updated; canonical `seed_academic_events.py` created the 18th QUIZ_DAY event. Canonical schedule = 18 SCHEDULED dates, exact match with the authoritative source (verifier check 1).
+2. **Canonical eligibility states** (fixes Q-D1/Q-D2/Q-D3): ELIGIBLE / RECOVERABLE / NOT_ELIGIBLE / UNRESOLVED derived from the existing engine's counts at current + best-case scenarios (no second math model). `is_eligible` redefined to "currently eligible"; dashboard snapshot corrects itself with zero dashboard changes.
+3. **Official policy** per `S4_PRODUCT_SPEC.md:32-33`: (Criterion I — Lecture % qualifies) OR (Criterion II — Combined average qualifies) = Eligible; persisted `eligibility_policies` thresholds authoritative for both routes (fixes Q-D5).
+4. **Practical exclusion** via authoritative `subjects.quiz_applicable` (fixes Q-D4; labs 404).
+5. **Reference UI:** `/tools/quiz-schedule` → "Quiz Eligibility" with cycle tabs (Quiz I/II/III) and per-subject reference cards (code, THEORY badge, name, status, lecture/tutorial attended/total/%, average, required, expandable View Calculation with criteria + final + must-attend/safe-skip). React is presentation-only; loading/error+Retry/empty/unresolved states included.
+6. **Verification:** `verify_phase_7_1.py` 26/26; frozen regression 6.5 23/23, 6.6 36/36, 6.7 31/31 (Phase 6.7 count assertions maintained 17→18 for the new authoritative schedule); compileall/tsc/ESLint/build green.
+
+### Files changed (Phase 7.1)
+
+| Layer | Files |
+|---|---|
+| Backend (app) | `app/schemas/attendance.py` · `app/engines/eligibility_engine.py` · `app/services/eligibility_service.py` |
+| Backend (scripts) | NEW `scripts/verify_phase_7_1.py` · `scripts/seed_academic_baseline.py` (BCS-054 override removed) · `scripts/verify_phase_6_7.py` (17→18 maintained) |
+| Frontend | `src/types/api.ts` · NEW `src/components/quiz/QuizEligibilityCard.tsx` · `src/app/(authenticated)/tools/quiz-schedule/page.tsx` · DELETED `src/components/dashboard/SubjectQuizSchedule.tsx` |
+| DB | `quiz_schedules` BCS-054 Q3 → 2026-10-23 SCHEDULED + 18th QUIZ_DAY event (documented, reversible) |
+| Docs | NEW `docs/phase_7_1_implementation_report.md`; `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+
+### Next (Phase 7.2, requires product authorization)
+
+- Q-D6 teaching-day (vs raw-range) counting; Q-D8 overall denominator; Q-D7 student event-mutation capability (product/security decision); date-aware default cycle tab; any further reference-UI polish. Each requires its own phase + verifier + full regression (6.5/6.6/6.7 + 7.1).
