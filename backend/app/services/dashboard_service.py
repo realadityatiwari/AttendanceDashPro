@@ -163,6 +163,10 @@ class DashboardService:
         missed = 0
         pending = 0
         for r in rows:
+            # Cancelled sessions are their own state — never pending
+            # (Phase 6.6 event->session integration).
+            if r["is_cancelled"]:
+                continue
             if r["status"] == AttendanceStatus.ATTENDED:
                 attended += 1
             elif r["status"] == AttendanceStatus.MISSED:
@@ -228,6 +232,9 @@ class DashboardService:
             day_recorded = 0
             for r in week_rows:
                 if r["date"] != d:
+                    continue
+                # Cancelled sessions are not classes (matches Today's total).
+                if r["is_cancelled"]:
                     continue
                 day_classes += 1
                 if r["status"] == AttendanceStatus.ATTENDED:

@@ -446,3 +446,61 @@ Status: **COMPLETE** (2026-08-14). Admin role system, admin-only event mutation 
 
 - Frozen areas unchanged (attendance/eligibility engines, dashboard, Track, History, auth flow, Phase 1 design system, AppShell, TopNav, Phase 6.1 events + 6.2 calendar contracts, 6.3 calendar UI, 6.4 student experience, attendance schema, Firebase boundary).
 - Deferred: event→engine integration (6.6 — event→class_sessions, holiday→cancellation, extra/substitution lecture generation, quiz-window mutation), verification/freeze (6.7), the data gap (institutional holiday/break dates) pending authoritative input.
+
+---
+
+## PHASE 6.6 — EVENT → ENGINE INTEGRATION
+
+Status: **COMPLETE** (2026-08-14). Persisted `AcademicEvent` records now operationally mutate `class_sessions` through the canonical pipeline, exactly as the legacy engine's effective schedule did (docs/S4.3: **ACADEMIC EVENT = EXACT-DATE SCHEDULE MUTATION**). No engine was rewritten; no schema change; no frontend change.
+
+### Semantics per event type (desired-schedule deltas)
+
+- **Closures** (PUBLIC_HOLIDAY, INSTITUTE_HOLIDAY, FESTIVAL_HOLIDAY, EMERGENCY_CLOSURE, SEMESTER_BREAK, MID_SEMESTER_BREAK): the calendar engine makes the day non-working → desired schedule empty → every scheduled session on the date becomes `is_cancelled=True` (rows are NEVER deleted; cancelled ≠ absent, per ADR 004 / audit Q12).
+- **CLASS_CANCELLED** (subject + class type required): removes ONE matching occurrence (legacy splice semantics) → that session is cancelled; its type total drops by exactly 1.
+- **EXTRA_LECTURE / EXTRA_TUTORIAL / EXTRA_PRACTICAL / SURPRISE_QUIZ** (subject + class type): inject ONE extra occurrence → a new `is_extra=True` session (no timetable entry), type total +1.
+- **WORKING_SATURDAY / substitution_schedule_override**: the day follows the substituted timetable (engine `substitution_schedule_override`) → sessions are materialized on the date (timetable_entry_id set), bounded by the baseline span; reverted by deleting unattended weekend projections when the event goes away.
+- **QUIZ_DAY / WORKING_DAY_OVERRIDE**: calendar/read semantics only — NO session effect (quiz eligibility math untouched; nothing to do in the pipeline).
+
+### Design
+
+- `backend/app/services/event_session_service.py` — `EventSessionSynchronizer.sync_event(event, span_override=None)`:
+  - Day semantics come from the **frozen** `calendar_engine.get_academic_day` (never reimplemented); `_desired_schedule` is the direct port of legacy `getEffectiveDaySchedule` (base timetable for the resolved day − one match per CLASS_CANCELLED + one extra per EXTRA_*/SURPRISE_QUIZ, deterministic order: priority desc then event id).
+  - `_reconcile_date` is state-based, so sync is **idempotent** (double-sync converges, no duplicates) and **date-scoped** (computed from ALL active events — deactivating/moving an event automatically restores what its dates no longer imply).
+  - **Attendance safety:** sessions with any `AttendanceRecord` are never cancelled/un-cancelled/deleted; attended extras survive count reconciliation. Cancelled sessions reject attendance with 409 (existing rule, verified).
+  - Sessions are only created within the canonical baseline span (`get_session_date_span`: 2026-07-15 → 2026-12-31).
+- `backend/app/repositories/session_repo.py` — `SessionRepository`: timetable/span/range reads, attendance-guard id set, `add_session`, `delete_session`, `flush`.
+- `backend/app/services/event_service.py` — synchronizer wired into `create_event` / `update_event` / `deactivate_event` **inside the same transaction** (after flush, before commit). Updates sync the union of the old and new date ranges (`span_override`), so moving an event reverts the old dates. Deactivation reverts all session effects.
+- **No schema change** — audit proved existing `class_sessions` fields (`is_cancelled`, `is_extra`, `timetable_entry_id`) and event fields sufficient.
+
+### Counting corrections (cancelled ≠ pending — proven necessary)
+
+Cancelled sessions were previously counted as pending in the student pipeline. Frozen shapes preserved; only value-level exclusions:
+
+- `backend/app/repositories/attendance_repo.py`: `get_subject_counts_up_to_date` + `get_subject_counts_between` add `ClassSession.is_cancelled.is_(False)`.
+- `backend/app/services/dashboard_service.py`: `_build_overall` and `_build_weekly` day_classes skip cancelled sessions.
+- `backend/app/services/calendar_service.py`: `get_month_view` `session_count` counts non-cancelled only.
+
+### Verification
+
+- `compileall` backend PASS.
+- `backend/scripts/verify_phase_6_6.py` — **36/36 PASS** (httpx ASGITransport + real DB + minted JWTs): student POST 403; closure → all 5 sessions cancelled (none deleted); attended-session guard (fully-attended 2026-07-15 closure → zero mutation); CLASS_CANCELLED → exactly one BCS-501/L cancelled, BCS-501 lecture total −1; EXTRA_LECTURE → one `is_extra` session, total restored +1; double-sync idempotency; SURPRISE_QUIZ +1; QUIZ_DAY no-op; WORKING_SATURDAY Monday schedule materialized (5 sessions with timetable entries); PATCH move reverts old date / applies new; read contracts (calendar working/non-working + session counts, daily Cancelled states, daily extra visibility, history clamped to today so future cancelled sessions never leak); eligibility BCS-501 Q1 byte-identical; deactivation reversal for every event type; rollback-transaction checks (attended extra preserved, 3-day range → exactly 3 extras, deactivated range removes extras + second sync no-op); final **exact baseline** assertion (events=17, sessions=684, cancelled=0, extra=0, records=89). Test rows hard-deleted; startup cleanup also recovers orphans left by earlier crashed runs and the 6.5 verifier's extra-session side effect.
+- `backend/scripts/verify_phase_6_5.py` regression — **23/23 PASS** after 6.6 (runs converge with 6.6's cleanup: 6.5's EXTRA_LECTURE test now leaves one session that 6.6's startup cleanup removes).
+
+### Files changed (Phase 6.6)
+
+| Layer | Files |
+|---|---|
+| NEW | `app/services/event_session_service.py`, `app/repositories/session_repo.py`, `scripts/verify_phase_6_6.py` |
+| Modified | `app/services/event_service.py` (sync wiring), `app/repositories/attendance_repo.py`, `app/services/dashboard_service.py`, `app/services/calendar_service.py` (cancelled-count exclusions) |
+| Untouched | all engines, schemas (shapes), frontend (no UI change needed), migrations, auth |
+
+### Database state after 6.6
+
+- Returned to the exact pre-6.6 baseline: events=17, sessions=684 (0 cancelled, 0 extra), attendance_records=89, enrollments=18, subjects=9, quiz_schedules=18, users=30 (1 ADMIN). Test event rows hard-deleted; rollback tests committed nothing.
+
+### Known limitations / data gaps
+
+- Sessions are only materialized inside the baseline span (2026-07-15 → 2026-12-31); events outside it affect the calendar engine but never extend the session pipeline.
+- No authoritative institutional holiday/break/working-Saturday dates exist in the repo — the data gap stands; nothing fabricated.
+- Extra sessions carry no event linkage (schema has none) — reconciliation matches extras by (subject_id, class_type) count, which is deterministic but cannot distinguish which event produced which extra.
+- History/Dashboard today-based views clamp to today (2026-08-14); event effects on future dates are visible via calendar/daily/eligibility reads.

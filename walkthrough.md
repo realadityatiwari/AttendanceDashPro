@@ -474,3 +474,33 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 - Phase 6.6 — event→engine integration (event→class_sessions, holiday→cancellation, extra/substitution lecture generation, quiz-window mutation). Explicitly NOT implemented in 6.5.
 - Phase 6.7 — verification/freeze.
 - Institutional holiday/break/working-Saturday dates — pending authoritative input from the product owner.
+
+---
+
+# AttendanceDash Pro — Phase 6.6 Walkthrough
+
+> **PHASE 6.6 COMPLETE** — events now drive the session pipeline. A persisted
+> holiday cancels the day's classes, CLASS_CANCELLED cancels exactly the
+> intended session, EXTRA_*/SURPRISE_QUIZ materialize extra sessions, and a
+> working Saturday / substitution projects the substituted timetable into
+> `class_sessions` — matching the legacy engine's effective-schedule behavior
+> (docs/S4.3: ACADEMIC EVENT = EXACT-DATE SCHEDULE MUTATION) without rewriting
+> any engine. Idempotent, transactional (same commit as the event mutation),
+> and attendance-safe (history is never mutated).
+
+## What Phase 6.6 Delivered
+
+1. **Synchronizer** (`backend/app/services/event_session_service.py`): for each date an event touches, the engine's desired schedule is computed from ALL active events (closure → empty day; CLASS_CANCELLED → remove one matching occurrence; EXTRA_*/SURPRISE_QUIZ → +1 extra occurrence; substitution/working-Saturday → substituted timetable) and `class_sessions` is reconciled state-based: cancellations become `is_cancelled=True` (rows never deleted), extras become `is_extra=True` rows, weekend projections are deleted when reverted. Double sync = no-op (idempotent by construction).
+2. **Session repository** (`backend/app/repositories/session_repo.py`): bounded span reads + writes + attendance-guard; sessions are only created inside the baseline window.
+3. **Same-transaction wiring** (`backend/app/services/event_service.py`): create/update/deactivate each run the sync before commit; updates sync the union of old+new ranges so a moved event restores its old dates; deactivation reverts every effect.
+4. **Counting corrections**: cancelled sessions were being counted as pending — `attendance_repo` count queries, `dashboard_service` overall/weekly, and `calendar_service` month session counts now exclude `is_cancelled`. Read shapes and engines untouched.
+5. **Verification** (`backend/scripts/verify_phase_6_6.py`): **36/36 PASS** against the real DB with minted JWTs — every event type's effect, exact-count assertions (1 cancellation, +1 extra), read contracts (calendar day states, daily Cancelled states, extra visibility, eligibility byte-identical), deactivation reversal, rollback-transaction safety (attended extras preserved), and a final assertion that the database returned to its exact baseline (17 events / 684 sessions / 0 cancelled / 0 extra / 89 attendance records). Phase 6.5 regression: 23/23 PASS.
+
+## Database State After 6.6
+
+- Exact pre-6.6 baseline: `academic_events`=17, `class_sessions`=684 (0 cancelled, 0 extra), `attendance_records`=89, enrollments=18, subjects=9, quiz_schedules=18, users=30 (1 ADMIN). No test residue; rollback tests committed nothing.
+
+## Remaining Work
+
+- Phase 6.7 — verification/freeze (next; not started).
+- Institutional holiday/break/working-Saturday dates — pending authoritative input.

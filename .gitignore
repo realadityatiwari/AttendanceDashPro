@@ -70,3 +70,7 @@ node_modules/
 
 # Migration Reports (Sensitive data)
 backend/migration_reports/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

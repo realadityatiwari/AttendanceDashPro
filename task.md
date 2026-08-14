@@ -513,3 +513,34 @@ Status: **COMPLETE** (2026-08-14). Admin role system (`users.role`), admin-only 
 
 - Phase 6.6 — event→engine integration (event→class_sessions generation, holiday→cancellation, extra/substitution lecture generation, quiz-window mutation) — explicit next phase, NOT implemented here.
 - Phase 6.7 — verification/freeze. Institutional holiday/break/working-Saturday dates pending authoritative input.
+
+---
+
+# PHASE 6.6 — EVENT → ENGINE INTEGRATION
+
+Status: **COMPLETE** (2026-08-14). Persisted events now mutate the canonical session pipeline — closures cancel, CLASS_CANCELLED cancels exactly one occurrence, EXTRA_*/SURPRISE_QUIZ materialize `is_extra` sessions, substitution/working-Saturday project the substituted timetable — exactly as the legacy engine's effective schedule dictated. Idempotent, transactional, attendance-safe. No engine rewrites, no schema change, no frontend change.
+
+## What was done
+
+1. **Session synchronizer** (`backend/app/services/event_session_service.py`): `EventSessionSynchronizer.sync_event()` — per-date desired schedule from the frozen calendar engine + legacy `getEffectiveDaySchedule` port (base timetable − one per CLASS_CANCELLED + one per EXTRA_*/SURPRISE_QUIZ, deterministic priority→id order), reconciled against `class_sessions`:
+   - Closures & CLASS_CANCELLED → `is_cancelled=True` (rows never deleted; cancelled ≠ absent).
+   - Extras → `is_extra=True` rows without timetable entries.
+   - Working Saturday / substitution → timetable-materialized rows (weekend projections deleted when reverted; attended rows never touched).
+   - State-based ⇒ idempotent (double sync converges); date-scoped ⇒ deactivation/move automatically reverts old effects.
+   - Sessions only created within the baseline span (2026-07-15 → 2026-12-31).
+2. **Session repository** (`backend/app/repositories/session_repo.py`): timetable/span/range reads + attendance-guard + `add_session` / `delete_session`.
+3. **Service wiring** (`backend/app/services/event_service.py`): sync runs in the same transaction as create/update/deactivate; updates sync the union of old+new ranges so moved events revert the old dates.
+4. **Counting corrections** (cancelled ≠ pending): `attendance_repo` (both count queries), `dashboard_service` (`_build_overall`, `_build_weekly`), `calendar_service` (`get_month_view` session_count) now exclude `is_cancelled`. Shapes/engines unchanged.
+5. **Verification** (`backend/scripts/verify_phase_6_6.py`): **36/36 PASS** — closure→5 cancelled (none deleted), attended-guard (07-15 untouched), CLASS_CANCELLED→exactly 1 + total −1, extra→+1 & restored, double-sync idempotency, SURPRISE_QUIZ, QUIZ_DAY no-op, working-Saturday (5 materialized), PATCH move reverts old date, calendar/daily/eligibility read contracts, deactivation reversal for all types, rollback-tx checks (attended extra preserved; 3-day range → 3 extras; deactivation no-op on 2nd sync), final exact baseline (17/684/0/0/89). 6.5 regression 23/23 PASS.
+
+## Database state after 6.6
+
+- Exactly the pre-6.6 baseline: events=17, sessions=684 (0 cancelled, 0 extra), attendance_records=89, enrollments=18, subjects=9, quiz_schedules=18, users=30 (1 ADMIN). Test rows hard-deleted; rollback tests committed nothing.
+
+## Do Not Touch Again (from this phase)
+
+- Event↔session semantics live ONLY in `EventSessionSynchronizer`; consumers must not re-derive them. Cancelled sessions are never deleted and never receive attendance (409). Engine mathematics remain frozen.
+
+## Deferred (intentionally NOT done here)
+
+- Phase 6.7 — verification/freeze (explicit next phase, requires go-ahead). Institutional holiday/break/working-Saturday dates pending authoritative input.

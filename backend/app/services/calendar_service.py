@@ -112,6 +112,10 @@ class CalendarService:
 
         counts_by_date: Dict[date, int] = {}
         for row in session_rows:
+            # Cancelled sessions are not classes: a closure/substitution day
+            # must not report sessions that did not take place (Phase 6.6).
+            if row["is_cancelled"]:
+                continue
             counts_by_date[row["date"]] = counts_by_date.get(row["date"], 0) + 1
 
         days: List[CalendarDayItem] = []

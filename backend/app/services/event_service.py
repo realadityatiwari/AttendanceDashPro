@@ -12,6 +12,7 @@ from app.services.event_registry import (
     validate_event,
     get_rule,
 )
+from app.services.event_session_service import EventSessionSynchronizer
 
 
 class EventService:
@@ -27,6 +28,7 @@ class EventService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = EventRepository(db)
+        self.sync = EventSessionSynchronizer(db)
 
     async def _ensure_subject(self, subject_id: UUID) -> None:
         if not await self.repo.subject_exists(subject_id):
@@ -83,6 +85,10 @@ class EventService:
         self.repo.add(event)
         try:
             await self.repo.flush()
+            # Phase 6.6: reconcile class_sessions to the engine's effective
+            # schedule for the event's dates — same transaction, so the event
+            # and its session effect commit (or roll back) together.
+            await self.sync.sync_event(event)
             await self.db.commit()
         except Exception:
             await self.db.rollback()
@@ -94,6 +100,11 @@ class EventService:
         event = await self.repo.get_by_id(event_id)
         if event is None:
             raise EventNotFound("Event not found")
+
+        # Phase 6.6: remember the pre-update span so sessions affected by the
+        # old configuration are reconciled back even when the event moves.
+        old_start = event.start_date
+        old_end = event.end_date
 
         # Partial update: absent fields keep their current values. `subject_id`
         # and friends can be explicitly nulled to convert scoping.
@@ -136,6 +147,13 @@ class EventService:
         )
 
         try:
+            # Reconcile the union of the old and new spans: dates the event
+            # stopped covering are restored, dates it now covers are applied.
+            await self.repo.flush()
+            await self.sync.sync_event(
+                event,
+                span_override=(min(old_start, event.start_date), max(old_end, event.end_date)),
+            )
             await self.db.commit()
         except Exception:
             await self.db.rollback()
@@ -157,6 +175,11 @@ class EventService:
             return event
         event.active = False
         try:
+            # Phase 6.6: reconcile the event's dates back to what the remaining
+            # active events imply — sessions it cancelled are restored, extras
+            # it created are removed (attendance-bound ones are preserved).
+            await self.repo.flush()
+            await self.sync.sync_event(event)
             await self.db.commit()
         except Exception:
             await self.db.rollback()

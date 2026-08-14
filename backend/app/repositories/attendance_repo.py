@@ -38,11 +38,18 @@ class AttendanceRepository:
         self.db.add(record)
         
     async def get_subject_counts_up_to_date(self, user_id: UUID, subject_id: UUID, end_date: date) -> List[Tuple[str, AttendanceStatus]]:
-        # This joins ClassSession and AttendanceRecord for a given student and subject
+        # This joins ClassSession and AttendanceRecord for a given student and subject.
+        # Cancelled sessions are excluded: a cancelled class is not a pending,
+        # absent, or attended class (Phase 6.6 event->session integration; the
+        # legacy engine applied the same rule via the effective schedule).
         stmt = select(ClassSession.class_type, AttendanceRecord.status)\
             .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id))\
-            .filter(ClassSession.subject_id == subject_id, ClassSession.date <= end_date)
-            
+            .filter(
+                ClassSession.subject_id == subject_id,
+                ClassSession.date <= end_date,
+                ClassSession.is_cancelled.is_(False),
+            )
+
         result = await self.db.execute(stmt)
         return list(result.all())
 
@@ -50,14 +57,16 @@ class AttendanceRepository:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
         # attendance from the previous quiz boundary through the day before the quiz).
+        # Cancelled sessions are excluded for the same reason as above.
         stmt = select(ClassSession.class_type, AttendanceRecord.status)\
             .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id))\
             .filter(
                 ClassSession.subject_id == subject_id,
                 ClassSession.date >= start_date,
-                ClassSession.date <= end_date
+                ClassSession.date <= end_date,
+                ClassSession.is_cancelled.is_(False),
             )
-            
+
         result = await self.db.execute(stmt)
         return list(result.all())
 
