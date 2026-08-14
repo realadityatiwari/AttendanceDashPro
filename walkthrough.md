@@ -504,3 +504,28 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 
 - Phase 6.7 — verification/freeze (next; not started).
 - Institutional holiday/break/working-Saturday dates — pending authoritative input.
+
+---
+
+# AttendanceDash Pro — Phase 6.7 Walkthrough
+
+> **PHASE 6.7 COMPLETE — PHASE 6 FROZEN.** Final verification of the whole
+> Calendar & Academic Events subsystem (6.1 → 6.6) as one coherent system:
+> 90/90 checks across three verifiers, exact database baseline restored, and a
+> clean architectural review. Not a feature phase — nothing was redesigned.
+
+## What Phase 6.7 Delivered
+
+1. **`verify_phase_6_7.py` (NEW) — 31/31 PASS**: engine weekend convention (DEFAULT_WEEKENDS `[0,6]`, JS getDay mapping), MID_SEMESTER_BREAK closure + priority tier 60, `/events` active-default/inverted-422/upcoming, calendar read model (outside-semester empty truth, July/December clamping, weekend correctness, QUIZ_DAY working), all six closure types cancel their day's sessions with rows preserved, EXTRA_TUTORIAL/EXTRA_PRACTICAL exactly-one extras, WORKING_DAY_OVERRIDE calendar-only (working day, zero session mutation), cancelled session → 409 on attendance, deactivate→re-enable convergence, seeding integrity (17 QUIZ_DAY, nothing fabricated), and a full 10-table baseline restoration assertion.
+2. **Regression**: 6.5 → 23/23, 6.6 → 36/36 — combined **90/90 PASS**; verifiers converge in any order; `compileall` PASS.
+3. **Static review**: calendar & events UIs render the backend read model only (no weekend/holiday/session math, no business logic in React); layering API→Service→Repository→DB intact; `EventSessionSynchronizer` is the only session-sync path; no engine rewrites, no hardcoded dates in `app/`, no N+1, role resolved from the DB per request.
+
+## Database State After 6.7
+
+- Exact baseline: `academic_events`=17, `class_sessions`=684 (0 cancelled, 0 extra), `attendance_records`=89, enrollments=18, subjects=9, quiz_schedules=18, users=30 (1 ADMIN). No test residue.
+
+## Phase 6 is now FROZEN
+
+- Frozen: calendar engine semantics, `/api/v1/events` + `/api/v1/calendar*` contracts, calendar/events UI, event registry, event service + `EventSessionSynchronizer`, the three verifiers, and the baseline. Changes require a new phase.
+- Known limitations frozen as documented: baseline-span-bounded session materialization, extra sessions without event linkage, the institutional-date data gap (pending authoritative input), today-clamped views.
+- Browser/manual testing remains the user's responsibility.

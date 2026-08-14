@@ -504,3 +504,52 @@ Cancelled sessions were previously counted as pending in the student pipeline. F
 - No authoritative institutional holiday/break/working-Saturday dates exist in the repo — the data gap stands; nothing fabricated.
 - Extra sessions carry no event linkage (schema has none) — reconciliation matches extras by (subject_id, class_type) count, which is deterministic but cannot distinguish which event produced which extra.
 - History/Dashboard today-based views clamp to today (2026-08-14); event effects on future dates are visible via calendar/daily/eligibility reads.
+
+---
+
+## PHASE 6.7 — CALENDAR & ACADEMIC EVENTS VERIFICATION / FREEZE
+
+Status: **COMPLETE / FROZEN** (2026-08-15). Phase 6 (6.0 → 6.6) verified as one coherent system and frozen. No feature development, no engine rewrites, no schema redesign, no frontend changes.
+
+### Verification
+
+- `backend/scripts/verify_phase_6_7.py` (NEW) — **31/31 PASS**:
+  - **6.1:** `DEFAULT_WEEKENDS == [0, 6]` (JS getDay convention: Sunday=0, Saturday=6); MID_SEMESTER_BREAK is a closure (Monday non-working) and shares SEMESTER_BREAK's priority tier 60; `/events` default = active only; inverted date range → 422; `upcoming=true` semantics.
+  - **6.2:** calendar read model — January 2026 (outside semester) → truthful empty result with real bounds; July clamps to semester start 2026-07-15; December respects semester end 2026-12-31; Sat/Sun non-working, Mon working; QUIZ_DAY remains a working day.
+  - **6.5:** seeding integrity — exactly 17 events, ALL `QUIZ_DAY`, all active, none fabricated, matching 17 SCHEDULED `quiz_schedules`; deactivate → re-enable via PATCH converges the pipeline.
+  - **6.6:** all six closure types (INSTITUTE_HOLIDAY, FESTIVAL_HOLIDAY, EMERGENCY_CLOSURE, SEMESTER_BREAK, MID_SEMESTER_BREAK + PUBLIC_HOLIDAY already in 6.6) cancel every session on the date with rows preserved and the day non-working; EXTRA_TUTORIAL / EXTRA_PRACTICAL create exactly one `is_extra` session each (no timetable entry); WORKING_DAY_OVERRIDE is calendar/read-only (working day, zero session mutation); cancelled session rejects attendance with **409**.
+  - **Baseline:** full 10-table assertion — events=17, sessions=684 (0 cancelled, 0 extra), records=89, enrollments=18, subjects=9, quizzes=18, users=30, admins=1 — restored exactly.
+- Regression: `verify_phase_6_5.py` **23/23** + `verify_phase_6_6.py` **36/36**; `compileall` PASS; combined **90/90**. All three verifiers converge in any order (startup cleanups handle each other's leftovers).
+- Frontend (static): CalendarGrid/DayDetail/calendar page render only the backend read model (no weekend/holiday/session math; `getDay()` used for layout alignment only; semester bounds and month gating from backend data; selection state month-keyed so it never leaks across months; truthful loading/error/empty states; aria-labels intact). Events page consumes the backend contract (server-side range overlap, inverted range prevented client-side + 422 server-side, active filter maps to the API `active` param, grouping presentation-only, unknown event types humanized by string, admin surface gated by backend-provided role).
+
+### Architectural review (targeted, Phase 6 scope)
+
+| Check | Result |
+|---|---|
+| Duplicated event/calendar/attendance semantics | None — engine + `EventSessionSynchronizer` are the only paths |
+| React-side business logic | None (read-model rendering only) |
+| Direct DB access from Phase 6 endpoints | None (auth.py/quiz.py/laboratory.py pre-date Phase 6; unchanged) |
+| Sync outside EventSessionSynchronizer | None (event_service.py only) |
+| Engine rewrites | None (calendar/attendance/eligibility engines untouched) |
+| Schema changes beyond Phase 6.5 | None (only `d4e5f6a7b8c9_add_user_role`) |
+| Hidden hardcoded academic dates | Zero matches in `app/` (semester bounds from academic context) |
+| Unsafe deletion of attended sessions | Impossible — attendance-guard in synchronizer; verified live (attended closure 07-15 → zero mutation) |
+| Role trust in client/JWT | None — role resolved from DB per request |
+| Repository/service boundary bypasses | None — endpoints call services only |
+| N+1 in calendar read model | None — one enrollment-scoped session query per month |
+
+### Files changed (Phase 6.7)
+
+| Layer | Files |
+|---|---|
+| NEW | `backend/scripts/verify_phase_6_7.py` |
+| Docs | `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+
+### Freeze
+
+Phase 6 is **FROZEN**. Frozen boundaries: calendar engine constants/priorities/closure semantics, `/api/v1/events` + `/api/v1/calendar*` contracts, calendar/events UI, event registry validation rules, event service transaction+sync wiring, `EventSessionSynchronizer` semantics, the three verifiers, and the baseline (17/684/0/0/89/18/9/18/30/1). Known limitations and the institutional-date data gap are documented as frozen state, not defects.
+
+### Deferred (unchanged, later phases)
+
+- Institutional holiday/break/working-Saturday dates — pending authoritative product input (data gap).
+- Any post-freeze improvement must be a new phase with its own verification.

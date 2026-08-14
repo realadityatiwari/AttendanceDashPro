@@ -544,3 +544,33 @@ Status: **COMPLETE** (2026-08-14). Persisted events now mutate the canonical ses
 ## Deferred (intentionally NOT done here)
 
 - Phase 6.7 — verification/freeze (explicit next phase, requires go-ahead). Institutional holiday/break/working-Saturday dates pending authoritative input.
+
+---
+
+# PHASE 6.7 — CALENDAR & ACADEMIC EVENTS VERIFICATION / FREEZE
+
+Status: **COMPLETE / FROZEN** (2026-08-15). Phase 6 is verified end-to-end and frozen. This was NOT a feature phase — no engine rewrites, no schema redesign, no frontend changes, no new business logic.
+
+## What was done
+
+1. **`backend/scripts/verify_phase_6_7.py` (NEW) — 31/31 PASS**, closing every gap not covered by the 6.5/6.6 verifiers:
+   - **6.1 contracts:** `DEFAULT_WEEKENDS=[0,6]` (JS convention Sunday=0, Saturday=6); MID_SEMESTER_BREAK is a closure sharing SEMESTER_BREAK's tier 60; `/events` active-default, inverted range → 422, `upcoming=true`.
+   - **6.2 read model:** truthful empty month outside semester (Jan 2026); July clamps to 2026-07-15; December respects 2026-12-31; weekends correct; QUIZ_DAY stays a working day.
+   - **6.5:** seeding integrity (17/17 QUIZ_DAY, all active, nothing fabricated, matches SCHEDULED quiz_schedules); deactivate → PATCH re-enable converges.
+   - **6.6:** all five additional closure types cancel every session on their date (rows preserved, day non-working); EXTRA_TUTORIAL/EXTRA_PRACTICAL → exactly one `is_extra` each; WORKING_DAY_OVERRIDE → working day, zero session mutation; cancelled session → **409** on attendance.
+   - **Baseline:** 10-table exact restoration (17/684/0/0/89/18/9/18/30/1).
+2. **Regression:** 6.5 → 23/23, 6.6 → 36/36, 6.7 → 31/31 = **90/90**; `compileall` PASS; verifiers converge in any order.
+3. **Static review:** calendar + events UIs are presentation-only; layering API→Service→Repository→DB intact; `EventSessionSynchronizer` sole sync path; no engine rewrites; no hardcoded dates in `app/`; no N+1; role from DB per request; no schema change beyond the 6.5 migration.
+
+## Database state after 6.7
+
+- Exact baseline: events=17, sessions=684 (0 cancelled, 0 extra), records=89, enrollments=18, subjects=9, quizzes=18, users=30 (1 ADMIN). No test residue.
+
+## Do Not Touch Again (from this phase)
+
+- Phase 6 is **FROZEN**: calendar engine semantics, events/calendar API contracts, calendar/events UI, event registry, event service + synchronizer wiring, the three verifiers, and the documented baseline. Any change requires a new phase with its own verification.
+
+## Deferred (intentionally NOT done here)
+
+- Institutional holiday/break/working-Saturday dates — pending authoritative product input (documented data gap).
+- Browser/manual testing — the user's responsibility (no automation run).
