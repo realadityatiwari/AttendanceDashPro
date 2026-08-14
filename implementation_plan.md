@@ -243,3 +243,39 @@ Status: **COMPLETE** (2026-08-14). Scope: the four defects PROVEN in `docs/phase
 ### Not changed / deferred
 
 - Attendance/eligibility engines, Track/History/Dashboard calculations, auth, migrations, schema. Deferred: calendar UI, event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.
+
+---
+
+## PHASE 6.2 — CALENDAR READ MODEL & API
+
+Status: **COMPLETE** (2026-08-14). Backend-only month-bounded calendar read model for the future Phase 6.3 calendar UI. Read-only; no UI/CRUD/admin/seeding/event→session integration.
+
+### Endpoint
+
+- `GET /api/v1/calendar?year=YYYY&month=M` (JWT): `year` Query `ge=2000 le=2100`, `month` Query `ge=1 le=12` — FastAPI validation (422 on malformed/out-of-range). Existing `/calendar/today` and `/calendar/{date}` unchanged.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `backend/app/schemas/calendar.py` | `CalendarDayItem(AcademicDayResponse)` + `non_working_reason` + `session_count`; `CalendarMonthResponse` (year, month, semester_start/end, effective_start/end, days) |
+| `backend/app/services/calendar_service.py` | `get_month_view(user, year, month)` — semester clamp, engine delegation, one-scoped-query session counts; service now composes `UserRepository` + `AttendanceRepository` |
+| `backend/app/api/v1/endpoints/calendar.py` | `GET ""` with `year`/`month` Query validation |
+
+### Read model
+
+- Semester bounds from `UserRepository.get_academic_context` (same as /student/me, Track, History); `effective_start = max(month_start, semester_start)`, `effective_end = min(month_end, semester_end)`; month outside semester → `days: []` (inverted effective range); no context → `days: []` with null bounds.
+- Day resolution entirely via `calendar_engine.get_academic_day` + `DEFAULT_WEEKENDS` (no second algorithm); `non_working_reason` = dominant active event title, else "Weekend", None when working.
+- Events via `get_all_events(active=True, date_from, date_to)` (Phase 6.1 semantics); empty table → correct calendar with empty `events` arrays.
+- `session_count` from one enrollment-scoped `get_sessions_with_status` query grouped by date (no N+1; no attendance mathematics).
+
+### Verification
+
+- `compileall backend/app` — PASS; `npx tsc --noEmit` — PASS.
+- Service tests (live DB, read-only) 24/24 PASS (bounds, clamps, weekends, reasons, MID_SEMESTER_BREAK closure, inactive ignored, cross-month exclusion, session counts vs independent SQL, rollback).
+- API contract tests (in-process httpx ASGITransport on real `api_router`) 21/21 PASS (7 validation 422s, Aug 200 + exact structure, Jan 2027 empty, existing endpoints intact).
+- No persisted DB mutations (read-only SQL: 0 events, 9 subjects, 684 sessions, 84 records, 18 enrollments, 30 users). No browser testing.
+
+### Not changed / deferred
+
+- Engines, Track/History/Dashboard math, auth, migrations, schema unchanged. Deferred: calendar UI (6.3), events page upgrade (6.4), persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7), plus the standing 6.1 deferrals.

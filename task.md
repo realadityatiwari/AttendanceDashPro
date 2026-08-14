@@ -259,3 +259,84 @@ Now a closure (same tier as SEMESTER_BREAK, priority 60): an active MID_SEMESTER
 ## Deferred (intentionally NOT done here)
 
 - Calendar UI / month-day calendar / calendar route · Events CRUD · admin role system · event validation registry · event seeding · event→class_sessions integration · EXTRA/CLASS_CANCELLED session mutation · substitution schedule implementation · quiz/event integration · semester/section event scoping · timetable section schema redesign · TodayClassesCard cleanup · engine type-hint refactor · legacy attendance-window field restoration.
+
+---
+
+## PHASE 6.2 - CALENDAR READ MODEL & API
+
+Status: **COMPLETE** (2026-08-14). Backend-only calendar read model for the future Phase 6.3 calendar UI. No UI, no event CRUD, no admin, no seeding, no event→session integration.
+
+## Endpoint contract
+
+- `GET /api/v1/calendar?year=YYYY&month=M` (JWT) — month-bounded calendar read model.
+- `year` Query `ge=2000 le=2100`; `month` Query `ge=1 le=12` — FastAPI/Pydantic validation, malformed/out-of-range input → 422 (no custom error semantics).
+- Read-only. Returns `CalendarMonthResponse` (never raw ORM).
+- Existing endpoints unchanged: `GET /calendar/today`, `GET /calendar/{date}`.
+
+## Read-model structure (CalendarMonthResponse → CalendarDayItem[])
+
+```
+{
+  year, month,
+  semester_start, semester_end,          // student's real academic bounds (None when no context)
+  effective_start, effective_end,        // intersection of month and semester
+  days: [ {
+    date, is_working_day, day_type, is_teaching_day,
+    original_day_of_week, substitution_schedule_override,
+    non_working_reason,                   // dominant event title or 'Weekend'; None when working
+    events: [AcademicEventResponse],      // active events only
+    session_count,                        // scheduled sessions for the student's enrolled subjects
+  } ]
+}
+```
+
+- `CalendarDayItem` extends the existing `AcademicDayResponse` (reuse of the established day shape).
+- Month entirely outside the semester → `days: []` with inverted `effective_start > effective_end` (truthful empty result, never invented dates).
+- No academic context (no section/semester) → `days: []` with null bounds.
+
+## Semester bounding
+
+- Resolved through the same `UserRepository.get_academic_context` used by /student/me, Track and History — no hardcoded dates.
+- `effective_start = max(month_start, semester_start)`; `effective_end = min(month_end, semester_end)`; month bounds computed server-side (Dec 12-31 handled).
+
+## Calendar-engine reuse
+
+- Day resolution (`is_working_day`, `is_teaching_day`, `day_type`, `events`, `substitution_schedule_override`) delegates entirely to `calendar_engine.get_academic_day` with the canonical `DEFAULT_WEEKENDS`; no second weekday/closure algorithm. `non_working_reason` is a render-only string derived from the engine's `AcademicDay` output (dominant event title, else "Weekend").
+- Phase 6.1 semantics preserved: Fri 2026-08-14 working; Sat/Sun non-working; MID_SEMESTER_BREAK is a closure; inactive events never affect resolution.
+
+## Event handling
+
+- `CalendarRepository.get_all_events(active=True, date_from=effective_start, date_to=effective_end)` — Phase 6.1 /events semantics (active only, date-range overlap). Inactive/past events outside the month never leak into the read model. Empty table → structurally correct calendar with empty `events` arrays.
+
+## Session-count implementation
+
+- One `AttendanceRepository.get_sessions_with_status(user.id, effective_start, effective_end)` query for the whole range (no N+1), grouped by date in memory; the method is the Phase 6.1 enrollment-scoped canonical aggregation source.
+- `session_count` = scheduled `class_sessions` rows for the authenticated student's enrolled subjects on that date (cancelled sessions are still scheduled rows and are included). No attendance percentages, quiz, forecast, or safe-skip mathematics.
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `backend/app/schemas/calendar.py` | `CalendarDayItem` (extends `AcademicDayResponse`, adds `non_working_reason`, `session_count`) + `CalendarMonthResponse` |
+| `backend/app/services/calendar_service.py` | `get_month_view(user, year, month)` (+ `_month_bounds`, `_non_working_reason`); service now composes `UserRepository` + `AttendanceRepository` |
+| `backend/app/api/v1/endpoints/calendar.py` | `GET ""` with `year`/`month` Query validation |
+
+## Verification (static / in-process / read-only; no browser testing)
+
+- `compileall backend/app` — PASS; `npx tsc --noEmit` — PASS (0 errors).
+- Service-level (live DB, read-only): Aug 2026 semester bounds + effective range + 31 days; Fri 08-14 working, Sat 08-15 / Sun 08-16 non-working with "Weekend" reason; session counts cross-checked against independent enrollment-scoped SQL; Jul 2026 clamp to 07-15; Dec 2026 full month; Jan 2026 / Jan 2027 empty; MID_SEMESTER_BREAK → non-working "Mid Semester Break"; inactive holiday ignored; September holiday excluded from August — 24/24 PASS.
+- API contract (in-process httpx ASGITransport on the real `api_router`): 7 validation cases (month 0/13, year 1999/2101, non-numeric, missing params) → 422; valid Aug 2026 → 200 with exact structure; Jan 2027 → 200 empty; `/calendar/today` and `/calendar/{date}` still work — 21/21 PASS.
+- Read-only SQL: academic_events 0 · subjects 9 · class_sessions 684 · attendance_records 84 · enrollments 18 · users 30 (unchanged).
+
+## Database mutation status
+
+- **ZERO INSERT/UPDATE/DELETE persisted.** Event rows existed only inside a rolled-back transaction; no test sessions, no attendance, no user/enrollment changes.
+
+## Do Not Touch Again (from this phase)
+
+- The `GET /api/v1/calendar?year=&month=` contract and `CalendarMonthResponse` shape (Phase 6.3 renders it directly).
+- `CalendarService.get_month_view` semantics (semester clamp, engine delegation, single-query session counts).
+
+## Deferred (intentionally NOT done here)
+
+- Calendar UI/route, month navigation, date selection, event forms, Upcoming/Today/Past redesign, admin interface — Phase 6.3+. Also deferred: event CRUD, admin roles, validation registry, seeding, event→class_sessions integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.

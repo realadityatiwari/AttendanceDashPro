@@ -274,3 +274,59 @@ Date: 2026-08-14 · Scope: Foundational Calendar Corrections (Phase 6.0 defects,
 - Phase 6.2 — Calendar read model & API (month-bounded, semester-bounded; next per roadmap).
 - Phase 6.3 — Calendar UI · 6.4 — Events page upgrade · 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
 - Deferred per Phase 6.1 scope: event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.
+
+---
+
+# AttendanceDash Pro — Phase 6.2 Walkthrough
+
+Date: 2026-08-14 · Scope: Calendar Read Model & API (backend only, no UI)
+
+> **PHASE 6.2 COMPLETE** — `GET /api/v1/calendar?year=&month=` now returns a
+> semester-bounded, engine-resolved, enrollment-scoped month calendar read model that the
+> future Phase 6.3 UI can render directly without recomputing weekends, closures, events,
+> semester bounds, or class-session counts. Read-only; static/in-process verification only
+> (no browser testing per instruction); zero persisted database mutations.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| `backend/.venv/Scripts/python -m compileall backend/app` — PASS | **VERIFIED** |
+| Frontend `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| Aug 2026: semester bounds 2026-07-15 → 2026-12-31, effective 08-01 → 08-31, 31 day items | **VERIFIED** |
+| 2026-08-14 Friday → working · 2026-08-15 Saturday → non-working "Weekend" · 2026-08-16 Sunday → non-working | **VERIFIED** |
+| Jul 2026 clamped to 07-15 → 07-31 (17 days); Dec 2026 full 12-01 → 12-31 | **VERIFIED** |
+| Jan 2026 and Jan 2027 (outside semester) → empty `days` with inverted effective range | **VERIFIED** |
+| Session counts match independent enrollment-scoped SQL per day and for the whole month | **VERIFIED** |
+| Saturday session_count = 0; working Friday has scheduled classes | **VERIFIED** |
+| Active MID_SEMESTER_BREAK → non-working "Mid Semester Break" (rolled-back event row) | **VERIFIED** |
+| Inactive PUBLIC_HOLIDAY ignored; September holiday excluded from August | **VERIFIED** |
+| API validation: month 0/13, year 1999/2101, non-numeric, missing params → 422 (7 cases) | **VERIFIED** |
+| API happy path (real `api_router`, in-process ASGITransport): Aug 200 + exact shape; Jan 2027 empty; `/calendar/today` and `/calendar/{date}` intact | **VERIFIED** |
+| Read-only SQL: academic_events 0 · subjects 9 · class_sessions 684 · attendance_records 84 · enrollments 18 · users 30 | **VERIFIED** |
+| No browser testing performed (deferred to user) | **AS DESIGNED** |
+
+## What Phase 6.2 Delivered
+
+1. **Month read model** (`CalendarMonthResponse` / `CalendarDayItem` extending `AcademicDayResponse`):
+   `year`, `month`, real `semester_start/end`, `effective_start/end`, and a deterministic per-day list with
+   `date`, `is_working_day`, `day_type`, `is_teaching_day`, `original_day_of_week`,
+   `substitution_schedule_override`, `non_working_reason`, `events[]`, `session_count`.
+2. **Real semester bounds**: `UserRepository.get_academic_context` (the /student/me / Track / History
+   resolver) — never hardcoded; `effective_start = max(month_start, semester_start)`,
+   `effective_end = min(month_end, semester_end)`; months outside the semester return a truthful empty result.
+3. **Engine delegation**: every day is resolved by the canonical `calendar_engine.get_academic_day` with
+   `DEFAULT_WEEKENDS`; `non_working_reason` is a render-only string from engine output (dominant event
+   title, else "Weekend"). Phase 6.1 semantics preserved.
+4. **Events**: `get_all_events(active=True, date_from, date_to)` (Phase 6.1 contract); inactive events and
+   events outside the month never leak; an empty table still yields a structurally correct calendar.
+5. **Session counts**: one enrollment-scoped `get_sessions_with_status` query for the range, grouped by
+   date (no N+1); counts reflect scheduled sessions for the student's enrolled subjects only; no
+   attendance/quiz mathematics.
+6. **Validation**: FastAPI `Query` constraints (`year 2000-2100`, `month 1-12`) — 422 for every invalid form.
+
+## Remaining Work
+
+- Phase 6.3 — Calendar UI (route, month/day navigation, working/non-working indicators, event cards) rendering the 6.2 read model directly.
+- Phase 6.4 — Events page upgrade · 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
+- Standing deferrals unchanged (event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration).
