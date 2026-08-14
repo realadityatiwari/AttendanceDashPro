@@ -529,3 +529,26 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 - Frozen: calendar engine semantics, `/api/v1/events` + `/api/v1/calendar*` contracts, calendar/events UI, event registry, event service + `EventSessionSynchronizer`, the three verifiers, and the baseline. Changes require a new phase.
 - Known limitations frozen as documented: baseline-span-bounded session materialization, extra sessions without event linkage, the institutional-date data gap (pending authoritative input), today-clamped views.
 - Browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 7.0 Walkthrough
+
+> **PHASE 7.0 COMPLETE — READ-ONLY QUIZ ELIGIBILITY & SCHEDULE REALITY AUDIT.**
+> No implementation, no DB writes, no commit. Deliverable: `docs/phase_7_0_quiz_eligibility_audit.md` (A–Y).
+
+## What Phase 7.0 Delivered
+
+1. **Eligibility math verified against real data** (engine-in-process, SELECT-only): formula `(Lecture% + Tutorial%)/2 ≥ threshold` (lecture-only when no tutorials) is byte-identical to the legacy JS engines; ADR-010 windows identical; optimizer tie-breaks identical; practicals excluded from eligibility but counted in overall; quiz-day attendance flows through normal sessions; SURPRISE_QUIZ/EXTRA_* flow through `is_extra` sessions.
+2. **Schedule reality captured:** thresholds 70/75/75 from `eligibility_policies`; 17 dated SCHEDULED quiz_schedules + **BCS-054 Q3 UNRESOLVED**; 17 QUIZ_DAY events; semester V 2026-07-15 → 2026-12-31; 9 subjects (6 theory + 3 labs).
+3. **Headline finding (Q-D1):** backend `is_eligible` means *reachable* — with pending classes it is `True` even at 15–36% attendance. All 18 resolved subject×cycle results report eligible=True in current data; the legacy engine would label every one "NEEDS ATTENDANCE". The dashboard quiz snapshot reports 6/6 "Eligible".
+4. **Reference-UI contract gap (Q-D2):** the API cannot currently supply window lecture/tutorial attended-total-%, average, Criterion I/II PASS/FAIL, quiz date, recoverable state, or explanation — the mandated subject cards cannot be built without client-side math (prohibited).
+5. **Decision points Q-D1…Q-D10** documented (audit §R), incl. rule G (students add/remove events) vs the frozen admin-only event mutations (Q-D7).
+
+## Database State After 7.0
+
+- Exact baseline preserved — zero writes: events=17, sessions=684 (0 cancelled, 0 extra), records=89, enrollments=18, subjects=9, quizzes=18, users=30 (1 ADMIN).
+
+## What's Next
+
+- Decisions Q-D1…Q-D10 from the product owner, then **Phase 7.1**: eligibility payload extension (window counts/percentages/criteria/quiz date/tri-state status/explanation) + reference subject-card UI + verifier `verify_phase_7_1.py` + 90/90 regression + baseline restore. No implementation until authorized.

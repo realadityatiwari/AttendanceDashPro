@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`); implementation awaits decisions Q-D1…Q-D10.
 
 ---
 
@@ -48,7 +48,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
 | 5 | Attendance History | 🟢 Complete / Frozen |
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
-| 7 | Quiz Eligibility & Schedule UX | ⚪ Planned |
+| 7 | Quiz Eligibility & Schedule UX | 🟡 **7.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: eligibility math verified against legacy engines & real DB data; schedule reality captured (BCS-054 Q3 UNRESOLVED); 10 decision points (Q-D1…Q-D10) documented for Aditya. Implementation blocked on decisions. |
 | 8 | Attendance Analytics / Intelligence | ⚪ Planned |
 | 9 | Laboratory System | ⚪ Planned |
 | 10 | Settings, Feedback & Account Management | ⚪ Planned |
@@ -377,6 +377,8 @@ The event system must feed the existing engines instead of creating parallel rul
 ---
 
 # 🟡 Phase 7 — Quiz Eligibility & Schedule UX
+
+**7.0 AUDIT COMPLETE (2026-08-15)** — see `docs/phase_7_0_quiz_eligibility_audit.md`. Read-only audit; no code changed. Headline finding: the backend's `is_eligible` (reachability) diverges from the legacy "currently-meets-threshold" definition (Q-D1), and the reference-UI data contract (window lecture/tutorial %, Criterion I/II, recoverable state, quiz date, explanation) is not yet exposed by the API (Q-D2). Implementation (Phase 7.1+) requires decisions Q-D1…Q-D10 from the product owner.
 
 The backend eligibility architecture is already substantially implemented and audited.
 
@@ -1188,7 +1190,7 @@ PHASE 5  ████████████████████  COMPLETE 
 
 PHASE 6  ██████████████░░░░░░  CURRENT 🟡
 PHASE 6  ░░░░░░░░░░░░░░░░░░░░  PLANNED
-PHASE 7  ░░░░░░░░░░░░░░░░░░░░  PLANNED
+PHASE 7  ██████████░░░░░░░░░░  AUDIT COMPLETE (7.0) — implementation pending Q-D1…Q-D10
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
@@ -1235,3 +1237,13 @@ Phase 6.7 is **COMPLETE** (2026-08-15). Phase 6 (6.0 → 6.6) is now **FROZEN**:
 - **Known limitations (frozen as documented):** sessions materialize only within the baseline span (2026-07-15 → 2026-12-31); extras carry no event linkage (count-matched by subject+class_type); institutional holiday/break/working-Saturday dates remain a data gap pending authoritative input; today-based views clamp to today. Browser/manual testing remains the user's responsibility.
 
 Phase 6 is now **FROZEN**. Do not modify its contracts, engines, synchronizer, or verifiers without a new phase.
+
+## Phase 7.0 — Quiz Eligibility & Schedule Reality audit
+
+Phase 7.0 is **COMPLETE** (2026-08-15). Read-only audit; **no implementation, no DB mutation, no commit**:
+
+- **Audit doc:** `docs/phase_7_0_quiz_eligibility_audit.md` (sections A–Y).
+- **Verified (PASS):** eligibility formula `(Lecture% + Tutorial%)/2 ≥ threshold` (lecture-only when no tutorials) matches the legacy engines byte-for-byte; practicals excluded from eligibility but included in overall; quiz-day attendance flows through normal sessions; SURPRISE_QUIZ/EXTRA_* sessions flow through the canonical pipeline; ADR-010 windows identical (Q1 from semester start, QN from previous quiz date, end = quiz − 1); thresholds 70/75/75 from `eligibility_policies` match legacy `policies.quiz`; DB baseline re-confirmed (17/684/0/0/89/18/9/18/30/1); student `9999999999999` has 0 attendance records, admin has 84 (records=89 total across 5 users).
+- **Headline finding:** backend `is_eligible` = reachability (pending>0 ⇒ `is_reachable`), so **every resolved cycle reports eligible=True** in current data; legacy requires deficit 0 (all would show "NEEDS ATTENDANCE"). Dashboard snapshot consequently reports 6/6 Eligible. **Q-D1**.
+- **Other decision points (Q-D2…Q-D10):** eligibility API payload lacks window counts/percentages/Criterion I|II/quiz date/recoverable/explanation (reference UI cannot render without client-side math); `S4_PRODUCT_SPEC` says "(Criterion 1 qualifies) OR (Criterion 2 qualifies)" but both engines implement a single combined rule; `quiz_applicable`/`category` hardcoded in the service (labs rely on having no schedules); DB `combined_threshold` never read; raw-range vs teaching-day counting is latent; **rule G (students add/remove events) conflicts with the frozen admin-only event mutations**; overall denominator = recorded (pending excluded); quiz-day attendance requires a session; BCS-054 Q3 date pending from Aditya.
+- **Next:** decisions Q-D1…Q-D10, then Phase 7.1 implementation (eligibility payload extension §S + reference subject-card UI + tri-state status; verifier `verify_phase_7_1.py`; regression + baseline restore).

@@ -570,6 +570,35 @@ Status: **COMPLETE / FROZEN** (2026-08-15). Phase 6 is verified end-to-end and f
 
 - Phase 6 is **FROZEN**: calendar engine semantics, events/calendar API contracts, calendar/events UI, event registry, event service + synchronizer wiring, the three verifiers, and the documented baseline. Any change requires a new phase with its own verification.
 
+---
+
+# PHASE 7.0 — QUIZ ELIGIBILITY & SCHEDULE REALITY AUDIT
+
+Status: **COMPLETE** (2026-08-15) — READ-ONLY audit, **PASS** (no defects to fix; discrepancies reported for decision). No implementation, no DB mutation, no commit.
+
+## What was audited
+
+1. **Eligibility path:** `GET /api/v1/quiz-eligibility/{code}/{cycle}` → `EligibilityService` → `calendar_engine.get_attendance_window` → `attendance_repo.get_subject_counts_between` → `eligibility_engine.evaluate_quiz_eligibility` → `meets_attendance_target`/`optimize_attendance`.
+2. **Schedule reality:** quiz_cycles/eligibility_policies (70/75/75), 18 quiz_schedules (17 dated SCHEDULED; **BCS-054 Q3 UNRESOLVED**), 17 QUIZ_DAY events, semester V (2026-07-15 → 2026-12-31), 9 subjects (6 theory + 3 labs).
+3. **Legacy parity:** `js/quiz-engine.js`, `attendance-engine.js`, `calendar-engine.js`, `ui.js`, docs 05/06/07/15, `S4_PRODUCT_SPEC`, ADR-010.
+4. **Live math trace:** engine-in-process against the real DB for student `9999999999999` (0 records) and admin `2401220100027` (84 records, overall 71.43% recorded-only / 46.51% incl. pending).
+
+## Verification summary
+
+- Formula + window + optimizer parity with legacy: **PASS** (byte-equivalent rules; identical ADR-010 window bounds).
+- Practical exclusion from eligibility, inclusion in overall: **PASS**.
+- Quiz-day attendance via normal sessions; SURPRISE_QUIZ/EXTRA_* via `is_extra` sessions: **PASS** (architecture-level).
+- DB baseline re-confirmed: 17/684/0/0/89/18/9/18/30/1. **DB mutation status: NONE.**
+- Discrepancies (reported, NOT fixed): Q-D1 eligible-vs-reachable semantics (all 18 subject×cycle results say eligible=True today; legacy says "NEEDS ATTENDANCE"); Q-D2 reference-UI data contract unavailable from the API; Q-D3 single-rule vs "(Criterion 1) OR (Criterion 2)"; Q-D4 hardcoded `quiz_applicable=True`; Q-D5 `combined_threshold` never read; Q-D6 raw-range counting (latent); **Q-D7 rule G students-add/remove-events vs frozen admin-only mutations**; Q-D8 overall denominator; Q-D9 quiz-day attendance without a session; Q-D10 BCS-054 Q3 date.
+
+## Database state after 7.0
+
+- Exact baseline preserved (no writes): events=17, sessions=684 (0 cancelled, 0 extra), records=89, enrollments=18, subjects=9, quizzes=18, users=30 (1 ADMIN).
+
+## Do Not Touch Again (from this phase)
+
+- Same as Phase 6.7 (frozen list) plus: **the audit is documentation-only** — the eligibility engine, eligibility API contract, and the frozen Phase 6 event system remain untouched until Q-D1…Q-D10 are decided and Phase 7.1 is authorized.
+
 ## Deferred (intentionally NOT done here)
 
 - Institutional holiday/break/working-Saturday dates — pending authoritative product input (documented data gap).

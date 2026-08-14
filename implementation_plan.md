@@ -552,4 +552,32 @@ Phase 6 is **FROZEN**. Frozen boundaries: calendar engine constants/priorities/c
 ### Deferred (unchanged, later phases)
 
 - Institutional holiday/break/working-Saturday dates — pending authoritative product input (data gap).
+
+---
+
+## PHASE 7.0 — QUIZ ELIGIBILITY & SCHEDULE REALITY AUDIT
+
+Status: **COMPLETE** (2026-08-15). Read-only audit — no implementation, no DB writes, no commit. Deliverable: `docs/phase_7_0_quiz_eligibility_audit.md` (sections A–Y).
+
+### What the audit established
+
+1. **Formula parity (PASS):** `meets_attendance_target` (average of Lecture% and Tutorial%, lecture-only when no tutorials) is identical to legacy `meetsAttendanceTarget`; the exhaustive optimizer matches `optimizeLive` (same tie-break: fewest total, then fewest lectures). ADR-010 window semantics identical in both engines (Q1 = [semester start, quiz−1]; QN>1 = [prev quiz, quiz−1]).
+2. **Data reality (SELECT-only):** 9 subjects (6 theory quiz-applicable + 3 labs); policies 70/75/75 from `eligibility_policies` (matches legacy `policies.quiz`); 17 dated SCHEDULED quiz_schedules + **BCS-054 Q3 UNRESOLVED**; 17 active events all QUIZ_DAY; semester V 2026-07-15 → 2026-12-31. Records=89 split: admin 84 + 4 students (2/1/1/1); student `9999999999999` has 0 records; no future-dated records.
+3. **Worked traces (in-process engine, real DB):** admin Quiz I windows: BCS-501 L 18 (10 att) / T 6 (1 att) → avg 36.1% vs 70%; BCS-502 51.1%; BCS-503 44.2%; BCS-054 29.9%; BCS-058 26.4%; BNC-501 27.3% (no tutorials). All report `is_eligible=True` (reachable) — legacy would show "NEEDS ATTENDANCE" for all.
+4. **Headline discrepancy (Q-D1):** backend `is_eligible = is_reachable` when any class is pending ⇒ **everything eligible** today; legacy requires `reachable && deficits == 0`. Dashboard snapshot reports 6/6 Eligible.
+5. **UI data contract gap (Q-D2):** `EligibilityResult` lacks window lecture/tutorial counts+percentages, average, quiz date, Criterion I/II PASS/FAIL, recoverable state, explanation. Reference UI cannot render these without client-side recomputation (prohibited).
+6. **Decision points Q-D1…Q-D10** (see audit doc §R): tri-state eligibility; Criterion I OR II (per `S4_PRODUCT_SPEC.md:32-33`); payload extension; honor `subjects.quiz_applicable`; DB `combined_threshold` authority; raw-range vs teaching-day counting; **rule G students-add/remove-events vs frozen admin-only mutations**; overall denominator (recorded vs all); quiz-day attendance without a session; BCS-054 Q3 date.
+
+### Files changed (Phase 7.0)
+
+| Layer | Files |
+|---|---|
+| Docs | NEW `docs/phase_7_0_quiz_eligibility_audit.md`; `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+| Code | **NONE** (audit-only) |
+
+### Next (Phase 7.1, requires Q-D1…Q-D10)
+
+- Backend: extend the eligibility payload (window-bounded counts/percentages, criterion structure, quiz date, tri-state status, explanation) — computed by the canonical engines, never in React.
+- Frontend: reference subject-card UI rendering that contract verbatim (badge, attended/total/%, average, required, expandable "View Calculation", recoverable state).
+- Verifier `verify_phase_7_1.py`; regression 6.5/6.6/6.7 (90/90); baseline restore; docs update.
 - Any post-freeze improvement must be a new phase with its own verification.
