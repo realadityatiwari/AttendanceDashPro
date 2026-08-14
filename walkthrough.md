@@ -378,3 +378,48 @@ Date: 2026-08-14 · Scope: Calendar UI (frontend only)
 - Phase 6.4 — Events page upgrade (Upcoming/Today/Past grouping, filters, details; keep read-only).
 - Phase 6.5 — persistence + admin auth + seeding · 6.6 — event→engine integration · 6.7 — verification/freeze.
 - Standing deferrals unchanged (event CRUD, admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration).
+
+---
+
+# AttendanceDash Pro — Phase 6.4 Walkthrough
+
+Date: 2026-08-14 · Scope: Events page upgrade (frontend only)
+
+> **PHASE 6.4 COMPLETE** — `/tools/events` is now the production read-only
+> Academic Events page: Upcoming / Today / Past grouping, event-type / state /
+> date-range filters, and truthful loading/error/empty states — all consuming
+> the frozen Phase 6.1 `GET /api/v1/events` contract with the backend as the
+> single data authority. No second event data source; no calendar semantics in
+> React; zero backend changes; zero database mutations.
+
+## Verification Summary (every item labelled)
+
+| Verification | Label |
+|---|---|
+| `npx tsc --noEmit` — 0 errors | **VERIFIED** |
+| ESLint on changed files — PASS (no new warnings) | **VERIFIED** |
+| `git diff` — no backend files changed (Phase 6.1/6.2 contracts untouched) | **VERIFIED** |
+| No migrations/schema changes; no attendance/eligibility engine changes | **VERIFIED** |
+| No event CRUD, no admin, no seeding; `academic_events` untouched | **VERIFIED** |
+| `useEvents(params)` — one logical request per filter combination; `mutate` for retry | **VERIFIED** |
+| Grouping is presentation-only (local today vs backend date ranges) — reviewed | **VERIFIED** |
+| No working-day/holiday/session/eligibility calculations in React — reviewed | **VERIFIED** |
+| Unknown event types humanize gracefully (reviewed humanizer) | **VERIFIED** |
+| Empty state differentiates "no events" vs "no filter matches" — reviewed | **VERIFIED** |
+| No browser testing performed (deferred to user) | **AS DESIGNED** |
+
+## What Phase 6.4 Delivered
+
+1. **Single data source**: the existing Phase 6.1 endpoint. `useEvents(params?)` gained the Phase 6.1 query contract (`active`, `date_from`, `date_to`, `upcoming`) with a stable per-params SWR key; the default call is unchanged.
+2. **Grouping**: Today (local today inside the event range), Upcoming (end_date after today, start asc), Past (ended, newest first). Pure presentation over backend dates.
+3. **Filters**: event type (client-side over the fetched set, since the API has no type filter), Active/Inactive state (honestly supported by `active=true|false`), and From/To date range (server-side range overlap; inverted ranges blocked client-side with a hint). Reset clears all.
+4. **Rows**: compact `EventRow` cards — date block, humanized type title (robust for unknown/future types), semantic badges (Today/Holiday/Extra/Cancelled/class type/Inactive), date range with end date only when different, substitution note, and a `Calendar` link to `/calendar` (no invented query params; calendar route untouched).
+5. **Sections**: `Upcoming` / `Today` / `Past` headings with counts; empty sections show muted placeholder lines.
+6. **States**: skeleton sections on load (no fake empty flash); events-specific error card with "Try again" (`mutate`); and a truthful zero-row empty state ("No events scheduled" — correct today, since `academic_events` has 0 rows) distinguished from "No events match the selected filters".
+7. **Accessibility**: semantic h1/h2/h3 headings, labeled native filter controls, focus-visible rings, real buttons/links only (no div-as-button, no Base UI button-as-link composition).
+
+## Remaining Work
+
+- Phase 6.5 — event persistence + admin auth + seeding (event CRUD, validation registry; admin-owned mutation).
+- Phase 6.6 — event→engine integration · 6.7 — verification/freeze.
+- Standing deferrals unchanged (admin roles, validation registry, seeding, event→session integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration).

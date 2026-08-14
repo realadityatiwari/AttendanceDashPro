@@ -10,6 +10,7 @@ import {
   AttendanceHistoryResponse,
   AttendanceHistoryParams,
   AcademicEventResponse,
+  EventsParams,
   CalendarMonthResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
@@ -123,8 +124,19 @@ export function useAttendanceHistory(params: AttendanceHistoryParams = {}) {
   };
 }
 
-export function useEvents() {
-  const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>('/api/v1/events', fetcher, STANDARD_CACHE);
+export function useEvents(params: EventsParams = {}) {
+  // One logical request per filter combination; the backend applies date/active
+  // semantics server-side (Phase 6.1 contract). Type grouping is presentation
+  // only and happens in the page.
+  const query = new URLSearchParams();
+  (Object.entries(params) as [string, string | number | boolean | undefined][]).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const queryString = query.toString();
+  const url = queryString ? `/api/v1/events?${queryString}` : "/api/v1/events";
+  const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>(url, fetcher, STANDARD_CACHE);
   return {
     events: data,
     isLoading,

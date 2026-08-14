@@ -1,108 +1,283 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useEvents } from "@/hooks/useApi";
-import { ClassType } from "@/types/api";
+import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
-import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EventRow, humanizeEventType } from "@/components/events/EventRow";
+import { getLocalDateString } from "@/lib/date";
+import { AlertCircle, CalendarX2, RefreshCw } from "lucide-react";
 
+type ActiveFilter = "active" | "inactive";
+
+const TYPE_OPTIONS = Object.values(EventType);
+
+/**
+ * Read-only Academic Events presentation page (Phase 6.4).
+ *
+ * The backend /events endpoint is authoritative for event existence, dates,
+ * types, holiday metadata, class-type metadata, and active state. The page
+ * only: (1) passes server-side filters (active, date range) to that endpoint,
+ * (2) applies the event-type filter to the already-returned set for
+ * presentation, and (3) groups events by whether today falls inside their date
+ * range. No academic calendar semantics are computed here.
+ */
 export default function EventsPage() {
-  const { events, isLoading, isError } = useEvents();
+  const todayStr = getLocalDateString();
 
-  if (isError) {
-    return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
-        <PageHeader title="Academic Events" />
-        <ErrorState message="Could not load academic events." />
-      </div>
-    );
-  }
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
+  const [typeFilter, setTypeFilter] = useState<EventType | "">("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  const activeEvents = events || [];
+  // Guard against an inverted server-side range (which the API rejects with
+  // 422) — show a hint instead of letting the request fail.
+  const datesValid = !dateFrom || !dateTo || dateFrom <= dateTo;
+
+  const params: EventsParams = useMemo(
+    () => ({
+      active: activeFilter === "active" ? true : false,
+      date_from: datesValid ? dateFrom || undefined : undefined,
+      date_to: datesValid ? dateTo || undefined : undefined,
+    }),
+    [activeFilter, dateFrom, dateTo, datesValid]
+  );
+
+  const { events, isLoading, isError, mutate } = useEvents(params);
+
+  const hasFilters = activeFilter !== "active" || Boolean(typeFilter || dateFrom || dateTo);
+
+  const resetFilters = () => {
+    setActiveFilter("active");
+    setTypeFilter("");
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  // Event-type filter is presentation-only over the single server-fetched set.
+  const filtered = useMemo(() => {
+    const base = events ?? [];
+    if (!typeFilter) return base;
+    return base.filter(e => e.event_type === typeFilter);
+  }, [events, typeFilter]);
+
+  // Presentation grouping using local dates and the backend-provided ranges:
+  // today inside [start, end] -> TODAY; end after today -> UPCOMING; else PAST.
+  const groups = useMemo(() => {
+    const today: AcademicEventResponse[] = [];
+    const upcoming: AcademicEventResponse[] = [];
+    const past: AcademicEventResponse[] = [];
+    for (const event of filtered) {
+      if (event.start_date <= todayStr && todayStr <= event.end_date) today.push(event);
+      else if (event.end_date > todayStr) upcoming.push(event);
+      else past.push(event);
+    }
+    const byStartAsc = (a: AcademicEventResponse, b: AcademicEventResponse) =>
+      a.start_date.localeCompare(b.start_date) || a.end_date.localeCompare(b.end_date);
+    const byStartDesc = (a: AcademicEventResponse, b: AcademicEventResponse) =>
+      b.start_date.localeCompare(a.start_date) || b.end_date.localeCompare(a.end_date);
+    today.sort(byStartAsc);
+    upcoming.sort(byStartAsc);
+    past.sort(byStartDesc);
+    return { today, upcoming, past };
+  }, [filtered, todayStr]);
+
+  const selectClass =
+    "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
+  const dateInputClass = selectClass;
 
   return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
-      <PageHeader 
-        title="Academic Events" 
-        description="Upcoming holidays, extra classes, and institute events."
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        title="Academic Events"
+        description="Upcoming, current, and past academic events for your program."
       />
 
-      <GlassCard className="mb-6 p-4 border border-amber-500/20 bg-amber-500/10">
-        <div className="flex items-start gap-3 text-sm text-amber-400">
-          <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
-          <p>
-            Event creation is currently restricted to administrators. This is a read-only view of scheduled events.
-          </p>
-        </div>
+      <GlassCard className="border-amber-500/20 bg-amber-500/10 p-4">
+        <p className="flex items-start gap-2 text-sm text-amber-400">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          Event creation is restricted to administrators. This is a read-only view of scheduled events.
+        </p>
       </GlassCard>
 
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <GlassCard key={i} className="h-24 animate-pulse bg-surface/50" />
+      {/* Filters */}
+      <Card className="flex flex-col gap-3 border-border p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</span>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={resetFilters}>
+              Reset
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-type">
+              Event type
+            </label>
+            <select
+              id="events-type"
+              className={selectClass}
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value as EventType | "")}
+            >
+              <option value="">All types</option>
+              {TYPE_OPTIONS.map(type => (
+                <option key={type} value={type}>{humanizeEventType(type)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
+              State
+            </label>
+            <select
+              id="events-active"
+              className={selectClass}
+              value={activeFilter}
+              onChange={e => setActiveFilter(e.target.value as ActiveFilter)}
+            >
+              <option value="active">Active events</option>
+              <option value="inactive">Inactive events</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
+              From
+            </label>
+            <Input
+              id="events-from"
+              type="date"
+              className={dateInputClass}
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
+              To
+            </label>
+            <Input
+              id="events-to"
+              type="date"
+              className={dateInputClass}
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+            />
+          </div>
+        </div>
+        {!datesValid && (
+          <p className="text-xs text-destructive">From date must be on or before the To date.</p>
+        )}
+      </Card>
+
+      {/* Error */}
+      {isError ? (
+        <GlassCard className="border-red-900/50 bg-red-950/20">
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+            <AlertCircle className="size-10 text-red-500" aria-hidden />
+            <h3 className="text-lg font-semibold text-red-400">Unable to load events</h3>
+            <p className="max-w-md text-sm text-red-400/80">
+              Academic events could not be fetched from the server. Check your connection and try again.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => mutate()}>
+              <RefreshCw className="size-3.5" aria-hidden />
+              Try again
+            </Button>
+          </div>
+        </GlassCard>
+      ) : // Loading — never flash a fake empty state.
+      isLoading || !events ? (
+        <div className="flex flex-col gap-6">
+          {[0, 1, 2].map(section => (
+            <div key={section} className="flex flex-col gap-3">
+              <Skeleton className="h-4 w-32" />
+              {Array.from({ length: 2 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 rounded-xl" />
+              ))}
+            </div>
           ))}
         </div>
-      ) : activeEvents.length === 0 ? (
-        <EmptyState 
-          title="No events scheduled" 
-          message="There are no upcoming academic events in the calendar."
-          icon={<Calendar className="h-10 w-10 text-muted-foreground mb-4" />}
+      ) : // Empty — differentiate "no events at all" from "no events match the filters".
+      filtered.length === 0 ? (
+        <EmptyState
+          title={hasFilters ? "No events match the selected filters" : "No events scheduled"}
+          message={
+            hasFilters
+              ? "Try adjusting the event type, state, or date range."
+              : "There are no academic events in the calendar right now."
+          }
+          icon={<CalendarX2 className="mb-4 size-10 text-muted-foreground" aria-hidden />}
         />
       ) : (
-        <div className="space-y-4">
-          {activeEvents.map((event) => {
-            const startDate = new Intl.DateTimeFormat("en-US", { 
-              weekday: "short", month: "long", day: "numeric" 
-            }).format(new Date(event.start_date));
-            
-            const endDate = event.end_date !== event.start_date 
-              ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(new Date(event.end_date))
-              : null;
-
-            const humanizedType = event.event_type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-            const isHoliday = event.event_type.endsWith("HOLIDAY");
-            const classTypeLabel = event.class_type === ClassType.LECTURE ? "Lecture" : event.class_type === ClassType.TUTORIAL ? "Tutorial" : event.class_type ? "Practical" : null;
-
-            return (
-              <GlassCard key={event.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 border-l-accent">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-foreground text-lg">{humanizedType}</h3>
-                    {isHoliday && (
-                      <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/25">
-                        Holiday
-                      </Badge>
-                    )}
-                    {event.substitution_schedule_override && (
-                      <Badge variant="outline" className="uppercase text-[10px] tracking-wider border-border/60">
-                        Follows {event.substitution_schedule_override.toLowerCase()} schedule
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-sm font-medium text-accent flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    {startDate} {endDate ? `- ${endDate}` : ""}
-                  </div>
-                </div>
-                <div className="sm:text-right">
-                  {classTypeLabel ? (
-                    <Badge variant="outline" className="uppercase text-[10px] tracking-wider border-border/60">
-                      {classTypeLabel}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {event.active ? "Active" : "Inactive"}
-                    </span>
-                  )}
-                </div>
-              </GlassCard>
-            );
-          })}
+        <div className="flex flex-col gap-8">
+          <EventSection
+            id="events-upcoming"
+            title="Upcoming"
+            count={groups.upcoming.length}
+            events={groups.upcoming}
+            emptyLabel="No upcoming events."
+          />
+          <EventSection
+            id="events-today"
+            title="Today"
+            count={groups.today.length}
+            events={groups.today}
+            emptyLabel="No events happening today."
+            isTodaySection
+          />
+          <EventSection
+            id="events-past"
+            title="Past"
+            count={groups.past.length}
+            events={groups.past}
+            emptyLabel="No past events."
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function EventSection({
+  id,
+  title,
+  count,
+  events,
+  emptyLabel,
+  isTodaySection = false,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  events: AcademicEventResponse[];
+  emptyLabel: string;
+  isTodaySection?: boolean;
+}) {
+  return (
+    <section aria-labelledby={id}>
+      <div className="mb-3 flex items-center gap-2">
+        <h2 id={id} className="text-sm font-semibold uppercase tracking-wider text-foreground">
+          {title}
+        </h2>
+        <Badge variant="neutral" className="h-4 px-1.5 text-[10px]">{count}</Badge>
+      </div>
+      {events.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {events.map(event => (
+            <EventRow key={event.id} event={event} isToday={isTodaySection} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

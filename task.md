@@ -408,3 +408,58 @@ Status: **COMPLETE** (2026-08-14). Production Calendar UI at `/calendar`, render
 ## Deferred (intentionally NOT done here)
 
 - Events page upgrade (Upcoming/Today/Past, filters, details) — Phase 6.4. Also deferred: event CRUD, admin roles, validation registry, seeding, event→class_sessions integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.
+
+---
+
+## PHASE 6.4 — EVENTS PAGE UPGRADE
+
+Status: **COMPLETE** (2026-08-14). Production read-only Academic Events page at `/tools/events` (Upcoming/Today/Past grouping + filters). Frontend-only; no backend changes; no event CRUD, admin, or seeding.
+
+## Route & architecture
+
+- `/tools/events` rebuilt inside the existing AppShell/TopNav structure; the backend `GET /api/v1/events` endpoint remains the single data authority (event existence, dates, types, holiday/class metadata, active state).
+- Presentation-only grouping: browser-local today (`getLocalDateString`) vs the backend-provided `[start_date, end_date]` — today inside range → **Today**; `end_date` after today → **Upcoming** (start asc); else → **Past** (newest first). No working-day/holiday/closure semantics computed in React.
+
+## Filters
+
+- Event type — client-side over the already-fetched set (the API has no type filter).
+- State — Active / Inactive, honestly supported by the Phase 6.1 `active=true|false` contract (no "all" option, since the contract cannot express it in one request).
+- From / To — server-side inclusive range-overlap via `date_from`/`date_to`; inverted ranges are blocked client-side with a hint (never sent as a 422).
+- Reset button clears everything. One logical request per filter combination.
+
+## Event rendering
+
+- `EventRow` card: date block (day/month), humanized type title (robust for unknown/future types), semantic badges (Today/Holiday/Extra/Cancelled/class type/Inactive), date range (end only when different), substitution-schedule note, and a `Calendar` link affordance to `/calendar` (no query params invented; calendar route untouched).
+- Section headings with counts; empty sections show muted placeholder lines.
+
+## Loading / error / empty
+
+- Loading: skeleton sections (no fake empty state before the response resolves).
+- Error: events-specific error card with **Try again** via SWR `mutate`; an API failure never renders "No events".
+- Empty: "No events scheduled" (truthful zero-row state — `academic_events` has 0 rows) vs "No events match the selected filters".
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `frontend/src/app/(authenticated)/tools/events/page.tsx` | Rebuilt page (filters, grouping, sections, states) |
+| `frontend/src/components/events/EventRow.tsx` | New compact read-only event row |
+| `frontend/src/hooks/useApi.ts` | `useEvents(params)` — Phase 6.1 query contract |
+| `frontend/src/types/api.ts` | `EventsParams` |
+
+## Verification (static only; no browser testing)
+
+- `npx tsc --noEmit` — PASS (0 errors); ESLint on changed files — PASS.
+- `git diff` — backend: no changes; no migrations/schema changes; no attendance/eligibility engine changes; no event CRUD; no fake events.
+
+## Database mutation status
+
+- **ZERO INSERT/UPDATE/DELETE persisted.** No seeding, no test data, no schema changes.
+
+## Do Not Touch Again (from this phase)
+
+- The rebuilt `/tools/events` page + `useEvents(params)` + `EventsParams` are the Phase 6.4 UI surface; the Phase 6.1 `/events` contract and Phase 6.2/6.3 calendar surface remain frozen.
+
+## Deferred (intentionally NOT done here)
+
+- Event persistence/admin auth/seeding — Phase 6.5. Also deferred: event CRUD, admin roles, validation registry, seeding, event→class_sessions integration, substitution, quiz/event integration, scoping, timetable schema, TodayClassesCard cleanup, type-hint refactor, window-field restoration.

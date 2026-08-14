@@ -339,3 +339,48 @@ Status: **COMPLETE** (2026-08-14). Production `/calendar` route rendering the fr
 ### Not changed / deferred
 
 - Backend (Phase 6.2 contract frozen), Track, History, auth, migrations, schema, attendance/eligibility engines, `/tools/events` page. Deferred: events page upgrade (6.4), persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7).
+
+---
+
+## PHASE 6.4 — EVENTS PAGE UPGRADE
+
+Status: **COMPLETE** (2026-08-14). Production read-only Academic Events page at `/tools/events`. Frontend-only; no backend changes; no event CRUD; no admin; no seeding.
+
+### API integration
+
+- `useEvents(params?: EventsParams)` in `frontend/src/hooks/useApi.ts` — extended the existing Phase 6.1 hook with the Phase 6.1 query contract (`active`, `date_from`, `date_to`, `upcoming`) via a stable per-params SWR key; `mutate` exposed for retry. Default call (`/api/v1/events`) unchanged. One logical request per filter combination.
+- `EventsParams` type added to `frontend/src/types/api.ts` (mirrors the `AttendanceHistoryParams` convention). `AcademicEventResponse`/`EventType` reused — no parallel event model.
+
+### Grouping / filters
+
+- Grouping is presentation-only, computed from the backend-returned date ranges against browser-local today (`getLocalDateString`): today inside `[start_date, end_date]` → **Today**; `end_date` after today → **Upcoming** (start asc); otherwise → **Past** (newest first). No academic semantics computed.
+- Filters: event type (client-side over the fetched set, per contract — the API has no type filter), active/inactive state (honestly supported server-side by `active=true|false`), and a From/To date range (server-side inclusive range-overlap). Inverted From/To is prevented client-side with a hint instead of triggering a 422. Reset button clears all filters.
+- Event type rendering reuses the existing `EventType` enum with a robust humanizer that also handles unknown/future types gracefully.
+
+### Event rendering
+
+- `frontend/src/components/events/EventRow.tsx` — compact Card row: date block (day/month), humanized type title, semantic badges (Today / Holiday / Extra / Cancelled / class type / Inactive), date range (end date only when different), substitution note, and a `Calendar` link affordance to `/calendar` (no invented query params; the calendar route was not modified).
+- Section headings (`Upcoming` / `Today` / `Past`) with live counts; empty sections show a muted placeholder line.
+
+### Loading / error / empty
+
+- Loading: skeleton sections (heading + row skeletons) — no fake empty state before the request resolves.
+- Error: events-specific error card with a working **Try again** (`mutate`); never shows "No events" for an API failure.
+- Empty: differentiates "No events scheduled" (zero backend rows — the truthful current state) from "No events match the selected filters". Nothing seeded or manufactured.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `frontend/src/app/(authenticated)/tools/events/page.tsx` | Rebuilt: filters, grouping, states, sections |
+| `frontend/src/components/events/EventRow.tsx` | New compact read-only event row |
+| `frontend/src/hooks/useApi.ts` | `useEvents(params)` — Phase 6.1 query contract |
+| `frontend/src/types/api.ts` | `EventsParams` |
+
+### Verification
+
+- `npx tsc --noEmit` — PASS (0 errors). ESLint on changed files — PASS. No backend files touched (`git diff` backend: none); no migrations/schema changes; no attendance/eligibility engine changes; no event CRUD; no fake events. Browser testing deferred to the user.
+
+### Not changed / deferred
+
+- Backend contract (Phase 6.1 events + Phase 6.2 calendar frozen), Track, History, Dashboard, auth, migrations, schema, attendance/eligibility engines, `/calendar` route. Deferred: persistence/admin/seeding (6.5), event→engine integration (6.6), verification/freeze (6.7).

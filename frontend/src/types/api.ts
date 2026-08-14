@@ -197,6 +197,14 @@ export interface AcademicEventResponse {
   active: boolean;
 }
 
+// Query parameters for GET /api/v1/events (Phase 6.1 read contract).
+export interface EventsParams {
+  active?: boolean;
+  date_from?: string;
+  date_to?: string;
+  upcoming?: boolean;
+}
+
 export interface AcademicDayResponse {
   date: string;
   is_working_day: boolean;
