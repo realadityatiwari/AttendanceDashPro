@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AcademicEventPayload, AcademicEventResponse, ClassType, EventType } from "@/types/api";
+import { AcademicEventPayload, AcademicEventResponse, ClassType, EventType, SubjectCategory } from "@/types/api";
 import { useSubjects, useEventMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,7 +99,17 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   }
 
   const rule = getRule(form.event_type);
-  const subjectsForEvent = useMemo(() => subjects ?? [], [subjects]);
+  // Phase 9.1: the laboratory event types are scoped to the student's enrolled
+  // practical/lab subjects (Subject.category === lab), mirroring the backend's
+  // PRACTICAL-only rules. Every other subject-scoped type keeps showing all
+  // enrolled subjects, unchanged. /api/v1/subjects is already
+  // enrollment-scoped (authenticated student).
+  const labScopedEvent = form.event_type === EventType.MID_SEM_PRACTICAL
+    || form.event_type === EventType.LAB_CANCELLED;
+  const subjectsForEvent = useMemo(() => {
+    const all = subjects ?? [];
+    return labScopedEvent ? all.filter(s => s.category === SubjectCategory.LAB) : all;
+  }, [subjects, labScopedEvent]);
 
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -114,6 +124,20 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     : null;
   if (singleClassType && form.class_type !== singleClassType) {
     set("class_type", singleClassType);
+  }
+
+  // Render-time guard (same pattern as the class-type auto-fill): when the
+  // selected subject is no longer valid for the current event type — e.g. the
+  // user switched from a lecture event to a lab event, or subjects arrived
+  // after the dialog seeded an edit — clear it so a stale subject can never be
+  // submitted. Runs only once subjects are loaded so edit-mode seeding is kept.
+  if (
+    subjects !== undefined
+    && rule.requiresSubject
+    && form.subject_id
+    && !subjectsForEvent.some(s => s.id === form.subject_id)
+  ) {
+    set("subject_id", "");
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
