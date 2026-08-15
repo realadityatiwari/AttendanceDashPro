@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { humanizeEventType } from "@/components/events/EventRow";
-import { getRule, SUBSTITUTION_DAYS, CLASS_TYPE_LABELS } from "@/components/events/eventRules";
+import { getRule, SUBSTITUTION_DAYS, CLASS_TYPE_LABELS, STUDENT_CREATABLE_EVENT_TYPES } from "@/components/events/eventRules";
 import { AlertCircle } from "lucide-react";
 
 const TYPE_OPTIONS = Object.values(EventType);
@@ -25,6 +25,13 @@ interface EventFormDialogProps {
   /** Existing event for edit mode; null = create mode. */
   event: AcademicEventResponse | null;
   onSaved: () => void;
+  /**
+   * Attendance-spec alignment: admins may create every event type; students
+   * are limited to the flexible subject-scoped types (extras, cancellations,
+   * surprise quizzes) for their own enrolled subjects. The backend remains
+   * authoritative — this only drives which options the form exposes.
+   */
+  isAdmin?: boolean;
 }
 
 interface FormState {
@@ -38,9 +45,10 @@ interface FormState {
   active: boolean;
 }
 
-function initialState(event: AcademicEventResponse | null): FormState {
+function initialState(event: AcademicEventResponse | null, isAdmin: boolean): FormState {
+  const defaultType = event?.event_type ?? (isAdmin ? EventType.PUBLIC_HOLIDAY : EventType.EXTRA_LECTURE);
   return {
-    event_type: event?.event_type ?? EventType.PUBLIC_HOLIDAY,
+    event_type: defaultType,
     start_date: event?.start_date ?? "",
     end_date: event?.end_date ?? "",
     subject_id: event?.subject_id ?? "",
@@ -58,20 +66,23 @@ const fieldClass = "flex flex-col gap-1";
 const labelClass = "text-[10px] uppercase tracking-wider text-muted-foreground";
 
 /**
- * Admin event create/edit form (Phase 6.5). Exposes only fields the
- * AcademicEvent model actually has; field visibility is driven by the
- * registry mirror (eventRules.ts), while the backend validation registry
- * remains authoritative. Handles loading, validation, 403/404/409/422, and
- * successful mutations.
+ * Event create/edit form (Phase 6.5 + attendance-spec alignment). Exposes
+ * only fields the AcademicEvent model actually has; field visibility is
+ * driven by the registry mirror (eventRules.ts), while the backend validation
+ * registry remains authoritative. Handles loading, validation, 403/404/409/
+ * 422, and successful mutations.
  */
-export function EventFormDialog({ open, onOpenChange, event, onSaved }: EventFormDialogProps) {
+export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = true }: EventFormDialogProps) {
   const isEdit = event !== null;
   const { subjects } = useSubjects();
   const { createEvent, updateEvent } = useEventMutations();
-  const [form, setForm] = useState<FormState>(() => initialState(event));
+  const [form, setForm] = useState<FormState>(() => initialState(event, isAdmin));
   const [localError, setLocalError] = useState("");
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Students may only create the flexible subject-scoped types.
+  const typeOptions = isAdmin ? TYPE_OPTIONS : STUDENT_CREATABLE_EVENT_TYPES;
 
   // Re-seed the form whenever the dialog is (re)opened for a different event.
   const [lastKey, setLastKey] = useState<string | null>(null);
@@ -79,7 +90,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved }: EventFor
   if (key !== lastKey) {
     setLastKey(key);
     if (open) {
-      setForm(initialState(event));
+      setForm(initialState(event, isAdmin));
       setLocalError("");
       setServerError("");
     }
@@ -150,7 +161,9 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved }: EventFor
           <DialogDescription>
             {isEdit
               ? "Update the event details. Empty optional fields keep or clear their stored value."
-              : "Create a new academic event. The server validation registry enforces the final rules."}
+              : isAdmin
+                ? "Create a new academic event. The server validation registry enforces the final rules."
+                : "Record what actually happened: extra classes, cancellations, or surprise quizzes for your enrolled subjects."}
           </DialogDescription>
         </DialogHeader>
 
@@ -170,7 +183,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved }: EventFor
               value={form.event_type}
               onChange={e => set("event_type", e.target.value as EventType)}
             >
-              {TYPE_OPTIONS.map(type => (
+              {typeOptions.map(type => (
                 <option key={type} value={type}>{humanizeEventType(type)}</option>
               ))}
             </select>

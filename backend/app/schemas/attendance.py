@@ -80,6 +80,14 @@ class SubjectAttendanceSummary(BaseModel):
     forecast_practical_pct: Optional[float] = None
     optimization: Optional[OptimizationResult] = None
 
+    # Attendance UI refinement (spec alignment): the required attendance target
+    # the subject-level optimizer reasons about (75%) and the canonical current
+    # status band (SAFE | WATCH | CRITICAL | None) derived from the same
+    # engine banding the dashboard/analytics use. Both are additive, backend-
+    # emitted values — the frontend renders them and never recomputes banding.
+    required_pct: float = 75.0
+    status: Optional[str] = None
+
 class EligibilityState(str, Enum):
     """Canonical quiz eligibility state for a subject/cycle pair.
 

@@ -155,6 +155,13 @@ export interface SubjectAttendanceSummary {
   current_practical_pct: number | null;
   forecast_practical_pct: number | null;
   optimization: OptimizationResult | null;
+
+  // Attendance UI refinement (backend-emitted, additive): the required
+  // attendance target the subject optimizer reasons about (75) and the
+  // canonical current status band (SAFE | WATCH | CRITICAL | null). The
+  // frontend renders these and never recomputes banding.
+  required_pct: number;
+  status: "SAFE" | "WATCH" | "CRITICAL" | null;
 }
 
 export interface OptimizationResult {

@@ -9,6 +9,12 @@ from app.repositories.calendar_repo import CalendarRepository
 from app.services.attendance_service import AttendanceService
 from app.services.eligibility_service import EligibilityService
 from app.services.calendar_service import CalendarService
+from app.engines.attendance_engine import (
+    ATTENDANCE_TARGET_PCT,
+    WATCH_BAND_PCT,
+    SAFE_BAND_PCT,
+    classify_attendance_status,
+)
 from app.schemas.dashboard import (
     DashboardSummaryResponse,
     TodaySection,
@@ -25,33 +31,10 @@ from app.models.academic import Semester, Subject
 from app.models.user import Section
 from app.models.enums import AttendanceStatus
 
-# Academic constants reused from the frozen attendance configuration.
-# The dashboard never owns policy values: these mirror the legacy banding
-# documented in docs/11_UI_ARCHITECTURE.md and the 75% attendance target.
-ATTENDANCE_TARGET_PCT = 75.0
-WATCH_BAND_PCT = ATTENDANCE_TARGET_PCT - 15.0  # amber band lower bound
-SAFE_BAND_PCT = ATTENDANCE_TARGET_PCT + 5.0    # legacy SAFE band (target + 5)
-
+# DAY_LABELS + banding constants/functions now live in the canonical
+# attendance engine (single definition; dashboard + analytics + subject
+# summaries all consume it).
 DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-def classify_attendance_status(current_pct: Optional[float]) -> Optional[str]:
-    """
-    Semantic status classification used by the Home page.
-
-    Derived from the frozen legacy banding (docs/11_UI_ARCHITECTURE.md):
-      - pctColor: green >= target, amber >= target-15, red below
-      - getSubjectStatus: SAFE >= target+5
-    Per the S4.1 architecture reconciliation, status reflects the student's
-    CURRENT standing (not forecast). Subjects with no data return None.
-    """
-    if current_pct is None:
-        return None
-    if current_pct >= SAFE_BAND_PCT:
-        return "SAFE"
-    if current_pct >= WATCH_BAND_PCT:
-        return "WATCH"
-    return "CRITICAL"
-
 
 class DashboardService:
     """

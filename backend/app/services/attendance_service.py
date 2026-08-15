@@ -8,7 +8,12 @@ from app.repositories.user_repo import UserRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
 from app.models.enums import AttendanceStatus
-from app.engines.attendance_engine import compute_subject_stats, normalize_class_type, optimize_attendance
+from app.engines.attendance_engine import (
+    compute_subject_stats,
+    normalize_class_type,
+    optimize_attendance,
+    classify_attendance_status,
+)
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
 
 # Subject-level optimizer target (Phase 8.0 contract): the documented academic
@@ -33,6 +38,11 @@ def _build_subject_summary(subject_code: str, counts: Dict[str, Any]) -> Subject
     mathematics is reproduced here.
     """
     summary = compute_subject_stats(subject_code, {'counts': counts})
+
+    # Additive Attendance-UI-refinement fields: the required target and the
+    # canonical current status band (engine-owned; never computed in React).
+    summary.required_pct = SUBJECT_OPTIMIZATION_TARGET_PCT
+    summary.status = classify_attendance_status(summary.current_avg_pct)
 
     p = counts.get('P', {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0})
     done_p = p['att'] + p['miss']

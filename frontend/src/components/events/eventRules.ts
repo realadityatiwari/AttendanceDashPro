@@ -76,6 +76,23 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   },
 };
 
+// Event types students may create/update/deactivate for their OWN enrolled
+// subjects (attendance spec: events are student-adjustable; mirrors the
+// backend STUDENT_CREATABLE_EVENT_TYPES). Used only to decide which types the
+// form exposes and which rows offer edit/deactivate to non-admins — the
+// backend remains authoritative.
+export const STUDENT_CREATABLE_EVENT_TYPES: EventType[] = [
+  EventType.EXTRA_LECTURE,
+  EventType.EXTRA_TUTORIAL,
+  EventType.EXTRA_PRACTICAL,
+  EventType.CLASS_CANCELLED,
+  EventType.SURPRISE_QUIZ,
+];
+
+export function canStudentMutateEventType(eventType: EventType): boolean {
+  return STUDENT_CREATABLE_EVENT_TYPES.includes(eventType);
+}
+
 // Engine day-name representation (backend DAY_NAMES in calendar_engine.py).
 export const SUBSTITUTION_DAYS = [
   "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",

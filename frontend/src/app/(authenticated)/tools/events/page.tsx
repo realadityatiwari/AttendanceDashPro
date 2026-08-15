@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventRow, humanizeEventType } from "@/components/events/EventRow";
 import { EventFormDialog } from "@/components/events/EventFormDialog";
+import { canStudentMutateEventType } from "@/components/events/eventRules";
 import { getLocalDateString } from "@/lib/date";
 import { AlertCircle, CalendarX2, Plus, RefreshCw } from "lucide-react";
 
@@ -21,14 +22,17 @@ type ActiveFilter = "active" | "inactive";
 const TYPE_OPTIONS = Object.values(EventType);
 
 /**
- * Academic Events page (Phase 6.4 read experience, frozen) + the smallest
- * admin-only management surface (Phase 6.5).
+ * Academic Events page (Phase 6.4 read experience, frozen) + the event
+ * management surface (Phase 6.5 + attendance-spec alignment).
  *
  * The backend /events endpoint is authoritative for event existence, dates,
- * types, holiday metadata, class-type metadata, and active state. Admin
- * controls render only when the backend-provided role says ADMIN (frontend
- * visibility is UX only; the backend enforces authorization on every
- * mutation).
+ * types, holiday metadata, class-type metadata, and active state. Per the
+ * product spec, events are student-adjustable: students may add/remove the
+ * flexible subject-scoped types (extras, cancellations, surprise quizzes) for
+ * their own enrolled subjects; global/closure events stay admin-only. Edit/
+ * deactivate controls render only for events the current user may mutate
+ * (frontend visibility is UX only; the backend enforces authorization on
+ * every mutation).
  */
 export default function EventsPage() {
   const todayStr = getLocalDateString();
@@ -144,27 +148,29 @@ export default function EventsPage() {
         <p className="flex items-start gap-2 text-sm text-amber-400">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           {isAdmin
-            ? "Admin view: you can add, edit, and deactivate academic events. Deactivation is safe — the event can be re-enabled later."
-            : "Event creation is restricted to administrators. This is a read-only view of scheduled events."}
+            ? "Admin view: you can add, edit, and deactivate any academic event. Deactivation is safe — the event can be re-enabled later."
+            : "Events are flexible: record what actually happened by adding extra classes, cancellations, or surprise quizzes for your enrolled subjects. Holidays and global events are managed by administrators."}
         </p>
       </GlassCard>
 
-      {/* Admin-only management surface (Phase 6.5) — visible only when the
-          backend-provided role is ADMIN; the backend enforces authorization. */}
-      {isAdmin && (
-        <Card className="flex items-center justify-between gap-3 border-border p-4">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
-            <p className="text-xs text-muted-foreground">
-              Create subject-scoped or global events. Validation rules are enforced by the server.
-            </p>
-          </div>
-          <Button size="sm" onClick={openCreate} className="shrink-0">
-            <Plus className="size-3.5" aria-hidden />
-            Add Event
-          </Button>
-        </Card>
-      )}
+      {/* Event management surface (Phase 6.5 + attendance-spec alignment).
+          Admins manage every event type; students add/remove the flexible
+          subject-scoped types. The dialog exposes only the types the current
+          role may create, and the backend enforces authorization. */}
+      <Card className="flex items-center justify-between gap-3 border-border p-4">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
+          <p className="text-xs text-muted-foreground">
+            {isAdmin
+              ? "Create subject-scoped or global events. Validation rules are enforced by the server."
+              : "Add extras, cancellations, or surprise quizzes for your subjects. The server enforces enrollment and event rules."}
+          </p>
+        </div>
+        <Button size="sm" onClick={openCreate} className="shrink-0">
+          <Plus className="size-3.5" aria-hidden />
+          Add Event
+        </Button>
+      </Card>
 
       {/* Filters */}
       <Card className="flex flex-col gap-3 border-border p-4">
@@ -283,6 +289,7 @@ export default function EventsPage() {
             count={groups.upcoming.length}
             events={groups.upcoming}
             emptyLabel="No upcoming events."
+            canEdit={isAdmin}
             isAdmin={isAdmin}
             onEdit={openEdit}
             onDeactivate={handleDeactivate}
@@ -294,6 +301,7 @@ export default function EventsPage() {
             events={groups.today}
             emptyLabel="No events happening today."
             isTodaySection
+            canEdit={isAdmin}
             isAdmin={isAdmin}
             onEdit={openEdit}
             onDeactivate={handleDeactivate}
@@ -304,6 +312,7 @@ export default function EventsPage() {
             count={groups.past.length}
             events={groups.past}
             emptyLabel="No past events."
+            canEdit={isAdmin}
             isAdmin={isAdmin}
             onEdit={openEdit}
             onDeactivate={handleDeactivate}
@@ -316,6 +325,7 @@ export default function EventsPage() {
         onOpenChange={setFormOpen}
         event={editingEvent}
         onSaved={handleSaved}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -328,6 +338,7 @@ function EventSection({
   events,
   emptyLabel,
   isTodaySection = false,
+  canEdit,
   isAdmin,
   onEdit,
   onDeactivate,
@@ -338,6 +349,9 @@ function EventSection({
   events: AcademicEventResponse[];
   emptyLabel: string;
   isTodaySection?: boolean;
+  /** Admins may edit every event; students only the flexible subject-scoped
+      types they are allowed to mutate (backend remains authoritative). */
+  canEdit: boolean;
   isAdmin: boolean;
   onEdit?: (event: AcademicEventResponse) => void;
   onDeactivate?: (event: AcademicEventResponse) => void;
@@ -354,15 +368,18 @@ function EventSection({
         <p className="text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {events.map(event => (
-            <EventRow
-              key={event.id}
-              event={event}
-              isToday={isTodaySection}
-              onEdit={isAdmin ? onEdit : undefined}
-              onDeactivate={isAdmin ? onDeactivate : undefined}
-            />
-          ))}
+          {events.map(event => {
+            const mutable = canEdit || (!isAdmin && canStudentMutateEventType(event.event_type));
+            return (
+              <EventRow
+                key={event.id}
+                event={event}
+                isToday={isTodaySection}
+                onEdit={mutable ? onEdit : undefined}
+                onDeactivate={mutable ? onDeactivate : undefined}
+              />
+            );
+          })}
         </div>
       )}
     </section>

@@ -12,7 +12,7 @@ from app.schemas.analytics import (
 )
 from app.models.user import User
 from app.models.enums import AttendanceStatus
-from app.services.dashboard_service import classify_attendance_status
+from app.engines.attendance_engine import classify_attendance_status
 
 # Monday-start week bucketing for the weekly read model. A structure, not a
 # product "trend" definition (Phase 8.0 contract §I/§J/§15).

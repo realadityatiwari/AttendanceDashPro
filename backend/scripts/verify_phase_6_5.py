@@ -64,16 +64,49 @@ async def main() -> int:
             r = await client.get("/api/v1/events", headers=student_headers)
             check("2. student GET /events -> 200", r.status_code == 200, f"got {r.status_code}")
 
+            # --- Student event authorization (attendance-spec alignment) -------------
+            # The product spec makes events student-adjustable: students may
+            # add/remove the flexible subject-scoped event types (extras,
+            # cancellations, surprise quizzes) for their OWN enrolled subjects;
+            # global/closure/quiz-schedule events remain admin-only. This
+            # deliberately replaces the Phase 6.5 admin-only 403 assertions
+            # (documented in docs/attendance_ui_refinement_report.md).
+            subjects = (await client.get("/api/v1/subjects", headers=student_headers)).json()
+            enrolled_bcs501 = next(s for s in subjects if s["code"] == "BCS-501")
+
             r = await client.post("/api/v1/events", headers=student_headers, json={
                 "event_type": "PUBLIC_HOLIDAY", "start_date": "2026-11-01", "end_date": "2026-11-01"})
-            check("3. student POST /events -> 403", r.status_code == 403, f"got {r.status_code}")
+            check("3. student POST global (PUBLIC_HOLIDAY) -> 403 (admin-only)", r.status_code == 403, f"got {r.status_code}")
 
-            r = await client.patch("/api/v1/events/00000000-0000-0000-0000-000000000000", headers=student_headers,
+            r = await client.post("/api/v1/events", headers=student_headers, json={
+                "event_type": "EXTRA_LECTURE", "start_date": "2026-11-04", "end_date": "2026-11-04",
+                "subject_id": enrolled_bcs501["id"], "class_type": "L"})
+            check("3b. student POST subject-scoped extra for enrolled subject -> 201",
+                  r.status_code == 201, f"got {r.status_code} {r.text[:200]}")
+            student_extra_id = uuid.UUID(r.json()["id"])
+            test_event_ids.append(student_extra_id)
+
+            r = await client.patch(f"/api/v1/events/{student_extra_id}", headers=student_headers,
+                                   json={"is_working_day": False})
+            check("4. student PATCH subject-scoped enrolled event -> 200", r.status_code == 200, f"got {r.status_code}")
+
+            r = await client.delete(f"/api/v1/events/{student_extra_id}", headers=student_headers)
+            check("5. student DELETE subject-scoped enrolled event -> 200 (safe deactivation)",
+                  r.status_code == 200 and r.json()["active"] is False, f"got {r.status_code}")
+
+            # Global events stay admin-only even for students.
+            r = await client.post("/api/v1/events", headers=admin_headers, json={
+                "event_type": "PUBLIC_HOLIDAY", "start_date": "2026-11-08", "end_date": "2026-11-08"})
+            check("5b. admin POST global holiday (fixture) -> 201", r.status_code == 201, f"got {r.status_code}")
+            holiday_fixture_id = uuid.UUID(r.json()["id"])
+            test_event_ids.append(holiday_fixture_id)
+
+            r = await client.patch(f"/api/v1/events/{holiday_fixture_id}", headers=student_headers,
                                    json={"active": False})
-            check("4. student PATCH /events/{id} -> 403", r.status_code == 403, f"got {r.status_code}")
+            check("5c. student PATCH global event -> 403", r.status_code == 403, f"got {r.status_code}")
 
-            r = await client.delete("/api/v1/events/00000000-0000-0000-0000-000000000000", headers=student_headers)
-            check("5. student DELETE /events/{id} -> 403", r.status_code == 403, f"got {r.status_code}")
+            r = await client.delete(f"/api/v1/events/{holiday_fixture_id}", headers=student_headers)
+            check("5d. student DELETE global event -> 403", r.status_code == 403, f"got {r.status_code}")
 
             # --- Admin mutations -------------------------------------------------------
             r = await client.post("/api/v1/events", headers=admin_headers, json={

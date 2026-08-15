@@ -17,9 +17,12 @@ directly exercise, plus the cross-phase invariants:
   EXTRA_PRACTICAL materialize exactly one extra; WORKING_DAY_OVERRIDE is
   calendar/read-only (working day, zero session mutation); cancelled sessions
   reject attendance with 409.
-- Database baseline: exact restoration at the end (events=18, sessions=684,
+- Database baseline: exact restoration at the end (events=18, sessions=691,
   cancelled=0, extra=0, records=89, enrollments=18, subjects=9,
-  quiz_schedules=18, users=30, admins=1).
+  quiz_schedules=18, users=30, admins=1). The +7 sessions are the
+  materialized quiz-day sessions (attendance-spec alignment: quiz-day
+  attendance is a real attendance event; see
+  docs/attendance_ui_refinement_report.md).
 
 Note (Phase 7.1): the authoritative quiz schedule now includes BCS-054
 Quiz III (2026-10-23), so the expected counts are 18 QUIZ_DAY events and 18

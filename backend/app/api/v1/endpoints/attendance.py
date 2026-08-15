@@ -75,7 +75,7 @@ class AttendanceMutationRequest(BaseModel):
 
 class AttendanceMutationResponse(BaseModel):
     id: UUID
-    student_id: UUID
+    user_id: UUID
     class_session_id: UUID
     status: AttendanceStatus
 

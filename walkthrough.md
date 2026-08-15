@@ -683,3 +683,42 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 - Product decisions T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing) before those features ship.
 - Q-D9 and rule G remain separate product decisions.
 - **HARD STOP after Phase 8.2** — no commit made; Phase 8.3 NOT STARTED; browser/manual testing remains the user's responsibility.
+
+---
+
+# Attendance UI Refinement — Specification Alignment + Reference UI
+
+> **COMPLETE (2026-08-15) — PASS.** Full report: `docs/attendance_ui_refinement_report.md`.
+
+## What This Phase Did
+
+Aligned the implementation with the authoritative attendance specification and rebuilt the Attendance (/subjects) cards to the reference UI — without putting business math into React. Two spec conflicts were escalated and **authorized by the user**:
+
+1. **Quiz-day attendance = real attendance event** → quiz-day sessions materialized on every SCHEDULED quiz date (7 created; sessions 684 → 691; eligibility untouched because windows end at `quiz_date − 1`).
+2. **Events are student-adjustable** → students may add/remove the flexible subject-scoped event types (extras, cancellations, surprise quizzes) for their own enrolled subjects; global/closure/quiz-schedule events stay admin-only; the synchronizer never cancels/deletes quiz-day sessions.
+
+## Backend Changes (smallest correct)
+
+- Consolidated attendance banding (SAFE/WATCH/CRITICAL) into the attendance engine — one definition shared by dashboard, analytics, and subject summaries.
+- `SubjectAttendanceSummary` gains additive `required_pct` (75) and `status` fields (backend-emitted; React never bands).
+- Student event authorization (service + repo + endpoint): enrollment-scoped, flexible types only.
+- Fixed a latent defect: successful attendance mutations previously 500'd (`student_id` → `user_id` in the response schema) — required for quiz-day attendance to be recordable.
+- New scripts: `materialize_quiz_day_sessions.py` (idempotent, `--undo` reversible) and `verify_attendance_spec_alignment.py` (15/15).
+
+## Frontend Changes
+
+- **Reference Attendance cards**: header (code · THEORY/LAB · name · canonical status badge), prominent primary %, lecture/tutorial sections with required + must-attend/safe-skip, combined average with formula caption, practical section for lab subjects, expandable Details with real backend forecast/optimizer values. All values are backend fields.
+- **Events page**: students get the Add Event surface restricted to flexible subject-scoped types; edit/deactivate appear only on events they may mutate.
+
+## Verification
+
+- `verify_attendance_spec_alignment.py` **15/15**; frozen regressions 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** (deliberate documented re-scopes in 6.5/7.2/7.1 only). compileall / `tsc --noEmit` / ESLint / `next build` green.
+
+## Database State After Refinement
+
+- **Documented, authorized, minimal**: sessions 684 → **691** (7 quiz-day LECTURE sessions, no attendance records; reversible via `--undo`). Events=18 · cancelled=0 · extra=0 · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN). BCS-054 Quiz III = 2026-10-23 unchanged.
+
+## What's Next
+
+- **Phase 8.3 (requires explicit authorization)** — nothing is queued; T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing), Q-D9 and rule G remain product decisions.
+- **HARD STOP after the Attendance UI Refinement** — no commit made; browser/manual testing remains the user's responsibility.

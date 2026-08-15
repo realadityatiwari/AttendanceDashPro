@@ -214,6 +214,13 @@ async def main() -> int:
               f"labs={lab_codes} theory_flags={theory_flags}")
 
         # --- 5. BCS-054 Q3 QUIZ_DAY event calendar-only -------------------------
+        # Deliberate update (attendance-spec alignment, documented in
+        # docs/attendance_ui_refinement_report.md): the QUIZ_DAY event remains
+        # calendar-only — it creates NO session itself (no is_extra session,
+        # no timetable-derived session). Quiz-day attendance is now a real
+        # attendance event materialized from the quiz SCHEDULE: the quiz date
+        # carries exactly one non-cancelled session with no timetable linkage
+        # (the schedule-materialized quiz-day session).
         async with AsyncSessionLocal() as db:
             events = (await db.execute(
                 select(AcademicEvent).where(
@@ -222,13 +229,20 @@ async def main() -> int:
                 ))).scalars().all()
             q3_event = next((e for e in events if e.subject_id == bcs054_id), None)
             q3_day_sessions = (await db.execute(
-                select(func.count()).select_from(ClassSession).where(
+                select(ClassSession).where(
                     ClassSession.subject_id == bcs054_id,
                     ClassSession.date == expected_q3,
-                ))).scalar()
-        check("5. BCS-054 Q3 QUIZ_DAY event exists, active, calendar-only (no sessions)",
-              q3_event is not None and q3_event.active and q3_day_sessions == 0,
-              f"event={q3_event is not None} active={q3_event.active if q3_event else None} sessions={q3_day_sessions}")
+                ))).scalars().all()
+            extras_on_q3 = sum(1 for s in q3_day_sessions if s.is_extra)
+            quiz_day_session = next((s for s in q3_day_sessions if not s.is_extra and s.timetable_entry_id is None), None)
+        check("5. BCS-054 Q3 QUIZ_DAY event exists, active, calendar-only "
+              "(no event-created sessions; one schedule-materialized quiz-day session)",
+              q3_event is not None and q3_event.active
+              and extras_on_q3 == 0
+              and quiz_day_session is not None and not quiz_day_session.is_cancelled
+              and len(q3_day_sessions) == 1,
+              f"event={q3_event is not None} active={q3_event.active if q3_event else None} "
+              f"sessions={len(q3_day_sessions)} extras={extras_on_q3} quiz_day={quiz_day_session is not None}")
 
         # --- 6. /events upcoming surfaces all 18 quiz days ----------------------
         r = await client.get("/api/v1/events?upcoming=true", headers=admin_headers)

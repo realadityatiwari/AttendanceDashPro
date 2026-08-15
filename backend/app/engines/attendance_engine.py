@@ -3,6 +3,30 @@ from app.models.enums import ClassType, AttendanceStatus
 from app.schemas.attendance import SubjectAttendanceSummary, ClassCounts, OptimizationResult
 import math
 
+# Canonical attendance banding (docs/11_UI_ARCHITECTURE.md legacy pctColor /
+# getSubjectStatus, reconciled in S4.1). Single definition: dashboard overall,
+# analytics overall, and the per-subject summary status all consume this.
+# SAFE >= target+5, WATCH >= target-15, CRITICAL below — on CURRENT (recorded-
+# only) percentages. AT-RISK is NOT defined and is never emitted.
+ATTENDANCE_TARGET_PCT = 75.0
+WATCH_BAND_PCT = ATTENDANCE_TARGET_PCT - 15.0  # amber band lower bound
+SAFE_BAND_PCT = ATTENDANCE_TARGET_PCT + 5.0    # legacy SAFE band (target + 5)
+
+
+def classify_attendance_status(current_pct: Optional[float]) -> Optional[str]:
+    """
+    Semantic status classification (SAFE | WATCH | CRITICAL | None) for the
+    student's CURRENT standing. Subjects with no recorded data return None.
+    """
+    if current_pct is None:
+        return None
+    if current_pct >= SAFE_BAND_PCT:
+        return "SAFE"
+    if current_pct >= WATCH_BAND_PCT:
+        return "WATCH"
+    return "CRITICAL"
+
+
 def normalize_class_type(t: str) -> str:
     if t in ('P1', 'P2'):
         return 'P'

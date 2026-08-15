@@ -244,6 +244,12 @@ class EventSessionSynchronizer:
         for session in scheduled:
             if session.id in attended_ids:
                 continue
+            if session.timetable_entry_id is None:
+                # Quiz-day session (attendance-spec alignment): authoritative
+                # from the quiz schedule, not from any timetable/event. Event
+                # reconciliation never cancels or deletes it — quiz-day
+                # attendance must stay recordable and counted.
+                continue
             if session.timetable_entry_id in desired_scheduled_ids:
                 if session.is_cancelled:
                     session.is_cancelled = False

@@ -735,3 +735,39 @@ Status: **COMPLETE (2026-08-15) — PASS.** Frontend-only consumption of the Pha
 ### Next (Phase 8.3, requires explicit product authorization)
 
 - T-1 (AT-RISK taxonomy), T-2 (trend semantics), T-3 (dedicated Analytics page), T-4 (multi-class forecast wording) remain product decisions. Q-D9 and rule G unchanged. **HARD STOP — no commit made; Phase 8.3 NOT STARTED.**
+
+---
+
+## ATTENDANCE UI REFINEMENT — SPECIFICATION ALIGNMENT + REFERENCE UI
+
+Status: **COMPLETE (2026-08-15) — PASS.** Aligned the implementation with the authoritative attendance specification and implemented the reference Attendance UI. Two spec conflicts were escalated and **authorized by the user** before implementation; full report: `docs/attendance_ui_refinement_report.md`.
+
+### Authorized decisions
+
+1. **Quiz-day attendance (materialize):** quiz-day attendance is a real attendance event. `scripts/materialize_quiz_day_sessions.py` (idempotent, `--undo` reversible) materialized 7 LECTURE sessions on the SCHEDULED quiz dates that lacked one (incl. BCS-054 Q3 = 2026-10-23); all 18 quiz dates now recordable. Eligibility windows end at `quiz_date − 1` so eligibility is untouched; subject + overall attendance now include quiz-day sessions. Sessions 684 → 691 (documented baseline change).
+2. **Student-adjustable events (shared schedule, subject-scoped):** students may create/update/deactivate the flexible subject-scoped event types (EXTRA_LECTURE/TUTORIAL/PRACTICAL, CLASS_CANCELLED, SURPRISE_QUIZ) for their own enrolled subjects; global/closure/quiz-schedule events remain admin-only (403). Enrollment check mirrors the attendance path; the event synchronizer never cancels/deletes quiz-day sessions (attendance safety preserved).
+
+### Implemented
+
+- **Reference Attendance cards** (`SubjectAttendanceCard`): header (code · THEORY/LAB · name · canonical status badge), prominent primary % (combined average for theory, practical % for labs), lecture/tutorial sections with required (75) + must-attend/safe-skip, combined average with formula caption, practical section for lab-only subjects, expandable Details with real backend forecast/optimizer values. Backend emits `required_pct` and `status` additively; banding consolidated into `attendance_engine` (single definition — dashboard/analytics/subjects share it).
+- **Student event UI** (Events page + form): students get the Add Event surface restricted to the flexible subject-scoped types; edit/deactivate render per-event only where the user may mutate; backend remains authoritative.
+- **Latent fix:** `AttendanceMutationResponse.student_id` → `user_id` (successful attendance mutations previously 500'd during response serialization — required for quiz-day attendance to be recordable).
+
+### Files changed
+
+| Layer | Files |
+|---|---|
+| Backend | `engines/attendance_engine.py` · `schemas/attendance.py` · `services/attendance_service.py` · `services/event_service.py` · `services/event_session_service.py` · `services/dashboard_service.py` · `services/analytics_service.py` · `repositories/event_repo.py` · `api/v1/endpoints/events.py` · `api/v1/endpoints/attendance.py` |
+| Scripts | NEW `scripts/materialize_quiz_day_sessions.py` · NEW `scripts/verify_attendance_spec_alignment.py` · `scripts/verify_phase_6_5.py` · `scripts/verify_phase_7_2.py` · `scripts/verify_phase_7_1.py` · `scripts/verify_phase_6_7.py` (deliberate assertion updates) |
+| Frontend | `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/components/events/EventFormDialog.tsx` · `src/components/events/eventRules.ts` · `src/app/(authenticated)/tools/events/page.tsx` |
+| Docs | `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/attendance_ui_refinement_report.md` |
+
+### Verification
+
+- `verify_attendance_spec_alignment.py` **15/15** (quiz-day sessions on all 18 dates · eligibility-window exclusion · recordability + as_of counting · student event authorization incl. non-enrolled 403 via temp partial-enrollment user · synchronizer guard · additive fields · exact baseline).
+- Frozen regression (no assertion weakened except the documented deliberate re-scopes): 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22**.
+- Static: compileall PASS · `npx tsc --noEmit` PASS (0 errors) · ESLint clean on changed files · `next build` PASS (14 routes).
+
+### Database mutation status
+
+- **Documented, authorized, minimal**: sessions 684 → **691** (7 quiz-day sessions; reversible via `--undo`). Nothing else touched: events=18 · cancelled=0 · extra=0 · records=89 · enrollments=18 · subjects=9 · quizzes=18 · users=30 (1 ADMIN).

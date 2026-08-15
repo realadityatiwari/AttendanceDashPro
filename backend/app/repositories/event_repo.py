@@ -40,6 +40,21 @@ class EventRepository:
         )
         return result.scalars().first() is not None
 
+    async def is_enrolled(self, user_id: UUID, subject_id: UUID) -> bool:
+        """
+        Whether the user holds an enrollment for the subject (student event
+        authorization — the same enrollment pattern the attendance mutation
+        path uses).
+        """
+        from app.models.academic import StudentEnrollment
+        result = await self.db.execute(
+            select(StudentEnrollment.id).where(
+                StudentEnrollment.user_id == user_id,
+                StudentEnrollment.subject_id == subject_id,
+            )
+        )
+        return result.scalars().first() is not None
+
     async def exists_active_duplicate(
         self,
         event_type: EventType,

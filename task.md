@@ -790,3 +790,51 @@ Consume the Phase 8.1 backend read model in the existing Next.js frontend: typed
 
 - AT-RISK (T-1) · trend product semantics (T-2) · dedicated Analytics page (T-3) · multi-class forecast wording (T-4) · Q-D9 · rule G.
 - Browser/manual testing — the user's responsibility.
+
+---
+
+# ATTENDANCE UI REFINEMENT — SPECIFICATION ALIGNMENT + REFERENCE UI
+
+Status: **COMPLETE (2026-08-15) — PASS.** Full report: `docs/attendance_ui_refinement_report.md`. Two spec conflicts were escalated and **authorized by the user**.
+
+## Objective
+
+Align the implementation with the authoritative attendance specification (lecture/tutorial daily marking; (L%+T%)/2 average with L%-only fallback; practicals counted in attendance + overall but excluded from quiz eligibility; event-weighted overall; quiz-day attendance as a real event; student-adjustable events; calendar day = whole schedule) and implement the reference Attendance UI without introducing React business math.
+
+## Authorized decisions (user)
+
+1. **Quiz-day attendance → materialize sessions** on every SCHEDULED quiz date (7 created; 684 → 691; eligibility untouched since windows end at quiz_date − 1).
+2. **Events → shared schedule, subject-scoped**: students may add/remove flexible subject-scoped events for their own enrollments; global/closure events remain admin-only.
+
+## Implemented
+
+- [x] Quiz-day sessions materialized (`scripts/materialize_quiz_day_sessions.py`, idempotent + `--undo`); all 18 quiz dates recordable; subject + overall attendance include them.
+- [x] Student event authorization (backend): `STUDENT_CREATABLE_EVENT_TYPES` + enrollment check; global/closure/quiz-schedule events stay 403; synchronizer guard protects quiz-day sessions from event reconciliation.
+- [x] Reference Attendance cards: header (code · THEORY/LAB · name · canonical status), primary %, lecture/tutorial sections (required 75 · must-attend · safe-skip), combined average with formula caption, practical section for labs, expandable Details with backend forecast/optimizer values. Backend emits `required_pct` + `status` additively; banding consolidated in the attendance engine.
+- [x] Student event UI (Events page + form restricted to flexible subject-scoped types).
+- [x] Latent fix: `AttendanceMutationResponse.student_id` → `user_id` (successful attendance mutations previously 500'd).
+
+## Files changed
+
+- Backend: `engines/attendance_engine.py` · `schemas/attendance.py` · `services/attendance_service.py` · `services/event_service.py` · `services/event_session_service.py` · `services/dashboard_service.py` · `services/analytics_service.py` · `repositories/event_repo.py` · `api/v1/endpoints/events.py` · `api/v1/endpoints/attendance.py`.
+- Scripts: NEW `materialize_quiz_day_sessions.py` · NEW `verify_attendance_spec_alignment.py` · `verify_phase_6_5.py` · `verify_phase_7_2.py` · `verify_phase_7_1.py` · `verify_phase_6_7.py` (deliberate assertion updates).
+- Frontend: `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/components/events/EventFormDialog.tsx` · `src/components/events/eventRules.ts` · `src/app/(authenticated)/tools/events/page.tsx`.
+- Docs: `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/attendance_ui_refinement_report.md`.
+
+## Verification
+
+- `verify_attendance_spec_alignment.py` **15/15**; frozen regressions 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** (deliberate documented re-scopes in 6.5/7.2/7.1 only).
+- compileall PASS · `npx tsc --noEmit` PASS (0 errors) · ESLint clean · `next build` PASS (14 routes).
+
+## Database state after refinement
+
+- **Documented, authorized, minimal**: sessions 684 → **691** (7 quiz-day LECTURE sessions, `timetable_entry_id IS NULL`, `is_extra=false`, non-cancelled, no records; reversible via `--undo`). Events=18 · cancelled=0 · extra=0 · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN). BCS-054 Quiz III = 2026-10-23 unchanged.
+
+## Do Not Touch Again
+
+- The quiz-day session semantics, student event authorization policy, consolidated banding, `required_pct`/`status` fields, and the attendance-mutation response contract are now canonical — changes require a new phase with its own verifier. No commit was made.
+
+## Deferred (intentionally NOT done here)
+
+- AT-RISK (T-1) · trend product semantics (T-2) · dedicated Analytics page (T-3) · multi-class forecast wording (T-4) · Q-D9 · rule G.
+- Browser/manual testing — the user's responsibility.

@@ -4,7 +4,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import AcademicEvent
-from app.models.enums import EventType, ClassType
+from app.models.enums import EventType, ClassType, UserRole
+from app.models.user import User
 from app.repositories.event_repo import EventRepository, EventNotFound, EventConflict
 from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
 from app.services.event_registry import (
@@ -15,6 +16,31 @@ from app.services.event_registry import (
 from app.services.event_session_service import EventSessionSynchronizer
 
 
+class EventForbidden(Exception):
+    """
+    The authenticated user is not authorized for this event mutation (mapped
+    to 403 by the endpoint). Per the product specification, events are
+    student-adjustable for the flexible, subject-scoped types; global/
+    closure/quiz-schedule events remain admin-only, and subject-scoped
+    student events are limited to the student's own enrollments.
+    """
+
+
+# Event types students may create/update/deactivate for their OWN enrolled
+# subjects (spec: "Students must be able to add/remove events according to
+# what actually happened"). These are exactly the flexible, class-reality
+# event types; everything else (holidays, closures, breaks, working-day
+# overrides, QUIZ_DAY) stays admin-only because it drives the shared calendar
+# structure / quiz schedule.
+STUDENT_CREATABLE_EVENT_TYPES = {
+    EventType.EXTRA_LECTURE,
+    EventType.EXTRA_TUTORIAL,
+    EventType.EXTRA_PRACTICAL,
+    EventType.CLASS_CANCELLED,
+    EventType.SURPRISE_QUIZ,
+}
+
+
 class EventService:
     """
     Business layer for academic-event mutations (Phase 6.5).
@@ -23,12 +49,49 @@ class EventService:
     The service validates, enforces business rules, coordinates the
     transaction (single commit; no partial event writes), and calls the
     repository for persistence.
+
+    Since the product specification makes events student-adjustable,
+    authorization is enforced here (single place): students may mutate only
+    STUDENT_CREATABLE_EVENT_TYPES scoped to subjects they are enrolled in;
+    admins may mutate anything. The endpoint only translates EventForbidden
+    into a 403.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = EventRepository(db)
         self.sync = EventSessionSynchronizer(db)
+
+    async def assert_mutation_allowed(
+        self,
+        user: User,
+        *,
+        event_type: EventType,
+        subject_id: Optional[UUID],
+    ) -> None:
+        """
+        Authorization gate for event mutations. Admins pass unconditionally.
+        Students may only mutate flexible subject-scoped types for subjects
+        they are enrolled in (enrollment authorization mirrors the attendance
+        mutation path — a student can never touch another student's or an
+        unrelated subject's schedule).
+        """
+        if user.role == UserRole.ADMIN:
+            return
+        if event_type not in STUDENT_CREATABLE_EVENT_TYPES:
+            raise EventForbidden(
+                "This event type is restricted to administrators "
+                "(global / closure / quiz-schedule events)."
+            )
+        if subject_id is None:
+            raise EventForbidden(
+                "Subject-scoped event mutations require a subject."
+            )
+        if not await self.repo.is_enrolled(user.id, subject_id):
+            raise EventForbidden(
+                "You can only add or remove events for subjects you are "
+                "enrolled in."
+            )
 
     async def _ensure_subject(self, subject_id: UUID) -> None:
         if not await self.repo.subject_exists(subject_id):
@@ -51,7 +114,11 @@ class EventService:
                 "(same type, subject, class type, and date range)"
             )
 
-    async def create_event(self, data: AcademicEventCreate) -> AcademicEvent:
+    async def create_event(self, user: User, data: AcademicEventCreate) -> AcademicEvent:
+        # Student-adjustable events: authorize before any side effect.
+        await self.assert_mutation_allowed(
+            user, event_type=data.event_type, subject_id=data.subject_id
+        )
         # Structural fields arrive validated by the Pydantic schema.
         if data.subject_id is not None:
             await self._ensure_subject(data.subject_id)
@@ -96,10 +163,16 @@ class EventService:
         await self.db.refresh(event)
         return event
 
-    async def update_event(self, event_id: UUID, data: AcademicEventUpdate) -> AcademicEvent:
+    async def update_event(self, user: User, event_id: UUID, data: AcademicEventUpdate) -> AcademicEvent:
         event = await self.repo.get_by_id(event_id)
         if event is None:
             raise EventNotFound("Event not found")
+
+        # Authorize on the existing state first (a student may not touch a
+        # global/closure event even to "fix" it).
+        await self.assert_mutation_allowed(
+            user, event_type=event.event_type, subject_id=event.subject_id
+        )
 
         # Phase 6.6: remember the pre-update span so sessions affected by the
         # old configuration are reconciled back even when the event moves.
@@ -125,6 +198,12 @@ class EventService:
             event.substitution_schedule_override = data.substitution_schedule_override
         if "active" in fields:
             event.active = data.active
+
+        # Re-authorize on the FINAL state: a student changing the subject or
+        # type must still land on a flexible, enrolled-subject event.
+        await self.assert_mutation_allowed(
+            user, event_type=event.event_type, subject_id=event.subject_id
+        )
 
         if event.subject_id is not None:
             await self._ensure_subject(event.subject_id)
@@ -161,7 +240,7 @@ class EventService:
         await self.db.refresh(event)
         return event
 
-    async def deactivate_event(self, event_id: UUID) -> AcademicEvent:
+    async def deactivate_event(self, user: User, event_id: UUID) -> AcademicEvent:
         """
         Deletion is safe deactivation: `active` is the event lifecycle flag
         (legacy ADR 004 soft-delete semantics; the schema has no hard-delete
@@ -171,6 +250,11 @@ class EventService:
         event = await self.repo.get_by_id(event_id)
         if event is None:
             raise EventNotFound("Event not found")
+        # Students may remove (deactivate) flexible subject-scoped events for
+        # their enrolled subjects only.
+        await self.assert_mutation_allowed(
+            user, event_type=event.event_type, subject_id=event.subject_id
+        )
         if not event.active:
             return event
         event.active = False

@@ -26,8 +26,12 @@ Verifies the Phase 7.2 product contract end-to-end against the real database:
         expose missed/pending separately.
    9.   Zero-record student: overall pct is null (not 0%).
 
- Q-D7  mutation / eligibility timing (decision: intentional restriction):
-   10.  Event mutations remain admin-only  -  student POST /events -> 403.
+ Q-D7  mutation / eligibility timing (decision: intentionally re-scoped by
+       the attendance specification — events are student-adjustable for the
+       flexible subject-scoped types on the student's own enrollments;
+       global/closure/quiz-schedule events remain admin-only; attendance
+       mutation safety is unchanged):
+   10.  Student POST global/closure event -> 403 (admin-only).
    11.  Attendance mutation safety: non-enrolled subject -> 403; cancelled
         session -> 409 (cancelled != absent).
    12.  Eligibility is computed read-time: a mutation propagates to the next
@@ -218,10 +222,12 @@ async def main() -> int:
               "for all 18 theory subject/cycle combos (no off-teaching-day session counted)",
               all_ok, detail)
 
-        # --- Q-D7 check 10: event mutations stay admin-only ---------------------
+        # --- Q-D7 check 10 (attendance-spec re-scope): global/closure events
+        # stay admin-only; flexible subject-scoped student events are covered
+        # by verify_phase_6_5 and verify_attendance_spec_alignment.
         r = await client.post("/api/v1/events", headers=student_headers, json={
             "event_type": "INSTITUTE_HOLIDAY", "start_date": "2026-10-05", "end_date": "2026-10-05"})
-        check("10. Q-D7: student event mutation rejected with 403 (admin-only, intentional restriction)",
+        check("10. Q-D7 re-scope: student POST global/closure event -> 403 (admin-only)",
               r.status_code == 403, f"got {r.status_code} {r.text[:120]}")
 
         # --- Q-D6 checks 2-4 + Q-D7 check 11 (event + attendance safety) -------
