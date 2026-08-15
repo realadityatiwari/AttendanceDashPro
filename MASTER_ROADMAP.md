@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **COMPLETE / FROZEN** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (Canonical Analytics Read Model) **COMPLETE** ✅ — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. Phase 8.2 (analytics frontend) **NOT STARTED** — requires explicit authorization.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **COMPLETE / FROZEN** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (Canonical Analytics Read Model) **COMPLETE** ✅ — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. Phase 8.2 (Frontend Consumption of the Canonical Analytics Read Model) **COMPLETE** ✅ — typed analytics client + backend-derived subject/overall/weekly analytics; tsc/ESLint/`next build` green; zero backend/DB change.
 
 ---
 
@@ -49,7 +49,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 5 | Attendance History | 🟢 Complete / Frozen |
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
 | 7 | Quiz Eligibility & Schedule UX | 🟡 **7.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: eligibility math verified against legacy engines & real DB data; schedule reality captured (BCS-054 Q3 UNRESOLVED); 10 decision points (Q-D1…Q-D10) documented for Aditya. Implementation blocked on decisions. |
-| 8 | Attendance Analytics / Intelligence | ✅ **8.0 AUDIT COMPLETE / FROZEN (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`). **8.1 CANONICAL ANALYTICS READ MODEL COMPLETE (2026-08-15)** — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. 8.2 (frontend) NOT STARTED. |
+| 8 | Attendance Analytics / Intelligence | ✅ **8.0 AUDIT COMPLETE / FROZEN (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`). **8.1 CANONICAL ANALYTICS READ MODEL COMPLETE (2026-08-15)** — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. **8.2 FRONTEND CONSUMPTION COMPLETE (2026-08-15)** — typed `useAnalyticsOverview`, backend practical % + 75% must-attend/safe-skip on Subjects, forecast + weekly series on Dashboard, dead components removed; no backend/DB change. |
 | 9 | Laboratory System | ⚪ Planned |
 | 10 | Settings, Feedback & Account Management | ⚪ Planned |
 | 11 | Notifications & Reminders | ⚪ Planned |
@@ -1211,9 +1211,7 @@ PHASE 7  ████████████████████  COMPLETE 
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
-```## Immediate Next Action
-
-**Phase 6.5 — Event persistence, admin authentication & seeding**
+```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):
 
@@ -1314,3 +1312,15 @@ Phase 8.1 is **COMPLETE (2026-08-15) — PASS**. Backend-only additive analytics
 - **Verification:** `verify_phase_8_1.py` **22/22** (auth, enrollment scoping, ERP overall, forecast, pending, subject summaries, practical %, must-attend/safe-skip + optimizer edge cases, weekly read model, dashboard compatibility + N+1 correctness with query counting, runtime-date behavior, enrollment protection, no duplicate attendance math, exact baseline, frozen 7.2 invariants). Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** — no assertion weakened. Static: compileall PASS · `npx tsc --noEmit` PASS.
 - **Database:** zero mutation — exact baseline before/after (events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN)). BCS-054 Q3 = 2026-10-23 unchanged.
 - **Next:** Phase 8.2 (frontend consumption of the read model: practical % + must-attend/safe-skip on Subjects, overall forecast + weekly series, remove duplicated card banding/cycle) after explicit authorization; T-1 AT-RISK and T-3 Analytics page remain product decisions. **HARD STOP after Phase 8.1 — no commit made, Phase 8.2 NOT STARTED.**
+
+## Phase 8.2 — Frontend Consumption of the Canonical Analytics Read Model
+
+Phase 8.2 is **COMPLETE (2026-08-15) — PASS**. Frontend-only consumption of the Phase 8.1 read model; **no backend change, no DB mutation, no commit**:
+
+- **Typed analytics client:** `AnalyticsOverviewResponse`/`OverallAnalytics`/`WeeklyAnalyticsItem`/`AnalyticsSubjectItem` types (exact match to the backend schema) + extended `SubjectAttendanceSummary` (`current_practical_pct`, `forecast_practical_pct`, `optimization`) + `useAnalyticsOverview()` SWR hook (`/api/v1/analytics/overview`, standard cache).
+- **Subjects page:** `SubjectAttendanceGrid` now loads every subject's backend summary from ONE overview request (no per-subject N+1); each card renders backend practical % (+forecast) and the 75% must-attend/safe-skip from `summary.optimization`. The duplicated 75/65 client banding was removed (no backend status field exists for subjects, so none is invented) and the hardcoded `cycle = 1` was replaced with the canonical `useCurrentQuizCycle()` (Phase 7.2 mechanism) driving the quiz eligibility badge.
+- **Dashboard:** `OverallAttendanceCard` gains an additive backend forecast line (pending-as-attended); `WeeklyAttendanceCard` now renders the backend weekly series (Monday-start weeks, backend `current_pct`, null = truthful gap, never 0%) instead of re-deriving day-bar percentages in React.
+- **Dead component cleanup:** `TodayClassesCard.tsx` and `FormulaCard.tsx` verified unused (zero imports/routes) and deleted.
+- **No React business math:** all rendered percentages/forecasts/deficits/safe-skips come from backend fields; React only formats/clamps width for presentation.
+- **Verification:** `npx tsc --noEmit` PASS (0 errors) · ESLint clean on all changed files · `next build` PASS. Backend untouched; frozen phases untouched.
+- **Next:** Phase 8.3 (if any) after explicit authorization; T-1 (AT-RISK), T-2 (trend semantics), T-3 (dedicated Analytics page), T-4 (multi-class forecast wording) remain product decisions. **HARD STOP after Phase 8.2 — no commit made, Phase 8.3 NOT STARTED.**

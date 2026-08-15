@@ -18,7 +18,8 @@ import {
   LaboratoryRecordResponse,
   DashboardSummaryResponse,
   DailySessionsResponse,
-  AttendanceMutationRequest
+  AttendanceMutationRequest,
+  AnalyticsOverviewResponse
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -237,6 +238,24 @@ export function useDashboardSummary() {
   );
   return {
     summary: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useAnalyticsOverview() {
+  // Phase 8.1 analytics read model (authenticated, enrollment-scoped): overall
+  // current/forecast, pending count, weekly series, per-subject analytics — all
+  // backend-derived. The frontend renders these fields and never recomputes
+  // attendance/forecast/safe-skip mathematics.
+  const { data, error, isLoading, mutate } = useSWR<AnalyticsOverviewResponse>(
+    '/api/v1/analytics/overview',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    overview: data,
     isLoading,
     isError: error,
     mutate

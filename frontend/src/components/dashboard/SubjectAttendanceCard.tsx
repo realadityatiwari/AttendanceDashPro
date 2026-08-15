@@ -1,86 +1,35 @@
-import { useSubjectSummary, useQuizEligibility } from "@/hooks/useApi";
-import { SubjectResponse } from "@/types/api";
+"use client";
+
+import { useQuizEligibility, useCurrentQuizCycle } from "@/hooks/useApi";
+import { SubjectResponse, AnalyticsSubjectItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Target, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Target } from "lucide-react";
 
 interface SubjectAttendanceCardProps {
   subject: SubjectResponse;
+  // Backend-derived analytics (Phase 8.1 read model, delivered via the
+  // analytics overview). The card renders these values and never recomputes
+  // percentages, must-attend, or safe-skip client-side.
+  summary: AnalyticsSubjectItem | null;
 }
 
-export function SubjectAttendanceCard({ subject }: SubjectAttendanceCardProps) {
-  // Hardcode cycle 1 for now, or this could come from a context/prop
-  const cycle = 1;
-  const { summary, isLoading: sumLoading, isError: sumError } = useSubjectSummary(subject.code);
-  const { eligibility, isLoading: eligLoading, isError: eligError } = useQuizEligibility(subject.quiz_applicable ? subject.code : null, cycle);
+export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCardProps) {
+  // Canonical date-aware quiz cycle (Phase 7.2): the backend answers which
+  // cycle is currently relevant — no hardcoded cycle=1, no client-side
+  // schedule logic. While it loads, the eligibility query stays disabled.
+  const { currentCycle } = useCurrentQuizCycle();
+  const cycle = currentCycle?.quiz_cycle ?? null;
+  const { eligibility, isError: eligError } = useQuizEligibility(
+    subject.quiz_applicable ? subject.code : null,
+    cycle
+  );
 
-  const isLoading = sumLoading || eligLoading;
-  
-  if (isLoading) {
-    return (
-      <Card className="bg-surface border-border overflow-hidden opacity-70">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex justify-between items-center">
-            <span className="font-semibold">{subject.code}</span>
-            <div className="w-12 h-4 bg-surface2 rounded animate-pulse"></div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="h-2 w-full bg-surface2 rounded-full animate-pulse"></div>
-            <div className="flex justify-between">
-              <div className="w-16 h-4 bg-surface2 rounded animate-pulse"></div>
-              <div className="w-16 h-4 bg-surface2 rounded animate-pulse"></div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const avgPct = summary?.current_avg_pct ?? null;
+  const optimization = summary?.optimization ?? null;
+  const hasPractical = (summary?.practical.total ?? 0) > 0;
 
-  if (sumError) {
-    return (
-      <Card className="bg-surface border-border overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">{subject.code}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-xs text-red-400 flex items-center gap-1.5">
-            <AlertCircle size={14} />
-            Failed to load stats
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Determine status color based on avg percentage or quiz eligibility
-  const avgPct = summary?.current_avg_pct ?? 0;
-  
-  let statusColor = "text-foreground";
-  let badgeColor = "bg-surface2 text-text border-border";
-  let statusIcon = null;
-
-  if (subject.quiz_applicable && eligibility) {
-    if (eligibility.is_eligible) {
-      statusColor = "text-emerald-400";
-      badgeColor = "bg-emerald-500/15 text-emerald-400 border-emerald-500/20";
-      statusIcon = <CheckCircle2 size={14} className="text-emerald-400" />;
-    } else {
-      statusColor = "text-red-400";
-      badgeColor = "bg-red-500/15 text-red-400 border-red-500/20";
-      statusIcon = <XCircle size={14} className="text-red-400" />;
-    }
-  } else {
-    // Basic threshold if no quiz
-    if (avgPct >= 75) {
-      statusColor = "text-emerald-400";
-    } else if (avgPct >= 65) {
-      statusColor = "text-amber-400";
-    } else {
-      statusColor = "text-red-400";
-    }
-  }
+  const isEligible = subject.quiz_applicable && eligibility?.is_eligible === true;
 
   return (
     <Card className="bg-surface border-border overflow-hidden hover:border-border/80 transition-colors">
@@ -94,64 +43,121 @@ export function SubjectAttendanceCard({ subject }: SubjectAttendanceCardProps) {
               {subject.name}
             </div>
           </div>
-          {subject.quiz_applicable && eligibility && (
-             <Badge className={`uppercase text-[10px] tracking-wider px-2 py-0 h-5 flex items-center gap-1 ${badgeColor}`}>
-               {statusIcon}
-               {eligibility.is_eligible ? "Eligible" : "Defaulter"}
-             </Badge>
+          {subject.quiz_applicable && eligibility && !eligError && (
+            <Badge
+              className={`uppercase text-[10px] tracking-wider px-2 py-0 h-5 flex items-center gap-1 ${
+                isEligible
+                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
+                  : "bg-red-500/15 text-red-400 border-red-500/20"
+              }`}
+            >
+              {isEligible ? (
+                <CheckCircle2 size={14} className="text-emerald-400" />
+              ) : (
+                <XCircle size={14} className="text-red-400" />
+              )}
+              {isEligible ? "Eligible" : "Defaulter"}
+            </Badge>
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="p-4">
-        {/* Main Stats */}
+        {/* Main stats (backend values) */}
         <div className="flex items-end justify-between mb-4">
           <div>
-            <div className={`text-2xl font-bold tracking-tight ${statusColor}`}>
-              {summary?.current_avg_pct !== null ? `${summary?.current_avg_pct?.toFixed(1)}%` : "N/A"}
+            <div className="text-2xl font-bold tracking-tight text-foreground">
+              {avgPct !== null ? `${avgPct.toFixed(1)}%` : "N/A"}
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Overall Avg</div>
           </div>
-          
+
           <div className="text-right">
             <div className="text-sm font-semibold text-foreground">
-              {summary?.lecture.attended} / {summary?.lecture.total}
+              {summary?.lecture.attended ?? 0} / {summary?.lecture.total ?? 0}
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Lec Attended</div>
           </div>
         </div>
 
-        {/* Progress Bar (Visual representation) */}
+        {/* Progress bar — single accent; no client-side SAFE/WATCH/CRITICAL
+            banding (the backend does not emit a per-subject status, so none is
+            invented here). */}
         <div className="h-1.5 w-full bg-surface2 rounded-full overflow-hidden mb-4">
-          <div 
-            className="h-full bg-emerald-500 rounded-full" 
-            style={{ 
-              width: `${Math.min(100, Math.max(0, avgPct))}%`,
-              backgroundColor: avgPct >= 75 ? 'var(--emerald-500)' : avgPct >= 65 ? 'var(--amber-500)' : 'var(--red-500)'
-            }}
+          <div
+            className="h-full bg-accent rounded-full"
+            style={{ width: `${avgPct !== null ? Math.min(100, Math.max(0, avgPct)) : 0}%` }}
           />
         </div>
 
-        {/* Details Grid */}
+        {/* Lecture / Tutorial with backend 75% optimization */}
         <div className="grid grid-cols-2 gap-2 text-xs border-t border-border/30 pt-3">
           <div className="flex flex-col">
-            <span className="text-muted-foreground">Lec: <span className="font-medium text-foreground">{summary?.current_lecture_pct !== null ? `${summary?.current_lecture_pct?.toFixed(0)}%` : "—"}</span></span>
-            {subject.quiz_applicable && eligibility?.optimization && (
+            <span className="text-muted-foreground">
+              Lec:{" "}
+              <span className="font-medium text-foreground">
+                {summary?.current_lecture_pct !== null && summary?.current_lecture_pct !== undefined
+                  ? `${summary.current_lecture_pct.toFixed(0)}%`
+                  : "—"}
+              </span>
+            </span>
+            {optimization && (
               <span className="text-[10px] mt-0.5 text-text2 flex items-center gap-1">
-                <Target size={10} /> Safe Skips: {eligibility.optimization.safe_skip_lecture}
+                <Target size={10} />
+                Must attend: {optimization.lecture_deficit} · Safe skip: {optimization.safe_skip_lecture}
               </span>
             )}
           </div>
-          
+
           <div className="flex flex-col text-right">
-            <span className="text-muted-foreground">Tut: <span className="font-medium text-foreground">{summary?.current_tutorial_pct !== null ? `${summary?.current_tutorial_pct?.toFixed(0)}%` : "—"}</span></span>
-            {subject.quiz_applicable && eligibility?.optimization && (
+            <span className="text-muted-foreground">
+              Tut:{" "}
+              <span className="font-medium text-foreground">
+                {summary?.current_tutorial_pct !== null && summary?.current_tutorial_pct !== undefined
+                  ? `${summary.current_tutorial_pct.toFixed(0)}%`
+                  : "—"}
+              </span>
+            </span>
+            {optimization && (
               <span className="text-[10px] mt-0.5 text-text2 flex items-center justify-end gap-1">
-                <Target size={10} /> Safe Skips: {eligibility.optimization.safe_skip_tutorial}
+                <Target size={10} />
+                Must attend: {optimization.tutorial_deficit} · Safe skip: {optimization.safe_skip_tutorial}
               </span>
             )}
           </div>
         </div>
+
+        {/* Practical analytics (backend canonical fields; shown only when the
+            subject actually has practical sessions) */}
+        {hasPractical && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs border-t border-border/30 pt-3">
+            <div className="flex flex-col">
+              <span className="text-muted-foreground">
+                Prac:{" "}
+                <span className="font-medium text-foreground">
+                  {summary?.current_practical_pct !== null && summary?.current_practical_pct !== undefined
+                    ? `${summary.current_practical_pct.toFixed(0)}%`
+                    : "—"}
+                </span>
+              </span>
+              <span className="text-[10px] mt-0.5 text-text2">
+                {summary?.practical.attended ?? 0} / {summary?.practical.total ?? 0} attended
+                {summary && summary.practical.pending > 0 ? ` · ${summary.practical.pending} pending` : ""}
+              </span>
+            </div>
+            <div className="flex flex-col text-right">
+              <span className="text-muted-foreground">
+                Forecast:{" "}
+                <span className="font-medium text-foreground">
+                  {summary?.forecast_practical_pct !== null && summary?.forecast_practical_pct !== undefined
+                    ? `${summary.forecast_practical_pct.toFixed(0)}%`
+                    : "—"}
+                </span>
+              </span>
+              <span className="text-[10px] mt-0.5 text-text2">if pending attended</span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

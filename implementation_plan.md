@@ -704,6 +704,34 @@ Status: **COMPLETE (2026-08-15) — PASS.** Backend-only additive analytics read
 - Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** — no assertion weakened.
 - Static: compileall PASS · `npx tsc --noEmit` PASS (0 errors, frontend untouched).
 
-### Next (Phase 8.2, requires explicit product authorization)
+---
 
-- Frontend consumption of the Phase 8.1 read model: practical % + must-attend/safe-skip on Subjects, overall forecast + weekly series from `/analytics/overview`, remove duplicated card banding and hardcoded cycle, drop dead components — within the existing design system. T-1 (AT-RISK) and T-3 (dedicated Analytics page) remain product decisions. **HARD STOP — no commit made; Phase 8.2 NOT STARTED.**
+## PHASE 8.2 — FRONTEND CONSUMPTION OF THE CANONICAL ANALYTICS READ MODEL
+
+Status: **COMPLETE (2026-08-15) — PASS.** Frontend-only consumption of the Phase 8.1 read model; **no backend change, no DB mutation, no commit**.
+
+### Implemented
+
+1. **Typed analytics client:** `AnalyticsOverviewResponse`, `OverallAnalytics`, `WeeklyAnalyticsItem`, `AnalyticsSubjectItem` added to `src/types/api.ts` (exact match to the backend schema — no invented fields); `SubjectAttendanceSummary` extended additively with `current_practical_pct`, `forecast_practical_pct`, `optimization`; new `useAnalyticsOverview()` hook (`/api/v1/analytics/overview`, standard SWR cache).
+2. **Subjects page (backend-derived):** `SubjectAttendanceGrid` loads all subject summaries from ONE overview request (per-subject N+1 eliminated); each `SubjectAttendanceCard` renders backend practical % (+forecast) and 75% must-attend/safe-skip from `summary.optimization`. The duplicated 75/65 client banding was removed (no per-subject status exists in the backend contract — none invented); hardcoded `cycle = 1` replaced with the canonical `useCurrentQuizCycle()` (Phase 7.2) driving the quiz eligibility badge.
+3. **Dashboard (backend-derived):** `OverallAttendanceCard` renders an additive backend forecast line (pending-as-attended); `WeeklyAttendanceCard` renders the backend weekly series (Monday-start, backend `current_pct`, null rendered as a truthful gap — never 0%) instead of re-deriving day-bar percentages.
+4. **Dead components removed:** `TodayClassesCard.tsx` and `FormulaCard.tsx` verified unused (zero imports/routes) and deleted.
+
+### Files changed (Phase 8.2)
+
+| Layer | Files |
+|---|---|
+| Frontend | `src/types/api.ts` · `src/hooks/useApi.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/components/dashboard/SubjectAttendanceGrid.tsx` · `src/components/dashboard/home/OverallAttendanceCard.tsx` · `src/components/dashboard/home/WeeklyAttendanceCard.tsx` · `src/app/(authenticated)/dashboard/page.tsx` · DELETED `src/components/dashboard/TodayClassesCard.tsx` · DELETED `src/components/dashboard/FormulaCard.tsx` |
+| Docs | `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+| Backend | **NONE** |
+| DB | **NONE** (zero mutation) |
+
+### Verification
+
+- `npx tsc --noEmit` PASS (0 errors) · ESLint clean on all changed files · `next build` PASS (all 14 routes).
+- No attendance formulas, safe-skip calculations, eligibility calculations, or quiz-cycle logic in React (backend fields rendered directly).
+- Frozen phases untouched; no backend file modified.
+
+### Next (Phase 8.3, requires explicit product authorization)
+
+- T-1 (AT-RISK taxonomy), T-2 (trend semantics), T-3 (dedicated Analytics page), T-4 (multi-class forecast wording) remain product decisions. Q-D9 and rule G unchanged. **HARD STOP — no commit made; Phase 8.3 NOT STARTED.**

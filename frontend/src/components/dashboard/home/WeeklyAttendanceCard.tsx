@@ -1,16 +1,25 @@
 import { ArrowDownRight, ArrowUpRight, CalendarRange } from "lucide-react";
-import { WeeklySection } from "@/types/api";
+import { WeeklySection, WeeklyAnalyticsItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDelta, formatPct } from "@/lib/date";
+import { formatDayHeader, formatDelta, formatPct } from "@/lib/date";
 
 interface WeeklyAttendanceCardProps {
   weekly: WeeklySection;
+  // Backend weekly read-model series from GET /api/v1/analytics/overview
+  // (Monday-start weeks, recorded-only current_pct, null = gap week). The
+  // frontend renders these values and never re-derives percentages.
+  series?: WeeklyAnalyticsItem[] | null;
 }
 
-export function WeeklyAttendanceCard({ weekly }: WeeklyAttendanceCardProps) {
+// Presentation-only: cap the rendered series to the most recent weeks so the
+// card stays compact. No data is invented — the backend series is shown as-is.
+const MAX_WEEKS = 6;
+
+export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardProps) {
   const delta = weekly.delta_pct;
+  const weeks = (series ?? []).slice(-MAX_WEEKS);
 
   return (
     <Card>
@@ -46,43 +55,53 @@ export function WeeklyAttendanceCard({ weekly }: WeeklyAttendanceCardProps) {
       </CardHeader>
 
       <CardContent className="p-4">
-        <ul className="space-y-2.5">
-          {weekly.days.map((day) => {
-            const pct = day.recorded > 0 ? (day.attended / day.recorded) * 100 : null;
-            return (
-              <li
-                key={day.date}
-                className={`flex items-center gap-3 rounded-md px-2 py-1.5 ${
-                  day.is_today ? "bg-muted/60 ring-1 ring-border" : ""
-                }`}
-              >
-                <span className="w-16 shrink-0 text-xs font-medium text-foreground">
-                  {day.day_label.slice(0, 3)}
-                </span>
-                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full ${
-                      pct === null
-                        ? "bg-muted"
-                        : pct >= 80
-                          ? "bg-success"
-                          : pct >= 60
-                            ? "bg-warning"
-                            : "bg-destructive"
-                    }`}
-                    style={{ width: pct === null ? "0%" : `${Math.min(100, pct)}%` }}
-                  />
-                </div>
-                <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {day.is_future ? "—" : pct !== null ? `${Math.round(pct)}%` : "—"}
-                </span>
-                <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {day.attended}/{day.recorded || day.classes}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {weeks.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              No weekly attendance data yet.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2.5">
+            {weeks.map((week) => {
+              const pct = week.current_pct; // backend-provided; null = gap week
+              const isCurrentWeek = week.week_start === weekly.week_start;
+              return (
+                <li
+                  key={week.week_start}
+                  className={`flex items-center gap-3 rounded-md px-2 py-1.5 ${
+                    isCurrentWeek ? "bg-muted/60 ring-1 ring-border" : ""
+                  }`}
+                >
+                  <span className="w-16 shrink-0 text-xs font-medium text-foreground">
+                    {formatDayHeader(week.week_start)}
+                  </span>
+                  <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full ${
+                        pct === null
+                          ? "bg-muted"
+                          : pct >= 80
+                            ? "bg-success"
+                            : pct >= 60
+                              ? "bg-warning"
+                              : "bg-destructive"
+                      }`}
+                      style={{ width: pct === null ? "0%" : `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {pct !== null ? `${Math.round(pct)}%` : "—"}
+                  </span>
+                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {week.attended}/{week.recorded}
+                    {week.pending > 0 ? ` · ${week.pending}p` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         <div className="mt-4 space-y-1.5 border-t border-border/60 pt-3 text-xs">
           {weekly.best_subject && (

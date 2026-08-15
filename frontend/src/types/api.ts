@@ -147,6 +147,14 @@ export interface SubjectAttendanceSummary {
   forecast_lecture_pct: number | null;
   forecast_tutorial_pct: number | null;
   forecast_avg_pct: number | null;
+
+  // Phase 8.1 additive analytics (Phase 8.2 consumes; the frontend never
+  // computes these): practical attendance % uses the canonical class-session
+  // pipeline; the subject-level 75% optimization is the attendance engine's
+  // own optimizer (must-attend = *_deficit, safe-skip = safe_skip_*).
+  current_practical_pct: number | null;
+  forecast_practical_pct: number | null;
+  optimization: OptimizationResult | null;
 }
 
 export interface OptimizationResult {
@@ -155,6 +163,48 @@ export interface OptimizationResult {
   safe_skip_lecture: number;
   safe_skip_tutorial: number;
   is_reachable: boolean;
+}
+
+// --- Phase 8.1 analytics read model (GET /api/v1/analytics/overview) ---
+// Every value is backend-derived from the canonical attendance engines; the
+// frontend renders these fields and never re-implements attendance mathematics.
+
+export interface OverallAnalytics {
+  // ERP semantics: current = Σ attended / Σ recorded × 100 (recorded-only,
+  // pending never converted to absent); forecast = Σ (attended + pending) /
+  // Σ total × 100 (pending treated as attended). Cancelled excluded.
+  current_pct: number | null;
+  forecast_pct: number | null;
+  attended: number;
+  recorded: number;
+  pending: number;
+  cancelled: number;
+  // Canonical 3-state current banding: SAFE | WATCH | CRITICAL | null.
+  // AT-RISK is NOT defined and is never emitted.
+  status: "SAFE" | "WATCH" | "CRITICAL" | null;
+}
+
+export interface WeeklyAnalyticsItem {
+  // Monday-start week bucket. current_pct is null (a gap) when nothing was
+  // recorded that week — render as a gap, never as 0%.
+  week_start: string; // YYYY-MM-DD
+  current_pct: number | null;
+  attended: number;
+  recorded: number;
+  pending: number;
+}
+
+export interface AnalyticsSubjectItem extends SubjectAttendanceSummary {
+  subject_name: string | null;
+}
+
+export interface AnalyticsOverviewResponse {
+  as_of: string; // YYYY-MM-DD
+  semester_start: string | null;
+  semester_end: string | null;
+  overall: OverallAnalytics;
+  weekly: WeeklyAnalyticsItem[];
+  subjects: AnalyticsSubjectItem[];
 }
 
 export enum EligibilityState {

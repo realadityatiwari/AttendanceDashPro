@@ -1,6 +1,6 @@
 "use client";
 
-import { useDashboardSummary } from "@/hooks/useApi";
+import { useDashboardSummary, useAnalyticsOverview } from "@/hooks/useApi";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GreetingHeader } from "@/components/dashboard/home/GreetingHeader";
 import { TodayAttendanceCard, TodayAttendanceCardSkeleton } from "@/components/dashboard/home/TodayAttendanceCard";
@@ -12,6 +12,9 @@ import { UpcomingEventsCard, UpcomingEventsCardSkeleton } from "@/components/das
 
 export default function DashboardPage() {
   const { summary, isLoading, isError } = useDashboardSummary();
+  // Phase 8.1 analytics read model: supplies the overall forecast and the
+  // authoritative weekly series that the cards render (backend-derived only).
+  const { overview } = useAnalyticsOverview();
 
   if (isError) {
     return (
@@ -42,8 +45,8 @@ export default function DashboardPage() {
         ) : (
           <>
             <TodayAttendanceCard today={summary.today} />
-            <OverallAttendanceCard overall={summary.overall} />
-            <WeeklyAttendanceCard weekly={summary.weekly} />
+            <OverallAttendanceCard overall={summary.overall} forecastPct={overview?.overall.forecast_pct ?? null} />
+            <WeeklyAttendanceCard weekly={summary.weekly} series={overview?.weekly ?? null} />
             <QuizSnapshotCard quiz={summary.quiz_snapshot} />
             <AttentionRequiredCard items={summary.attention_required} />
             <UpcomingEventsCard events={summary.upcoming_events} />

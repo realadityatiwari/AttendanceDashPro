@@ -1,10 +1,17 @@
-import { useSubjects } from "@/hooks/useApi";
+"use client";
+
+import { useSubjects, useAnalyticsOverview } from "@/hooks/useApi";
 import { SubjectAttendanceCard } from "./SubjectAttendanceCard";
 import { AlertCircle } from "lucide-react";
-import { SubjectCategory } from "@/types/api";
 
 export function SubjectAttendanceGrid() {
-  const { subjects, isLoading, isError } = useSubjects();
+  const { subjects, isLoading: subjectsLoading, isError: subjectsError } = useSubjects();
+  // ONE analytics overview request supplies every subject's backend summary
+  // (practical %, 75% must-attend/safe-skip, forecasts) — no per-subject N+1.
+  const { overview, isLoading: overviewLoading, isError: overviewError } = useAnalyticsOverview();
+
+  const isLoading = subjectsLoading || overviewLoading;
+  const isError = subjectsError || overviewError;
 
   if (isLoading) {
     return (
@@ -22,7 +29,7 @@ export function SubjectAttendanceGrid() {
         <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
         <h3 className="text-sm font-semibold text-red-400">Failed to load subjects</h3>
         <p className="text-xs text-red-400/80 mt-1">
-          Could not retrieve your enrolled subjects from the server.
+          Could not retrieve your enrolled subjects or their analytics from the server.
         </p>
       </div>
     );
@@ -39,14 +46,21 @@ export function SubjectAttendanceGrid() {
     );
   }
 
-  // Filter out LAB category or group them if needed. 
-  // Based on legacy, labs have a separate tool, but we can show them if attendance_applicable is true.
-  const displaySubjects = subjects.filter(s => s.attendance_applicable);
+  // Backend-derived summaries keyed by subject code (the analytics overview is
+  // enrollment-scoped and excludes non-attendance-applicable subjects, the same
+  // scope used below).
+  const summaryByCode = new Map((overview?.subjects ?? []).map((s) => [s.subject_code, s]));
+
+  const displaySubjects = subjects.filter((s) => s.attendance_applicable);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {displaySubjects.map((subject) => (
-        <SubjectAttendanceCard key={subject.id} subject={subject} />
+        <SubjectAttendanceCard
+          key={subject.id}
+          subject={subject}
+          summary={summaryByCode.get(subject.code) ?? null}
+        />
       ))}
     </div>
   );

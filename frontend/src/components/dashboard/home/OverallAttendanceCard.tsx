@@ -9,9 +9,13 @@ import { attendanceStatusVariant } from "./status";
 
 interface OverallAttendanceCardProps {
   overall: OverallSection;
+  // Backend-provided overall forecast (pending treated as attended — canonical
+  // forecast semantics from GET /api/v1/analytics/overview). Optional: the
+  // card renders it additively when supplied.
+  forecastPct?: number | null;
 }
 
-export function OverallAttendanceCard({ overall }: OverallAttendanceCardProps) {
+export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanceCardProps) {
   const pct = overall.overall_pct;
 
   return (
@@ -35,6 +39,12 @@ export function OverallAttendanceCard({ overall }: OverallAttendanceCardProps) {
               {overall.attended} attended · {overall.recorded} recorded
               {overall.pending > 0 && ` · ${overall.pending} pending`}
             </p>
+            {forecastPct !== null && forecastPct !== undefined && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Forecast {formatPct(forecastPct)}
+                <span className="text-text2"> if all pending attended</span>
+              </p>
+            )}
           </div>
           {overall.weekly_delta_pct !== null && (
             <div

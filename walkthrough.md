@@ -656,3 +656,30 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 - Product decisions T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing) before those features ship.
 - Q-D9 and rule G remain separate product decisions.
 - **HARD STOP after Phase 8.1** — no commit made; Phase 8.2 NOT STARTED; browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 8.2 Walkthrough
+
+> **PHASE 8.2 COMPLETE — FRONTEND CONSUMPTION OF THE CANONICAL ANALYTICS READ MODEL.**
+> Frontend-only; no backend change, no DB mutation, no commit.
+
+## What Phase 8.2 Did
+
+1. **Added the typed analytics client.** New `AnalyticsOverviewResponse` / `OverallAnalytics` / `WeeklyAnalyticsItem` / `AnalyticsSubjectItem` types match the Phase 8.1 backend schema exactly (no invented fields), `SubjectAttendanceSummary` gained the additive Phase 8.1 fields (`current_practical_pct`, `forecast_practical_pct`, `optimization`), and a new `useAnalyticsOverview()` SWR hook consumes `GET /api/v1/analytics/overview` with the standard cache.
+2. **Made the Subjects page fully backend-driven.** `SubjectAttendanceGrid` fetches every subject's analytics from a SINGLE overview request (no more per-subject summary N+1) and passes each backend summary to its card. Cards now render practical % (current + forecast) and the subject-level 75% must-attend/safe-skip straight from `summary.optimization`. The duplicated client-side 75/65 banding was removed — the backend has no per-subject status, so none is invented — and the hardcoded `cycle = 1` was replaced with the canonical `useCurrentQuizCycle()` (Phase 7.2) that drives the Eligible/Defaulter badge.
+3. **Made the Dashboard analytics backend-derived.** `OverallAttendanceCard` shows an additive backend forecast line (pending-as-attended). `WeeklyAttendanceCard` now renders the backend Monday-start weekly series — backend `current_pct`, with `null` weeks shown as truthful gaps instead of the old React `attended/recorded × 100` day-bar derivation.
+4. **Removed the dead components.** `TodayClassesCard.tsx` and `FormulaCard.tsx` were verified unused (zero imports, zero routes) and deleted.
+5. **Kept the design system intact.** Existing Card/Badge/typography/spacing and the SAFE/WATCH/CRITICAL visual language are unchanged; the analytics feels native.
+6. **Verified statically.** `npx tsc --noEmit` PASS (0 errors), ESLint clean on all changed files, `next build` PASS (14 routes). Confirmed zero attendance/safe-skip/eligibility/quiz-cycle mathematics in React — every rendered value is a backend field. Backend and database untouched.
+
+## Database State After 8.2
+
+- **ZERO mutation** — no backend/database file touched. Phase 8.1 baseline unchanged.
+
+## What's Next
+
+- **Phase 8.3 (requires explicit authorization)** — only after reviewing Phase 8.2; nothing is queued.
+- Product decisions T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing) before those features ship.
+- Q-D9 and rule G remain separate product decisions.
+- **HARD STOP after Phase 8.2** — no commit made; Phase 8.3 NOT STARTED; browser/manual testing remains the user's responsibility.
