@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Integer, Time, Boolean, Date, ForeignKey, Enum
 from app.db.base_class import Base
-from app.models.enums import ClassType
+from app.models.enums import ClassType, SessionDesignation
 import datetime
 from typing import List
 import uuid
@@ -27,6 +27,15 @@ class ClassSession(Base):
     is_extra: Mapped[bool] = mapped_column(Boolean, default=False)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     timetable_entry_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("timetable_entries.id"), nullable=True)
+    # Phase 8.2: optional ADMIN-controlled session designation (e.g.
+    # MID_SEM_PRACTICAL). NULL = regular session. This is a session-level fact
+    # tied to an actual scheduled ClassSession — it is never inferred from
+    # experiment completion counts or a fixed calendar date, and it does not
+    # alter attendance counting (the same canonical mutation records
+    # attendance against the designated session).
+    designation: Mapped[SessionDesignation | None] = mapped_column(
+        Enum(SessionDesignation), nullable=True, default=None
+    )
 
     subject: Mapped["Subject"] = relationship(back_populates="class_sessions")
     timetable_entry: Mapped["TimetableEntry"] = relationship(back_populates="class_sessions")

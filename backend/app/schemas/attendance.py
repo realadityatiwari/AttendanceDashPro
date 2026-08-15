@@ -85,8 +85,28 @@ class SubjectAttendanceSummary(BaseModel):
     # status band (SAFE | WATCH | CRITICAL | None) derived from the same
     # engine banding the dashboard/analytics use. Both are additive, backend-
     # emitted values — the frontend renders them and never recomputes banding.
+    # NOTE (Phase 8.2): `status` (legacy SAFE/WATCH/CRITICAL) stays emitted for
+    # backwards compatibility; the Attendance page consumes `health` instead.
     required_pct: float = 75.0
     status: Optional[str] = None
+
+    # Phase 8.2 Attendance Health: the canonical 4-state classification for the
+    # subject's OVERALL attendance (HEALTHY | WATCH | AT_RISK | CRITICAL |
+    # None), emitted by the backend from the attendance engine's own
+    # classification (thresholds documented in
+    # docs/phase_8_2_implementation_report.md). The Attendance page renders it;
+    # React never bands attendance. None when nothing is recorded.
+    health: Optional[str] = None
+
+    # Phase 8.2 mid-semester practical designation (lab domain): the actual
+    # scheduled PRACTICAL class session the admin/faculty designated as the
+    # subject's mid-semester practical, if any. Always None until such a
+    # session is explicitly designated — the designation is a session-level
+    # fact (ClassSession.designation), never inferred from experiment counts
+    # or a computed date. Attendance against it is recorded through the normal
+    # attendance mutation.
+    mid_sem_session_id: Optional[str] = None
+    mid_sem_session_date: Optional[date] = None
 
 class EligibilityState(str, Enum):
     """Canonical quiz eligibility state for a subject/cycle pair.

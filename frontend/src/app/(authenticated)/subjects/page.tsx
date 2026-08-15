@@ -8,7 +8,7 @@ export default function SubjectsPage() {
     <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
       <PageHeader 
         title="Subjects Overview" 
-        description="Detailed attendance and quiz eligibility across all enrolled subjects."
+        description="How your attendance is going in each enrolled subject — current to today's scheduled classes."
       />
       
       <div className="mt-6">

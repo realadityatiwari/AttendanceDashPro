@@ -1,247 +1,202 @@
 "use client";
 
 import { useState } from "react";
-import { useQuizEligibility, useCurrentQuizCycle } from "@/hooks/useApi";
 import { SubjectResponse, AnalyticsSubjectItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, ChevronDown, ChevronUp, XCircle, Calculator, Target } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STATUS_BADGE: Record<string, { label: string; variant: "success" | "warning" | "danger" } | null> = {
-  SAFE: { label: "Safe", variant: "success" },
+// Attendance Health (Phase 8.2) — the backend emits the classification
+// (`summary.health`); React only maps it to existing semantic tokens:
+//   HEALTHY  -> success (green)
+//   WATCH    -> warning (amber)
+//   AT_RISK  -> danger (soft red)
+//   CRITICAL -> danger (solid red)
+// No new color system is invented; banding never happens in React.
+const HEALTH_BADGE: Record<string, { label: string; variant: "success" | "warning" | "danger"; solid?: boolean }> = {
+  HEALTHY: { label: "Healthy", variant: "success" },
   WATCH: { label: "Watch", variant: "warning" },
-  CRITICAL: { label: "Critical", variant: "danger" },
+  AT_RISK: { label: "At Risk", variant: "danger" },
+  CRITICAL: { label: "Critical", variant: "danger", solid: true },
+};
+
+const HEALTH_PROGRESS: Record<string, "success" | "warning" | "danger" | "default"> = {
+  HEALTHY: "success",
+  WATCH: "warning",
+  AT_RISK: "danger",
+  CRITICAL: "danger",
 };
 
 function fmtPct(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;
 }
 
-function fmtInt(value: number | null | undefined): string {
+function fmtIntPct(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${value.toFixed(0)}%`;
 }
 
+function fmtDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 /**
- * Attendance subject card (reference UI — attendance spec).
+ * Attendance subject card (Phase 8.2 — attendance monitoring only).
  *
- * Every number is a backend field from the Phase 8.1 analytics read model:
- *   - primary %: combined average (Lecture + Tutorial) / 2 for theory subjects,
- *     practical % for lab-only subjects;
- *   - lecture/tutorial: current % · attended/total · required · must-attend
- *     (optimization.*_deficit) · safe-skip (optimization.safe_skip_*);
- *   - status: the canonical SAFE/WATCH/CRITICAL band emitted by the backend.
- * React only formats and expands/collapses — no attendance mathematics here.
+ * This card answers "how is my attendance going in this subject?" and nothing
+ * else. Quiz strategy (must-attend, safe-skip, forecast, current-vs-forecast,
+ * quiz-window denominators, required 75%, eligibility badge) is deliberately
+ * absent — those concepts belong to the Quiz Eligibility surface and stay in
+ * its engine/API.
+ *
+ * Every number is a backend field from the canonical attendance pipeline
+ * (analytics read model / subject summary). React formats, expands/collapses,
+ * and maps backend health to tokens — it never computes attendance, averages,
+ * banding, or mid-sem state.
  */
 export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCardProps) {
-  // Canonical date-aware quiz cycle (Phase 7.2): the backend answers which
-  // cycle is currently relevant — no hardcoded cycle, no client-side schedule
-  // logic. While it loads, the eligibility query stays disabled.
-  const { currentCycle } = useCurrentQuizCycle();
-  const cycle = currentCycle?.quiz_cycle ?? null;
-  const { eligibility, isError: eligError } = useQuizEligibility(
-    subject.quiz_applicable ? subject.code : null,
-    cycle
-  );
   const [showDetails, setShowDetails] = useState(false);
 
+  // Theory subjects headline the combined average (the spec formula);
+  // lab-only subjects headline practical attendance.
   const isLabOnly = !subject.quiz_applicable;
   const hasTutorials = (summary?.tutorial.total ?? 0) > 0;
-  const hasPractical = (summary?.practical.total ?? 0) > 0;
 
-  // PRIMARY: theory subjects headline the combined average (the spec's subject
-  // formula); lab-only subjects headline the practical percentage.
   const primaryPct = isLabOnly ? summary?.current_practical_pct ?? null : summary?.current_avg_pct ?? null;
-  const primaryCounts = isLabOnly ? summary?.practical : summary?.lecture;
-
-  const status = summary?.status ?? null;
-  const statusBadge = status ? STATUS_BADGE[status] : null;
-  const required = summary?.required_pct ?? 75;
-  const optimization = summary?.optimization ?? null;
-  const isEligible = subject.quiz_applicable && eligibility?.is_eligible === true;
-
-  const progressVariant =
-    status === "SAFE" ? "success" : status === "WATCH" ? "warning" : status === "CRITICAL" ? "danger" : "default";
+  const health = summary?.health ?? null;
+  const healthBadge = health ? HEALTH_BADGE[health] : null;
+  const progressVariant = health ? HEALTH_PROGRESS[health] : "default";
 
   return (
-    <Card className="bg-surface border-border overflow-hidden hover:border-border/80 transition-colors flex flex-col">
-      {/* Header: code · type · name · current status */}
-      <CardHeader className="pb-2 pt-4 px-4 bg-surface/50 border-b border-border/30">
-        <div className="flex justify-between items-start gap-2">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="font-mono text-sm font-bold tracking-tight text-foreground">
-                {subject.code}
-              </CardTitle>
-              <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-[10px] tracking-wider px-2 py-0 h-5">
-                {isLabOnly ? "LAB" : "THEORY"}
-              </Badge>
-              {subject.quiz_applicable && eligibility && !eligError && (
-                <Badge
-                  className={`uppercase text-[10px] tracking-wider px-2 py-0 h-5 flex items-center gap-1 ${
-                    isEligible
-                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
-                      : "bg-red-500/15 text-red-400 border-red-500/20"
-                  }`}
-                >
-                  {isEligible ? (
-                    <CheckCircle2 size={14} className="text-emerald-400" />
-                  ) : (
-                    <XCircle size={14} className="text-red-400" />
-                  )}
-                  {isEligible ? "Eligible" : "Defaulter"}
-                </Badge>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground truncate mt-1" title={subject.name}>
-              {subject.name}
-            </div>
+    <Card className="bg-card border-border overflow-hidden hover:border-border/80 transition-colors flex flex-col">
+      {/* Header: code · type · name + Attendance Health */}
+      <CardHeader className="pb-2 pt-3.5 px-4 flex flex-row items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle className="font-mono text-sm font-bold tracking-tight text-foreground">
+              {subject.code}
+            </CardTitle>
+            <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-[10px] tracking-wider px-2 py-0 h-5">
+              {isLabOnly ? "LAB" : "THEORY"}
+            </Badge>
           </div>
-          {statusBadge && <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>}
+          <div className="text-xs text-muted-foreground truncate mt-1 max-w-56 sm:max-w-none" title={subject.name}>
+            {subject.name}
+          </div>
         </div>
+        {healthBadge && (
+          <Badge
+            variant={healthBadge.variant}
+            className={cn("uppercase text-[10px] tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
+          >
+            {healthBadge.label}
+          </Badge>
+        )}
       </CardHeader>
 
-      <CardContent className="p-4 flex-1 flex flex-col gap-4">
-        {/* Primary attendance */}
+      <CardContent className="p-4 pt-1 flex-1 flex flex-col gap-3">
+        {/* Main: large overall percentage */}
         <div>
-          <div className="flex items-end justify-between">
-            <div>
-              <div className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
-                {fmtPct(primaryPct)}
-              </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
-                {isLabOnly ? "Practical Attendance" : "Average Attendance"}
-              </div>
+          <div className="flex items-end justify-between gap-3">
+            <div className="text-3xl font-bold tracking-tight text-foreground tabular-nums leading-none">
+              {fmtPct(primaryPct)}
             </div>
-            <div className="text-right">
-              <div className="text-sm font-semibold text-foreground tabular-nums">
-                {primaryCounts?.attended ?? 0} / {primaryCounts?.total ?? 0}
+            <div className="text-right pb-0.5">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+                {isLabOnly ? "Practical" : "Overall"}
               </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
-                {isLabOnly ? "Prac Attended" : "Lecture Attended"}
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+                Attendance
               </div>
             </div>
           </div>
-          <div className="h-1.5 w-full bg-surface2 rounded-full overflow-hidden mt-3">
+          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mt-2.5">
             <div
               className={cn(
                 "h-full rounded-full",
                 progressVariant === "success" && "bg-success",
                 progressVariant === "warning" && "bg-warning",
                 progressVariant === "danger" && "bg-destructive",
-                progressVariant === "default" && "bg-accent"
+                progressVariant === "default" && "bg-primary"
               )}
               style={{ width: `${primaryPct !== null ? Math.min(100, Math.max(0, primaryPct)) : 0}%` }}
             />
           </div>
         </div>
 
-        {/* Theory: lecture / tutorial / combined sections (backend values) */}
-        {!isLabOnly && (
+        {!isLabOnly ? (
           <>
-            <Section
-              label="Lecture"
-              pct={summary?.current_lecture_pct ?? null}
-              counts={summary?.lecture}
-              required={required}
-              optimization={optimization ? { deficit: optimization.lecture_deficit, safeSkip: optimization.safe_skip_lecture } : null}
-              align="left"
-            />
-            {hasTutorials && (
-              <Section
-                label="Tutorial"
-                pct={summary?.current_tutorial_pct ?? null}
-                counts={summary?.tutorial}
-                required={required}
-                optimization={optimization ? { deficit: optimization.tutorial_deficit, safeSkip: optimization.safe_skip_tutorial } : null}
-                align="right"
+            {/* Breakdown: two balanced blocks, Lecture / Tutorial */}
+            <div className="grid grid-cols-2 gap-3 mt-0.5">
+              <Block
+                label="Lecture"
+                pct={summary?.current_lecture_pct ?? null}
+                counts={summary?.lecture}
               />
-            )}
-            <div className="border-t border-border/30 pt-3">
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="font-medium text-foreground">Combined Average</span>
-                <span className="tabular-nums font-semibold text-foreground">{fmtPct(summary?.current_avg_pct ?? null)}</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                {hasTutorials
-                  ? "Average = (Lecture % + Tutorial %) / 2"
-                  : "No tutorials — subject average equals Lecture %"}
-              </p>
+              {hasTutorials ? (
+                <Block
+                  label="Tutorial"
+                  pct={summary?.current_tutorial_pct ?? null}
+                  counts={summary?.tutorial}
+                />
+              ) : (
+                <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5 flex items-center justify-center text-[11px] text-muted-foreground">
+                  No tutorials
+                </div>
+              )}
             </div>
-          </>
-        )}
 
-        {/* Lab / practical-only: practical section in the same dense language */}
-        {isLabOnly && hasPractical && (
-          <div className="border-t border-border/30 pt-3">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium text-foreground">
-                Practical{" "}
-                <span className="text-muted-foreground font-normal">
-                  · {summary?.practical.attended ?? 0}/{summary?.practical.total ?? 0} attended
-                  {summary && summary.practical.pending > 0 ? ` · ${summary.practical.pending} pending` : ""}
-                </span>
+            {/* Formula caption (presentation only — the backend computes) */}
+            <p className="text-[11px] text-muted-foreground">
+              {hasTutorials
+                ? "Average = (Lecture % + Tutorial %) / 2"
+                : "No tutorials — subject average equals Lecture %"}
+            </p>
+          </>
+        ) : (
+          /* Lab / practical-only: practical attendance + mid-sem state (backend-backed) */
+          <div className="space-y-2 mt-0.5">
+            <div className="flex items-baseline justify-between rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5">
+              <span className="text-xs font-medium text-foreground">Practical sessions attended</span>
+              <span className="tabular-nums font-semibold text-foreground text-sm">
+                {summary?.practical.attended ?? 0} / {summary?.practical.total ?? 0}
               </span>
-              <span className="tabular-nums text-muted-foreground">{fmtPct(summary?.current_practical_pct ?? null)}</span>
             </div>
-            <Progress value={summary?.current_practical_pct ?? 0} variant={progressVariant} className="mt-2 [&_[data-slot=progress-track]]:h-1.5" />
+            {/* Mid-sem state comes only from the backend designation (actual
+                scheduled session); nothing is fabricated when unset. */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Mid-Sem Practical</span>
+              <span className="font-medium text-foreground tabular-nums">
+                {summary?.mid_sem_session_date ? fmtDate(summary.mid_sem_session_date) : "Not scheduled"}
+              </span>
+            </div>
           </div>
         )}
 
-        {/* Expandable calculation / forecast details — real backend values only */}
+        {/* Details: real backend values only — no forecast, no optimizer */}
         <Button variant="outline" size="sm" onClick={() => setShowDetails(v => !v)} className="w-full justify-between mt-auto">
-          <span className="inline-flex items-center gap-1.5">
-            <Calculator className="size-3.5" />
-            View Details
-          </span>
+          <span>View Details</span>
           {showDetails ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </Button>
 
         {showDetails && (
-          <div className="rounded-lg border border-border/50 bg-surface2/30 p-4 space-y-4 text-xs">
-            {/* Current vs forecast per class type */}
-            <div className="space-y-2">
-              <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase">Current vs Forecast</p>
-              <DetailRow label="Lecture" current={summary?.current_lecture_pct ?? null} forecast={summary?.forecast_lecture_pct ?? null} counts={summary?.lecture} />
-              {hasTutorials && (
-                <DetailRow label="Tutorial" current={summary?.current_tutorial_pct ?? null} forecast={summary?.forecast_tutorial_pct ?? null} counts={summary?.tutorial} />
-              )}
-              {hasPractical && (
-                <DetailRow label="Practical" current={summary?.current_practical_pct ?? null} forecast={summary?.forecast_practical_pct ?? null} counts={summary?.practical} />
-              )}
-              {!isLabOnly && (
-                <DetailRow label="Average" current={summary?.current_avg_pct ?? null} forecast={summary?.forecast_avg_pct ?? null} counts={null} />
-              )}
-            </div>
-
-            {/* Optimizer: must-attend / safe-skip (backend optimization result) */}
-            {optimization && !isLabOnly && (
-              <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3">
-                <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                  <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Must Attend</p>
-                  <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{optimization.lecture_deficit}</span></p>
-                  {hasTutorials && (
-                    <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{optimization.tutorial_deficit}</span></p>
-                  )}
-                  {!optimization.is_reachable && <p className="text-[10px] text-warning mt-1">Target unreachable</p>}
-                </div>
-                <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                  <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Safe Skip</p>
-                  <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{optimization.safe_skip_lecture}</span></p>
-                  {hasTutorials && (
-                    <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{optimization.safe_skip_tutorial}</span></p>
-                  )}
-                </div>
-              </div>
+          <div className="rounded-lg border border-border/50 bg-muted/30 p-3.5 space-y-2.5 text-xs">
+            {!isLabOnly && (
+              <>
+                <DetailRow label="Lecture" counts={summary?.lecture} pct={summary?.current_lecture_pct ?? null} />
+                {hasTutorials && <DetailRow label="Tutorial" counts={summary?.tutorial} pct={summary?.current_tutorial_pct ?? null} />}
+                <DetailRow label="Overall" counts={null} pct={summary?.current_avg_pct ?? null} />
+              </>
             )}
-
-            {/* Formula / pending note */}
-            <p className="border-t border-border/50 pt-3 text-muted-foreground">
-              {isLabOnly
-                ? "Current % is recorded-only (pending never treated as absent); forecast assumes pending classes are attended."
-                : `Current % is recorded-only (pending never treated as absent); forecast assumes pending classes are attended. Required attendance for the optimizer is ${required.toFixed(0)}%.`}
+            {isLabOnly && (
+              <DetailRow label="Practical" counts={summary?.practical} pct={summary?.current_practical_pct ?? null} />
+            )}
+            <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+              Percentages are current and recorded-only — pending sessions are never treated as absent.
             </p>
           </div>
         )}
@@ -252,61 +207,42 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
 
 interface SubjectAttendanceCardProps {
   subject: SubjectResponse;
-  // Backend-derived analytics (Phase 8.1 read model, delivered via the
-  // analytics overview). The card renders these values and never recomputes
-  // percentages, must-attend, or safe-skip client-side.
+  // Backend-derived analytics (canonical attendance pipeline via the analytics
+  // overview). The card renders these values and never recomputes percentages,
+  // banding, or mid-sem state client-side.
   summary: AnalyticsSubjectItem | null;
 }
 
-function Section({
+function Block({
   label,
   pct,
   counts,
-  required,
-  optimization,
-  align,
 }: {
   label: string;
   pct: number | null;
-  counts: { total: number; attended: number; pending: number } | undefined;
-  required: number;
-  optimization: { deficit: number; safeSkip: number } | null;
-  align: "left" | "right";
+  counts: { total: number; attended: number } | undefined;
 }) {
   return (
-    <div className={cn("flex flex-col", align === "right" && "text-right")}>
-      <div className="flex items-baseline justify-between text-sm">
-        <span className="font-medium text-foreground">{label}</span>
-        <span className="tabular-nums font-semibold text-foreground">{fmtInt(pct)}</span>
+    <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
+        <span className="tabular-nums font-semibold text-foreground text-sm leading-none">{fmtIntPct(pct)}</span>
       </div>
-      <p className="text-[11px] text-muted-foreground mt-0.5">
+      <p className="text-[11px] text-muted-foreground mt-1.5 tabular-nums">
         {counts?.attended ?? 0}/{counts?.total ?? 0} attended
-        {counts && counts.pending > 0 ? ` · ${counts.pending} pending` : ""} · Current {fmtInt(pct)} · Required{" "}
-        {required.toFixed(0)}%
       </p>
-      {optimization && (
-        <p className={cn("text-[11px] mt-1 text-text2 flex items-center gap-1", align === "right" && "justify-end")}>
-          <Target size={10} className="shrink-0" />
-          <span>
-            Must attend <span className="font-bold tabular-nums">{optimization.deficit}</span> · Safe skip{" "}
-            <span className="font-bold tabular-nums">{optimization.safeSkip}</span>
-          </span>
-        </p>
-      )}
     </div>
   );
 }
 
 function DetailRow({
   label,
-  current,
-  forecast,
   counts,
+  pct,
 }: {
   label: string;
-  current: number | null;
-  forecast: number | null;
-  counts: { total: number; attended: number; pending: number } | null | undefined;
+  counts: { total: number; attended: number; missed: number; pending: number } | null | undefined;
+  pct: number | null;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -315,13 +251,13 @@ function DetailRow({
         {counts && (
           <span className="text-muted-foreground">
             {" "}
-            · {counts.attended}/{counts.total} attended{counts.pending > 0 ? ` · ${counts.pending} pending` : ""}
+            · {counts.attended}/{counts.total} attended
+            {counts.missed > 0 ? ` · ${counts.missed} missed` : ""}
+            {counts.pending > 0 ? ` · ${counts.pending} pending` : ""}
           </span>
         )}
       </span>
-      <span className="tabular-nums text-muted-foreground shrink-0">
-        {fmtPct(current)} → {fmtPct(forecast)}
-      </span>
+      <span className="tabular-nums text-muted-foreground shrink-0">{fmtPct(pct)}</span>
     </div>
   );
 }

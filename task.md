@@ -838,3 +838,41 @@ Align the implementation with the authoritative attendance specification (lectur
 
 - AT-RISK (T-1) · trend product semantics (T-2) · dedicated Analytics page (T-3) · multi-class forecast wording (T-4) · Q-D9 · rule G.
 - Browser/manual testing — the user's responsibility.
+
+---
+
+## Phase 8.2 — Attendance Monitoring + Lab Domain Correction
+
+Correct the Attendance (/subjects) page so it is attendance-monitoring only (no quiz strategy), introduce a canonical backend-owned Attendance Health classification, and establish the laboratory domain foundation with a session-bound mid-sem designation.
+
+## Root cause (traced)
+
+- The "11 / 14" denominator is NOT a quiz window: it is the canonical count of non-cancelled `class_sessions` <= today (14 real lectures through 2026-08-15 for every theory subject; no fixed constant anywhere). The Attendance page's real defect was presenting quiz strategy (must-attend / safe-skip / forecast / current-vs-forecast / required 75% / Defaulter badge) and the legacy SAFE/WATCH/CRITICAL banding.
+
+## Implemented
+
+- [x] Attendance Health (backend-owned, additive `health` on `SubjectAttendanceSummary`): HEALTHY >= 75 · WATCH 65–<75 · AT RISK 60–<65 · CRITICAL <60; canonical engine definition; legacy `status` untouched for frozen consumers; React never bands.
+- [x] Attendance card redesigned (attendance-only): code · THEORY/LAB · name · Health badge; large "Overall Attendance" %; balanced Lecture/Tutorial blocks (attended/total + %); formula caption; lab cards show Practical Attendance + backend-backed "Mid-Sem Practical" row; View Details = attended/missed/pending only. No quiz strategy anywhere.
+- [x] Laboratory domain separation: practical attendance stays canonical `ClassSession(PRACTICAL)` + `AttendanceRecord`; experiment curriculum/progress (`laboratory_experiments`/`laboratory_records`) untouched and empty (no fabricated data).
+- [x] Mid-sem practical: smallest safe foundation — `class_sessions.designation` (nullable enum, migration `e5f6a7b8c9d0`), ADMIN-only `PUT/DELETE /api/v1/laboratory/{code}/mid-sem` + read, tied to an actual PRACTICAL session (never inferred from experiment count, never a computed date); attendance against it flows through the normal mutation; one per subject, replaceable, clearable.
+- [x] Verification `verify_phase_8_2.py` 18/18; frozen regressions 6.5 27/27 · 6.6 36/36 · 6.7 31/31 · 7.1 26/26 · 7.2 26/26 · 8.1 22/22 · attendance-spec 15/15; compileall / tsc / ESLint / next build green.
+
+## Files changed
+
+- Backend: `engines/attendance_engine.py` · `models/enums.py` · `models/timetable.py` · `schemas/attendance.py` · `services/attendance_service.py` · `repositories/attendance_repo.py` · `services/laboratory_service.py` (NEW) · `api/v1/endpoints/laboratory.py` · `schemas/laboratory.py` · `alembic/versions/e5f6a7b8c9d0_add_session_designation.py` (NEW).
+- Scripts: NEW `verify_phase_8_2.py` · `verify_phase_7_1.py` (check 23: stale hardcoded 89 replaced with the verifier's own baseline snapshot — DB legitimately holds 92 records after the user's manual lab reconstruction).
+- Frontend: `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/app/(authenticated)/subjects/page.tsx`.
+- Docs: `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/phase_8_2_implementation_report.md`.
+
+## Database state
+
+- Migration `e5f6a7b8c9d0` applied (additive nullable column). Baseline unchanged: events=18 · sessions=691 (0 cancelled, 0 extra) · records=92 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · laboratory tables empty · designations=0. BCS-054 Quiz III = 2026-10-23 unchanged.
+
+## Do Not Touch Again
+
+- Attendance Health classification, the attendance-only card contract, the mid-sem designation semantics/endpoints, and the `health`/`mid_sem_*` summary fields are canonical — changes require a new phase with its own verifier. No commit was made.
+
+## Deferred (intentionally NOT done here)
+
+- Authoritative experiment titles/curriculum (unavailable), faculty scheduling system (missing authority boundary — documented), "Lab Progress N/10" on the Attendance page, anything on the Quiz Eligibility engine or Phase 6 calendar architecture.
+- Browser/manual testing — the user's responsibility.

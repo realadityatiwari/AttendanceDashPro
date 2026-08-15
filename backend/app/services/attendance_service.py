@@ -13,6 +13,7 @@ from app.engines.attendance_engine import (
     normalize_class_type,
     optimize_attendance,
     classify_attendance_status,
+    classify_attendance_health,
 )
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
 
@@ -23,7 +24,7 @@ from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsRespon
 SUBJECT_OPTIMIZATION_TARGET_PCT = 75.0
 
 
-def _build_subject_summary(subject_code: str, counts: Dict[str, Any]) -> SubjectAttendanceSummary:
+def _build_subject_summary(subject_code: str, counts: Dict[str, Any], mid_sem=None) -> SubjectAttendanceSummary:
     """
     Composes the canonical per-subject summary (attendance engine) with the
     Phase 8.1 additive analytics fields, all derived from the same counts:
@@ -43,6 +44,16 @@ def _build_subject_summary(subject_code: str, counts: Dict[str, Any]) -> Subject
     # canonical current status band (engine-owned; never computed in React).
     summary.required_pct = SUBJECT_OPTIMIZATION_TARGET_PCT
     summary.status = classify_attendance_status(summary.current_avg_pct)
+
+    # Phase 8.2 Attendance Health: the canonical 4-state classification of the
+    # subject's OVERALL attendance, emitted by the backend (React never bands).
+    summary.health = classify_attendance_health(summary.current_avg_pct)
+
+    # Phase 8.2 mid-semester practical designation: the actual scheduled
+    # PRACTICAL session designated by admin/faculty (None until designated).
+    if mid_sem:
+        summary.mid_sem_session_id = mid_sem[0]
+        summary.mid_sem_session_date = mid_sem[1]
 
     p = counts.get('P', {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0})
     done_p = p['att'] + p['miss']
@@ -69,7 +80,8 @@ class AttendanceService:
     async def get_summary(self, user_id: UUID, subject_id: UUID, subject_code: str, as_of_date: date) -> SubjectAttendanceSummary:
         raw_counts = await self.repo.get_subject_counts_up_to_date(user_id, subject_id, as_of_date)
         counts = self._aggregate_counts(raw_counts)
-        return _build_subject_summary(subject_code, counts)
+        mid_sem = (await self.repo.get_mid_sem_sessions([subject_id])).get(subject_id)
+        return _build_subject_summary(subject_code, counts, mid_sem=mid_sem)
 
     @staticmethod
     def _aggregate_counts(raw_counts) -> Dict[str, Any]:
@@ -126,7 +138,11 @@ class AttendanceService:
                 bucket[t]['miss'] += 1
             else:
                 bucket[t]['pending'] += 1
-        return {s.id: _build_subject_summary(s.code, grouped[s.id]) for s in subjects}
+        mid_sems = await self.repo.get_mid_sem_sessions(list(grouped.keys()))
+        return {
+            s.id: _build_subject_summary(s.code, grouped[s.id], mid_sem=mid_sems.get(s.id))
+            for s in subjects
+        }
 
     async def record_attendance(self, user_id: UUID, class_session_id: UUID, status: AttendanceStatus) -> AttendanceRecord:
         session = await self.repo.get_session_by_id(class_session_id)

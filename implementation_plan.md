@@ -771,3 +771,44 @@ Status: **COMPLETE (2026-08-15) — PASS.** Aligned the implementation with the 
 ### Database mutation status
 
 - **Documented, authorized, minimal**: sessions 684 → **691** (7 quiz-day sessions; reversible via `--undo`). Nothing else touched: events=18 · cancelled=0 · extra=0 · records=89 · enrollments=18 · subjects=9 · quizzes=18 · users=30 (1 ADMIN).
+
+---
+
+## PHASE 8.2 — ATTENDANCE MONITORING + LAB DOMAIN CORRECTION
+
+Status: **COMPLETE (2026-08-15) — PASS.** Attendance (/subjects) corrected to an attendance-monitoring-only page; canonical backend-owned Attendance Health introduced; laboratory domain separated with the smallest safe session-bound mid-sem designation. Full report: `docs/phase_8_2_implementation_report.md`.
+
+### Root-cause trace (the "14")
+
+The reported `11 / 14` denominator is **not** a quiz window: it comes from the canonical `class_sessions` table (non-cancelled sessions `<= today` via `AttendanceRepository.get_subject_counts_for_user`). Every theory subject has exactly 14 real lectures through 2026-08-15 (3/week since 2026-07-15) — no fixed "14" constant exists anywhere. The page's real defect was **presentation ownership**: quiz strategy (must-attend / safe-skip / forecast / current-vs-forecast / required 75% / Defaulter badge) rendered on an attendance card, plus the legacy SAFE/WATCH/CRITICAL banding.
+
+### Implemented
+
+1. **Attendance Health (backend-owned):** `classify_attendance_health` in `attendance_engine.py` — HEALTHY ≥ 75 · WATCH 65–<75 · AT RISK 60–<65 · CRITICAL <60 (documented; current recorded-only %; None when nothing recorded). Emitted additively as `SubjectAttendanceSummary.health` (and `AnalyticsSubjectItem`). Legacy `status` (SAFE/WATCH/CRITICAL) stays emitted for the frozen dashboard/analytics surfaces; React maps health to existing semantic tokens — never bands.
+2. **Attendance card redesign (attendance-only):** header (code · THEORY/LAB · name · Health badge); large "Overall Attendance" % + progress bar; balanced Lecture/Tutorial blocks (attended/total + %); formula caption; labs show Practical Attendance + backend-backed "Mid-Sem Practical" row; View Details = attended/missed/pending only. No quiz strategy anywhere. Compact/horizontal layout; responsive 1/2/3 columns. `/subjects` copy updated to attendance-only.
+3. **Laboratory domain separation:** practical attendance = canonical `ClassSession(PRACTICAL)` + `AttendanceRecord` (verified; cancelled excluded); experiment curriculum/progress = `laboratory_experiments`/`laboratory_records` (both empty — **no fabricated data**); mid-sem = ADMIN-designated session-level fact.
+4. **Mid-sem designation (smallest safe foundation):** `class_sessions.designation` (nullable enum `sessiondesignation`; migration `e5f6a7b8c9d0`); `PUT/DELETE/GET /api/v1/laboratory/{code}/mid-sem` — admin-only mutations tied to an actual PRACTICAL session (400 for LECTURE/foreign-subject, 404 missing; one per subject, replaceable, clearable); the date comes from the real session — never computed; attendance against it flows through the normal mutation. Missing faculty scheduling authority documented — no faculty system invented.
+
+### Files changed
+
+| Layer | Files |
+|---|---|
+| Backend | `engines/attendance_engine.py` · `models/enums.py` · `models/timetable.py` · `schemas/attendance.py` · `services/attendance_service.py` · `repositories/attendance_repo.py` · `services/laboratory_service.py` (NEW) · `api/v1/endpoints/laboratory.py` · `schemas/laboratory.py` |
+| Migration | `alembic/versions/e5f6a7b8c9d0_add_session_designation.py` (NEW, applied) |
+| Scripts | NEW `scripts/verify_phase_8_2.py` · `scripts/verify_phase_7_1.py` (check 23: stale hardcoded `records == 89` → start-of-run snapshot; DB legitimately holds 92 records after the user's manual lab reconstruction) |
+| Frontend | `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/app/(authenticated)/subjects/page.tsx` |
+| Docs | `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/phase_8_2_implementation_report.md` |
+
+### Verification
+
+- `verify_phase_8_2.py` **18/18** (current-to-date totals · no fixed denominator · quiz-window independence · tutorial/lecture-only formulas · cancelled-practical exclusion · canonical practical attendance · no experiment inference/fabrication · unchanged Quiz Eligibility · exact baseline · Health boundaries · session-bound admin mid-sem).
+- Frozen regressions (all green): 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** · attendance-spec **15/15**.
+- Static: compileall PASS · `npx tsc --noEmit` PASS (0 errors) · ESLint clean · `next build` PASS (14 routes).
+
+### Database state
+
+- Migration `e5f6a7b8c9d0` applied (additive nullable column; zero rows changed). Baseline: events=18 · sessions=691 (0 cancelled, 0 extra) · records=92 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · laboratory tables empty · designations=0. BCS-054 Quiz III = 2026-10-23 unchanged.
+
+### Deferred (intentionally NOT done here)
+
+- Authoritative experiment titles/curriculum (unavailable — nothing fabricated), faculty scheduling system (missing authority boundary — documented), "Lab Progress N/10" on the Attendance page, Quiz Eligibility engine / Phase 6 calendar architecture changes. Browser/manual testing remains the user's responsibility. **HARD STOP — no commit made; Phase 9 (Laboratory System) is the next planned phase.**

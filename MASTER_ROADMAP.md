@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **COMPLETE / FROZEN** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (Canonical Analytics Read Model) **COMPLETE** ✅ — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. Phase 8.2 (Frontend Consumption of the Canonical Analytics Read Model) **COMPLETE** ✅ — typed analytics client + backend-derived subject/overall/weekly analytics; tsc/ESLint/`next build` green; zero backend/DB change. **Attendance UI Refinement (spec alignment + reference UI) COMPLETE** ✅ — authoritative attendance spec aligned (student-adjustable subject-scoped events, quiz-day attendance sessions, event sync guard, attendance-mutation 500 fix) + reference Attendance cards; 15/15 spec verifier + full frozen regression (6.5/6.6/6.7/7.1/7.2/8.1 all green); see `docs/attendance_ui_refinement_report.md`.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **COMPLETE / FROZEN** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (Canonical Analytics Read Model) **COMPLETE** ✅ — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. Phase 8.2 (Frontend Consumption of the Canonical Analytics Read Model) **COMPLETE** ✅ — typed analytics client + backend-derived subject/overall/weekly analytics; tsc/ESLint/`next build` green; zero backend/DB change. **Attendance UI Refinement (spec alignment + reference UI) COMPLETE** ✅ — authoritative attendance spec aligned (student-adjustable subject-scoped events, quiz-day attendance sessions, event sync guard, attendance-mutation 500 fix) + reference Attendance cards; 15/15 spec verifier + full frozen regression (6.5/6.6/6.7/7.1/7.2/8.1 all green); see `docs/attendance_ui_refinement_report.md`. **Phase 8.2 (Attendance Monitoring + Lab Domain Correction) COMPLETE** ✅ — Attendance page corrected to attendance-only (quiz strategy removed; the "14" traced to the canonical session table — real 14 lectures through today, not a quiz window); canonical backend-owned Attendance Health (HEALTHY ≥75 / WATCH 65–<75 / AT_RISK 60–<65 / CRITICAL <60) added; compact card redesign; lab domain separation with the smallest safe session-bound mid-sem designation (admin-only `ClassSession.designation`, migration applied, no fabricated experiment data); 18/18 Phase 8.2 verifier + full frozen regression (6.5/6.6/6.7/7.1/7.2/8.1/attendance-spec all green); see `docs/phase_8_2_implementation_report.md`.
 
 ---
 
@@ -49,7 +49,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 5 | Attendance History | 🟢 Complete / Frozen |
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
 | 7 | Quiz Eligibility & Schedule UX | 🟡 **7.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: eligibility math verified against legacy engines & real DB data; schedule reality captured (BCS-054 Q3 UNRESOLVED); 10 decision points (Q-D1…Q-D10) documented for Aditya. Implementation blocked on decisions. |
-| 8 | Attendance Analytics / Intelligence | ✅ **8.0 AUDIT COMPLETE / FROZEN (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`). **8.1 CANONICAL ANALYTICS READ MODEL COMPLETE (2026-08-15)** — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. **8.2 FRONTEND CONSUMPTION COMPLETE (2026-08-15)** — typed `useAnalyticsOverview`, backend practical % + 75% must-attend/safe-skip on Subjects, forecast + weekly series on Dashboard, dead components removed; no backend/DB change. **ATTENDANCE UI REFINEMENT COMPLETE (2026-08-15)** — spec alignment: student-adjustable subject-scoped events (shared schedule; global/closure admin-only), quiz-day attendance sessions materialized (sessions 684→691, eligibility untouched), synchronizer guard, attendance-mutation 500 fix; reference Attendance cards; 15/15 spec verifier + 6.5/6.6/6.7/7.1/7.2/8.1 regressions all green; see `docs/attendance_ui_refinement_report.md`. |
+| 8 | Attendance Analytics / Intelligence | ✅ **8.0 AUDIT COMPLETE / FROZEN (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`). **8.1 CANONICAL ANALYTICS READ MODEL COMPLETE (2026-08-15)** — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. **8.2 FRONTEND CONSUMPTION COMPLETE (2026-08-15)** — typed `useAnalyticsOverview`, backend practical % + 75% must-attend/safe-skip on Subjects, forecast + weekly series on Dashboard, dead components removed; no backend/DB change. **ATTENDANCE UI REFINEMENT COMPLETE (2026-08-15)** — spec alignment: student-adjustable subject-scoped events (shared schedule; global/closure admin-only), quiz-day attendance sessions materialized (sessions 684→691, eligibility untouched), synchronizer guard, attendance-mutation 500 fix; reference Attendance cards; 15/15 spec verifier + 6.5/6.6/6.7/7.1/7.2/8.1 regressions all green; see `docs/attendance_ui_refinement_report.md`. **8.2 ATTENDANCE MONITORING + LAB DOMAIN CORRECTION COMPLETE (2026-08-15)** — Attendance page corrected to attendance-only (quiz strategy removed; "14" traced to canonical session table — real, not quiz-window); canonical backend-owned Attendance Health (HEALTHY ≥75 / WATCH 65–<75 / AT_RISK 60–<65 / CRITICAL <60); compact card redesign; lab domain separation + smallest safe session-bound mid-sem designation (admin-only `class_sessions.designation`, migration `e5f6a7b8c9d0`, no fabricated experiment data); 18/18 verifier + 6.5/6.6/6.7/7.1/7.2/8.1/attendance-spec regressions all green; see `docs/phase_8_2_implementation_report.md`. |
 | 9 | Laboratory System | ⚪ Planned |
 | 10 | Settings, Feedback & Account Management | ⚪ Planned |
 | 11 | Notifications & Reminders | ⚪ Planned |
@@ -462,6 +462,29 @@ CRITICAL
 Dashboard, Track, History and Quiz Eligibility must remain consistent because they derive from the same canonical calculations.
 
 This phase improves **analytics presentation and intelligence**, not by repeatedly rebuilding the core engines.
+
+## Phase 8.2 — Attendance Monitoring + Lab Domain Correction (COMPLETE 2026-08-15)
+
+Attendance (/subjects) is now a pure attendance-monitoring page: quiz strategy
+(must-attend / safe-skip / forecast / current-vs-forecast / quiz-window
+denominator / required 75% / Defaulter badge) was removed from the UI — those
+concepts remain only on the Quiz Eligibility surface. The reported "11 / 14"
+denominator was traced to the canonical session table (14 real lectures through
+today per theory subject) — not a quiz window — and is verified as such.
+Attendance Health (backend-owned, additive `health` field, never banded in
+React): **HEALTHY ≥ 75% · WATCH 65–<75% · AT RISK 60–<65% · CRITICAL <60%**
+(supersedes the legacy SAFE/WATCH/CRITICAL presentation on the Attendance card;
+`status` stays emitted for the frozen dashboard/analytics surfaces).
+
+The laboratory domain is now explicitly separated: practical attendance =
+canonical `ClassSession(PRACTICAL)` + `AttendanceRecord`; experiment
+curriculum/progress = `laboratory_experiments`/`laboratory_records` (empty — no
+fabricated data); mid-sem = an ADMIN-designated **session-level fact**
+(`class_sessions.designation`, migration `e5f6a7b8c9d0`) tied to an actual
+scheduled practical — never inferred from experiment counts and never given a
+computed date. The missing faculty scheduling authority is documented (no
+faculty system invented). See `docs/phase_8_2_implementation_report.md`;
+verification 18/18 + full frozen regression.
 
 ---
 

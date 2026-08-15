@@ -12,11 +12,49 @@ ATTENDANCE_TARGET_PCT = 75.0
 WATCH_BAND_PCT = ATTENDANCE_TARGET_PCT - 15.0  # amber band lower bound
 SAFE_BAND_PCT = ATTENDANCE_TARGET_PCT + 5.0    # legacy SAFE band (target + 5)
 
+# Attendance Health (Phase 8.2 product decision, supersedes the legacy
+# SAFE/WATCH/CRITICAL presentation on the Attendance surface). This is the
+# canonical, backend-owned 4-state classification for a subject's OVERALL
+# attendance (the combined average for theory, practical % for labs):
+#
+#     HEALTHY   >= 75%
+#     WATCH      65% .. < 75%
+#     AT_RISK    60% .. < 65%
+#     CRITICAL  < 60%
+#
+# Thresholds are documented in docs/phase_8_2_implementation_report.md and
+# chosen per the product requirement (75% academic target; AT_RISK band
+# between the watch floor and the target). The legacy `classify_attendance_status`
+# (SAFE/WATCH/CRITICAL) remains untouched for the frozen dashboard/analytics
+# surfaces; Attendance Health is a separate presentation concept emitted
+# additively on SubjectAttendanceSummary and never computed in React.
+ATTENDANCE_HEALTH_HEALTHY_PCT = 75.0   # HEALTHY floor
+ATTENDANCE_HEALTH_WATCH_PCT = 65.0     # WATCH floor
+ATTENDANCE_HEALTH_AT_RISK_PCT = 60.0   # AT_RISK floor
+
+
+def classify_attendance_health(current_pct: Optional[float]) -> Optional[str]:
+    """
+    Attendance Health classification (HEALTHY | WATCH | AT_RISK | CRITICAL |
+    None) for a subject's OVERALL attendance, on CURRENT (recorded-only)
+    percentages. None when nothing has been recorded.
+    """
+    if current_pct is None:
+        return None
+    if current_pct >= ATTENDANCE_HEALTH_HEALTHY_PCT:
+        return "HEALTHY"
+    if current_pct >= ATTENDANCE_HEALTH_WATCH_PCT:
+        return "WATCH"
+    if current_pct >= ATTENDANCE_HEALTH_AT_RISK_PCT:
+        return "AT_RISK"
+    return "CRITICAL"
+
 
 def classify_attendance_status(current_pct: Optional[float]) -> Optional[str]:
     """
-    Semantic status classification (SAFE | WATCH | CRITICAL | None) for the
-    student's CURRENT standing. Subjects with no recorded data return None.
+    Legacy semantic status classification (SAFE | WATCH | CRITICAL | None) for
+    the student's CURRENT standing (frozen dashboard/analytics banding).
+    Subjects with no recorded data return None.
     """
     if current_pct is None:
         return None

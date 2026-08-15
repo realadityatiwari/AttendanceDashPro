@@ -33,3 +33,15 @@ class UserRole(str, Enum):
 class SubjectCategory(str, Enum):
     THEORY = "theory"
     LAB = "lab"
+
+class SessionDesignation(str, Enum):
+    """Session-level designation for a scheduled class session (Phase 8.2).
+
+    A designation is an ADMIN-controlled fact tied to an ACTUAL scheduled
+    session (never inferred from experiment counts or a fixed date). Today the
+    only designation is MID_SEM_PRACTICAL: a specific PRACTICAL class session
+    the faculty/admin designates as the mid-semester practical for its
+    subject. Attendance against that session flows through the normal
+    attendance mutation — designation changes nothing about counting.
+    """
+    MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL"

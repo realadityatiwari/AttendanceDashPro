@@ -722,3 +722,37 @@ Aligned the implementation with the authoritative attendance specification and r
 
 - **Phase 8.3 (requires explicit authorization)** — nothing is queued; T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing), Q-D9 and rule G remain product decisions.
 - **HARD STOP after the Attendance UI Refinement** — no commit made; browser/manual testing remains the user's responsibility.
+
+---
+
+## Phase 8.2 — Attendance Monitoring + Lab Domain Correction
+
+Corrected the Attendance (/subjects) page into a pure attendance-monitoring surface and established the laboratory domain foundation.
+
+### The "14" was traced, not assumed
+
+The reported `11 / 14` denominator comes from the **canonical session table**, not a quiz window: `get_subject_counts_for_user` counts non-cancelled `class_sessions` through today, and every theory subject has exactly 14 real lectures since 2026-07-15. Verified: totals == direct SQL counts; an inserted session changes the total (no constant); moving a quiz date leaves the attendance summary byte-identical. The page's real defect was **presentation ownership** — quiz strategy rendered on an attendance card.
+
+### Attendance Health (backend-owned)
+
+New canonical `classify_attendance_health` in the attendance engine, emitted additively as `health` on `SubjectAttendanceSummary`: **HEALTHY ≥ 75 · WATCH 65–<75 · AT RISK 60–<65 · CRITICAL <60**. Legacy `status` (SAFE/WATCH/CRITICAL) stays emitted for the frozen dashboard/analytics surfaces; only the Attendance card presentation switched. React maps health to existing semantic tokens — it never bands.
+
+### Attendance card (attendance-only)
+
+Compact horizontal redesign: code · THEORY/LAB · name · Health badge → large "Overall Attendance" % → balanced Lecture/Tutorial blocks (attended/total + %) → formula caption → View Details (attended/missed/pending only). Labs: Practical Attendance + backend-backed "Mid-Sem Practical" row. All quiz strategy (must-attend, safe-skip, forecast, current-vs-forecast, required 75%, Defaulter badge) removed.
+
+### Laboratory domain (smallest safe foundation)
+
+Four concerns kept separate: practical attendance (canonical sessions), experiment curriculum (`laboratory_experiments`, empty — no fabricated data), student progress (`laboratory_records`, empty), and mid-sem designation (NEW: `class_sessions.designation`, migration `e5f6a7b8c9d0`, ADMIN-only `PUT/DELETE /api/v1/laboratory/{code}/mid-sem`). The mid-sem is tied to an actual PRACTICAL session — never `experiments >= 5 → midsem`, never a computed date; attendance against it uses the normal mutation. The missing faculty scheduling authority is documented, not invented.
+
+### Verification
+
+- `verify_phase_8_2.py` — **18/18** (session-derived totals, no fixed denominator, quiz-window independence, tutorial/lecture-only formulas, cancelled-practical exclusion, canonical practical attendance, no experiment inference/fabrication, unchanged Quiz Eligibility, exact baseline, Health boundaries, session-bound admin mid-sem).
+- Frozen regressions — 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** · attendance-spec **15/15**.
+- One documented correction: `verify_phase_7_1` check 23's hardcoded `records == 89` now compares against the verifier's own start-of-run snapshot (the DB legitimately holds 92 records after the user's manual lab-session reconstruction — same dynamic-baseline pattern as 7.2/8.1).
+- compileall / `tsc --noEmit` / ESLint / `next build` all green. Database baseline exactly restored (18/691/92/18/9/18/30, lab tables empty, zero designations).
+
+### What's Next
+
+- **Phase 9 (Laboratory System)** — real experiment management once authoritative curriculum data exists; a faculty scheduling authority is still a product decision.
+- **HARD STOP after Phase 8.2** — no commit made; browser/manual testing remains the user's responsibility.

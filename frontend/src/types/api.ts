@@ -159,9 +159,22 @@ export interface SubjectAttendanceSummary {
   // Attendance UI refinement (backend-emitted, additive): the required
   // attendance target the subject optimizer reasons about (75) and the
   // canonical current status band (SAFE | WATCH | CRITICAL | null). The
-  // frontend renders these and never recomputes banding.
+  // frontend renders these and never recomputes banding. The Attendance page
+  // consumes `health` (Phase 8.2), NOT this legacy status.
   required_pct: number;
   status: "SAFE" | "WATCH" | "CRITICAL" | null;
+
+  // Phase 8.2 Attendance Health: canonical 4-state classification of the
+  // subject's OVERALL attendance, emitted by the backend (HEALTHY >= 75,
+  // WATCH 65-<75, AT_RISK 60-<65, CRITICAL <60; null when nothing recorded).
+  // React never bands attendance.
+  health: "HEALTHY" | "WATCH" | "AT_RISK" | "CRITICAL" | null;
+
+  // Phase 8.2 mid-semester practical designation (lab domain): the actual
+  // scheduled PRACTICAL session designated as the subject's mid-sem, or null
+  // when not designated. Never inferred from experiment counts/dates.
+  mid_sem_session_id: string | null;
+  mid_sem_session_date: string | null;
 }
 
 export interface OptimizationResult {

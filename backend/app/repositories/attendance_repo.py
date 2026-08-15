@@ -76,6 +76,29 @@ class AttendanceRepository:
         result = await self.db.execute(stmt)
         return list(result.all())
 
+    async def get_mid_sem_sessions(self, subject_ids) -> dict:
+        """
+        Phase 8.2: the designated mid-semester practical sessions for the given
+        subject ids, keyed by subject_id -> (session_id, date). A designation
+        is an ADMIN-controlled session-level fact (ClassSession.designation ==
+        MID_SEM_PRACTICAL); it is never inferred from experiment counts or a
+        computed date. Returns an empty mapping when nothing is designated.
+        """
+        from app.models.enums import SessionDesignation
+        if not subject_ids:
+            return {}
+        stmt = select(
+            ClassSession.subject_id,
+            ClassSession.id,
+            ClassSession.date,
+        ).where(
+            ClassSession.subject_id.in_(list(subject_ids)),
+            ClassSession.designation == SessionDesignation.MID_SEM_PRACTICAL,
+        )
+        result = await self.db.execute(stmt)
+        return {subject_id: (str(session_id), session_date)
+                for subject_id, session_id, session_date in result.all()}
+
     async def get_subject_counts_between(self, user_id: UUID, subject_id: UUID, start_date: date, end_date: date) -> List[Tuple[str, AttendanceStatus]]:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
