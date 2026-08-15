@@ -358,25 +358,32 @@ firebase deploy --only firestore:rules
 
 ---
 
-## Run Locally
+## Run Locally (Canonical Development Workflow)
 
-Using Python:
+**Prerequisites:**
+- PostgreSQL running locally
+- Python virtual environment (`backend\.venv`)
+- Node.js & npm (`frontend\node_modules`)
 
-```bash
-python -m http.server
+### Start the Application
+
+From the project root:
+
+```powershell
+.\start-dev.ps1
 ```
 
-or
+**Expected URLs:**
+- **Frontend:** http://localhost:3100
+- **Backend API:** http://127.0.0.1:8000/api/v1
 
-```bash
-npx serve .
+### Stop the Application
+
+```powershell
+.\stop-dev.ps1
 ```
 
-Open:
-
-```
-http://localhost:8000
-```
+*Note: For manual startup (e.g., debugging), you can run `npm run dev` in the frontend (it defaults to port 3100) and `backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` in the backend.*
 
 ---
 
