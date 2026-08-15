@@ -603,3 +603,31 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 - **Phase 8 — Attendance Analytics / Intelligence** (roadmap next): overall/subject analytics, forecasting, SAFE/WATCH/AT-RISK/CRITICAL risk states — on the existing canonical engines.
 - Q-D9 (quiz-day attendance without a session) and rule G (student event capability) each require an explicit product decision before their own phase.
 - **HARD STOP after Phase 7.2** — no commit made; browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 8.0 Walkthrough
+
+> **PHASE 8.0 COMPLETE — ATTENDANCE ANALYTICS & INTELLIGENCE AUDIT / CONTRACT DESIGN.**
+> Report: `docs/phase_8_0_attendance_analytics_audit.md`.
+
+## What Phase 8.0 Did
+
+1. **Audited the analytics architecture (read-only).** There is no dedicated analytics layer: the dashboard service is the de-facto aggregator and every existing surface (Home, Subjects, Quiz Eligibility, History, Track, Calendar) already consumes the canonical engines — no second attendance engine, no second calendar enumeration, no React business math. The canonical chain (class_sessions → attendance_records → engines → analytics read model → API → React) is intact and frozen.
+2. **Built the full analytics inventory (23 metrics).** Every metric currently computed or displayed was catalogued with its exact formula, source, and treatment of Pending / Cancelled / Extras / Practicals / L-T separation / semester & quiz-window bounds. Findings: all current % are recorded-only (pending never absent, surfaced separately); forecast % = pending-as-attended; overall = ERP Σatt/Σrecorded (class-weighted, NOT subject-averaged); cancelled excluded everywhere; practicals counted in overall but excluded from quiz eligibility; status banding = SAFE ≥ 80 / WATCH ≥ 60 / CRITICAL < 60 on current (S4.1 reconciliation).
+3. **Identified the 4 legacy gaps — all additive, none a new formula:** practical % (Python engine computes counts but exposes no practical pct); subject-level 75% must-attend/safe-skip (legacy `optResult`); overall forecast (legacy `computeForecastOverallAttendance`); forecast-impact deltas (legacy `calcForecastImpact`). These are extensions of existing engine outputs, so Phase 8.1 can bridge them without touching engine mathematics.
+4. **Flagged (NOT fixed) React duplications:** `WeeklyAttendanceCard` re-derives the day-bar % from backend counts; `SubjectAttendanceCard` applies its own 75/65 banding (vs canonical 80/60) and hardcodes cycle=1; dead `TodayClassesCard`/`FormulaCard` remain. Also documented performance findings (N+1 in the dashboard quiz snapshot and subject summaries, overlapping range scans, an import-time `date.today()` default) and one security-consistency gap (`/attendance/summary/{code}` lacks the enrollment 404 the quiz endpoint has).
+5. **Withheld undefined metrics.** AT-RISK (roadmap's 4-state taxonomy) and weekly/semester trend series have NO definition anywhere — candidate definitions were provided for product approval; nothing was invented.
+6. **Produced the Phase 8.1 contract (not implemented):** additive extension of `SubjectAttendanceSummary` (practical %, subject-level optimization, enrollment scope) + `GET /api/v1/analytics/overview` (overall current/forecast/pending + weekly series + per-subject optimization) + dashboard N+1 fixes + `verify_phase_8_1.py` — all pure consumers of the canonical engines.
+7. **Verified (read-only).** compileall PASS · `npx tsc --noEmit` PASS (0 errors) · frozen `verify_phase_7_2.py` 26/26 PASS · DB baseline exact.
+
+## Database State After 8.0
+
+- **ZERO mutation** — SELECT only: events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Quiz III = 2026-10-23 confirmed.
+
+## What's Next
+
+- **Phase 8.1 (requires explicit authorization)** — backend-only additive analytics read model per the audit contract (§L/§R/§W). No UI, no schema change, no new engine, no new formula.
+- Product decisions T-1…T-4 (AT-RISK band, trend scope, dedicated analytics page, multi-class forecast phrasing) before those features ship.
+- Q-D9 and rule G remain separate product decisions.
+- **HARD STOP after Phase 8.0** — no commit made; Phase 8.1 NOT STARTED; browser/manual testing remains the user's responsibility.

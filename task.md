@@ -669,3 +669,39 @@ Status: **COMPLETE (2026-08-15) — PASS** (26/26 verification + full regression
 
 - Q-D9 quiz-day attendance without a session (product decision) · rule G student event capability (product/security decision) · Phase 8 Attendance Analytics/Intelligence (roadmap next).
 - Browser/manual testing — the user's responsibility.
+
+---
+
+# PHASE 8.0 — ATTENDANCE ANALYTICS & INTELLIGENCE: AUDIT / CONTRACT DESIGN
+
+Status: **COMPLETE (2026-08-15) — PASS** (read-only audit; zero code, zero DB change).
+Report: `docs/phase_8_0_attendance_analytics_audit.md`.
+
+## Objective
+
+Establish the exact architectural and mathematical contract for Phase 8 (Attendance Analytics / Intelligence) BEFORE any implementation. No analytics API, no analytics UI, no migrations, no new engines, no attendance/eligibility math changes, no DB mutation.
+
+## Findings
+
+- [x] **Architecture:** no analytics layer exists; `dashboard_service` is the de-facto aggregator and already consumes the canonical engines (no second engine). React performs no business math today.
+- [x] **Inventory (23 metrics):** overall/weekly/today %, subject current/forecast %, quiz-window %, eligibility states, optimizer deficits, history summary, banding — each with pending/cancelled/extra/practical/semester/quiz-window treatment. All current % recorded-only; pending never absent; cancelled excluded; extras included; ERP overall class-weighted; labs excluded from eligibility.
+- [x] **4 legacy gaps (additive, NOT new formulas):** practical % not exposed · subject-level 75% must-attend/safe-skip not exposed · overall forecast not exposed · forecast-impact deltas not exposed.
+- [x] **React duplications flagged (NOT fixed):** `WeeklyAttendanceCard` re-derives day-bar %; `SubjectAttendanceCard` 75/65 banding vs canonical 80/60 + hardcoded cycle=1; dead `TodayClassesCard`/`FormulaCard`.
+- [x] **Performance (latent, NOT fixed):** N+1 dashboard quiz snapshot + subject summaries; overlapping range scans; import-time `date.today()` default.
+- [x] **Security:** all reads authenticated + user/enrollment-scoped; one gap flagged (`/attendance/summary/{code}` lacks enrollment 404 — consistency only, no leak).
+- [x] **Withheld (no definition):** AT-RISK state; weekly/semester trend series — candidate definitions in audit §J/§T for product approval.
+- [x] **Proposed 8.1 contract (not implemented):** extend `SubjectAttendanceSummary` (practical %, subject-level optimization, enrollment scope) + new `GET /api/v1/analytics/overview` (overall current/forecast/pending + weekly series + per-subject optimization) + dashboard N+1 fixes + `verify_phase_8_1.py`.
+
+## Verification
+
+- `python -m compileall app scripts` — PASS · `npx tsc --noEmit` — PASS (0 errors) · `verify_phase_7_2.py` — 26/26 PASS (frozen verifier).
+- DB baseline (read-only SELECT): events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Q3 = 2026-10-23. **DB mutation status: ZERO.**
+
+## Do Not Touch Again (from this phase)
+
+- Same frozen lists as 6.7/7.1/7.2, plus: the Phase 8.0 audit decisions (recorded-only current, ERP overall, AT-RISK + trends withheld, legacy gaps additive-only) are the contract for Phase 8.1.
+
+## Deferred (intentionally NOT done here)
+
+- Phase 8.1 implementation (requires explicit product authorization after review of the audit). Q-D9 and rule G remain separate product decisions.
+- Browser/manual testing — the user's responsibility.

@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Next roadmap phase: Phase 8 (Attendance Analytics / Intelligence).
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **AUDIT COMPLETE** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (implementation) **NOT STARTED** — requires explicit authorization after product review of the Phase 8.0 findings.
 
 ---
 
@@ -49,7 +49,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 5 | Attendance History | 🟢 Complete / Frozen |
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
 | 7 | Quiz Eligibility & Schedule UX | 🟡 **7.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: eligibility math verified against legacy engines & real DB data; schedule reality captured (BCS-054 Q3 UNRESOLVED); 10 decision points (Q-D1…Q-D10) documented for Aditya. Implementation blocked on decisions. |
-| 8 | Attendance Analytics / Intelligence | ⚪ Planned |
+| 8 | Attendance Analytics / Intelligence | 🟡 **8.0 AUDIT COMPLETE (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`): full analytics inventory, 4 legacy gaps (practical %, subject-level 75% must-attend/safe-skip, overall forecast, forecast-impact deltas), 2 React duplications flagged, N+1 findings, AT-RISK + trend definitions withheld pending product decisions. 8.1 implementation NOT STARTED. |
 | 9 | Laboratory System | ⚪ Planned |
 | 10 | Settings, Feedback & Account Management | ⚪ Planned |
 | 11 | Notifications & Reminders | ⚪ Planned |
@@ -413,6 +413,20 @@ Do not move quiz calculations into React.
 ---
 
 # 🟡 Phase 8 — Attendance Analytics / Intelligence
+
+**8.0 AUDIT COMPLETE (2026-08-15) — PASS** — read-only audit + contract design
+(`docs/phase_8_0_attendance_analytics_audit.md`). No code, no DB change.
+Headline findings: the current system has no analytics layer but every existing
+surface already consumes the canonical engines (no second engine); the dashboard
+service is the de-facto aggregator; **4 legacy gaps** must be bridged additively
+(practical %, subject-level 75% must-attend/safe-skip, overall forecast,
+forecast-impact deltas — all extensions of existing engine outputs); 2 React
+display duplications + a hardcoded cycle=1 flagged for removal; N+1s in the
+dashboard quiz snapshot and subject summaries documented; AT-RISK state and
+trend series are roadmap intent with **no definition** — withheld pending
+product decisions. Recommended 8.1 scope: backend-only additive analytics read
+model (`/analytics/overview` + extended `SubjectAttendanceSummary`) + N+1 fixes,
+consuming the canonical engines; no UI, no schema change, no new formula.
 
 Turn the existing calculations into a strong intelligence experience.
 
@@ -1273,3 +1287,17 @@ Phase 7.2 is **COMPLETE (2026-08-15) — PASS**. Report: `docs/phase_7_2_impleme
 - **Verification:** `verify_phase_7_2.py` **26/26**; frozen regression 6.5 **23/23**, 6.6 **36/36**, 6.7 **31/31**, 7.1 **26/26**; compileall/tsc/ESLint/`next build` green.
 - **Database:** zero mutations — exact baseline restored (events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN)). BCS-054 Q3 = 2026-10-23 confirmed.
 - **Next:** Phase 8 (Attendance Analytics / Intelligence) on the canonical engines; Q-D9 and rule G require explicit product decisions before their own phases. **HARD STOP after Phase 7.2 — no commit made.**
+
+## Phase 8.0 — Attendance Analytics & Intelligence audit / contract design
+
+Phase 8.0 is **COMPLETE (2026-08-15) — PASS**. Read-only audit; **no implementation, no DB mutation, no commit**:
+
+- **Audit doc:** `docs/phase_8_0_attendance_analytics_audit.md` (sections A–W).
+- **Architecture:** no analytics layer exists; the dashboard service is the de-facto aggregator and already consumes the canonical engines (no second engine, no React business math). Canonical chain intact: class_sessions → attendance_records → engines → (Phase 8 analytics read model) → API → React.
+- **Inventory (23 items):** every existing analytics surface catalogued (overall/weekly/today %, subject current/forecast %, quiz-window %, states, optimizer deficits, history summary, banding) with pending/cancelled/extra/practical/semester/quiz-window treatment per metric — all recorded-only current, forecast-as-pending, ERP class-weighted overall, cancelled excluded, labs excluded from eligibility.
+- **Legacy gaps (4, all additive — NOT new formulas):** practical % not exposed (Python engine computes counts only); subject-level 75% must-attend/safe-skip not exposed (legacy `optResult`); overall forecast not exposed (legacy `computeForecastOverallAttendance`); forecast-impact deltas not exposed (legacy `calcForecastImpact`).
+- **React duplications flagged (NOT fixed):** `WeeklyAttendanceCard` re-derives the day bar %; `SubjectAttendanceCard` applies its own 75/65 banding vs the canonical 80/60 band and hardcodes cycle=1. Dead `TodayClassesCard`/`FormulaCard` documented.
+- **Performance:** N+1s in the dashboard quiz snapshot (per-subject eligibility with repeated events fetch) and subject summaries (per-subject count query); overlapping range scans; one import-time `date.today()` default on `/attendance/summary`. No fixes in this phase.
+- **Security:** all reads authenticated + user/enrollment-scoped; one gap flagged (`GET /attendance/summary/{subject_code}` lacks the enrollment 404 the quiz endpoint has). AT-RISK state and trend series withheld — roadmap intent with no definition (product decisions T-1…T-4).
+- **Verification:** compileall PASS · tsc --noEmit PASS · `verify_phase_7_2.py` 26/26 PASS · DB baseline exact (events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Q3 = 2026-10-23). **Zero DB mutation (SELECT only).**
+- **Next:** Phase 8.1 (backend additive analytics read model only) after explicit authorization from the product owner. **HARD STOP after Phase 8.0 — no commit made, Phase 8.1 NOT STARTED.**
