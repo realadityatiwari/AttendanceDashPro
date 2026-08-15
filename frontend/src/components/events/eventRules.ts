@@ -107,6 +107,40 @@ export function canStudentMutateEventType(eventType: EventType): boolean {
   return STUDENT_CREATABLE_EVENT_TYPES.includes(eventType);
 }
 
+export type DurationMode = "single" | "range";
+
+// Default duration mode for a newly created event (UX preference only). The
+// backend has no duration concept — every event is start_date/end_date and a
+// single-day event is simply start_date == end_date. Used to seed the Add
+// Event form and when the user switches event type without having deliberately
+// changed the duration control.
+export const DEFAULT_DURATION_MODE: Record<EventType, DurationMode> = {
+  // Naturally single-day: extras, cancellations, quizzes, and the Phase 9.1
+  // laboratory events (each resolves one practical occurrence for the date).
+  [EventType.EXTRA_LECTURE]: "single",
+  [EventType.EXTRA_TUTORIAL]: "single",
+  [EventType.EXTRA_PRACTICAL]: "single",
+  [EventType.CLASS_CANCELLED]: "single",
+  [EventType.SURPRISE_QUIZ]: "single",
+  [EventType.QUIZ_DAY]: "single",
+  [EventType.MID_SEM_PRACTICAL]: "single",
+  [EventType.LAB_CANCELLED]: "single",
+  // Naturally multi-day: breaks and the holiday/closure/working-day family
+  // (still able to represent a single day by collapsing to one date).
+  [EventType.PUBLIC_HOLIDAY]: "range",
+  [EventType.INSTITUTE_HOLIDAY]: "range",
+  [EventType.FESTIVAL_HOLIDAY]: "range",
+  [EventType.EMERGENCY_CLOSURE]: "range",
+  [EventType.SEMESTER_BREAK]: "range",
+  [EventType.MID_SEMESTER_BREAK]: "range",
+  [EventType.WORKING_DAY_OVERRIDE]: "range",
+  [EventType.WORKING_SATURDAY]: "range",
+};
+
+export function defaultDurationMode(eventType: EventType): DurationMode {
+  return DEFAULT_DURATION_MODE[eventType] ?? "range";
+}
+
 // Engine day-name representation (backend DAY_NAMES in calendar_engine.py).
 export const SUBSTITUTION_DAYS = [
   "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",

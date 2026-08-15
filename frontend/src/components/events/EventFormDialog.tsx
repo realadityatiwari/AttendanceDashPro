@@ -14,7 +14,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { humanizeEventType } from "@/components/events/EventRow";
-import { getRule, SUBSTITUTION_DAYS, CLASS_TYPE_LABELS, STUDENT_CREATABLE_EVENT_TYPES } from "@/components/events/eventRules";
+import {
+  getRule,
+  SUBSTITUTION_DAYS,
+  CLASS_TYPE_LABELS,
+  STUDENT_CREATABLE_EVENT_TYPES,
+  defaultDurationMode,
+  DurationMode,
+} from "@/components/events/eventRules";
 import { AlertCircle } from "lucide-react";
 
 const TYPE_OPTIONS = Object.values(EventType);
@@ -36,6 +43,9 @@ interface EventFormDialogProps {
 
 interface FormState {
   event_type: EventType;
+  /** Duration UX: "single" collapses start/end to one date; "range" shows
+      both pickers. Never sent to the API — the backend stays start/end. */
+  duration_mode: DurationMode;
   start_date: string;
   end_date: string;
   subject_id: string;
@@ -48,8 +58,15 @@ interface FormState {
 
 function initialState(event: AcademicEventResponse | null, isAdmin: boolean): FormState {
   const defaultType = event?.event_type ?? (isAdmin ? EventType.PUBLIC_HOLIDAY : EventType.EXTRA_LECTURE);
+  // Existing events carry their true duration: start_date == end_date means
+  // single-day. New events default per event type (DEFAULT_DURATION_MODE).
+  const hasDates = Boolean(event?.start_date && event?.end_date);
+  const durationMode = event && hasDates
+    ? (event.start_date === event.end_date ? "single" : "range")
+    : defaultDurationMode(defaultType);
   return {
     event_type: defaultType,
+    duration_mode: durationMode,
     start_date: event?.start_date ?? "",
     end_date: event?.end_date ?? "",
     subject_id: event?.subject_id ?? "",
@@ -82,6 +99,9 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   const [localError, setLocalError] = useState("");
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Whether the user deliberately chose a duration mode for the current event.
+  // Until they do, switching event type follows the new type's default mode.
+  const [durationModeTouched, setDurationModeTouched] = useState(false);
 
   // Students may only create the flexible subject-scoped types.
   const typeOptions = isAdmin ? TYPE_OPTIONS : STUDENT_CREATABLE_EVENT_TYPES;
@@ -93,6 +113,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     setLastKey(key);
     if (open) {
       setForm(initialState(event, isAdmin));
+      setDurationModeTouched(false);
       setLocalError("");
       setServerError("");
     }
@@ -113,6 +134,58 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
 
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setServerError("");
+  };
+
+  // Event-type change: re-apply the new type's default duration only while the
+  // user has not deliberately chosen a mode; dates are always preserved.
+  const handleEventTypeChange = (value: EventType) => {
+    setForm(prev => ({
+      ...prev,
+      event_type: value,
+      duration_mode: durationModeTouched ? prev.duration_mode : defaultDurationMode(value),
+    }));
+    setServerError("");
+  };
+
+  const handleDurationModeChange = (mode: DurationMode) => {
+    setDurationModeTouched(true);
+    setForm(prev => {
+      if (mode === "single") {
+        // Collapse to the start date (fall back to the end when start is empty).
+        const date = prev.start_date || prev.end_date;
+        return { ...prev, duration_mode: mode, start_date: date, end_date: date };
+      }
+      // Expanding to a range keeps both dates; a missing end inherits the start.
+      return { ...prev, duration_mode: mode, end_date: prev.end_date || prev.start_date };
+    });
+    setServerError("");
+  };
+
+  // Single-day mode always mirrors the picked date into both fields.
+  // Range mode never leaves start > end: moving the start past the end pulls
+  // the end up with it, and moving the end before the start pulls the start
+  // back — the form can never hold an inverted range.
+  const handleStartDateChange = (value: string) => {
+    setForm(prev => {
+      if (prev.duration_mode === "single") {
+        return { ...prev, start_date: value, end_date: value };
+      }
+      if (prev.end_date && value > prev.end_date) {
+        return { ...prev, start_date: value, end_date: value };
+      }
+      return { ...prev, start_date: value };
+    });
+    setServerError("");
+  };
+
+  const handleEndDateChange = (value: string) => {
+    setForm(prev => {
+      if (prev.start_date && value < prev.start_date) {
+        return { ...prev, end_date: value, start_date: value };
+      }
+      return { ...prev, end_date: value };
+    });
     setServerError("");
   };
 
@@ -145,7 +218,12 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     setServerError("");
     setLocalError("");
 
-    if (!form.start_date || !form.end_date) {
+    if (form.duration_mode === "single") {
+      if (!form.start_date) {
+        setLocalError("An event date is required.");
+        return;
+      }
+    } else if (!form.start_date || !form.end_date) {
       setLocalError("Start and end dates are required.");
       return;
     }
@@ -162,10 +240,13 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       return;
     }
 
+    // Single-day is represented by start_date == end_date (the backend has no
+    // separate duration concept); the picked date is mirrored into both.
+    const singleDay = form.duration_mode === "single";
     const payload: AcademicEventPayload = {
       event_type: form.event_type,
       start_date: form.start_date,
-      end_date: form.end_date,
+      end_date: singleDay ? form.start_date : form.end_date,
       subject_id: rule.requiresSubject ? form.subject_id : null,
       class_type: rule.requiresClassType ? (form.class_type as ClassType) : null,
       is_working_day: form.is_working_day === "" ? null : form.is_working_day === "true",
@@ -218,7 +299,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               id="event-form-type"
               className={selectClass}
               value={form.event_type}
-              onChange={e => set("event_type", e.target.value as EventType)}
+              onChange={e => handleEventTypeChange(e.target.value as EventType)}
             >
               {typeOptions.map(type => (
                 <option key={type} value={type}>{humanizeEventType(type)}</option>
@@ -226,27 +307,62 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="event-form-start">Start date</label>
+          <div className={fieldClass}>
+            <span className={labelClass}>Date</span>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="event-duration-mode"
+                  className="h-4 w-4 rounded-full border-input accent-primary"
+                  checked={form.duration_mode === "single"}
+                  onChange={() => handleDurationModeChange("single")}
+                />
+                Single day
+              </label>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="event-duration-mode"
+                  className="h-4 w-4 rounded-full border-input accent-primary"
+                  checked={form.duration_mode === "range"}
+                  onChange={() => handleDurationModeChange("range")}
+                />
+                Date range
+              </label>
+            </div>
+            {form.duration_mode === "single" ? (
               <Input
                 id="event-form-start"
                 type="date"
                 className={selectClass}
                 value={form.start_date}
-                onChange={e => set("start_date", e.target.value)}
+                onChange={e => handleStartDateChange(e.target.value)}
               />
-            </div>
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="event-form-end">End date</label>
-              <Input
-                id="event-form-end"
-                type="date"
-                className={selectClass}
-                value={form.end_date}
-                onChange={e => set("end_date", e.target.value)}
-              />
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className={fieldClass}>
+                  <label className={labelClass} htmlFor="event-form-start">Start date</label>
+                  <Input
+                    id="event-form-start"
+                    type="date"
+                    className={selectClass}
+                    value={form.start_date}
+                    onChange={e => handleStartDateChange(e.target.value)}
+                  />
+                </div>
+                <div className={fieldClass}>
+                  <label className={labelClass} htmlFor="event-form-end">End date</label>
+                  <Input
+                    id="event-form-end"
+                    type="date"
+                    className={selectClass}
+                    value={form.end_date}
+                    onChange={e => handleEndDateChange(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {rule.requiresSubject && (
