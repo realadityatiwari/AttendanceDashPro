@@ -187,11 +187,9 @@ smallest safe foundation implemented:
 - `app/schemas/laboratory.py` — mid-sem payload/response schemas.
 - `alembic/versions/e5f6a7b8c9d0_add_session_designation.py` — **NEW** migration.
 - `scripts/verify_phase_8_2.py` — **NEW** verifier (18 checks).
-- `scripts/verify_phase_7_1.py` — check 23: stale hardcoded `records == 89`
-  replaced with the verifier's own start-of-run snapshot (the DB legitimately
-  holds 92 records after the user's manual lab-session reconstruction; the
-  corruption check semantics are preserved, and the dynamic-baseline pattern
-  matches the 7.2/8.1 verifiers). Documented, evidence-backed correction.
+- `scripts/verify_phase_7_1.py` — check 23 **authorized fixed re-baseline
+  89 → 92** (see "Baseline/fixture change" below). The assertion keeps a
+  FIXED expected count (92); no dynamic baseline was introduced.
 
 **Frontend**
 - `src/types/api.ts` — additive `health`, `mid_sem_session_id`,
@@ -235,9 +233,35 @@ smallest safe foundation implemented:
     session, clear restores null).
 
 Frozen regressions (all re-run, all green): 6.5 **27/27** · 6.6 **36/36** ·
-6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** ·
+6.7 **31/31** · 7.1 **26/26** (qualified: after the authorized 89 → 92 fixed
+fixture re-baseline — see below) · 7.2 **26/26** · 8.1 **22/22** ·
 attendance-spec **15/15**. Static: `compileall` PASS · `npx tsc --noEmit`
 PASS · ESLint clean · `next build` PASS (14 routes).
+
+---
+
+## 8b. Baseline/fixture change (authorized, Phase 8.2 final freeze)
+
+- **Previous frozen baseline:** 89 attendance records.
+- **Current authorized baseline:** 92 attendance records.
+- The **+3 records are legitimate BCS-501 attendance marks** entered through
+  the canonical student attendance mutation path (Track full-semester
+  historical re-entry per Phase 4.5.2): 2026-08-04 LECTURE ATTENDED,
+  2026-08-13 LECTURE MISSED, 2026-08-04 TUTORIAL ATTENDED (created
+  2026-08-15 19:06–19:09 IST).
+- They are **NOT verifier/test residue** — no verifier persists BCS-501
+  records (7.1's BCS-501 scenarios run in rollback transactions; 8.2's
+  mutation check is BCS-553 and self-cleaning).
+- They were **already present before this audit** and are **never deleted**
+  merely to satisfy the historical fixture.
+- The frozen `verify_phase_7_1.py` check 23 was therefore **explicitly
+  re-baselined from `records == 89` to `records == 92`** — a fixed expected
+  value, authorized by the product owner. No dynamic baseline, no skipped or
+  weakened assertion.
+- This is an **authorized baseline/fixture change, NOT a product or
+  attendance-engine change** — attendance formulas, engines, eligibility,
+  analytics, counting, pending semantics, event semantics, and laboratory
+  architecture are untouched.
 
 ---
 

@@ -860,7 +860,7 @@ Correct the Attendance (/subjects) page so it is attendance-monitoring only (no 
 ## Files changed
 
 - Backend: `engines/attendance_engine.py` · `models/enums.py` · `models/timetable.py` · `schemas/attendance.py` · `services/attendance_service.py` · `repositories/attendance_repo.py` · `services/laboratory_service.py` (NEW) · `api/v1/endpoints/laboratory.py` · `schemas/laboratory.py` · `alembic/versions/e5f6a7b8c9d0_add_session_designation.py` (NEW).
-- Scripts: NEW `verify_phase_8_2.py` · `verify_phase_7_1.py` (check 23: stale hardcoded 89 replaced with the verifier's own baseline snapshot — DB legitimately holds 92 records after the user's manual lab reconstruction).
+- Scripts: NEW `verify_phase_8_2.py` · `verify_phase_7_1.py` (check 23 **authorized fixed re-baseline `records == 89` → `records == 92`** — the +3 are legitimate BCS-501 marks entered through the canonical attendance mutation path before the audit; the assertion keeps a FIXED expected count, no dynamic baseline).
 - Frontend: `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/app/(authenticated)/subjects/page.tsx`.
 - Docs: `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/phase_8_2_implementation_report.md`.
 
@@ -876,3 +876,31 @@ Correct the Attendance (/subjects) page so it is attendance-monitoring only (no 
 
 - Authoritative experiment titles/curriculum (unavailable), faculty scheduling system (missing authority boundary — documented), "Lab Progress N/10" on the Attendance page, anything on the Quiz Eligibility engine or Phase 6 calendar architecture.
 - Browser/manual testing — the user's responsibility.
+
+---
+
+## PHASE 9.0 — LABORATORY DOMAIN AUDIT & SPECIFICATION
+
+- [x] READ-ONLY audit of the laboratory domain (models/schemas/services/repos/endpoints, ClassSession/timetable/enums, attendance pipeline, events/calendar/quiz engines, frontend lab surfaces, git history, docs).
+- [x] Capability classification (experiment identity/number/title/description/completion/submission/status/date/marks/remarks/faculty approval/signature/ordering) — every item marked SUPPORTED / PARTIALLY SUPPORTED / NOT SUPPORTED / UNKNOWN; no gaps filled from academic assumptions.
+- [x] Lab turn vs experiment relationship established: a session can host one/many/no experiment (unlinked today), be cancelled, become a lecture (composed facts), host the mid-sem; NO auto `experiments >= 5 ⇒ mid-sem`.
+- [x] Mid-sem analysis: session-bound, ADMIN-only designation is the only authoritative mechanism; students can never designate; attendance = normal mutation; no new calculation path.
+- [x] Cancellation/substitution traces (cancelled / replaced-with-lecture / replaced-with-other / conducted-no-experiment / extra lab / mid-sem) with supported status per case.
+- [x] Attendance rules preserved (labs count to subject+overall, excluded from quiz eligibility, cancelled excluded, pending stays pending, recorded-only current, one engine); Phase 9 needs NO rule extension.
+- [x] Authorization matrix proposed (view=student read; curriculum/signature/mid-sem=admin/faculty; events per Phase 8.2 student policy) — not implemented.
+- [x] Data-model gap analysis: reuse ClassSession/AcademicEvent/attendance_records; reuse LaboratoryExperiment/LaboratoryRecord for authoritative data; ONLY possible additive: experiment↔session FK, audit identity, FACULTY role — all gated on product decisions.
+- [x] Future API contract designed (summary / activities / curriculum ingest / progress) with source of truth per field — not implemented.
+- [x] Frontend IA proposed (Practical Attendance · Mid-Sem · Lab Activity History · Experiment Progress only when authoritative) — not implemented.
+- [x] Migration analysis (no migration required for this phase; future additive candidates listed); nothing fabricated, ever.
+- [x] Engine impact: none required; additive read model → API → React only.
+- [x] Product decisions enumerated (curriculum source, faculty role, audit identity, session linkage, mid-sem check, student mutation boundary, grading).
+- [x] DELIVERABLE: `docs/phase_9_0_laboratory_domain_audit.md`; Phase 9 sections updated in MASTER_ROADMAP / implementation_plan / walkthrough / task.
+- [x] Verification: read-only SELECTs + `verify_phase_8_2.py` 18/18; DB byte-equivalent to baseline (18/691/92/18/9/18/30, lab tables empty, designations=0). No commit.
+
+## Do Not Touch (Phase 9.0 freeze)
+
+- Attendance engine/formulas, quiz eligibility engine, Phase 6 calendar/event architecture, Attendance Health, the mid-sem designation semantics, the student event policy, and all frozen verifiers — unchanged. Phase 9.1 may ONLY add read models / ingestion boundaries / the chosen authority surface, never engine or rule changes.
+
+## Deferred to Phase 9.1+ (requires product decisions)
+
+- Authoritative experiment curriculum ingestion, FACULTY role, experiment↔session linkage, marks/viva, dedicated Laboratory page UI, lab activity read model.

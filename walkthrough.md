@@ -749,10 +749,56 @@ Four concerns kept separate: practical attendance (canonical sessions), experime
 
 - `verify_phase_8_2.py` — **18/18** (session-derived totals, no fixed denominator, quiz-window independence, tutorial/lecture-only formulas, cancelled-practical exclusion, canonical practical attendance, no experiment inference/fabrication, unchanged Quiz Eligibility, exact baseline, Health boundaries, session-bound admin mid-sem).
 - Frozen regressions — 6.5 **27/27** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** · 8.1 **22/22** · attendance-spec **15/15**.
-- One documented correction: `verify_phase_7_1` check 23's hardcoded `records == 89` now compares against the verifier's own start-of-run snapshot (the DB legitimately holds 92 records after the user's manual lab-session reconstruction — same dynamic-baseline pattern as 7.2/8.1).
+- One documented correction: `verify_phase_7_1` check 23 was **explicitly re-baselined `records == 89` → `records == 92`** (authorized fixed fixture update). The +3 are legitimate BCS-501 marks entered through the canonical attendance mutation path before the audit; the assertion keeps a FIXED expected count — no dynamic baseline.
 - compileall / `tsc --noEmit` / ESLint / `next build` all green. Database baseline exactly restored (18/691/92/18/9/18/30, lab tables empty, zero designations).
 
 ### What's Next
 
 - **Phase 9 (Laboratory System)** — real experiment management once authoritative curriculum data exists; a faculty scheduling authority is still a product decision.
 - **HARD STOP after Phase 8.2** — no commit made; browser/manual testing remains the user's responsibility.
+
+## Phase 9.0 — Laboratory Domain Audit & Specification (READ-ONLY)
+
+Audited the entire laboratory domain end-to-end and produced the authoritative
+specification: `docs/phase_9_0_laboratory_domain_audit.md`.
+
+### Key conclusions
+
+- **Attendance is already correct and complete** — lab practical attendance is
+  canonical `ClassSession(PRACTICAL)` + `AttendanceRecord`; cancelled excluded;
+  pending stays pending; current recorded-only; labs excluded from quiz
+  eligibility (404). **No Phase 9 engine or rule change is required.**
+- **The lab domain is an intentionally empty foundation** — `laboratory_experiments`
+  / `laboratory_records` = 0 rows (no authoritative curriculum; nothing
+  fabricated); mid-sem = ADMIN-designated session-level fact that never alters
+  counting; students can never designate (403).
+- **Capability classification** — experiment identity/number/title = partially
+  supported (columns exist, catalog missing); description/submission/session
+  link = not supported; date/marks/remarks/ordering = supported; faculty
+  approval = partial (no signer identity); expected per-subject count = UNKNOWN
+  (legacy "10" is not authoritative).
+- **Lab turn ≠ experiment** — one turn can host one/many/no experiment
+  (unlinked today), be cancelled, become a lecture (composed event facts), or
+  host the mid-sem; nothing auto-designates mid-sem from experiment counts.
+- **Gaps** — authoritative curriculum, experiment↔session linkage, FACULTY
+  role, audit identity, dedicated lab page (the `/tools/laboratory` route
+  currently hosts Track).
+- **Blocking product decisions** — curriculum source · FACULTY vs ADMIN-only ·
+  audit identity · session linkage · mid-sem progress check · student mutation
+  boundary · grading/viva.
+
+### Verification
+
+- Read-only SELECTs + `verify_phase_8_2.py` **18/18** (baseline restore check
+  11 PASS). DB byte-equivalent to the frozen baseline (18/691/92/18/9/18/30,
+  lab tables empty, zero designations). No migration, no seed change, no
+  commit.
+
+### What's Next
+
+- **Phase 9.1 (smallest safe increment)** — additive lab read model
+  (summary / activity history), curriculum ingestion boundary (authoritative
+  payloads only), experiment progress under the chosen authority, dedicated
+  Laboratory page IA. Requires the §16 product decisions first.
+- **HARD STOP after Phase 9.0** — audit + specification only; no code written;
+  browser/manual testing remains the user's responsibility.

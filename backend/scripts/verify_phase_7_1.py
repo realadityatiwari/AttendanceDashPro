@@ -23,7 +23,8 @@ Verifies the Phase 7.1 product contract end-to-end against the real database:
 20.  API exposes the reference-card UI analytics
 21.  /quiz-eligibility for practical subjects -> 404
 22.  No cross-user leakage (admin vs zero-record student)
-23.  No attendance-history corruption (89 records, none future-dated)
+23.  No attendance-history corruption (92 records, none future-dated; authorized
+     fixture re-baseline 89 -> 92 — see the check-23 comment)
 24.  Quiz-day attendance + surprise-quiz materialization are canonical
 25.  Database baseline restored/verified after all checks (incl. rollback + cleanup)
 
@@ -383,24 +384,23 @@ async def main() -> int:
               f"admin_att={admin_att} student_att={student_att}")
 
         # --- 23. No attendance-history corruption --------------------------------------
-        # Deliberate update (documented in docs/phase_8_2_implementation_report.md):
-        # the literal "89" was a point-in-time count. The user's manual lab-session
-        # reconstruction (Phase 4.5.2 verdict B) legitimately added attendance
-        # records, so the corruption check now compares against this verifier's own
-        # start-of-run snapshot (records_before) — the same dynamic-baseline pattern
-        # the 7.2/8.1 verifiers use — instead of a stale magic number. The assertion
-        # still fails if THIS run mutates history (records_before != records_now) and
-        # if any record is future-dated; check 25 additionally asserts the exact
-        # before/after equality of the full baseline.
+        # AUTHORIZED FIXTURE RE-BASELINE (2026-08-15, Phase 8.2 final freeze): the
+        # historical fixed baseline moved from 89 to 92 attendance records. The +3
+        # are legitimate BCS-501 marks (2026-08-04 LECTURE/TUTORIAL ATTENDED,
+        # 2026-08-13 LECTURE MISSED) entered through the canonical student
+        # attendance mutation path BEFORE this audit; they are not verifier/test
+        # residue and must never be deleted to satisfy the old fixture. This is an
+        # explicit fixed-value update (89 -> 92), NOT a dynamic baseline — the
+        # assertion keeps a fixed expected count. See
+        # docs/phase_8_2_implementation_report.md "Baseline/fixture change".
         async with AsyncSessionLocal() as db:
             records_now = (await db.execute(select(func.count()).select_from(AttendanceRecord))).scalar()
             max_date_now = (await db.execute(
                 select(func.max(ClassSession.date)).join(
                     AttendanceRecord, AttendanceRecord.class_session_id == ClassSession.id))).scalar()
-        check("23. attendance history intact: record count unchanged by this run, "
-              "none future-dated",
-              records_now == records_before and max_date_now <= date(2026, 8, 15),
-              f"records={records_now} baseline={records_before} max_date={max_date_now}")
+        check("23. attendance history intact: 92 records, none future-dated",
+              records_now == 92 and max_date_now <= date(2026, 8, 15),
+              f"records={records_now} max_date={max_date_now}")
 
         # --- 13-15. State derivation scenarios (rollback transactions) ----------------
         # BCS-501 Q1 window sessions, from the already-verified API window bounds.

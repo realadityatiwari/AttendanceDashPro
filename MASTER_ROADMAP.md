@@ -486,32 +486,61 @@ computed date. The missing faculty scheduling authority is documented (no
 faculty system invented). See `docs/phase_8_2_implementation_report.md`;
 verification 18/18 + full frozen regression.
 
+**Authorized baseline/fixture change (final freeze, 2026-08-15):** the frozen
+`verify_phase_7_1.py` check-23 fixture moved from `records == 89` to
+`records == 92` (a FIXED expected value — no dynamic baseline). The +3 are
+legitimate BCS-501 attendance marks (2026-08-04 LECTURE/TUTORIAL ATTENDED,
+2026-08-13 LECTURE MISSED) entered through the canonical student attendance
+mutation path BEFORE this audit; they are not verifier/test residue and must
+never be deleted to satisfy the old fixture. This is an authorized
+baseline/fixture change only — no product or attendance-engine change.
+
 ---
 
 # 🟡 Phase 9 — Laboratory System
 
-Complete the laboratory experience for:
+## Phase 9.0 — Laboratory Domain Audit & Specification (COMPLETE 2026-08-15)
 
-- BCS-551
-- BCS-552
-- BCS-553
+READ-ONLY audit + specification only (no code/schema/API/UI). The laboratory
+domain is a clean, intentionally empty foundation: practical attendance is
+canonical `ClassSession(PRACTICAL)` + `AttendanceRecord` (verified 18/18),
+experiment curriculum/progress tables (`laboratory_experiments` /
+`laboratory_records`) are empty by design (no authoritative data — nothing
+fabricated), and the mid-sem practical is an ADMIN-designated session-level
+fact (`class_sessions.designation`, Phase 8.2) that never alters attendance
+counting.
 
-Build/polish:
+Key audit findings:
 
-- Experiment list
-- Experiment number
-- Title
-- Completion state
-- Signed/pending state
-- Conducted date
-- Marks
-- Remarks
-- Progress
-- Experiment details
+- **No engine/attendance-rule change required** — labs already flow through
+  the canonical pipeline; cancelled excluded; pending stays pending; labs
+  excluded from quiz eligibility.
+- **Gaps**: (1) authoritative experiment curriculum (identity/titles/count)
+  is UNKNOWN — legacy `LAB_RULES` "10 experiments" is not authoritative;
+  (2) no experiment↔session linkage (`LaboratoryRecord.date_conducted` is a
+  bare date); (3) no FACULTY role — only ADMIN; (4) no audit identity on
+  designation/signature; (5) `/tools/laboratory` hosts the Track page (naming
+  artifact).
+- **Hard boundaries kept**: no `experiments >= 5 ⇒ mid-sem` rule, no fake
+  mid-sem dates, no fabricated curriculum, students can never designate
+  mid-sem, Quiz Eligibility and Phase 6 calendar architecture untouched.
+- **Blocking product decisions** (before Phase 9.1): authoritative curriculum
+  source · FACULTY role vs ADMIN-only · audit identity · experiment↔session
+  linkage · mid-sem progress check vs free choice · student mutation boundary
+  · grading/viva.
 
-Then define whether students should be allowed to mutate laboratory records.
+Full audit: `docs/phase_9_0_laboratory_domain_audit.md` (20 sections +
+verification). **Phase 9.1 not started.**
 
-Do not invent mutation behavior without defining the academic workflow.
+## Phase 9.1+ — (deferred; requires the product decisions above)
+
+Complete the laboratory experience for BCS-551 / BCS-552 / BCS-553 per the
+Phase 9.0 architecture: additive lab read model (summary / activity history),
+curriculum ingestion boundary (authoritative data only), experiment progress
+surface under the chosen authority, dedicated Laboratory page IA (Practical
+Attendance · Mid-Sem Practical · Lab Activity History · Experiment Progress
+shown only when authoritative). Do not invent mutation behavior without the
+defined academic workflow; do not imply "10 lab turns = 10 experiments".
 
 ---
 

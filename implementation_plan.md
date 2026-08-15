@@ -795,7 +795,7 @@ The reported `11 / 14` denominator is **not** a quiz window: it comes from the c
 |---|---|
 | Backend | `engines/attendance_engine.py` · `models/enums.py` · `models/timetable.py` · `schemas/attendance.py` · `services/attendance_service.py` · `repositories/attendance_repo.py` · `services/laboratory_service.py` (NEW) · `api/v1/endpoints/laboratory.py` · `schemas/laboratory.py` |
 | Migration | `alembic/versions/e5f6a7b8c9d0_add_session_designation.py` (NEW, applied) |
-| Scripts | NEW `scripts/verify_phase_8_2.py` · `scripts/verify_phase_7_1.py` (check 23: stale hardcoded `records == 89` → start-of-run snapshot; DB legitimately holds 92 records after the user's manual lab reconstruction) |
+| Scripts | NEW `scripts/verify_phase_8_2.py` · `scripts/verify_phase_7_1.py` (check 23 **authorized fixed re-baseline `records == 89` → `records == 92`**; +3 legitimate BCS-501 marks entered via the canonical attendance mutation path before the audit; assertion keeps a FIXED expected count — no dynamic baseline) |
 | Frontend | `src/types/api.ts` · `src/components/dashboard/SubjectAttendanceCard.tsx` · `src/app/(authenticated)/subjects/page.tsx` |
 | Docs | `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md` · NEW `docs/phase_8_2_implementation_report.md` |
 
@@ -812,3 +812,67 @@ The reported `11 / 14` denominator is **not** a quiz window: it comes from the c
 ### Deferred (intentionally NOT done here)
 
 - Authoritative experiment titles/curriculum (unavailable — nothing fabricated), faculty scheduling system (missing authority boundary — documented), "Lab Progress N/10" on the Attendance page, Quiz Eligibility engine / Phase 6 calendar architecture changes. Browser/manual testing remains the user's responsibility. **HARD STOP — no commit made; Phase 9 (Laboratory System) is the next planned phase.**
+
+---
+
+## PHASE 9.0 — LABORATORY DOMAIN AUDIT & SPECIFICATION
+
+Status: **COMPLETE (2026-08-15) — READ-ONLY AUDIT + SPECIFICATION ONLY.** No
+code, schema, migration, seed, API, or UI implemented. Phase 9.1 NOT started.
+Full audit: `docs/phase_9_0_laboratory_domain_audit.md`.
+
+### Findings
+
+- **Attendance is already correct**: lab practical attendance is canonical
+  `ClassSession(PRACTICAL)` + `AttendanceRecord`; cancelled excluded; pending
+  stays pending; current recorded-only; labs excluded from quiz eligibility
+  (404). No engine/rule change required by Phase 9.
+- **Domain is a clean, intentionally empty foundation**: `laboratory_experiments`
+  and `laboratory_records` = 0 rows (no authoritative curriculum — nothing
+  fabricated); mid-sem = ADMIN-designated session-level fact
+  (`class_sessions.designation`, Phase 8.2) that never alters counting.
+- **Gaps**: (1) authoritative experiment curriculum UNKNOWN (legacy "10
+  experiments" in the retired vanilla-JS `LAB_RULES` is NOT authoritative);
+  (2) no experiment↔session linkage (`LaboratoryRecord.date_conducted` is a
+  bare date); (3) no FACULTY role (ADMIN only); (4) no audit identity on
+  designation/signature; (5) `/tools/laboratory` hosts the Track page (naming
+  artifact); (6) frontend `SubjectCategory` type drift (unused legacy enum —
+  cleanup candidate, untouched).
+- **Hard boundaries kept**: no `experiments >= 5 ⇒ mid-sem` rule, no fake
+  mid-sem dates, no fabricated curriculum, students can never designate
+  mid-sem (403), Quiz Eligibility and Phase 6 calendar architecture untouched.
+
+### Files changed
+
+- NEW `docs/phase_9_0_laboratory_domain_audit.md` (20 sections + verification).
+- `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` · `walkthrough.md`
+  — Phase 9 tracking sections updated (historical phase records untouched).
+
+### Verification / mutation status
+
+- Read-only inspection + SELECT queries + the existing self-cleaning
+  `verify_phase_8_2.py` (**18/18 PASS**; check 11 asserts exact baseline restore).
+- DB byte-equivalent to the frozen baseline: events=18 · sessions=691 (0
+  cancelled, 0 extra) · records=92 · enrollments=18 · subjects=9 · quizzes=18 ·
+  users=30 (1 ADMIN) · lab tables empty · designations=0.
+- No commit.
+
+### Blocking product decisions (before Phase 9.1)
+
+1. Authoritative curriculum source (titles/numbers/count per lab subject).
+2. FACULTY role vs ADMIN-only for lab mutations.
+3. Audit identity (designated_by / signed_by).
+4. Experiment↔session linkage (`laboratory_records.class_session_id`).
+5. Mid-sem progress check vs free faculty/admin choice.
+6. Student mutation boundary for experiment completion (attendance=student;
+   signature/completion=faculty?).
+7. Grading/viva enablement.
+
+### Proposed Phase 9.1 scope (smallest safe increment)
+
+Additive lab read model (`GET /laboratory/{code}/summary` + `/activities`,
+pure aggregation of canonical data), curriculum ingestion boundary
+(authoritative payloads only), experiment progress surface under the chosen
+authority, dedicated Laboratory page IA (Practical Attendance · Mid-Sem ·
+Activity History · Experiment Progress only when authoritative). New
+read-only verifier + frozen regressions. **HARD STOP — Phase 9.1 not started.**
