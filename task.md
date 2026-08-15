@@ -904,3 +904,35 @@ Correct the Attendance (/subjects) page so it is attendance-monitoring only (no 
 ## Deferred to Phase 9.1+ (requires product decisions)
 
 - Authoritative experiment curriculum ingestion, FACULTY role, experiment↔session linkage, marks/viva, dedicated Laboratory page UI, lab activity read model.
+
+---
+
+## PHASE 9.0b — PRODUCT DECISION REVIEW
+
+- [x] Read the complete `docs/phase_9_0_laboratory_domain_audit.md` + Phase 9 sections of MASTER_ROADMAP / implementation_plan / task / walkthrough.
+- [x] DELIVERABLE: `docs/phase_9_product_decisions.md` (14 sections: decision summary · current evidence · D1–D7 · final architecture · 9.1 prerequisites · rejected approaches · remaining unknowns · owner-confirmation list). Every recommendation labeled FACT-from-repository / PRODUCT RECOMMENDATION / UNKNOWN-or-requires-real-world-input.
+- [x] D1 Curriculum — recommended **E hybrid**: provenance-bound admin ingestion; nothing seeded until an authoritative catalog exists; per-subject count = catalog row count (no "10").
+- [x] D2 Faculty role — recommended **DEFER**: STUDENT + ADMIN for 9.1; FACULTY only with a defined signature/grading workflow (9.2+), capability-matrix ready.
+- [x] D3 Audit identity — recommended **minimal additive**: timestamps + `signed_by` + `designated_by/at` + catalog provenance; no created_by on attendance.
+- [x] D4 Experiment↔session linkage — recommended **nullable FK** `laboratory_records.class_session_id` + validation; single primary link; multiple experiments per session allowed.
+- [x] D5 Mid-sem rule — recommended **advisory only**: "Eligible for mid-sem designation (X of Y)" from the real catalog; designation stays manual ADMIN; no auto-designation/gate/universal count.
+- [x] D6 Student boundary — recommended **two-tier**: students self-track (pending); only elevated role sets SIGNED (official).
+- [x] D7 Grading/viva — recommended **EXCLUDE from Phase 9**; defer to a separate assessment phase; dormant columns retained.
+- [x] Explicitly rejected: hardcoded curriculum, seed-without-source, "10" default, auto mid-sem, hard gate, required FK, FACULTY without workflow, grading in 9, second engine / React math.
+- [x] Phase 9 sections updated in MASTER_ROADMAP / implementation_plan / walkthrough / task. Phase 9.1 remains **BLOCKED / NOT STARTED**.
+- [x] No code/schema/migration/data/API/UI/seed changes; no commit.
+
+## Phase 9.1 Gate (do not start until confirmed)
+
+Aditya must confirm §14 of `docs/phase_9_product_decisions.md` (D1–D7 recommended
+choices). Only then may Phase 9.1 implement: additive lab read model
+(summary/activities), curriculum ingestion boundary, nullable session-linkage
+FK migration, minimal audit columns, mid-sem readiness advisory, two-tier
+progress, Laboratory page IA — verified read-only with exact-baseline restore.
+
+## Do Not Touch (unchanged from Phase 9.0)
+
+Attendance engine/formulas, quiz eligibility engine, Phase 6 calendar/event
+architecture, Attendance Health, mid-sem designation semantics, student event
+policy, all frozen verifiers, and the DB (still 18/691/92/18/9/18/30, lab
+tables empty, designations=0).

@@ -802,3 +802,47 @@ specification: `docs/phase_9_0_laboratory_domain_audit.md`.
   Laboratory page IA. Requires the §16 product decisions first.
 - **HARD STOP after Phase 9.0** — audit + specification only; no code written;
   browser/manual testing remains the user's responsibility.
+
+## Phase 9.0b — Product Decision Review (SPECIFICATION ONLY)
+
+Produced `docs/phase_9_product_decisions.md`: the decision matrix that unlocks
+Phase 9.1. Every recommendation is labeled FACT-from-repository / PRODUCT
+RECOMMENDATION / UNKNOWN-or-requires-real-world-input.
+
+### Decisions (recommended)
+
+1. **Curriculum — E hybrid**: provenance-bound admin ingestion of an
+   authoritative institutional catalog; nothing seeded until a real catalog
+   exists; per-subject count = catalog row count, never a constant.
+2. **Faculty role — defer**: STUDENT + ADMIN for 9.1; FACULTY only with a
+   defined signature/grading workflow (9.2+).
+3. **Audit identity — minimal additive**: timestamps + `signed_by` +
+   `designated_by/at` + catalog provenance.
+4. **Session linkage — nullable FK** `laboratory_records.class_session_id`
+   (validated; multiple experiments per session allowed).
+5. **Mid-sem rule — advisory only**: "Eligible for mid-sem designation (X of
+   Y)" from the real catalog; designation stays a manual ADMIN act.
+6. **Student boundary — two-tier**: self-track pending; elevated signs.
+7. **Grading/viva — excluded from Phase 9**; separate assessment phase.
+
+### Why these choices
+
+The strongest repository facts driving them: a bare `date_conducted` cannot
+disambiguate which of the two daily PRACTICAL sessions hosted an experiment
+(⇒ nullable FK); no faculty concept exists anywhere (⇒ defer the role rather
+than invent a workflow); the legacy "10" is non-authoritative (⇒ no constants,
+catalog-derived counts only); Phase 8.2 already hard-forbids auto mid-sem
+(⇒ advisory-only readiness); and grading has no authoritative basis (⇒ defer).
+
+### Verification
+
+Specification-only: no code, schema, migration, data, API, UI, seed, or
+commit. DB untouched (18/691/92/18/9/18/30, lab tables empty, designations=0).
+
+### What's Next
+
+- **Phase 9.1 is BLOCKED / NOT STARTED** until Aditya confirms the §14
+  decision list in `docs/phase_9_product_decisions.md`. The exact 9.1 scope
+  and prerequisites are recorded there (§11) and in implementation_plan /
+  task / MASTER_ROADMAP.
+- **HARD STOP after Phase 9.0b** — decision review complete; no code written.

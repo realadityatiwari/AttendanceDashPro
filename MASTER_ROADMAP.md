@@ -532,15 +532,45 @@ Key audit findings:
 Full audit: `docs/phase_9_0_laboratory_domain_audit.md` (20 sections +
 verification). **Phase 9.1 not started.**
 
-## Phase 9.1+ — (deferred; requires the product decisions above)
+## Phase 9.0b — Product Decision Review (COMPLETE 2026-08-15)
+
+Decision matrix produced in `docs/phase_9_product_decisions.md` — one
+recommendation per blocking decision, each labeled FACT-from-repository vs
+PRODUCT RECOMMENDATION vs UNKNOWN/REQUIRES-REAL-WORLD-INPUT:
+
+1. **Curriculum — E (hybrid)**: provenance-bound admin ingestion of an
+   authoritative institutional catalog; NOTHING seeded until a real catalog
+   exists; per-subject count = catalog row count (never a constant).
+2. **Faculty role — DEFER**: keep STUDENT + ADMIN for 9.1; introduce FACULTY
+   only with a defined signature/grading workflow (9.2+), as a narrower
+   elevation via a capability matrix.
+3. **Audit identity — minimal additive**: record timestamps + `signed_by` +
+   `designated_by/at` + catalog provenance; no created_by on attendance.
+4. **Experiment↔session linkage — nullable FK** `laboratory_records.
+   class_session_id` + validation (PRACTICAL/mid-sem of same subject, not
+   cancelled); single primary link; multiple experiments per session allowed.
+5. **Mid-sem rule — advisory only**: "Eligible for mid-sem designation (X of
+   Y)" derived from the real catalog; designation stays a manual ADMIN act;
+   no auto-designation, no gate, no universal count.
+6. **Student boundary — two-tier**: students self-track (status pending);
+   only ADMIN/FACULTY sets SIGNED (official).
+7. **Grading/viva — EXCLUDE from Phase 9**: defer to a separate
+   academic-assessment phase; dormant `marks`/`remarks` columns retained.
+
+Phase 9.1 remains **BLOCKED / NOT STARTED** pending Aditya's confirmation of
+§14 in `docs/phase_9_product_decisions.md`.
+
+## Phase 9.1+ — (BLOCKED; requires the confirmed decisions above)
 
 Complete the laboratory experience for BCS-551 / BCS-552 / BCS-553 per the
-Phase 9.0 architecture: additive lab read model (summary / activity history),
-curriculum ingestion boundary (authoritative data only), experiment progress
-surface under the chosen authority, dedicated Laboratory page IA (Practical
-Attendance · Mid-Sem Practical · Lab Activity History · Experiment Progress
-shown only when authoritative). Do not invent mutation behavior without the
-defined academic workflow; do not imply "10 lab turns = 10 experiments".
+Phase 9.0 architecture and the Phase 9.0b decisions: additive lab read model
+(summary / activity history), curriculum ingestion boundary (authoritative
+data only), nullable session-linkage migration, minimal audit columns,
+mid-sem readiness advisory, two-tier experiment progress under the chosen
+authority, dedicated Laboratory page IA (Practical Attendance · Mid-Sem
+Practical · Lab Activity History · Experiment Progress shown only when
+authoritative). Do not invent mutation behavior without the defined academic
+workflow; do not imply "10 lab turns = 10 experiments".
 
 ---
 

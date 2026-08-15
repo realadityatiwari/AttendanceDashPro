@@ -876,3 +876,52 @@ pure aggregation of canonical data), curriculum ingestion boundary
 authority, dedicated Laboratory page IA (Practical Attendance · Mid-Sem ·
 Activity History · Experiment Progress only when authoritative). New
 read-only verifier + frozen regressions. **HARD STOP — Phase 9.1 not started.**
+
+---
+
+## PHASE 9.0b — PRODUCT DECISION REVIEW
+
+Status: **COMPLETE (2026-08-15) — DECISION REVIEW + SPECIFICATION ONLY.** No
+code, schema, migration, data, API, UI, seed, or commit. Phase 9.1 remains
+**BLOCKED / NOT STARTED**. Deliverable: `docs/phase_9_product_decisions.md`
+(decision matrix, one recommendation per blocking decision, each labeled
+FACT-from-repository / PRODUCT RECOMMENDATION / UNKNOWN-or-requires-real-world
+input).
+
+### Decisions and recommended choices
+
+1. **Curriculum — E (hybrid).** Provenance-bound admin ingestion of an
+   authoritative institutional catalog; nothing seeded until a real catalog
+   exists; per-subject count = catalog row count, never a constant (no "10").
+2. **Faculty role — DEFER.** Keep STUDENT + ADMIN for 9.1; add FACULTY only
+   with a defined signature/grading workflow (9.2+), designed as a narrower
+   elevation via a capability matrix.
+3. **Audit identity — minimal additive.** Timestamps + `signed_by` +
+   `designated_by/at` + catalog provenance; no created_by on attendance.
+4. **Experiment↔session linkage — nullable FK.** `laboratory_records.
+   class_session_id` + validation (PRACTICAL/mid-sem of same subject, not
+   cancelled); single primary link; multiple experiments per session allowed.
+5. **Mid-sem rule — advisory only.** "Eligible for mid-sem designation (X of
+   Y)" derived from the real catalog; designation stays a manual ADMIN act;
+   no auto-designation, no gate, no universal count.
+6. **Student boundary — two-tier.** Students self-track (status pending);
+   only ADMIN/FACULTY sets SIGNED (official).
+7. **Grading/viva — EXCLUDE from Phase 9.** Defer to a separate
+   academic-assessment phase; dormant `marks`/`remarks` columns retained.
+
+### Explicitly rejected
+
+Hardcoded curriculum · seeding without an authoritative source · "10
+experiments" default · auto mid-sem from count · hard mid-sem eligibility
+gate · required (non-nullable) session FK · FACULTY without a workflow ·
+marks/viva in Phase 9 · second attendance engine / React attendance math.
+
+### Phase 9.1 prerequisites (exact)
+
+D1 curriculum source confirmed (or experiment sections deferred) · D2
+STUDENT+ADMIN only · D3 minimal audit set · D4 nullable FK migration ·
+D5 advisory-only readiness · D6 two-tier progress · D7 no grading. Then
+Phase 9.1 = additive lab read model + ingestion boundary + nullable FK
+migration + audit columns + advisory + Laboratory page IA, verified read-only
+with exact-baseline restore. **BLOCKED until the owner confirms §14 of
+`docs/phase_9_product_decisions.md`.**
