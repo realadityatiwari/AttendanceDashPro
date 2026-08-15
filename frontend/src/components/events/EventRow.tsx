@@ -51,7 +51,10 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
   const title = humanizeEventType(event.event_type);
   const isHoliday = HOLIDAY_TYPES.has(event.event_type);
   const isExtra = event.event_type.startsWith("EXTRA_");
-  const isCancelled = event.event_type === EventType.CLASS_CANCELLED;
+  // Phase 9.1: LAB_CANCELLED renders the same Cancelled treatment as
+  // CLASS_CANCELLED (it is the practical-scoped cancellation event).
+  const isCancelled = event.event_type === EventType.CLASS_CANCELLED
+    || event.event_type === EventType.LAB_CANCELLED;
   const classLabel = classTypeLabel(event.class_type);
 
   const dateRange =

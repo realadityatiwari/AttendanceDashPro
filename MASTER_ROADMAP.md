@@ -557,20 +557,47 @@ PRODUCT RECOMMENDATION vs UNKNOWN/REQUIRES-REAL-WORLD-INPUT:
 7. **Grading/viva — EXCLUDE from Phase 9**: defer to a separate
    academic-assessment phase; dormant `marks`/`remarks` columns retained.
 
-Phase 9.1 remains **BLOCKED / NOT STARTED** pending Aditya's confirmation of
-§14 in `docs/phase_9_product_decisions.md`.
+## Phase 9.1 — Laboratory Attendance & Event Integration (COMPLETE 2026-08-15)
 
-## Phase 9.1+ — (BLOCKED; requires the confirmed decisions above)
+PRODUCT DECISION LOCKED: **Mid-Sem Practical and Lab Cancelled are NOT
+separate laboratory attendance systems — they are Academic Events that modify
+the canonical attendance schedule** (`AcademicEvent →
+EventSessionSynchronizer → ClassSession → AttendanceRecord → existing
+engines`). This supersedes the Phase 9.0 audit's additive read-model proposal
+for 9.1; experiment management remains a future concern.
 
-Complete the laboratory experience for BCS-551 / BCS-552 / BCS-553 per the
-Phase 9.0 architecture and the Phase 9.0b decisions: additive lab read model
-(summary / activity history), curriculum ingestion boundary (authoritative
-data only), nullable session-linkage migration, minimal audit columns,
-mid-sem readiness advisory, two-tier experiment progress under the chosen
-authority, dedicated Laboratory page IA (Practical Attendance · Mid-Sem
-Practical · Lab Activity History · Experiment Progress shown only when
-authoritative). Do not invent mutation behavior without the defined academic
-workflow; do not imply "10 lab turns = 10 experiments".
+Implemented: two new event types (`MID_SEM_PRACTICAL`, `LAB_CANCELLED`,
+subject-scoped, PRACTICAL-only, student-creatable for enrolled practical
+subjects, optional `note`); the synchronizer resolves the deterministic
+practical occurrence (reuses the timetable session — never duplicates — or
+materializes exactly one extra on a non-lab day) and marks it with the
+existing `ClassSession.designation = MID_SEM_PRACTICAL`; `LAB_CANCELLED`
+cancels the matching occurrence via canonical `is_cancelled`. Attendance
+flows through the normal mutation; cancelled rejects 409 and is excluded;
+mid-sem Present/Absent are ordinary practical records; quiz eligibility
+unchanged; state-based reconciliation keeps everything reversible and
+idempotent; cancellation wins on a mid-sem + lab-cancelled conflict; attended
+sessions are never deleted/cancelled. Additive read-model fields only
+(`designation` on history/daily; `note` on events). No new tables beyond a
+nullable `note` column and two PG enum values (migration
+`a1b2c3d4e5f6_add_lab_event_types.py`); no new endpoints; no experiment
+curriculum/progress; no FACULTY role; no grading/viva.
+
+Verification: `verify_phase_9_1.py` **28/28**; frozen regressions 6.5 27/27 ·
+6.6 36/36 · 6.7 31/31 · 7.2 26/26 · 8.1 22/22 · attendance-spec 15/15 ·
+8.2 18/18 · compileall / tsc / ESLint / next build PASS.
+
+⚠ **BASELINE DRIFT (owner decision required before final freeze):** the live
+DB now has **95 attendance records** (was 92). The +3 are legitimate
+owner-entered marks on BCS-502 LECTURE sessions (08-04, 08-05, 08-12 MISSED,
+created 2026-08-15 16:19–16:20 UTC via the canonical mutation path) — not
+verifier residue, not Phase 9.1 code. Per policy `verify_phase_7_1.py` was
+NOT modified; its fixed `records == 92` (check 23) now fails at 95
+(7.1 = 25/26). Authorize the fixed fixture 92 → 95 (as was done 89 → 92), or
+accept check 23 as a documented known-failing baseline assertion.
+
+Full details: `docs/phase_9_1_implementation_report.md`. Phase 9.1 code is
+otherwise freezable; Phase 9.2 (experiment management) NOT started.
 
 ---
 

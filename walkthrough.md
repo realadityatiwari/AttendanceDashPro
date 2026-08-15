@@ -841,8 +841,18 @@ commit. DB untouched (18/691/92/18/9/18/30, lab tables empty, designations=0).
 
 ### What's Next
 
-- **Phase 9.1 is BLOCKED / NOT STARTED** until Aditya confirms the §14
-  decision list in `docs/phase_9_product_decisions.md`. The exact 9.1 scope
-  and prerequisites are recorded there (§11) and in implementation_plan /
-  task / MASTER_ROADMAP.
-- **HARD STOP after Phase 9.0b** — decision review complete; no code written.
+- **Phase 9.1 — Laboratory Attendance & Event Integration (COMPLETE
+  2026-08-15).** Owner LOCKED the event-driven product decision. Two new
+  Academic Events (`MID_SEM_PRACTICAL`, `LAB_CANCELLED`) resolve into the
+  canonical `ClassSession` pipeline via the existing synchronizer: mid-sem
+  reuses the timetable practical occurrence (or materializes exactly one
+  extra on a non-lab day) and designates it (`ClassSession.designation`);
+  lab cancellation uses canonical `is_cancelled`; cancellation wins on
+  conflict; everything is state-based, reversible, and attendance-safe.
+  Verifier `verify_phase_9_1.py` **28/28**; all frozen regressions green
+  except 7.1 check 23 — **BASELINE DRIFT** (records 92 → 95: 3 legitimate
+  owner-entered BCS-502 marks; verifier NOT modified; owner must authorize
+  the fixed fixture 92 → 95). Full report:
+  `docs/phase_9_1_implementation_report.md`.
+- **HARD STOP after Phase 9.1** — Phase 9.2 (experiment management) not
+  started; no commit made.

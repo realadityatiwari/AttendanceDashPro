@@ -97,6 +97,22 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
             ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL,
         ],
     ),
+    # Phase 9.1 laboratory events. Both are subject-scoped PRACTICAL events
+    # the synchronizer resolves into canonical ClassSession state: LAB_CANCELLED
+    # cancels the matching practical occurrence (same session semantics as
+    # CLASS_CANCELLED, restricted to practical subjects); MID_SEM_PRACTICAL
+    # resolves/designates the practical occurrence as the mid-semester
+    # practical. Neither is a closure, override, or quiz-schedule event.
+    EventType.LAB_CANCELLED: _rule(
+        EventType.LAB_CANCELLED, "Lab Cancelled",
+        requires_subject=True, requires_class_type=True,
+        allowed_class_types=[ClassType.PRACTICAL],
+    ),
+    EventType.MID_SEM_PRACTICAL: _rule(
+        EventType.MID_SEM_PRACTICAL, "Mid-Sem Practical",
+        requires_subject=True, requires_class_type=True,
+        allowed_class_types=[ClassType.PRACTICAL],
+    ),
     EventType.SURPRISE_QUIZ: _rule(
         EventType.SURPRISE_QUIZ, "Surprise Quiz",
         requires_subject=True, requires_class_type=True,

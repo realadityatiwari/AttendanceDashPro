@@ -38,6 +38,12 @@ STUDENT_CREATABLE_EVENT_TYPES = {
     EventType.EXTRA_PRACTICAL,
     EventType.CLASS_CANCELLED,
     EventType.SURPRISE_QUIZ,
+    # Phase 9.1: students may record laboratory reality for their own enrolled
+    # practical subjects — a mid-sem practical on a date, or a cancelled lab.
+    # Both are subject-scoped, enrollment-checked, and resolved by the same
+    # canonical synchronizer (no separate lab attendance system).
+    EventType.MID_SEM_PRACTICAL,
+    EventType.LAB_CANCELLED,
 }
 
 
@@ -147,6 +153,7 @@ class EventService:
             class_type=data.class_type,
             is_working_day=data.is_working_day,
             substitution_schedule_override=data.substitution_schedule_override,
+            note=data.note,
             active=data.active,
         )
         self.repo.add(event)
@@ -196,6 +203,8 @@ class EventService:
             event.is_working_day = data.is_working_day
         if "substitution_schedule_override" in fields:
             event.substitution_schedule_override = data.substitution_schedule_override
+        if "note" in fields:
+            event.note = data.note
         if "active" in fields:
             event.active = data.active
 

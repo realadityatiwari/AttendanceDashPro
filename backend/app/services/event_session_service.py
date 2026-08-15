@@ -46,6 +46,7 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.engines.calendar_engine import (
     get_academic_day,
@@ -54,8 +55,8 @@ from app.engines.calendar_engine import (
     get_event_priority,
 )
 from app.models.event import AcademicEvent
-from app.models.enums import EventType
-from app.models.timetable import ClassSession
+from app.models.enums import EventType, ClassType, SessionDesignation
+from app.models.timetable import ClassSession, TimetableEntry
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
 
@@ -85,6 +86,19 @@ NO_SESSION_EFFECT_TYPES = {
     EventType.QUIZ_DAY,
     EventType.WORKING_DAY_OVERRIDE,
     EventType.WORKING_SATURDAY,
+}
+
+# Phase 9.1 laboratory events. LAB_CANCELLED is session-identical to
+# CLASS_CANCELLED (removes one matching practical occurrence); the registry
+# restricts it to PRACTICAL class type. MID_SEM_PRACTICAL is NOT an extra:
+# it resolves the existing practical occurrence for the subject/date (or
+# materializes exactly one extra when no timetable practical exists that day)
+# and marks that session with ClassSession.designation = MID_SEM_PRACTICAL.
+# Neither event creates a duplicate attendance opportunity for the same
+# practical turn, and neither touches attendance records.
+CANCELLATION_TYPES = {
+    EventType.CLASS_CANCELLED,
+    EventType.LAB_CANCELLED,
 }
 
 
@@ -143,15 +157,25 @@ class EventSessionSynchronizer:
             [s.id for s in existing]
         )
 
+        # Phase 9.1: mid-sem designations are managed ONLY when the triggering
+        # event is itself MID_SEM_PRACTICAL (create/update/deactivate). Other
+        # event syncs never touch ClassSession.designation, so the Phase 8.2
+        # admin endpoint's designation survives unrelated event reconciliation.
+        manage_mid_sem = event.event_type == EventType.MID_SEM_PRACTICAL
+        mid_sem_subject = event.subject_id if manage_mid_sem else None
+
         current = start
         while current <= end:
-            desired_scheduled, desired_extras = self._desired_schedule(
+            desired_scheduled, desired_extras, mid_sem_active = self._desired_schedule(
                 current, all_active_events, entries_by_dow
             )
             await self._reconcile_date(
                 current,
                 desired_scheduled,
                 desired_extras,
+                mid_sem_active,
+                manage_mid_sem,
+                mid_sem_subject,
                 by_date.get(current, []),
                 attended_ids,
             )
@@ -164,21 +188,31 @@ class EventSessionSynchronizer:
         target: date,
         events: List[AcademicEvent],
         entries_by_dow: Dict[int, list],
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int]]:
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
                              classes the engine says should exist on the date.
           desired_extras:    {(subject_id, class_type): count} of extra
                              occurrences to materialize.
+          mid_sem_active:    subject_ids whose practical occurrence on this
+                             date is the mid-semester practical (Phase 9.1).
+                             A subject is EXCLUDED when a practical
+                             cancellation (CLASS_CANCELLED / LAB_CANCELLED)
+                             is also active on this date — cancellation wins.
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}
+            return {}, {}, set()
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
         scheduled = {entry.id: entry for entry in entries_by_dow.get(target_dow, [])}
+        # Snapshot BEFORE cancellation removal: the mid-sem reuse rule must
+        # see the ORIGINAL timetable so a cancelled occurrence is never
+        # replaced by a freshly created extra (which would create two
+        # attendance opportunities for one practical turn).
+        original_scheduled = dict(scheduled)
 
         # Deterministic order: priority desc, then event id (no timestamps on
         # the model; uuid ordering is stable across runs).
@@ -189,13 +223,16 @@ class EventSessionSynchronizer:
         )
 
         extras: Dict[Tuple[object, object], int] = {}
+        cancelled_practical_subjects: set = set()
         for event in ordered:
             if event.event_type in CLOSURE_TYPES:
                 # Unreachable on a working day (closure => non-working), kept
                 # as the legacy guard.
                 continue
-            if event.event_type == EventType.CLASS_CANCELLED:
+            if event.event_type in CANCELLATION_TYPES:
                 # Remove ONE matching occurrence (legacy splice semantics).
+                if event.class_type == ClassType.PRACTICAL:
+                    cancelled_practical_subjects.add(event.subject_id)
                 match = next(
                     (
                         entry
@@ -211,7 +248,31 @@ class EventSessionSynchronizer:
                 key = (event.subject_id, event.class_type)
                 extras[key] = extras.get(key, 0) + 1
 
-        return scheduled, extras
+        # Phase 9.1 mid-sem plan (state-based, idempotent):
+        #   - cancellation wins (the occurrence is cancelled, never markable,
+        #     so it is not the mid-sem);
+        #   - a timetable practical for the subject/date is REUSED (never
+        #     duplicated — the same session becomes the mid-sem);
+        #   - when no timetable practical exists, exactly ONE extra practical
+        #     occurrence is materialized so attendance can be marked.
+        mid_sem_active: set = set()
+        for event in ordered:
+            if event.event_type != EventType.MID_SEM_PRACTICAL:
+                continue
+            subject_id = event.subject_id
+            if subject_id is None or subject_id in cancelled_practical_subjects:
+                continue
+            mid_sem_active.add(subject_id)
+            has_timetable_practical = any(
+                entry.subject_id == subject_id
+                and entry.class_type == ClassType.PRACTICAL
+                for entry in original_scheduled.values()
+            )
+            if not has_timetable_practical:
+                key = (subject_id, ClassType.PRACTICAL)
+                extras[key] = extras.get(key, 0) + 1
+
+        return scheduled, extras, mid_sem_active
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -230,6 +291,9 @@ class EventSessionSynchronizer:
         target: date,
         desired_scheduled: Dict[object, object],
         desired_extras: Dict[Tuple[object, object], int],
+        mid_sem_active: set,
+        manage_mid_sem: bool,
+        mid_sem_subject: object,
         existing: List[ClassSession],
         attended_ids: set,
     ) -> None:
@@ -316,3 +380,71 @@ class EventSessionSynchronizer:
                     continue
                 await self.session_repo.delete_session(session)
                 removed += 1
+
+        # Phase 9.1: mid-sem designation step. Runs only when the triggering
+        # event is itself MID_SEM_PRACTICAL (the event's create/update/
+        # deactivate lifecycle defines the designation). Designation is
+        # context (never attendance): clearing it never touches records.
+        if manage_mid_sem and mid_sem_subject is not None:
+            if mid_sem_subject in mid_sem_active:
+                await self._designate_mid_sem(target, mid_sem_subject)
+            else:
+                await self._clear_mid_sem(target, mid_sem_subject)
+
+    # -- Phase 9.1 mid-sem designation ------------------------------------------
+
+    async def _designate_mid_sem(self, target: date, subject_id: object) -> None:
+        """
+        Designates the deterministic practical occurrence for (subject, date)
+        as the mid-semester practical. The occurrence is the FIRST practical
+        session ordered by timetable start time (then id) — the canonical
+        period resolution when a lab day has two P slots; a mid-sem extra is
+        the only candidate when the event materialized one. One mid-sem per
+        subject: any other designated session for the subject is cleared
+        (mirrors the Phase 8.2 admin service's replace semantics). Attendance
+        records are never touched.
+        """
+        stmt = (
+            select(ClassSession)
+            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+            .where(
+                ClassSession.subject_id == subject_id,
+                ClassSession.date == target,
+                ClassSession.class_type == ClassType.PRACTICAL,
+            )
+            .order_by(
+                TimetableEntry.start_time.asc().nulls_last(),
+                ClassSession.id.asc(),
+            )
+        )
+        candidates = (await self.db.execute(stmt)).scalars().all()
+        if not candidates:
+            # No occurrence exists (e.g. non-working day with no materialized
+            # session) — nothing to designate.
+            return
+        target_session = candidates[0]
+        others = await self.db.execute(
+            select(ClassSession).where(
+                ClassSession.subject_id == subject_id,
+                ClassSession.designation == SessionDesignation.MID_SEM_PRACTICAL,
+                ClassSession.id != target_session.id,
+            )
+        )
+        for session in others.scalars().all():
+            session.designation = None
+        target_session.designation = SessionDesignation.MID_SEM_PRACTICAL
+
+    async def _clear_mid_sem(self, target: date, subject_id: object) -> None:
+        """
+        Clears the mid-sem designation on (subject, date) practical sessions.
+        Used when a MID_SEM_PRACTICAL event is deactivated or moved away from
+        this date. Attendance records on the session are untouched.
+        """
+        stmt = select(ClassSession).where(
+            ClassSession.subject_id == subject_id,
+            ClassSession.date == target,
+            ClassSession.class_type == ClassType.PRACTICAL,
+            ClassSession.designation == SessionDesignation.MID_SEM_PRACTICAL,
+        )
+        for session in (await self.db.execute(stmt)).scalars().all():
+            session.designation = None

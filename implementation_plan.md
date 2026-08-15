@@ -925,3 +925,36 @@ Phase 9.1 = additive lab read model + ingestion boundary + nullable FK
 migration + audit columns + advisory + Laboratory page IA, verified read-only
 with exact-baseline restore. **BLOCKED until the owner confirms §14 of
 `docs/phase_9_product_decisions.md`.**
+
+### Phase 9.1 — Laboratory Attendance & Event Integration (COMPLETE 2026-08-15)
+
+The owner LOCKED the product decision (event-driven model), which superseded
+the read-only audit's additive read-model proposal for 9.1. Implemented:
+
+- Two new AcademicEvent types — `MID_SEM_PRACTICAL`, `LAB_CANCELLED`
+  (subject-scoped, PRACTICAL-only, student-creatable for enrolled practical
+  subjects, optional `note`); registry rules + `STUDENT_CREATABLE_EVENT_TYPES`
+  + calendar-engine priority 30 (per-occurrence tier).
+- Synchronizer (additive): `LAB_CANCELLED` cancels the matching practical
+  occurrence (canonical `is_cancelled`); `MID_SEM_PRACTICAL` REUSES the
+  timetable practical occurrence (never duplicates) or materializes exactly
+  one extra on a non-lab day, then designates it
+  (`ClassSession.designation = MID_SEM_PRACTICAL`, first P slot by start time
+  then id — deterministic period resolution). Designation is context, never
+  attendance; managed only when the triggering event is MID_SEM_PRACTICAL.
+- Reversibility via existing state-based reconciliation (span-union on move;
+  soft-delete deactivation); idempotent; attendance-safe (attended sessions
+  never deleted/cancelled; cancelled ≠ absent 409 preserved).
+- Conflict default: LAB_CANCELLED wins over MID_SEM_PRACTICAL on the same
+  occurrence (no two conflicting sessions).
+- Additive read models only: `designation` on history/daily sessions; `note`
+  on events. Migration `a1b2c3d4e5f6_add_lab_event_types.py` (2 PG enum
+  values + nullable `note`; zero data rows changed).
+- Verification `verify_phase_9_1.py` 28/28; frozen regressions green except
+  7.1 check 23 (BASELINE DRIFT: records 92 → 95 — 3 legitimate owner-entered
+  BCS-502 marks; verifier NOT modified; owner must authorize the fixed
+  fixture 92 → 95). Full details:
+  `docs/phase_9_1_implementation_report.md`.
+- NOT implemented: experiment curriculum/progress, `experiments ≥ 5 ⇒
+  mid-sem`, FACULTY role, grading/viva, second lab engine, new endpoints,
+  period selector (backend resolves deterministically).

@@ -34,6 +34,16 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
     isClosure: false, isGlobal: false,
   },
+  // Phase 9.1 laboratory events: subject-scoped PRACTICAL events resolved by
+  // the canonical event synchronizer (no separate lab attendance system).
+  [EventType.LAB_CANCELLED]: {
+    eventType: EventType.LAB_CANCELLED, requiresSubject: true, requiresClassType: true,
+    allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
+  },
+  [EventType.MID_SEM_PRACTICAL]: {
+    eventType: EventType.MID_SEM_PRACTICAL, requiresSubject: true, requiresClassType: true,
+    allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
+  },
   [EventType.SURPRISE_QUIZ]: {
     eventType: EventType.SURPRISE_QUIZ, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL], isClosure: false, isGlobal: false,
@@ -87,6 +97,10 @@ export const STUDENT_CREATABLE_EVENT_TYPES: EventType[] = [
   EventType.EXTRA_PRACTICAL,
   EventType.CLASS_CANCELLED,
   EventType.SURPRISE_QUIZ,
+  // Phase 9.1: students may record laboratory reality (mid-sem practical /
+  // cancelled lab) for their own enrolled practical subjects.
+  EventType.MID_SEM_PRACTICAL,
+  EventType.LAB_CANCELLED,
 ];
 
 export function canStudentMutateEventType(eventType: EventType): boolean {

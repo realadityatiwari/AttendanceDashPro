@@ -23,6 +23,10 @@ class AttendanceHistoryItem(BaseModel):
     status: AttendanceStatus
     is_cancelled: bool = False
     is_extra: bool = False
+    # Phase 9.1: session designation (e.g. "MID_SEM_PRACTICAL") — an additive
+    # presentation field read from ClassSession.designation. NULL for regular
+    # sessions. Never used in any attendance calculation.
+    designation: Optional[str] = None
     marked_at: Optional[datetime] = None
 
 class HistorySummary(BaseModel):
@@ -205,6 +209,10 @@ class DailySessionResponse(BaseModel):
     status: AttendanceStatus
     is_cancelled: bool
     is_extra: bool
+    # Phase 9.1: session designation (e.g. "MID_SEM_PRACTICAL") — additive
+    # presentation field from ClassSession.designation. NULL for regular
+    # sessions; never used in any attendance calculation.
+    designation: Optional[str] = None
 
 class DailySessionsResponse(BaseModel):
     date: date

@@ -70,6 +70,9 @@ export interface AttendanceHistoryItem {
   status: AttendanceStatus;
   is_cancelled: boolean;
   is_extra: boolean;
+  // Phase 9.1: session designation ("MID_SEM_PRACTICAL") — additive
+  // presentation field; never used in any attendance calculation.
+  designation: string | null;
   marked_at: string | null;
 }
 
@@ -115,6 +118,10 @@ export interface DailySessionResponse {
   status: AttendanceStatus;
   is_cancelled: boolean;
   is_extra: boolean;
+  // Phase 9.1: session designation ("MID_SEM_PRACTICAL") — additive
+  // presentation field from ClassSession.designation; never used in any
+  // attendance calculation.
+  designation: string | null;
 }
 
 export interface DailySessionsResponse {
@@ -305,7 +312,10 @@ export enum EventType {
   EMERGENCY_CLOSURE = "EMERGENCY_CLOSURE",
   FESTIVAL_HOLIDAY = "FESTIVAL_HOLIDAY",
   SEMESTER_BREAK = "SEMESTER_BREAK",
-  MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK"
+  MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK",
+  // Phase 9.1 laboratory events (event-driven, canonical pipeline):
+  MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL",
+  LAB_CANCELLED = "LAB_CANCELLED"
 }
 
 export interface AcademicEventResponse {
@@ -317,6 +327,8 @@ export interface AcademicEventResponse {
   class_type: ClassType | null;
   is_working_day: boolean | null;
   substitution_schedule_override: string | null;
+  // Phase 9.1: optional student-entered note/reason (additive metadata).
+  note: string | null;
   active: boolean;
 }
 
@@ -339,6 +351,8 @@ export interface AcademicEventPayload {
   class_type?: ClassType | null;
   is_working_day?: boolean | null;
   substitution_schedule_override?: string | null;
+  // Phase 9.1: optional note/reason for the event (additive metadata).
+  note?: string | null;
   active?: boolean;
 }
 

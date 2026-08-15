@@ -100,7 +100,11 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
     );
   };
 
-  const displayType = session.class_type === ClassType.LECTURE ? "LECTURE" : 
+  // Phase 9.1: a session designated as the mid-semester practical is labeled
+  // as such in Track (from the backend session field — never computed here);
+  // everything else keeps its canonical class type.
+  const displayType = session.designation === "MID_SEM_PRACTICAL" ? "MID-SEM PRACTICAL" :
+                      session.class_type === ClassType.LECTURE ? "LECTURE" :
                       session.class_type === ClassType.TUTORIAL ? "TUTORIAL" : "PRACTICAL";
 
   return (

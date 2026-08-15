@@ -42,6 +42,7 @@ interface FormState {
   class_type: string;
   is_working_day: string;
   substitution_schedule_override: string;
+  note: string;
   active: boolean;
 }
 
@@ -56,6 +57,7 @@ function initialState(event: AcademicEventResponse | null, isAdmin: boolean): Fo
     is_working_day: event?.is_working_day === null || event?.is_working_day === undefined
       ? "" : String(event.is_working_day),
     substitution_schedule_override: event?.substitution_schedule_override ?? "",
+    note: event?.note ?? "",
     active: event?.active ?? true,
   };
 }
@@ -104,6 +106,16 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     setServerError("");
   };
 
+  // Phase 9.1: event types with a single allowed class type (the laboratory
+  // events — practical only) auto-fill it; the class-type selector is hidden
+  // because there is nothing to disambiguate.
+  const singleClassType = rule.requiresClassType && rule.allowedClassTypes.length === 1
+    ? rule.allowedClassTypes[0]
+    : null;
+  if (singleClassType && form.class_type !== singleClassType) {
+    set("class_type", singleClassType);
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setServerError("");
@@ -134,6 +146,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       class_type: rule.requiresClassType ? (form.class_type as ClassType) : null,
       is_working_day: form.is_working_day === "" ? null : form.is_working_day === "true",
       substitution_schedule_override: form.substitution_schedule_override || null,
+      note: form.note.trim() === "" ? null : form.note.trim(),
       active: form.active,
     };
 
@@ -231,7 +244,14 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </div>
           )}
 
-          {rule.requiresClassType && (
+          {rule.requiresClassType && (singleClassType ? (
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="event-form-class">Class type</label>
+              <div className="h-8 rounded-lg border border-input bg-input/20 px-3 text-sm text-muted-foreground flex items-center">
+                {CLASS_TYPE_LABELS[singleClassType]}
+              </div>
+            </div>
+          ) : (
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-class">Class type</label>
               <select
@@ -247,6 +267,23 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                   </option>
                 ))}
               </select>
+            </div>
+          ))}
+
+          {(form.event_type === EventType.MID_SEM_PRACTICAL || form.event_type === EventType.LAB_CANCELLED) && (
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="event-form-note">
+                {form.event_type === EventType.LAB_CANCELLED ? "Reason (optional)" : "Note (optional)"}
+              </label>
+              <Input
+                id="event-form-note"
+                type="text"
+                className={selectClass}
+                placeholder={form.event_type === EventType.LAB_CANCELLED ? "e.g. Technical issue" : "e.g. Mid-semester practical"}
+                value={form.note}
+                maxLength={200}
+                onChange={e => set("note", e.target.value)}
+              />
             </div>
           )}
 

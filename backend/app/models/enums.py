@@ -25,6 +25,15 @@ class EventType(str, Enum):
     FESTIVAL_HOLIDAY = "FESTIVAL_HOLIDAY"
     SEMESTER_BREAK = "SEMESTER_BREAK"
     MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK"
+    # Phase 9.1 laboratory attendance events (event-driven, canonical pipeline).
+    # These are NOT separate attendance systems: they are Academic Events the
+    # EventSessionSynchronizer resolves into canonical ClassSession state.
+    # MID_SEM_PRACTICAL marks the resolved practical occurrence as the subject's
+    # mid-semester practical (ClassSession.designation); LAB_CANCELLED cancels
+    # the matching practical occurrence (is_cancelled), identical in session
+    # semantics to CLASS_CANCELLED but restricted to practical subjects.
+    MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL"
+    LAB_CANCELLED = "LAB_CANCELLED"
 
 class UserRole(str, Enum):
     STUDENT = "STUDENT"

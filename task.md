@@ -922,17 +922,28 @@ Correct the Attendance (/subjects) page so it is attendance-monitoring only (no 
 - [x] Phase 9 sections updated in MASTER_ROADMAP / implementation_plan / walkthrough / task. Phase 9.1 remains **BLOCKED / NOT STARTED**.
 - [x] No code/schema/migration/data/API/UI/seed changes; no commit.
 
-## Phase 9.1 Gate (do not start until confirmed)
+## Phase 9.1 — Laboratory Attendance & Event Integration (COMPLETE 2026-08-15)
 
-Aditya must confirm §14 of `docs/phase_9_product_decisions.md` (D1–D7 recommended
-choices). Only then may Phase 9.1 implement: additive lab read model
-(summary/activities), curriculum ingestion boundary, nullable session-linkage
-FK migration, minimal audit columns, mid-sem readiness advisory, two-tier
-progress, Laboratory page IA — verified read-only with exact-baseline restore.
+Owner LOCKED the event-driven product decision (superseding the audit's
+read-model proposal for 9.1). Implemented: `MID_SEM_PRACTICAL` + `LAB_CANCELLED`
+Academic Events (subject-scoped, PRACTICAL-only, student-creatable for
+enrolled practical subjects, optional `note`); synchronizer reuses the
+timetable practical occurrence (or materializes exactly one extra on a
+non-lab day) and designates it `ClassSession.designation = MID_SEM_PRACTICAL`;
+lab cancellation uses canonical `is_cancelled`; cancellation wins on conflict;
+state-based reversibility; attendance-safe; additive read models only.
+Migration `a1b2c3d4e5f6_add_lab_event_types.py` (2 PG enum values + nullable
+`note`; zero data rows). Verifier `verify_phase_9_1.py` **28/28**; frozen
+regressions green except 7.1 check 23 — **BASELINE DRIFT**: records 92 → 95
+(3 legitimate owner-entered BCS-502 marks, 2026-08-15 16:19–16:20 UTC, not
+verifier residue); verifier NOT modified; **owner must authorize the fixed
+fixture 92 → 95**. Full report:
+`docs/phase_9_1_implementation_report.md`.
 
-## Do Not Touch (unchanged from Phase 9.0)
+## Do Not Touch (unchanged through Phase 9.1)
 
 Attendance engine/formulas, quiz eligibility engine, Phase 6 calendar/event
-architecture, Attendance Health, mid-sem designation semantics, student event
-policy, all frozen verifiers, and the DB (still 18/691/92/18/9/18/30, lab
-tables empty, designations=0).
+architecture, Attendance Health, mid-sem designation semantics (Phase 8.2
+admin endpoint intact), student event policy, all frozen verifiers (7.1 left
+unmodified; check 23 pending the owner's fixture decision). DB: 18/691/95/
+18/9/18/30, lab tables empty, designations=0.

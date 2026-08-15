@@ -17,4 +17,8 @@ class AcademicEvent(Base):
     
     is_working_day: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     substitution_schedule_override: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Phase 9.1: optional student-entered note/reason (e.g. lab cancellation
+    # reason, mid-sem remark). Additive metadata only — never read by any
+    # attendance calculation. NULL for events without a note.
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -233,6 +233,7 @@ class AttendanceService:
                 "status": resolved_status,
                 "is_cancelled": r["is_cancelled"],
                 "is_extra": r["is_extra"],
+                "designation": r["designation"].value if r["designation"] else None,
                 "marked_at": r["marked_at"],
             })
 
@@ -294,7 +295,8 @@ class AttendanceService:
                 class_type=r["class_type"],
                 status=status,
                 is_cancelled=r["is_cancelled"],
-                is_extra=r["is_extra"]
+                is_extra=r["is_extra"],
+                designation=r["designation"].value if r["designation"] else None,
             ))
             
         return DailySessionsResponse(date=target_date, sessions=sessions)

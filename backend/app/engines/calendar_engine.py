@@ -33,6 +33,11 @@ def get_event_priority(event_type: EventType) -> int:
         EventType.EXTRA_PRACTICAL: 30,
         EventType.SURPRISE_QUIZ: 30,
         EventType.QUIZ_DAY: 30,
+        # Phase 9.1 laboratory events: per-occurrence events in the same
+        # priority tier as cancellations/extras. They never affect the day's
+        # working/teaching state (not closures, not working-day overrides).
+        EventType.MID_SEM_PRACTICAL: 30,
+        EventType.LAB_CANCELLED: 30,
     }
     return priorities.get(event_type, 10)
 
