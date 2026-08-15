@@ -637,3 +637,35 @@ Status: **COMPLETE (2026-08-15) — PASS** (26/26 verification + full regression
 
 - Q-D6 teaching-day counting · Q-D8 overall denominator · Q-D7 student event-mutation capability (product/security decision) · date-aware default cycle tab.
 - Browser/manual testing — the user's responsibility (see MANUAL TESTING CHECKLIST in the implementation report).
+
+---
+
+# PHASE 7.2 — QUIZ ELIGIBILITY ANALYTICS REFINEMENT
+
+Status: **COMPLETE (2026-08-15) — PASS** (26/26 verification + full regression). Report: `docs/phase_7_2_implementation_report.md`.
+
+## What was decided & implemented
+
+1. **Q-D6 (raw-range counting) — NOT a defect under the locked spec.** The `class_sessions` table IS the teaching-day-resolved effective schedule (baseline expands only teaching days; closures cancel; extras only on working days; cancelled excluded from counts). No counting change. Regression-proven: all 18 subject/cycle combos equal a teaching-day enumeration with no off-teaching-day session counted; closure cancels → excluded + 409; EXTRA_LECTURE on a working day counted; SURPRISE_QUIZ on a non-working day materializes ZERO sessions (no divergence possible via the canonical event path).
+2. **Q-D8 (overall denominator) — recorded-only, ERP/legacy semantics.** Pending excluded from the CURRENT denominator (legacy `computeCurrentOverallAttendance`, S4 §10) but never converted to absent — always counted and shown separately. Dashboard overall card already showed pending; the quiz eligibility card now shows a muted "· X pending" on Lecture/Tutorial rows (reference visual language otherwise untouched). Verified: 71.43% recorded-only vs explicitly-not 46.51%; history + subject current/forecast identical semantics; zero-record student overall = null.
+3. **Q-D7 (mutation / eligibility timing) — intentional product restriction (B).** Attendance mutations are student-scoped + enrollment-authorized (403) + cancelled-protected (409); EVENT mutations stay admin-only (frozen 6.5 — rule G is a future product capability). Eligibility is computed read-time — a mutation propagates to the next read immediately (verified).
+4. **Date-aware default Quiz tab.** New canonical read-only `GET /api/v1/quiz-eligibility/current-cycle`: next upcoming SCHEDULED quiz → latest resolved cycle → fallback Quiz I (never invents dates). The Quiz Eligibility page preselects the tab from it (`useCurrentQuizCycle`); manual tab selection overrides; tab state is client-only. Today → Quiz I (next quiz 2026-08-24); Quiz I→II→III→latest_resolved→fallback transitions verified in rollback transactions.
+
+## Verification summary
+
+- `verify_phase_7_2.py`: **26/26 PASS** (Q-D6 ×4 · Q-D8 ×5 · Q-D7 ×4 · current-cycle ×6 · BCS-054 Q3 · UNRESOLVED · labs 404 · dashboard-snapshot==canonical · Track/History/Eligibility consistency · per-user isolation · exact baseline restore).
+- Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** — no assertions weakened.
+- Static: compileall clean · `npx tsc --noEmit` clean · ESLint 0 errors · `next build` exit 0.
+
+## Database state after 7.2
+
+- Exact baseline preserved (ZERO mutations): events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · max record date 2026-08-14. BCS-054 Quiz III = 2026-10-23 confirmed.
+
+## Do Not Touch Again (from this phase)
+
+- Same as Phase 6.7 + 7.1 (frozen lists), plus: the current-cycle endpoint contract, the Q-D6/Q-D8/Q-D7 documented decisions, and the quiz-card pending indicator are now canonical — changes require a new phase with its own verifier. No commit was made.
+
+## Deferred (intentionally NOT done here)
+
+- Q-D9 quiz-day attendance without a session (product decision) · rule G student event capability (product/security decision) · Phase 8 Attendance Analytics/Intelligence (roadmap next).
+- Browser/manual testing — the user's responsibility.

@@ -7,10 +7,12 @@ from app.repositories.quiz_repo import QuizRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.subject_repo import SubjectRepository
 from app.repositories.calendar_repo import CalendarRepository
+from app.repositories.user_repo import UserRepository
 from app.schemas.attendance import EligibilityResult
 from app.engines.eligibility_engine import evaluate_quiz_eligibility
 from app.engines.calendar_engine import get_attendance_window, DEFAULT_WEEKENDS
 from app.models.enums import AttendanceStatus
+from app.models.quiz import ScheduleStatus
 from app.engines.attendance_engine import normalize_class_type
 from app.schemas.academic import Subject as SubjectSchema, Milestone, Timeline
 
@@ -21,6 +23,7 @@ class EligibilityService:
         self.attendance_repo = AttendanceRepository(db)
         self.subject_repo = SubjectRepository(db)
         self.calendar_repo = CalendarRepository(db)
+        self.user_repo = UserRepository(db)
         
     async def get_quiz_eligibility(self, user_id: UUID, subject_id: UUID, quiz_cycle: int, semester_start: date | None = None) -> EligibilityResult:
         # 1. Fetch Subject
@@ -114,4 +117,55 @@ class EligibilityService:
         result.quiz_date = milestone.date if milestone else None
         
         return result
+
+    async def get_current_quiz_cycle(self, user_id: UUID) -> dict:
+        """Canonical "currently relevant" quiz cycle for a student.
+
+        Mirrors the dashboard quiz-snapshot pick semantics so the Quiz
+        Eligibility page and the dashboard agree for the same user/cycle:
+          - next SCHEDULED quiz at/after today -> that cycle ("next_upcoming");
+          - otherwise the highest-numbered resolved cycle ("latest_resolved");
+          - otherwise the documented fallback Quiz I ("fallback",
+            has_schedule=False, no invented date).
+        Reads only quiz_schedules (the authoritative schedule source); never
+        invents quiz dates and never mutates state.
+        """
+        subjects = await self.user_repo.get_enrolled_subjects(user_id)
+        quiz_applicable = [s for s in subjects if s.quiz_applicable]
+
+        schedules = []
+        for subject in quiz_applicable:
+            schedules.extend(await self.quiz_repo.get_quiz_schedules_for_subject(subject.id))
+
+        resolved = [
+            s for s in schedules
+            if s.date is not None and s.schedule_status == ScheduleStatus.SCHEDULED
+        ]
+        future = [s for s in resolved if s.date >= date.today()]
+
+        if future:
+            pick = min(future, key=lambda s: s.date)
+            return {
+                "quiz_cycle": pick.quiz_cycle.cycle_number,
+                "quiz_label": pick.quiz_cycle.label,
+                "quiz_date": pick.date,
+                "has_schedule": True,
+                "basis": "next_upcoming",
+            }
+        if resolved:
+            pick = max(resolved, key=lambda s: s.quiz_cycle.cycle_number)
+            return {
+                "quiz_cycle": pick.quiz_cycle.cycle_number,
+                "quiz_label": pick.quiz_cycle.label,
+                "quiz_date": pick.date,
+                "has_schedule": True,
+                "basis": "latest_resolved",
+            }
+        return {
+            "quiz_cycle": 1,
+            "quiz_label": "Quiz I",
+            "quiz_date": None,
+            "has_schedule": False,
+            "basis": "fallback",
+        }
 

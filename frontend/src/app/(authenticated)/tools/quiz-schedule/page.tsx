@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSubjects } from "@/hooks/useApi";
+import { useSubjects, useCurrentQuizCycle } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -18,7 +18,12 @@ const CYCLES = [
 
 export default function QuizEligibilityPage() {
   const { subjects, isLoading, isError } = useSubjects();
-  const [cycle, setCycle] = useState(1);
+  // Date-aware default tab (Phase 7.2): the backend picks the canonical
+  // currently-relevant cycle from the authoritative quiz schedule. Manual tab
+  // selection always overrides; tab state never mutates backend state.
+  const { currentCycle } = useCurrentQuizCycle();
+  const [cycle, setCycle] = useState<number | null>(null);
+  const activeCycle = cycle ?? currentCycle?.quiz_cycle ?? 1;
 
   if (isError) {
     return (
@@ -53,11 +58,11 @@ export default function QuizEligibilityPage() {
           <button
             key={c.number}
             role="tab"
-            aria-selected={cycle === c.number}
+            aria-selected={activeCycle === c.number}
             onClick={() => setCycle(c.number)}
             className={cn(
               "h-8 px-4 rounded-lg text-sm font-medium transition-colors",
-              cycle === c.number
+              activeCycle === c.number
                 ? "bg-primary text-primary-foreground"
                 : "bg-surface2/50 border border-border/50 text-muted-foreground hover:bg-surface2 hover:text-foreground"
             )}
@@ -83,10 +88,10 @@ export default function QuizEligibilityPage() {
         <div className="space-y-6">
           {quizApplicableSubjects.map((subject) => (
             <QuizEligibilityCard
-              key={`${subject.code}-${cycle}`}
+              key={`${subject.code}-${activeCycle}`}
               subjectCode={subject.code}
-              cycle={cycle}
-              cycleLabel={CYCLES.find((c) => c.number === cycle)?.label ?? `Quiz ${cycle}`}
+              cycle={activeCycle}
+              cycleLabel={CYCLES.find((c) => c.number === activeCycle)?.label ?? `Quiz ${activeCycle}`}
             />
           ))}
         </div>

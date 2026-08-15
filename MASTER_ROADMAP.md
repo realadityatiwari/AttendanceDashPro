@@ -4,7 +4,7 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 deferred pending authorization.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Next roadmap phase: Phase 8 (Attendance Analytics / Intelligence).
 
 ---
 
@@ -381,6 +381,8 @@ The event system must feed the existing engines instead of creating parallel rul
 **7.0 AUDIT COMPLETE (2026-08-15)** — see `docs/phase_7_0_quiz_eligibility_audit.md`. Read-only audit; no code changed. Headline finding: the backend's `is_eligible` (reachability) diverges from the legacy "currently-meets-threshold" definition (Q-D1), and the reference-UI data contract (window lecture/tutorial %, Criterion I/II, recoverable state, quiz date, explanation) is not yet exposed by the API (Q-D2). Implementation (Phase 7.1+) requires decisions Q-D1…Q-D10 from the product owner.
 
 **7.1 IMPLEMENTATION COMPLETE (2026-08-15) — PASS** — see `docs/phase_7_1_implementation_report.md`. BCS-054 Q3 resolved to 2026-10-23 (canonical 18/18 schedule); canonical eligibility states (ELIGIBLE/RECOVERABLE/NOT_ELIGIBLE/UNRESOLVED) with the official "(Criterion I) OR (Criterion II)" policy; extended eligibility API (no parallel system); reference subject-card UI on `/tools/quiz-schedule` (cycle tabs, View Calculation); `verify_phase_7_1.py` 26/26; regression 6.5 23/23, 6.6 36/36, 6.7 31/31. DB mutation: BCS-054 Q3 schedule row + the canonical 18th QUIZ_DAY event (minimal, reversible). Dashboard snapshot corrected automatically via the new `is_eligible` semantics (dashboard code untouched).
+
+**7.2 IMPLEMENTATION COMPLETE (2026-08-15) — PASS** — see `docs/phase_7_2_implementation_report.md`. Q-D6 raw-range counting resolved as NOT a defect under the locked spec (session table IS the teaching-day-resolved schedule; closure/extra/weekend-guard regression-proven); Q-D8 overall denominator = recorded-only (ERP/legacy/S4 §10; pending never converted to absent, made explicit on the quiz card); Q-D7 = intentional product restriction (event mutations stay admin-only; eligibility is read-time; regression-proven); date-aware default Quiz tab via new canonical `GET /api/v1/quiz-eligibility/current-cycle` (next upcoming → latest resolved → fallback Quiz I; frontend preselects, manual tabs override, no invented dates). `verify_phase_7_2.py` 26/26; regression 6.5 23/23, 6.6 36/36, 6.7 31/31, 7.1 26/26. Zero DB mutations (exact baseline restored).
 
 The backend eligibility architecture is already substantially implemented and audited.
 
@@ -1190,9 +1192,8 @@ PHASE 4  ████████████████████  COMPLETE 
 PHASE 4.5 ████████████████████  COMPLETE 🔒 (audit · Track · Sign Up)
 PHASE 5  ████████████████████  COMPLETE 🔒 (Attendance History)
 
-PHASE 6  ██████████████░░░░░░  CURRENT 🟡
-PHASE 6  ░░░░░░░░░░░░░░░░░░░░  PLANNED
-PHASE 7  ██████████░░░░░░░░░░  AUDIT COMPLETE (7.0) — implementation pending Q-D1…Q-D10
+PHASE 6  ████████████████████  COMPLETE 🔒
+PHASE 7  ████████████████████  COMPLETE 🔒 (7.0 audit · 7.1 contract+UI · 7.2 analytics refinement)
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
@@ -1260,3 +1261,15 @@ Phase 7.1 is **COMPLETE (2026-08-15) — PASS**. Report: `docs/phase_7_1_impleme
 - **Verification:** `verify_phase_7_1.py` **26/26**; frozen regression 6.5 **23/23**, 6.6 **36/36**, 6.7 **31/31** (Phase 6.7 count assertions maintained 17→18 for the new authoritative schedule — documented, not weakened); compileall/tsc/ESLint/`next build` green.
 - **Database:** new baseline events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN). Mutation minimal/reversible (documented).
 - **Known limitations / next:** Q-D6 teaching-day counting, Q-D8 overall denominator, Q-D7 student event-mutation capability, date-aware default cycle tab → Phase 7.2 (requires authorization; **HARD STOP** after Phase 7.1).
+
+## Phase 7.2 — Quiz Eligibility Analytics Refinement
+
+Phase 7.2 is **COMPLETE (2026-08-15) — PASS**. Report: `docs/phase_7_2_implementation_report.md`.
+
+- **Q-D6 (raw-range counting):** NOT a defect under the locked spec — the session table IS the teaching-day-resolved effective schedule (baseline expands only teaching days; closures cancel; extras only on working days; cancelled excluded from counts). No counting change; regression-proven equivalence (18/18 combos), closure exclusion, extra counted, weekend-guard zero-session (checks 1–4).
+- **Q-D8 (overall denominator):** recorded-only is canonical (legacy ERP `computeCurrentOverallAttendance`, S4 §10 current domain). Pending never converted to absent; exposed separately everywhere (dashboard card already showed it; quiz eligibility card gained a muted pending indicator). Verified 71.43% recorded-only vs explicitly-not 46.51% (checks 5–9).
+- **Q-D7 (mutation/timing):** intentional product restriction (B). Attendance mutations are student-scoped + enrollment-authorized + cancelled-protected; EVENT mutations stay admin-only (frozen 6.5). Eligibility is read-time; mutations propagate immediately. Regression-proven (checks 10–12).
+- **Date-aware default tab:** new canonical `GET /api/v1/quiz-eligibility/current-cycle` (next upcoming SCHEDULED quiz → latest resolved → fallback Quiz I); frontend preselects from it, manual selection overrides, no state mutation, no invented dates. Today → Quiz I; verified Quiz I→II→III→latest_resolved→fallback transitions (checks 13–15).
+- **Verification:** `verify_phase_7_2.py` **26/26**; frozen regression 6.5 **23/23**, 6.6 **36/36**, 6.7 **31/31**, 7.1 **26/26**; compileall/tsc/ESLint/`next build` green.
+- **Database:** zero mutations — exact baseline restored (events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN)). BCS-054 Q3 = 2026-10-23 confirmed.
+- **Next:** Phase 8 (Attendance Analytics / Intelligence) on the canonical engines; Q-D9 and rule G require explicit product decisions before their own phases. **HARD STOP after Phase 7.2 — no commit made.**

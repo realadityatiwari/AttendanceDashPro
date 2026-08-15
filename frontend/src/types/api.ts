@@ -178,6 +178,18 @@ export interface FinalCriterionResult {
   explanation: string;
 }
 
+// Canonical "currently relevant" quiz cycle (Phase 7.2). The backend derives
+// it solely from the authoritative quiz_schedules (next upcoming SCHEDULED
+// quiz, else the latest resolved cycle, else the documented fallback Quiz I);
+// the Quiz Eligibility page uses it only to preselect a default tab.
+export interface CurrentQuizCycle {
+  quiz_cycle: number;
+  quiz_label: string | null;
+  quiz_date: string | null;
+  has_schedule: boolean;
+  basis: "next_upcoming" | "latest_resolved" | "fallback";
+}
+
 export interface EligibilityResult {
   quiz_cycle: number;
   subject_code: string;

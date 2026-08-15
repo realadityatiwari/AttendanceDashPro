@@ -578,3 +578,28 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 
 - **Phase 7.2 (requires authorization):** Q-D6 teaching-day counting · Q-D8 overall denominator · Q-D7 student event-mutation capability · date-aware default cycle tab · further reference-UI polish. Each change must be its own phase with its own verifier + full regression (6.5/6.6/6.7 + 7.1).
 - **HARD STOP after Phase 7.1** — no Phase 7.2 work starts without explicit authorization.
+
+---
+
+# AttendanceDash Pro — Phase 7.2 Walkthrough
+
+> **PHASE 7.2 COMPLETE — QUIZ ELIGIBILITY ANALYTICS REFINEMENT.**
+> Report: `docs/phase_7_2_implementation_report.md`.
+
+## What Phase 7.2 Did
+
+1. **Resolved Q-D6 (raw-range counting) — NOT a defect.** The backend counts raw non-cancelled sessions in the window; the legacy engine enumerated teaching days. These are provably the same set: `expand_baseline.py` creates sessions only on engine teaching days, the synchronizer cancels sessions on closures (excluded from counts) and materializes extras only on working days, and cancelled sessions are filtered by `get_subject_counts_between`. Swapping to a separate teaching-day enumeration would create a second calendar-semantics model — forbidden. No counting change; `verify_phase_7_2.py` proves the equivalence for all 18 combos, plus closure exclusion (+409 on marking), extra-session counting, and the weekend guard (a SURPRISE_QUIZ on Saturday materializes zero sessions).
+2. **Resolved Q-D8 (overall denominator) — recorded-only, made explicit.** The authoritative semantics (legacy ERP `computeCurrentOverallAttendance` + S4 §10 current domain) exclude pending from the CURRENT denominator but never convert pending to absent: it is always counted and displayed separately. The dashboard overall card already showed attended/recorded/pending; the quiz eligibility card now shows a muted "· X pending" on the Lecture/Tutorial rows so the pending treatment is explicit everywhere. Verified: 71.43% (recorded-only) vs explicitly-not 46.51% (pending-inclusive), identical history/subject semantics, and null (not 0%) for the zero-record student.
+3. **Resolved Q-D7 (mutation / eligibility timing) — intentional product restriction (B).** Attendance mutations are student-scoped, enrollment-authorized, and cancelled-session-protected — students mark their own attendance. EVENT mutations stay admin-only (frozen Phase 6.5; rule G is a future product capability awaiting a decision). Eligibility is computed read-time: a mutation propagates to the next eligibility read immediately. No security weakened; boundaries regression-proven (student 403 on events, 409 on cancelled, 403/404 on non-enrolled, mutation→eligibility immediacy).
+4. **Added the date-aware default Quiz tab.** New canonical read-only endpoint `GET /api/v1/quiz-eligibility/current-cycle` derives the currently-relevant cycle from the authoritative schedule (next upcoming SCHEDULED quiz → latest resolved cycle → documented fallback Quiz I; never invents a date). The Quiz Eligibility page preselects its tab from that answer; manual tab selection always overrides and never mutates backend state. Today the default is Quiz I (next quiz 2026-08-24); the Quiz I→II→III→latest_resolved→fallback transitions were verified deterministically inside rollback transactions.
+5. **Verified everything.** New `verify_phase_7_2.py` — 26/26 checks (Q-D6 ×4 · Q-D8 ×5 · Q-D7 ×4 · current-cycle ×6 · BCS-054 Q3 = 2026-10-23 · UNRESOLVED-only-when-genuine · labs 404 · dashboard-snapshot == recomputed canonical eligibility · Track/History/Eligibility consistency · per-user isolation · exact baseline restore). Frozen regression: 6.5 23/23, 6.6 36/36, 6.7 31/31, 7.1 26/26 — no assertions weakened. Static gates green (compileall, tsc, ESLint, production build).
+
+## Database State After 7.2
+
+- Exact baseline preserved — ZERO mutations: events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN). BCS-054 Quiz III = 2026-10-23 confirmed.
+
+## What's Next
+
+- **Phase 8 — Attendance Analytics / Intelligence** (roadmap next): overall/subject analytics, forecasting, SAFE/WATCH/AT-RISK/CRITICAL risk states — on the existing canonical engines.
+- Q-D9 (quiz-day attendance without a session) and rule G (student event capability) each require an explicit product decision before their own phase.
+- **HARD STOP after Phase 7.2** — no commit made; browser/manual testing remains the user's responsibility.

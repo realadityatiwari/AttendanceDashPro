@@ -7,6 +7,7 @@ import {
   AcademicDayResponse,
   SubjectAttendanceSummary,
   EligibilityResult,
+  CurrentQuizCycle,
   AttendanceHistoryResponse,
   AttendanceHistoryParams,
   AcademicEventResponse,
@@ -101,6 +102,22 @@ export function useQuizEligibility(subjectCode: string | null, cycle: number | n
   );
   return {
     eligibility: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useCurrentQuizCycle() {
+  // Canonical backend answer for the date-aware default tab (Phase 7.2); the
+  // page never recomputes schedule semantics client-side.
+  const { data, error, isLoading, mutate } = useSWR<CurrentQuizCycle>(
+    '/api/v1/quiz-eligibility/current-cycle',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    currentCycle: data,
     isLoading,
     isError: error,
     mutate

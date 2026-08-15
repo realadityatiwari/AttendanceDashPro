@@ -117,6 +117,9 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 <div className="flex items-baseline justify-between text-sm mb-1.5">
                   <span className="font-medium text-foreground">
                     Lecture <span className="text-muted-foreground font-normal">· {eligibility.lecture.attended}/{eligibility.lecture.total} attended</span>
+                    {eligibility.lecture.pending > 0 && (
+                      <span className="text-muted-foreground font-normal"> · {eligibility.lecture.pending} pending</span>
+                    )}
                   </span>
                   <span className="tabular-nums text-muted-foreground">{fmtPct(eligibility.lecture_pct)}</span>
                 </div>
@@ -127,6 +130,9 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                   <div className="flex items-baseline justify-between text-sm mb-1.5">
                     <span className="font-medium text-foreground">
                       Tutorial <span className="text-muted-foreground font-normal">· {eligibility.tutorial.attended}/{eligibility.tutorial.total} attended</span>
+                      {eligibility.tutorial.pending > 0 && (
+                        <span className="text-muted-foreground font-normal"> · {eligibility.tutorial.pending} pending</span>
+                      )}
                     </span>
                     <span className="tabular-nums text-muted-foreground">{fmtPct(eligibility.tutorial_pct)}</span>
                   </div>

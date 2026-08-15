@@ -103,6 +103,24 @@ class FinalCriterionResult(BaseModel):
     passed: bool
     explanation: str
 
+class CurrentQuizCycle(BaseModel):
+    """Canonical 'currently relevant' quiz cycle for the authenticated student.
+
+    Derived solely from the authoritative quiz_schedules table (SCHEDULED +
+    dated): the cycle of the next quiz at/after today; when none remains, the
+    highest-numbered resolved cycle; otherwise the documented fallback (Quiz I)
+    with has_schedule=False. The Quiz Eligibility page uses this only to
+    preselect a default tab — it never invents quiz dates, and manual tab
+    selection is unaffected (tab state stays client-side).
+
+    basis: "next_upcoming" | "latest_resolved" | "fallback".
+    """
+    quiz_cycle: int
+    quiz_label: Optional[str] = None
+    quiz_date: Optional[date] = None
+    has_schedule: bool
+    basis: str
+
 class EligibilityResult(BaseModel):
     quiz_cycle: int
     subject_code: str

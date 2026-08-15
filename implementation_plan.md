@@ -610,3 +610,36 @@ Status: **COMPLETE (2026-08-15) — PASS.** Report: `docs/phase_7_1_implementati
 ### Next (Phase 7.2, requires product authorization)
 
 - Q-D6 teaching-day (vs raw-range) counting; Q-D8 overall denominator; Q-D7 student event-mutation capability (product/security decision); date-aware default cycle tab; any further reference-UI polish. Each requires its own phase + verifier + full regression (6.5/6.6/6.7 + 7.1).
+
+---
+
+## PHASE 7.2 — QUIZ ELIGIBILITY ANALYTICS REFINEMENT
+
+Status: **COMPLETE (2026-08-15) — PASS.** Report: `docs/phase_7_2_implementation_report.md`.
+
+### Decisions (documented, no second math model)
+
+1. **Q-D6 (raw-range counting) — NOT a defect.** The session table IS the teaching-day-resolved effective schedule: `expand_baseline.py` expands only teaching days, the synchronizer cancels on closures / materializes extras only on working days, and `get_subject_counts_between` excludes cancelled sessions. Raw-range counting == teaching-day enumeration (proven for all 18 combos + closure/extra/weekend-guard regressions). No counting change; `teaching_days` stays informational.
+2. **Q-D8 (overall denominator) — recorded-only.** Legacy ERP `computeCurrentOverallAttendance` + S4 §10 current domain: pending excluded from the current denominator but never converted to absent — always counted and surfaced separately. Dashboard card already showed pending; quiz eligibility card gained a muted pending indicator (reference visual language otherwise untouched). Verified 71.43% vs explicitly-not 46.51%.
+3. **Q-D7 (mutation/timing) — intentional product restriction (B).** Attendance mutations are student-scoped + enrollment-authorized + cancelled-protected; EVENT mutations stay admin-only (frozen 6.5, rule G is a future product capability). Eligibility is read-time; mutations propagate immediately.
+4. **Date-aware default tab.** New canonical read-only endpoint `GET /api/v1/quiz-eligibility/current-cycle` (next upcoming SCHEDULED quiz → latest resolved cycle → fallback Quiz I). Frontend preselects from it (`useCurrentQuizCycle`); manual tabs override; no state mutation; no invented dates.
+
+### Files changed (Phase 7.2)
+
+| Layer | Files |
+|---|---|
+| Backend (app) | `app/schemas/attendance.py` (`CurrentQuizCycle`) · `app/services/eligibility_service.py` (`get_current_quiz_cycle`) · `app/api/v1/endpoints/quiz.py` (`GET /current-cycle`) |
+| Backend (scripts) | NEW `scripts/verify_phase_7_2.py` |
+| Frontend | `src/types/api.ts` · `src/hooks/useApi.ts` (`useCurrentQuizCycle`) · `src/app/(authenticated)/tools/quiz-schedule/page.tsx` (date-aware default) · `src/components/quiz/QuizEligibilityCard.tsx` (pending indicator) |
+| Docs | NEW `docs/phase_7_2_implementation_report.md`; `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+| DB | **NONE** (exact baseline restored after every verifier run) |
+
+### Verification
+
+- `verify_phase_7_2.py` **26/26** (Q-D6 equivalence/exclusion/extra/weekend-guard; Q-D8 recorded-only + explicit pending + zero-record null; Q-D7 403/409/403-404/immediacy; current-cycle admin+student+4 date-aware transitions; BCS-054 Q3 = 2026-10-23; UNRESOLVED-only-when-genuine; labs 404; dashboard-snapshot == canonical results; Track/History/Eligibility consistency; per-user isolation; exact baseline restore).
+- Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** (no assertions weakened).
+- Static: compileall clean · `npx tsc --noEmit` clean · ESLint 0 errors · `next build` exit 0.
+
+### Next (Phase 8, roadmap)
+
+- Phase 8 — Attendance Analytics / Intelligence on the existing canonical engines. Q-D9 (quiz-day attendance without a session) and rule G (student event capability) each require an explicit product decision and their own phase. **HARD STOP — no commit made.**
