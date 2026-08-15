@@ -854,5 +854,31 @@ commit. DB untouched (18/691/92/18/9/18/30, lab tables empty, designations=0).
   owner-entered BCS-502 marks; verifier NOT modified; owner must authorize
   the fixed fixture 92 → 95). Full report:
   `docs/phase_9_1_implementation_report.md`.
-- **HARD STOP after Phase 9.1** — Phase 9.2 (experiment management) not
-  started; no commit made.
+- **Phase 9.2.1 — Laboratory Experiment Management (COMPLETE 2026-08-16).**
+  Owner LOCKED the Phase 9.2.0 audit. Implemented strictly additively, with
+  zero fabricated curriculum:
+  - Migrations A `f1a2b3c4d5e6f` (experiment `description`, `is_active`,
+    `UNIQUE(subject_id, experiment_number)`) and B `f6a5b4c3d2e1f` (record
+    `class_session_id` FK + `signed_by`/`created_by`/`updated_by` FKs);
+    alembic head `f6a5b4c3d2e1f`.
+  - Full backend surface under `/api/v1/laboratory/{code}`: summary (reuses
+    canonical `AttendanceService.get_summary`), curriculum, student record
+    self-tracking (forced PENDING) with admin-only signing (`signed_by`/
+    `signed_on`), admin experiment ingest/edit/deactivate, activity read
+    model, session-linkage validation, duplicate 409, 404/403 authz matrix.
+  - Dedicated `/laboratory` frontend route + nav item (Track page stays at
+    `/tools/laboratory`): Practical Attendance / Experiments / Activity tabs;
+    honest empty state when `catalog_available=false`; no React attendance
+    math; no placeholder experiment counts.
+  - Verifier `verify_phase_9_2.py` **29/29**; frozen regressions green: 6.5,
+    6.6, 7.2, 8.1, attendance-spec, 8.2, 9.1. Known pre-existing drift
+    (owner-entered, NOT 9.2.1 residue): 6.7 29/31 (checks 4/7 — 4 test events
+    beyond the 18 seeded QUIZ_DAY) and 7.1 25/26 (check 23 — same records
+    92 → 95 drift as Phase 9.1). Frozen verifiers NOT modified.
+  - DB byte-equivalent to baseline: 22 events · 691 sessions · 95 records ·
+    18 enrollments · 9 subjects · 18 quizzes · 30 users · cancelled=0 ·
+    extra=0 · designated=0 · lab tables 0/0. No commit.
+  - Full report: `docs/phase_9_2_1_implementation_report.md`.
+- **HARD STOP after Phase 9.2.1** — Phase 9.2.2 (e.g., experiment-count
+  guidance, FACULTY signing workflow, grading/viva) not started; no commit
+  made.

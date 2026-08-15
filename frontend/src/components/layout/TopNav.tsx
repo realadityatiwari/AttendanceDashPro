@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FlaskConical,
+  TestTubes,
   CalendarClock,
   BookOpen,
   History,
@@ -25,6 +26,7 @@ import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Track", href: "/tools/laboratory", icon: FlaskConical },
+  { label: "Laboratory", href: "/laboratory", icon: TestTubes },
   { label: "Quiz Eligibility", href: "/tools/quiz-schedule", icon: CalendarClock },
   { label: "Attendance", href: "/subjects", icon: BookOpen },
   { label: "History", href: "/history", icon: History },

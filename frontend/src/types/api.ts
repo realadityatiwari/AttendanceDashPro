@@ -394,17 +394,104 @@ export interface LaboratoryExperimentResponse {
   id: string;
   subject_id: string;
   experiment_number: number;
-  title: string;
+  title: string | null;
+  // Phase 9.2.1: optional per-experiment note + catalog flag. Deactivated
+  // experiments are hidden from the curriculum endpoint.
+  description: string | null;
+  is_active: boolean;
+}
+
+// Phase 9.2.1 record create payload (student self-tracking). Signature is
+// NEVER part of the payload — the backend forces PENDING.
+export interface LaboratoryRecordCreatePayload {
+  experiment_id: string;
+  date_conducted?: string | null;
+  class_session_id?: string | null;
+  remarks?: string | null;
+}
+
+// Phase 9.2.1 record update payload. Students may only edit date/session/
+// remarks of own PENDING records; admins sign with signature_status="signed".
+export interface LaboratoryRecordUpdatePayload {
+  date_conducted?: string | null;
+  class_session_id?: string | null;
+  remarks?: string | null;
+  signature_status?: SignatureStatus | null;
+}
+
+// Phase 9.2.1 admin experiment catalog payloads.
+export interface LaboratoryExperimentCreatePayload {
+  experiment_number: number;
+  title?: string | null;
+  description?: string | null;
+}
+
+export interface LaboratoryExperimentUpdatePayload {
+  title?: string | null;
+  description?: string | null;
 }
 
 export interface LaboratoryRecordResponse {
   id: string;
   user_id: string;
   experiment_id: string;
+  // Phase 9.2.1 additive fields: optional session linkage + audit trail.
+  class_session_id: string | null;
   signature_status: SignatureStatus;
   date_conducted: string | null;
+  signed_on: string | null;
+  signed_by: string | null;
+  created_by: string | null;
+  updated_by: string | null;
   marks: number | null;
   remarks: string | null;
+}
+
+// Phase 9.2.1 summary (GET /laboratory/{code}/summary). Every value is
+// backend-derived; the frontend renders and never recomputes attendance math.
+export interface LaboratorySummary {
+  subject_code: string;
+  practical_attendance: {
+    attended: number;
+    missed: number;
+    pending: number;
+    total: number;
+    current_practical_pct: number;
+  };
+  mid_sem: {
+    designated: boolean;
+    session_id: string | null;
+    session_date: string | null;
+    attendance_status: string | null;
+  };
+  experiment_progress: {
+    catalog_available: boolean;
+    total: number;
+    signed: number;
+    pending_self_tracked: number;
+    // "X of Y experiments officially completed" when a catalog exists,
+    // null otherwise (honest empty state — never a fabricated "0/10").
+    advisory: string | null;
+  };
+}
+
+// Phase 9.2.1 activity (GET /laboratory/{code}/activity): truthful
+// chronological list of the subject's PRACTICAL sessions with attendance
+// state and any experiment record linked to the session.
+export interface LaboratoryActivityItem {
+  id: string;
+  date: string;
+  class_type: ClassType;
+  is_cancelled: boolean;
+  is_extra: boolean;
+  designation: string | null;
+  attendance_status: string | null;
+  experiments: LaboratoryRecordResponse[];
+}
+
+export interface LaboratoryActivityResponse {
+  subject_code: string;
+  items: LaboratoryActivityItem[];
 }
 
 // Dashboard (Phase 3 Home read model)

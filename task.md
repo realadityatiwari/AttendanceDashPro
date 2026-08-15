@@ -947,3 +947,49 @@ architecture, Attendance Health, mid-sem designation semantics (Phase 8.2
 admin endpoint intact), student event policy, all frozen verifiers (7.1 left
 unmodified; check 23 pending the owner's fixture decision). DB: 18/691/95/
 18/9/18/30, lab tables empty, designations=0.
+
+## Phase 9.2.1 — Laboratory Experiment Management (COMPLETE 2026-08-16)
+
+Owner LOCKED the Phase 9.2.0 audit (see `docs/phase_9_2_0_laboratory_
+experiment_audit.md`; 21 sections, §21 scope). Implemented:
+
+- [x] Migration A `f1a2b3c4d5e6f`: `laboratory_experiments.description`,
+  `is_active` (NOT NULL default TRUE), `UNIQUE(subject_id, experiment_number)`.
+- [x] Migration B `f6a5b4c3d2e1f`: `laboratory_records.class_session_id`
+  (FK → class_sessions), `signed_by`/`created_by`/`updated_by` (FK → users).
+  `created_at`/`updated_at` already present (Base mixin) — NOT re-added.
+  Both migrations additive + reversible; alembic head `f6a5b4c3d2e1f`.
+- [x] Models/schemas updated (`LaboratoryExperiment`, `LaboratoryRecord`,
+  summary/activity/payload schemas; explicit `foreign_keys` on the users
+  relationship — 4 FKs to users).
+- [x] `LaboratoryRepository` full CRUD + `get_record_counts` + `get_activity_rows`.
+- [x] `LaboratoryService`: authorization matrix §16 (reads 404 unenrolled /
+  writes 403 / admin bypass), PENDING-forced student records, admin-only
+  signing (`signed_by` + `signed_on`), cancelled-session linkage rejection,
+  duplicate (user, experiment) 409, advisory-only mid-sem (never a gate).
+- [x] API: `GET summary|experiments|records|activity`; `POST/PATCH/DELETE
+  records[/{id}]`; `POST/PATCH/DELETE experiments[/{id}]` (admin). Phase 8.2
+  `mid-sem` endpoints untouched.
+- [x] Frontend: `/laboratory` route + nav item (Track stays at `/tools/
+  laboratory`); 3 tabs; honest empty state for the empty curriculum;
+  `useLabSummary`/`useLabActivity`/`useLabMutations` + extended types.
+- [x] `verify_phase_9_2.py` **29/29**; frozen regressions green: 6.5, 6.6,
+  7.2, 8.1, attendance-spec, 8.2, 9.1. Known pre-existing drift (owner-entered
+  data, NOT 9.2.1 residue): 6.7 29/31 (checks 4/7 — 4 test events beyond the
+  18 seeded QUIZ_DAY) and 7.1 25/26 (check 23 — records 92 → 95, already
+  documented in Phase 9.1). Frozen verifiers NOT modified.
+- [x] Docs updated (this file + MASTER_ROADMAP + implementation_plan +
+  walkthrough) + `docs/phase_9_2_1_implementation_report.md`.
+- [x] DB byte-equivalent to baseline: 22 events · 691 sessions · 95 records ·
+  18 enrollments · 9 subjects · 18 quizzes · 30 users · 0 cancelled · 0 extra ·
+  0 designated · **lab tables 0/0**. No commit; no Phase 9.2.2.
+
+## Do Not Touch (Phase 9.2.1 freeze)
+
+Attendance engine/formulas, quiz eligibility engine, Phase 6 calendar/event
+architecture, Attendance Health, mid-sem designation semantics, student
+event policy, all frozen verifiers (6.7/7.1 drift pending owner
+authorization). Experiment management is an additive layer — never a second
+attendance engine; never fabricated curriculum; no experiment-count gate;
+no auto-designation; no FACULTY; no grading/viva. DB: 22/691/95/18/9/18/30,
+cancelled=0, extra=0, designated=0, lab tables 0/0.

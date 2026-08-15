@@ -16,6 +16,12 @@ import {
   CalendarMonthResponse,
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
+  LaboratoryRecordCreatePayload,
+  LaboratoryRecordUpdatePayload,
+  LaboratoryExperimentCreatePayload,
+  LaboratoryExperimentUpdatePayload,
+  LaboratorySummary,
+  LaboratoryActivityResponse,
   DashboardSummaryResponse,
   DailySessionsResponse,
   AttendanceMutationRequest,
@@ -228,6 +234,80 @@ export function useLabRecords(subjectCode: string | null) {
     isError: error,
     mutate
   };
+}
+
+export function useLabSummary(subjectCode: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<LaboratorySummary>(
+    subjectCode ? `/api/v1/laboratory/${subjectCode}/summary` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    summary: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+export function useLabActivity(subjectCode: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<LaboratoryActivityResponse>(
+    subjectCode ? `/api/v1/laboratory/${subjectCode}/activity` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    activity: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+// Phase 9.2.1 laboratory mutations (student self-tracking + admin catalog).
+// Returns the created/updated object; errors carry the backend detail string.
+export function useLabMutations() {
+  const createRecord = async (subjectCode: string, payload: LaboratoryRecordCreatePayload) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/records`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }) as Promise<LaboratoryRecordResponse>;
+  };
+
+  const updateRecord = async (subjectCode: string, recordId: string, payload: LaboratoryRecordUpdatePayload) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/records/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }) as Promise<LaboratoryRecordResponse>;
+  };
+
+  const deleteRecord = async (subjectCode: string, recordId: string) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/records/${recordId}`, {
+      method: 'DELETE'
+    });
+  };
+
+  const createExperiment = async (subjectCode: string, payload: LaboratoryExperimentCreatePayload) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/experiments`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }) as Promise<LaboratoryExperimentResponse>;
+  };
+
+  const updateExperiment = async (subjectCode: string, experimentId: string, payload: LaboratoryExperimentUpdatePayload) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/experiments/${experimentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }) as Promise<LaboratoryExperimentResponse>;
+  };
+
+  const deleteExperiment = async (subjectCode: string, experimentId: string) => {
+    return apiFetch(`/api/v1/laboratory/${subjectCode}/experiments/${experimentId}`, {
+      method: 'DELETE'
+    }) as Promise<LaboratoryExperimentResponse>;
+  };
+
+  return { createRecord, updateRecord, deleteRecord, createExperiment, updateExperiment, deleteExperiment };
 }
 
 export function useDashboardSummary() {

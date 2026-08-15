@@ -958,3 +958,51 @@ the read-only audit's additive read-model proposal for 9.1. Implemented:
 - NOT implemented: experiment curriculum/progress, `experiments ≥ 5 ⇒
   mid-sem`, FACULTY role, grading/viva, second lab engine, new endpoints,
   period selector (backend resolves deterministically).
+
+### Phase 9.2.1 — Laboratory Experiment Management (COMPLETE 2026-08-16)
+
+Per the LOCKED Phase 9.2.0 audit (`docs/phase_9_2_0_laboratory_experiment_
+audit.md`) and its product decisions. Attendance stays canonical; experiment
+management is an additive layer with no fabricated curriculum.
+
+- **Migrations A + B** (`f1a2b3c4d5e6f` + `f6a5b4c3d2e1f`): `laboratory_
+  experiments` gains `description`, `is_active` (default TRUE), `UNIQUE
+  (subject_id, experiment_number)`; `laboratory_records` gains `class_session_
+  id` (FK → class_sessions), `signed_by`/`created_by`/`updated_by` (FK →
+  users). `created_at`/`updated_at` already existed on both tables (Base
+  mixin) — NOT re-added. Strictly additive + reversible; head at
+  `f6a5b4c3d2e1f`; both lab tables remain 0 rows.
+- **Backend**: `LaboratoryExperiment`/`LaboratoryRecord` models updated
+  (explicit `foreign_keys` for the now 4-way users FK); schemas extended
+  (summary/activity/create/update payloads); `LaboratoryRepository` full CRUD
+  + record counts + activity rows; `LaboratoryService` implements the §16
+  authorization matrix (reads 404 unenrolled, writes 403, admin bypass; record
+  creation forced PENDING; only ADMIN signs → `signed_by` = current admin,
+  `signed_on` = now; cancelled sessions reject linkage at write time; duplicate
+  (user, experiment) → 409; experiment must be ACTIVE and of the same subject).
+  `GET /laboratory/{code}/summary` reuses `AttendanceService.get_summary` for
+  the practical block (backend-owned math, zero duplication).
+- **API** (all under `/api/v1/laboratory/{code}`): `GET summary|experiments|
+  records|activity`; `POST/PATCH/DELETE records[/{id}]` (student self-track +
+  admin sign/edit); `POST/PATCH/DELETE experiments[/{id}]` (admin ingest /
+  correct / deactivate). Phase 8.2 `GET/PUT/DELETE mid-sem` untouched.
+- **Frontend**: dedicated `/laboratory` route (new nav item; `/tools/
+  laboratory` remains the Track page). Three tabs — Practical Attendance
+  (canonical summary + mid-sem card), Experiments (honest "Experiment
+  curriculum not yet available" empty state when `catalog_available=false`;
+  Track/Delete for students, Sign/Add/Deactivate for admins), Activity
+  (truthful session chronology; session without record shows "Practical
+  session — no experiment recorded"). No React-side attendance math; no
+  "10 experiments" placeholder. New types + `useLabSummary`/`useLabActivity`/
+  `useLabMutations` hooks.
+- **Verification**: `verify_phase_9_2.py` 29/29. Frozen regressions green:
+  6.5 (27/27), 6.6 (36/36), 7.2 (26/26), 8.1 (22/22), attendance-spec
+  (15/15), 8.2 (18/18), 9.1 (28/28). **Known pre-existing drift (NOT caused
+  by 9.2.1)**: 6.7 29/31 (checks 4/7: 4 owner-entered test events beyond the
+  18 seeded QUIZ_DAY) and 7.1 25/26 (check 23: records 92 → 95, same drift
+  documented in the 9.1 report). Frozen verifiers NOT modified; drift must be
+  authorized for removal or fixture update.
+- NOT implemented (deferred): experiment-count gate on anything, auto
+  designation, FACULTY role, marks/viva/grading, seeded curriculum, second
+  lab attendance engine, Phase 9.2.2.
+- Full details: `docs/phase_9_2_1_implementation_report.md`.

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, ForeignKey, Enum, text
 from app.db.base_class import Base
 from app.models.enums import UserRole
+from app.models.laboratory import LaboratoryRecord
 from typing import List
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
@@ -34,4 +35,9 @@ class User(Base):
     section: Mapped["Section"] = relationship(back_populates="users")
     enrollments: Mapped[List["StudentEnrollment"]] = relationship(back_populates="user")
     attendance_records: Mapped[List["AttendanceRecord"]] = relationship(back_populates="user")
-    lab_records: Mapped[List["LaboratoryRecord"]] = relationship(back_populates="user")
+    # foreign_keys: laboratory_records has four FKs to users (user_id,
+    # signed_by, created_by, updated_by) — explicit join required.
+    lab_records: Mapped[List[LaboratoryRecord]] = relationship(
+        back_populates="user",
+        foreign_keys=[LaboratoryRecord.user_id],
+    )

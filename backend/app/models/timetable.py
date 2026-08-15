@@ -40,3 +40,4 @@ class ClassSession(Base):
     subject: Mapped["Subject"] = relationship(back_populates="class_sessions")
     timetable_entry: Mapped["TimetableEntry"] = relationship(back_populates="class_sessions")
     attendance_records: Mapped[List["AttendanceRecord"]] = relationship(back_populates="class_session")
+    laboratory_records: Mapped[List["LaboratoryRecord"]] = relationship(back_populates="class_session")
