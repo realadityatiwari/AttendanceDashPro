@@ -50,6 +50,13 @@ class ClassCounts(BaseModel):
     missed: int = 0
     pending: int = 0
 
+class OptimizationResult(BaseModel):
+    lecture_deficit: int = 0
+    tutorial_deficit: int = 0
+    safe_skip_lecture: int = 0
+    safe_skip_tutorial: int = 0
+    is_reachable: bool = True
+
 class SubjectAttendanceSummary(BaseModel):
     subject_code: str
     lecture: ClassCounts = Field(default_factory=ClassCounts)
@@ -64,12 +71,14 @@ class SubjectAttendanceSummary(BaseModel):
     forecast_tutorial_pct: Optional[float] = None
     forecast_avg_pct: Optional[float] = None
 
-class OptimizationResult(BaseModel):
-    lecture_deficit: int = 0
-    tutorial_deficit: int = 0
-    safe_skip_lecture: int = 0
-    safe_skip_tutorial: int = 0
-    is_reachable: bool = True
+    # Phase 8.1 additive analytics (Phase 8.0 contract §H/§L-2): practical
+    # attendance percentages use the canonical class-session pipeline (no
+    # quiz-window dependency); the subject-level 75% optimization reuses the
+    # attendance engine's own optimizer against the subject's semester-to-date
+    # counts (same counting as the summary itself). No new formula.
+    current_practical_pct: Optional[float] = None
+    forecast_practical_pct: Optional[float] = None
+    optimization: Optional[OptimizationResult] = None
 
 class EligibilityState(str, Enum):
     """Canonical quiz eligibility state for a subject/cycle pair.

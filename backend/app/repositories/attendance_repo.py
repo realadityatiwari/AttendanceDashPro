@@ -53,6 +53,29 @@ class AttendanceRepository:
         result = await self.db.execute(stmt)
         return list(result.all())
 
+    async def get_subject_counts_for_user(self, user_id: UUID, end_date: date) -> List[Tuple[UUID, str, AttendanceStatus]]:
+        """
+        All enrolled-subject counts for a user up to end_date in ONE query
+        (dashboard/analytics N+1 fix). Mirrors get_subject_counts_up_to_date
+        semantics exactly: cancelled sessions excluded; a missing record row is
+        Pending (outer join); scoped to the authenticated student's enrollments
+        (StudentEnrollment join). Returns (subject_id, class_type, status).
+        """
+        from app.models.academic import StudentEnrollment
+
+        stmt = select(ClassSession.subject_id, ClassSession.class_type, AttendanceRecord.status)\
+            .join(StudentEnrollment, (StudentEnrollment.subject_id == ClassSession.subject_id)
+                  & (StudentEnrollment.user_id == user_id))\
+            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                       & (AttendanceRecord.user_id == user_id))\
+            .filter(
+                ClassSession.date <= end_date,
+                ClassSession.is_cancelled.is_(False),
+            )
+
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
     async def get_subject_counts_between(self, user_id: UUID, subject_id: UUID, start_date: date, end_date: date) -> List[Tuple[str, AttendanceStatus]]:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts

@@ -705,3 +705,47 @@ Establish the exact architectural and mathematical contract for Phase 8 (Attenda
 
 - Phase 8.1 implementation (requires explicit product authorization after review of the audit). Q-D9 and rule G remain separate product decisions.
 - Browser/manual testing — the user's responsibility.
+
+---
+
+# PHASE 8.1 — CANONICAL ANALYTICS READ MODEL
+
+Status: **COMPLETE (2026-08-15) — PASS** (backend-only additive read model; zero DB mutation, zero schema change, zero commit).
+Report: `docs/phase_8_1_implementation_report.md`.
+
+## Objective
+
+Implement ONLY the backend analytics read-model contract from Phase 8.0: extend `SubjectAttendanceSummary` (practical %, subject-level 75% must-attend/safe-skip, enrollment scope), add `GET /api/v1/analytics/overview` (overall current/forecast/pending + weekly series + per-subject analytics), fix dashboard N+1s, fix the import-time date default, close the enrollment-scope gap. No UI, no AT-RISK, no trend semantics, no new formulas, no new engines.
+
+## Implemented
+
+- [x] **Subject analytics (additive):** `SubjectAttendanceSummary` + `current_practical_pct`, `forecast_practical_pct`, `optimization` (`lecture_deficit`/`tutorial_deficit` = must-attend, `safe_skip_lecture`/`safe_skip_tutorial` = safe-skip) via the canonical engine's `optimize_attendance`; practicals use the canonical session/record pipeline (no quiz-window dependency, no lab engine); Pending stays Pending; cancelled excluded. Existing fields unchanged.
+- [x] **`GET /api/v1/analytics/overview`** (authenticated, enrollment-scoped, read-only, deterministic, no raw ORM): overall current = ERP Σatt/Σrecorded (recorded-only); overall forecast = pending-as-attended; pending count; Monday-start weekly read-model series (recorded-only, null gaps); per-subject current/forecast/optimization. AT-RISK / trend semantics / forecast-impact deltas NOT implemented (documented non-goals).
+- [x] **Dashboard N+1 fixes (contract-identical):** batched `get_quiz_eligibility_for_subjects` (single canonical engine path), grouped `get_subject_counts_for_user`, one shared range scan for Today/Overall/Weekly; dashboard JSON byte-identical; measured 54 → 23 queries.
+- [x] **Endpoint hygiene:** `/attendance/summary` default date resolved per-request; `/attendance/summary/{code}` enrollment 404 (quiz-endpoint pattern).
+
+## Files changed
+
+- Backend: `schemas/attendance.py` · NEW `schemas/analytics.py` · `services/attendance_service.py` · NEW `services/analytics_service.py` · `services/eligibility_service.py` · `services/dashboard_service.py` · `repositories/attendance_repo.py` · `repositories/quiz_repo.py` · NEW `api/v1/endpoints/analytics.py` · `api/v1/endpoints/attendance.py` · `api/api.py`.
+- Scripts: NEW `scripts/verify_phase_8_1.py`.
+- Docs: NEW `docs/phase_8_1_implementation_report.md`; `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md`.
+- DB: **NONE**.
+
+## Verification
+
+- `verify_phase_8_1.py` **22/22** (auth; enrollment scoping; ERP overall; forecast; pending; subject summaries; practical %; must-attend/safe-skip + optimizer edge cases; weekly read model; dashboard compatibility + N+1 correctness with query counting; runtime-date behavior; enrollment protection; no duplicate attendance math; exact baseline; frozen 7.2 invariants).
+- Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** — no assertion weakened.
+- Static: `python -m compileall app scripts` PASS · `npx tsc --noEmit` PASS (0 errors).
+
+## Database state after 8.1
+
+- Exact baseline preserved (ZERO mutations): events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN). BCS-054 Quiz III = 2026-10-23 confirmed.
+
+## Do Not Touch Again (from this phase)
+
+- Same frozen lists as 6.7/7.1/7.2/8.0, plus: the extended `SubjectAttendanceSummary` fields, the `/analytics/overview` contract, the batched dashboard paths, and the runtime-date/enrollment-scope fixes are now canonical — changes require a new phase with its own verifier. No commit was made.
+
+## Deferred (intentionally NOT done here)
+
+- Frontend consumption of the read model (Phase 8.2) · AT-RISK (T-1) · trend product semantics (T-2) · dedicated Analytics page (T-3) · multi-class forecast phrasing (T-4) · Q-D9 · rule G.
+- Browser/manual testing — the user's responsibility.

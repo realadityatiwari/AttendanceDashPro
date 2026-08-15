@@ -8,8 +8,48 @@ from app.repositories.user_repo import UserRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
 from app.models.enums import AttendanceStatus
-from app.engines.attendance_engine import compute_subject_stats, normalize_class_type
+from app.engines.attendance_engine import compute_subject_stats, normalize_class_type, optimize_attendance
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
+
+# Subject-level optimizer target (Phase 8.0 contract): the documented academic
+# attendance requirement for the general (non-quiz-window) subject optimizer.
+# This is the legacy `policies.attendance.targetPercentage` default (75) and the
+# attendance engine's own default (`compute_subject_stats(target_pct=75.0)`).
+SUBJECT_OPTIMIZATION_TARGET_PCT = 75.0
+
+
+def _build_subject_summary(subject_code: str, counts: Dict[str, Any]) -> SubjectAttendanceSummary:
+    """
+    Composes the canonical per-subject summary (attendance engine) with the
+    Phase 8.1 additive analytics fields, all derived from the same counts:
+
+      - practical attendance % (current recorded-only, forecast pending-as-
+        attended) - canonical class-session/attendance-record pipeline, no quiz
+        window dependency (Phase 8.0 contract 4);
+      - subject-level 75% optimization (must-attend / safe-skip) via the
+        attendance engine's own optimizer (Phase 8.0 contract 5).
+
+    The engine's `compute_subject_stats` is reused unchanged; no attendance
+    mathematics is reproduced here.
+    """
+    summary = compute_subject_stats(subject_code, {'counts': counts})
+
+    p = counts.get('P', {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0})
+    done_p = p['att'] + p['miss']
+    if done_p > 0:
+        summary.current_practical_pct = (p['att'] / done_p) * 100.0
+    if p['tot'] > 0:
+        summary.forecast_practical_pct = ((p['att'] + p['pending']) / p['tot']) * 100.0
+
+    l = counts.get('L', {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0})
+    t = counts.get('T', {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0})
+    summary.optimization = optimize_attendance(
+        l['tot'], l['att'], l['miss'], l['pending'],
+        t['tot'], t['att'], t['miss'], t['pending'],
+        SUBJECT_OPTIMIZATION_TARGET_PCT,
+    )
+    return summary
+
 
 class AttendanceService:
     def __init__(self, db: AsyncSession):
@@ -18,18 +58,26 @@ class AttendanceService:
         
     async def get_summary(self, user_id: UUID, subject_id: UUID, subject_code: str, as_of_date: date) -> SubjectAttendanceSummary:
         raw_counts = await self.repo.get_subject_counts_up_to_date(user_id, subject_id, as_of_date)
-        
+        counts = self._aggregate_counts(raw_counts)
+        return _build_subject_summary(subject_code, counts)
+
+    @staticmethod
+    def _aggregate_counts(raw_counts) -> Dict[str, Any]:
+        """Canonical (subject_id, class_type, status) rows -> L/T/P count buckets.
+        Shared by get_summary and get_subject_summaries so the batched path
+        produces byte-identical buckets to the per-subject path."""
         counts: Dict[str, Any] = {
             'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
             'T': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
             'P': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
         }
-        
-        for class_type_str, status in raw_counts:
+        for row in raw_counts:
+            # Row shape: (subject_id, class_type, status) or (class_type, status).
+            class_type_str = row[-2]
+            status = row[-1]
             t = normalize_class_type(class_type_str.value)
             if t not in counts:
                 continue
-            
             counts[t]['tot'] += 1
             if status == AttendanceStatus.ATTENDED:
                 counts[t]['att'] += 1
@@ -37,9 +85,38 @@ class AttendanceService:
                 counts[t]['miss'] += 1
             else:
                 counts[t]['pending'] += 1
-                
-        attendance_data = {'counts': counts}
-        return compute_subject_stats(subject_code, attendance_data)
+        return counts
+
+    async def get_subject_summaries(self, user_id: UUID, subjects, as_of_date: date) -> Dict[UUID, SubjectAttendanceSummary]:
+        """
+        Batched per-subject summaries for an enrolled subject list (dashboard
+        N+1 fix). ONE grouped count query replaces N per-subject queries; every
+        summary is built by the same `_build_subject_summary` path as
+        `get_summary`, so results are byte-identical.
+        """
+        raw_counts = await self.repo.get_subject_counts_for_user(user_id, as_of_date)
+        grouped: Dict[UUID, Dict[str, Any]] = {}
+        for subject in subjects:
+            grouped[subject.id] = {
+                'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+                'T': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+                'P': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+            }
+        for subject_id, class_type_str, status in raw_counts:
+            if subject_id not in grouped:
+                continue
+            bucket = grouped[subject_id]
+            t = normalize_class_type(class_type_str.value)
+            if t not in bucket:
+                continue
+            bucket[t]['tot'] += 1
+            if status == AttendanceStatus.ATTENDED:
+                bucket[t]['att'] += 1
+            elif status == AttendanceStatus.MISSED:
+                bucket[t]['miss'] += 1
+            else:
+                bucket[t]['pending'] += 1
+        return {s.id: _build_subject_summary(s.code, grouped[s.id]) for s in subjects}
 
     async def record_attendance(self, user_id: UUID, class_session_id: UUID, status: AttendanceStatus) -> AttendanceRecord:
         session = await self.repo.get_session_by_id(class_session_id)

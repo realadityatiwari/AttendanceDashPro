@@ -86,41 +86,51 @@ class DashboardService:
                 if semester is not None:
                     semester_start = semester.start_date
 
+        # Phase 8.1 N+1 fix: ONE enrollment-scoped range scan feeds the Today /
+        # Overall / Weekly sections (previously up to four overlapping scans).
+        # The scan starts at the earliest bound any section needs (semester
+        # start, or the previous week when the semester bound is unknown) and
+        # each builder slices its own date window from the shared rows.
+        prev_week_start = today - timedelta(days=today.weekday() + 7)
+        # Earliest bound any section needs: the semester start (overall) and
+        # the previous week (weekly delta). The strict min covers both; each
+        # builder re-applies its own bound.
+        scan_start = min(semester_start, prev_week_start) if semester_start is not None else prev_week_start
+        rows = await self.attendance_repo.get_sessions_with_status(user.id, scan_start, today)
+
         summaries = await self._subject_summaries(user.id, subjects, today)
 
         return DashboardSummaryResponse(
             generated_at=today,
-            today=await self._build_today(user.id, today),
-            overall=await self._build_overall(user.id, today, semester_start),
-            weekly=await self._build_weekly(user.id, today, summaries),
+            today=await self._build_today(user.id, today, rows),
+            overall=self._build_overall(rows, today, semester_start),
+            weekly=self._build_weekly(rows, today, summaries),
             quiz_snapshot=await self._build_quiz_snapshot(user, subjects, semester_start),
             attention_required=self._build_attention_required(subjects, summaries),
             upcoming_events=await self._build_upcoming_events(subjects),
         )
 
     async def _subject_summaries(self, user_id, subjects: List[Subject], as_of_date: date):
-        """Per-subject statistics via the existing AttendanceService (engine-owned)."""
-        summaries = []
-        for subject in subjects:
-            if not subject.attendance_applicable:
-                continue
-            summary = await self.attendance_service.get_summary(
-                user_id=user_id,
-                subject_id=subject.id,
-                subject_code=subject.code,
-                as_of_date=as_of_date,
-            )
-            summaries.append((subject, summary))
-        return summaries
+        """Per-subject statistics via the existing AttendanceService (engine-owned).
+        Phase 8.1 N+1 fix: one grouped count query replaces one query per subject;
+        each summary is built by the identical canonical engine path."""
+        applicable = [s for s in subjects if s.attendance_applicable]
+        summaries_map = await self.attendance_service.get_subject_summaries(
+            user_id=user_id,
+            subjects=applicable,
+            as_of_date=as_of_date,
+        )
+        return [(s, summaries_map[s.id]) for s in applicable]
 
-    async def _build_today(self, user_id, today: date) -> TodaySection:
+    async def _build_today(self, user_id, today: date, rows) -> TodaySection:
         day = await self.calendar_service.get_day_schedule(today)
-        rows = await self.attendance_repo.get_sessions_with_status(user_id, today, today)
 
         classes: List[DashboardClassItem] = []
         attended = 0
         total = 0
         for r in rows:
+            if r["date"] != today:
+                continue
             if r["is_cancelled"]:
                 status = "CANCELLED"
             elif r["status"] is not None:
@@ -155,14 +165,17 @@ class DashboardService:
             total=total,
         )
 
-    async def _build_overall(self, user_id, today: date, semester_start: Optional[date]) -> OverallSection:
+    def _build_overall(self, rows, today: date, semester_start: Optional[date]) -> OverallSection:
         start = semester_start if semester_start is not None else today
-        rows = await self.attendance_repo.get_sessions_with_status(user_id, start, today)
+        # Preserve the per-section date bound (semester start, or today when
+        # the semester bound is unknown) exactly as the pre-batch query did:
+        # every aggregate in this section counts only rows >= start.
+        section_rows = [r for r in rows if r["date"] >= start]
 
         attended = 0
         missed = 0
         pending = 0
-        for r in rows:
+        for r in section_rows:
             # Cancelled sessions are their own state — never pending
             # (Phase 6.6 event->session integration).
             if r["is_cancelled"]:
@@ -178,8 +191,8 @@ class DashboardService:
         overall_pct = (attended / recorded * 100.0) if recorded > 0 else None
 
         week_start = today - timedelta(days=today.weekday())
-        this_week = self._aggregate_range(rows, week_start, today)
-        prev_week = self._aggregate_range(rows, week_start - timedelta(days=7), week_start - timedelta(days=1))
+        this_week = self._aggregate_range(section_rows, week_start, today)
+        prev_week = self._aggregate_range(section_rows, week_start - timedelta(days=7), week_start - timedelta(days=1))
 
         weekly_delta = None
         if this_week is not None and prev_week is not None:
@@ -215,14 +228,15 @@ class DashboardService:
             return None
         return attended / recorded * 100.0
 
-    async def _build_weekly(self, user_id, today: date, summaries) -> WeeklySection:
+    def _build_weekly(self, rows, today: date, summaries) -> WeeklySection:
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
         prev_start = week_start - timedelta(days=7)
         prev_end = week_start - timedelta(days=1)
 
-        week_rows = await self.attendance_repo.get_sessions_with_status(user_id, week_start, week_end)
-        prev_rows = await self.attendance_repo.get_sessions_with_status(user_id, prev_start, prev_end)
+        # Slice the shared scan instead of issuing per-section queries.
+        week_rows = [r for r in rows if week_start <= r["date"] <= week_end]
+        prev_rows = [r for r in rows if prev_start <= r["date"] <= prev_end]
 
         days: List[WeekDayItem] = []
         for i in range(5):
@@ -290,9 +304,13 @@ class DashboardService:
         if not quiz_applicable:
             return empty
 
-        schedules = []
-        for subject in quiz_applicable:
-            schedules.extend(await self.quiz_repo.get_quiz_schedules_for_subject(subject.id))
+        # Phase 8.1 N+1 fix: one grouped schedule query + one batched
+        # eligibility evaluation (single canonical engine path), replacing the
+        # previous per-subject schedule + eligibility loops.
+        schedules_by_subject = await self.quiz_repo.get_quiz_schedules_for_subjects(
+            [s.id for s in quiz_applicable]
+        )
+        schedules = [s for lst in schedules_by_subject.values() for s in lst]
 
         resolved = [s for s in schedules if s.date is not None and s.schedule_status.value == "SCHEDULED"]
         future = [s for s in resolved if s.date >= date.today()]
@@ -304,20 +322,16 @@ class DashboardService:
         cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(cycle_number)
         threshold = cycle_model.policy.lecture_threshold if cycle_model and cycle_model.policy else None
 
+        results = await self.eligibility_service.get_quiz_eligibility_for_subjects(
+            user_id=user.id,
+            subjects=quiz_applicable,
+            quiz_cycle=cycle_number,
+            semester_start=semester_start,
+        )
         eligible = 0
         attention = 0
         not_eligible = 0
-        for subject in quiz_applicable:
-            try:
-                result = await self.eligibility_service.get_quiz_eligibility(
-                    user_id=user.id,
-                    subject_id=subject.id,
-                    quiz_cycle=cycle_number,
-                    semester_start=semester_start,
-                )
-            except HTTPException:
-                not_eligible += 1
-                continue
+        for result in results:
             if result.is_eligible:
                 eligible += 1
             elif result.optimization is not None and result.optimization.is_reachable:

@@ -14,6 +14,7 @@ from app.schemas.attendance import (
     DailySessionsResponse
 )
 from app.repositories.subject_repo import SubjectRepository
+from app.repositories.attendance_repo import AttendanceRepository
 
 router = APIRouter()
 
@@ -84,24 +85,35 @@ class AttendanceMutationResponse(BaseModel):
 @router.get("/summary/{subject_code}", response_model=SubjectAttendanceSummary)
 async def get_attendance_summary(
     subject_code: str,
-    as_of_date: date = date.today(),
+    as_of_date: Optional[date] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Returns aggregated attendance statistics and engine-optimized projections for a subject.
+    Returns aggregated attendance statistics and engine-optimized projections
+    for a subject. `as_of_date` defaults to the request-time current date (the
+    import-time `date.today()` default was removed — the date is resolved per
+    request). The subject must be one of the authenticated student's
+    enrollments (Phase 8.1 enrollment scope, mirroring the quiz endpoint).
     """
     subject_repo = SubjectRepository(db)
     subject = await subject_repo.get_by_code(subject_code)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
-        
+
+    # Enrollment scope: a student must not obtain analytics for a subject they
+    # are not enrolled in (established repository authorization pattern).
+    enrolled = await AttendanceRepository(db).is_enrolled(current_user.id, subject.id)
+    if not enrolled:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    effective_date = as_of_date if as_of_date is not None else date.today()
     service = AttendanceService(db)
     summary = await service.get_summary(
         user_id=current_user.id,
         subject_id=subject.id,
         subject_code=subject.code,
-        as_of_date=as_of_date
+        as_of_date=effective_date
     )
     return summary
 

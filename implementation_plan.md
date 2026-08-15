@@ -660,13 +660,6 @@ Status: **COMPLETE (2026-08-15) — PASS.** Read-only audit + contract design; *
 6. **Security:** all analytics reads authenticated + user/enrollment-scoped; one gap flagged — `GET /attendance/summary/{subject_code}` lacks the enrollment 404 the quiz endpoint has (no cross-user leak; consistency only).
 7. **Withheld (no definition anywhere):** AT-RISK state (roadmap §8 4-state taxonomy; only 3 states defined) and weekly/semester trend series — candidate definitions provided, require product approval (T-1…T-4).
 
-### Proposed Phase 8.1 contract (contract only — NOT implemented)
-
-- Extend `SubjectAttendanceSummary` additively: `current_practical_pct`, `forecast_practical_pct`, `optimization` (subject-level 75% via `optimize_attendance`) + add the missing enrollment scope.
-- New `GET /api/v1/analytics/overview` (authenticated, enrollment-scoped): overall current + forecast + pending + status + weekly series + per-subject current/forecast/optimization — a pure consumer of `attendance_service`/engine + one range scan. No competing endpoints, no pagination at current scale.
-- Dashboard N+1 fixes (batch counts, single events fetch) while keeping `DashboardSummaryResponse` byte-identical.
-- New verifier `verify_phase_8_1.py` + full frozen regression (6.5/6.6/6.7/7.1/7.2).
-
 ### Files changed (Phase 8.0)
 
 | Layer | Files |
@@ -680,6 +673,37 @@ Status: **COMPLETE (2026-08-15) — PASS.** Read-only audit + contract design; *
 - `python -m compileall app scripts` — PASS · `npx tsc --noEmit` — PASS (0 errors) · `verify_phase_7_2.py` — 26/26 PASS (frozen verifier, rollback-based).
 - DB baseline (read-only): events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Q3 = 2026-10-23.
 
-### Next (Phase 8.1, requires explicit product authorization)
+---
 
-- Backend-only additive analytics read model per §L/§R/§W of the audit. No UI, no schema change, no new engine, no new formula. Q-D9 and rule G remain separate product decisions. **HARD STOP — no commit made; Phase 8.1 NOT STARTED.**
+## PHASE 8.1 — CANONICAL ANALYTICS READ MODEL
+
+Status: **COMPLETE (2026-08-15) — PASS.** Backend-only additive analytics read model implementing the Phase 8.0 contract exactly. Report: `docs/phase_8_1_implementation_report.md`.
+
+### Implemented
+
+1. **Subject analytics (additive):** `SubjectAttendanceSummary` gains `current_practical_pct`, `forecast_practical_pct`, `optimization` (subject-level 75% must-attend/safe-skip via the attendance engine's own `optimize_attendance` — `lecture_deficit`/`tutorial_deficit` = must-attend, `safe_skip_lecture`/`safe_skip_tutorial` = safe-skip). Practicals use the canonical class-session/attendance-record pipeline — no quiz-window dependency, no separate lab engine; Pending stays Pending, cancelled excluded. Existing fields unchanged (backwards compatible).
+2. **`GET /api/v1/analytics/overview`** (authenticated, enrollment-scoped, read-only): overall current (ERP Σatt/Σrecorded, recorded-only), overall forecast (pending-as-attended), pending count, Monday-start weekly read-model series (recorded-only, null gaps), per-subject current/forecast/optimization. No AT-RISK, no trend product semantics, no forecast-impact deltas (documented non-goals).
+3. **Dashboard N+1 fixes (contract-identical):** batched `get_quiz_eligibility_for_subjects` (single canonical engine path via shared `_evaluate_subject`), grouped `get_subject_counts_for_user`, one shared range scan for Today/Overall/Weekly. Dashboard JSON byte-identical; 54 → 23 queries on the read path.
+4. **Endpoint hygiene:** `/attendance/summary` default date resolved per-request (no import-time `date.today()`); `/attendance/summary/{code}` returns the quiz-endpoint-style enrollment 404.
+
+### Files changed (Phase 8.1)
+
+| Layer | Files |
+|---|---|
+| Schemas | `app/schemas/attendance.py` (`OptimizationResult` moved above; `SubjectAttendanceSummary` additive fields) · NEW `app/schemas/analytics.py` |
+| Services | `app/services/attendance_service.py` · NEW `app/services/analytics_service.py` · `app/services/eligibility_service.py` (`_evaluate_subject` + batched) · `app/services/dashboard_service.py` |
+| Repositories | `app/repositories/attendance_repo.py` (`get_subject_counts_for_user`) · `app/repositories/quiz_repo.py` (`get_quiz_schedules_for_subjects`) |
+| Endpoints | NEW `app/api/v1/endpoints/analytics.py` · `app/api/v1/endpoints/attendance.py` · `app/api/api.py` |
+| Scripts | NEW `scripts/verify_phase_8_1.py` |
+| Docs | NEW `docs/phase_8_1_implementation_report.md`; `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` |
+| DB | **NONE** (zero mutation; exact baseline verified before/after) |
+
+### Verification
+
+- `verify_phase_8_1.py` **22/22** (auth; enrollment scoping; ERP overall; forecast; pending; subject summaries; practical %; must-attend/safe-skip + optimizer edge cases; weekly read model; dashboard compatibility + N+1 correctness with query counting; runtime-date behavior; enrollment protection; no duplicate attendance math; exact baseline; frozen 7.2 invariants).
+- Frozen regression: 6.5 **23/23** · 6.6 **36/36** · 6.7 **31/31** · 7.1 **26/26** · 7.2 **26/26** — no assertion weakened.
+- Static: compileall PASS · `npx tsc --noEmit` PASS (0 errors, frontend untouched).
+
+### Next (Phase 8.2, requires explicit product authorization)
+
+- Frontend consumption of the Phase 8.1 read model: practical % + must-attend/safe-skip on Subjects, overall forecast + weekly series from `/analytics/overview`, remove duplicated card banding and hardcoded cycle, drop dead components — within the existing design system. T-1 (AT-RISK) and T-3 (dedicated Analytics page) remain product decisions. **HARD STOP — no commit made; Phase 8.2 NOT STARTED.**

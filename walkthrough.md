@@ -623,11 +623,36 @@ Date: 2026-08-14 · Scope: Event persistence, admin authentication & controlled 
 
 ## Database State After 8.0
 
-- **ZERO mutation** — SELECT only: events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Quiz III = 2026-10-23 confirmed.
-
-## What's Next
+- **ZERO mutation** — SELECT only: events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Quiz III = 2026-10-23 confirmed.## What's Next
 
 - **Phase 8.1 (requires explicit authorization)** — backend-only additive analytics read model per the audit contract (§L/§R/§W). No UI, no schema change, no new engine, no new formula.
 - Product decisions T-1…T-4 (AT-RISK band, trend scope, dedicated analytics page, multi-class forecast phrasing) before those features ship.
 - Q-D9 and rule G remain separate product decisions.
 - **HARD STOP after Phase 8.0** — no commit made; Phase 8.1 NOT STARTED; browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 8.1 Walkthrough
+
+> **PHASE 8.1 COMPLETE — CANONICAL ANALYTICS READ MODEL (BACKEND).**
+> Report: `docs/phase_8_1_implementation_report.md`.
+
+## What Phase 8.1 Did
+
+1. **Extended the subject summary contract additively.** `GET /attendance/summary/{subject_code}` now also returns `current_practical_pct` / `forecast_practical_pct` and an `optimization` object (`lecture_deficit`/`tutorial_deficit` = must-attend, `safe_skip_lecture`/`safe_skip_tutorial` = safe-skip) computed by the attendance engine's own `optimize_attendance` against the subject's semester-to-date L/T counts at the documented 75% target. Practicals ride the same canonical class-session/attendance-record pipeline as L/T — no quiz-window dependency, no separate lab engine, Pending stays Pending, cancelled stays excluded. Every pre-existing field is unchanged.
+2. **Added `GET /api/v1/analytics/overview`** (authenticated, enrollment-scoped, read-only). It returns overall current (ERP Σatt/Σrecorded, recorded-only — never pending-as-absent), overall forecast (pending treated as attended — no mutation, canonical semantics), pending count, a Monday-start weekly read-model series (recorded-only with null gaps), and per-subject current/forecast/optimization. All derived from the canonical engines — the analytics layer is a read model, not a second attendance engine.
+3. **Fixed the dashboard N+1s without changing the response contract.** The quiz snapshot now uses a batched eligibility path (one canonical engine route via the shared `_evaluate_subject`), subject summaries use one grouped count query, and Today/Overall/Weekly share a single enrollment-scoped range scan. Dashboard JSON stays byte-identical; measured 54 → 23 queries on the read path.
+4. **Fixed endpoint hygiene.** `/attendance/summary` resolves its default date per request instead of at import time, and `/attendance/summary/{code}` now returns the same enrollment 404 the quiz endpoint uses — no student can read analytics for a subject they aren't enrolled in.
+5. **Left the Phase 8.0-flagged React duplications untouched** (per contract §13): `WeeklyAttendanceCard` day-bar %, `SubjectAttendanceCard` banding/cycle=1, dead `TodayClassesCard`/`FormulaCard` — inspected only, deferred to the frontend phase.
+6. **Verified end-to-end.** `verify_phase_8_1.py` 22/22 (auth, scoping, ERP overall, forecast, pending, practical %, must-attend/safe-skip + optimizer edge cases, weekly read model, dashboard compatibility + query counting, runtime date, enrollment protection, no duplicate math, exact baseline, frozen 7.2 invariants); frozen regressions 6.5 23/23 · 6.6 36/36 · 6.7 31/31 · 7.1 26/26 · 7.2 26/26; compileall + `npx tsc --noEmit` PASS.
+
+## Database State After 8.1
+
+- **ZERO mutation** — SELECT only: events=18 · sessions=684 (0 cancelled, 0 extra) · records=89 · enrollments=18 · subjects=9 · quizzes=18 (18 SCHEDULED) · users=30 (1 ADMIN) · BCS-054 Quiz III = 2026-10-23 confirmed.
+
+## What's Next
+
+- **Phase 8.2 (requires explicit authorization)** — frontend consumption of the Phase 8.1 read model: practical % + must-attend/safe-skip on the Subjects page, overall forecast + weekly series from `/analytics/overview`, replace the duplicated card banding and hardcoded cycle with backend fields, remove dead components — all within the existing design system.
+- Product decisions T-1 (AT-RISK), T-2 (trend scope), T-3 (dedicated Analytics page), T-4 (multi-class forecast phrasing) before those features ship.
+- Q-D9 and rule G remain separate product decisions.
+- **HARD STOP after Phase 8.1** — no commit made; Phase 8.2 NOT STARTED; browser/manual testing remains the user's responsibility.

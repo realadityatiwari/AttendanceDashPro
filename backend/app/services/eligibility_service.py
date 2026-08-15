@@ -30,10 +30,76 @@ class EligibilityService:
         subject_model = await self.subject_repo.get_by_id(subject_id)
         if not subject_model:
             raise HTTPException(status_code=404, detail="Subject not found")
-            
+
+        # Practicals/labs are strictly excluded from quiz eligibility
+        # (S4 PRODUCT SPEC §5). The persisted subject flag is authoritative.
+        if not subject_model.quiz_applicable:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        schedules = await self.quiz_repo.get_quiz_schedules_for_subject(subject_id)
+
+        # 2. Fetch Quiz Cycle Policy (persisted configuration is authoritative;
+        # the engine's hardcoded 70/75/75 is only the fallback).
+        cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(quiz_cycle)
+        if not cycle_model or not cycle_model.policy:
+            raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
+
+        # 3. Fetch Events (needed to resolve the attendance window)
+        events = await self.calendar_repo.get_all_events()
+
+        return await self._evaluate_subject(
+            user_id, subject_model, schedules, cycle_model, events,
+            quiz_cycle, semester_start,
+        )
+
+    async def get_quiz_eligibility_for_subjects(
+        self,
+        user_id: UUID,
+        subjects,
+        quiz_cycle: int,
+        semester_start: date | None = None,
+    ) -> List[EligibilityResult]:
+        """
+        Batched quiz eligibility for many subjects (dashboard quiz-snapshot
+        N+1 fix). Fetches the cycle policy, events, and every subject's
+        schedules ONCE, then evaluates each subject through the exact same
+        canonical engine path as get_quiz_eligibility (via _evaluate_subject).
+        Non-quiz-applicable subjects are skipped (mirroring the single-call
+        404; callers filter first). No eligibility mathematics is duplicated.
+        """
+        cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(quiz_cycle)
+        if not cycle_model or not cycle_model.policy:
+            raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
+        events = await self.calendar_repo.get_all_events()
+        schedules_by_subject = await self.quiz_repo.get_quiz_schedules_for_subjects(
+            [s.id for s in subjects]
+        )
+        results: List[EligibilityResult] = []
+        for subject in subjects:
+            if not subject.quiz_applicable:
+                continue
+            schedules = schedules_by_subject.get(subject.id, [])
+            results.append(await self._evaluate_subject(
+                user_id, subject, schedules, cycle_model, events,
+                quiz_cycle, semester_start,
+            ))
+        return results
+
+    async def _evaluate_subject(
+        self,
+        user_id: UUID,
+        subject_model,
+        schedules,
+        cycle_model,
+        events,
+        quiz_cycle: int,
+        semester_start: date | None,
+    ) -> EligibilityResult:
+        """Shared per-subject eligibility evaluation (single canonical path for
+        both the single-call endpoint and the dashboard batch). The subject has
+        already passed the quiz_applicable check by its caller."""
         # Convert SQLAlchemy Subject to Domain Subject schema
         milestones = []
-        schedules = await self.quiz_repo.get_quiz_schedules_for_subject(subject_id)
         for sched in schedules:
             if sched.date:
                 milestones.append(Milestone(
@@ -42,12 +108,7 @@ class EligibilityService:
                     type="QUIZ",
                     metadata={"quizCycle": sched.quiz_cycle.cycle_number}
                 ))
-        
-        # Practicals/labs are strictly excluded from quiz eligibility
-        # (S4 PRODUCT SPEC §5). The persisted subject flag is authoritative.
-        if not subject_model.quiz_applicable:
-            raise HTTPException(status_code=404, detail="Subject not found")
-        
+
         domain_subject = SubjectSchema(
             code=subject_model.code,
             name=subject_model.name,
@@ -56,15 +117,6 @@ class EligibilityService:
             attendance_applicable=subject_model.attendance_applicable,
             timeline=Timeline(commencement_date=semester_start or date.today(), milestones=milestones)
         )
-        
-        # 2. Fetch Quiz Cycle Policy (if we needed to override the engine's hardcoded policy, we could, but we stick to the engine for now or pass it)
-        # Actually, the user asked to: "Do not hardcode 70% or 75% in API routes. Use the persisted academic policy configuration."
-        cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(quiz_cycle)
-        if not cycle_model or not cycle_model.policy:
-            raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
-        
-        # 3. Fetch Events (needed to resolve the attendance window)
-        events = await self.calendar_repo.get_all_events()
         # Single source of truth from the calendar engine (JS getDay() indices:
         # 0=Sunday, 6=Saturday). Previously a local [5, 6] (Python weekday
         # indices) was passed here, which the engine interpreted as JS indices
@@ -81,7 +133,7 @@ class EligibilityService:
         if milestone:
             window = get_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
             raw_counts = await self.attendance_repo.get_subject_counts_between(
-                user_id, subject_id, window['window_start'], window['window_end']
+                user_id, subject_model.id, window['window_start'], window['window_end']
             )
         counts: Dict[str, Any] = {
             'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
