@@ -71,9 +71,11 @@ async def main() -> int:
         # Orphan artifacts from earlier crashed/buggy runs of this verifier on
         # the test window (2026-11-02 .. 2026-11-07): Phase 6.5's EXTRA_LECTURE
         # test now creates sessions (its cleanup deletes only event rows), and
-        # earlier 6.6 runs left extras / weekend projections / cancelled rows
-        # behind. Restore the known baseline: delete unattended extras and
-        # weekend projections, un-cancel unattended cancelled sessions.
+        # earlier 6.6 runs left extras / weekend projections / quiz-day
+        # projections / cancelled rows behind. Restore the known baseline:
+        # delete unattended extras, weekend projections, and unattended
+        # quiz-day projections (timetable NULL, non-extra), un-cancel
+        # unattended cancelled sessions.
         window_start, window_end = date(2026, 11, 2), date(2026, 11, 7)
         stale = (await db.execute(
             select(ClassSession).where(
@@ -86,7 +88,11 @@ async def main() -> int:
         for s in stale:
             if s.id in attended_ids:
                 continue
-            if s.is_extra or s.date.weekday() >= 5:
+            if (
+                s.is_extra
+                or s.date.weekday() >= 5
+                or (s.timetable_entry_id is None and not s.is_extra)
+            ):
                 await db.delete(s)
                 removed += 1
             elif s.is_cancelled:
@@ -233,7 +239,14 @@ async def main() -> int:
             surprise_id = uuid.UUID(r.json()["id"])
             test_event_ids.append(surprise_id)
 
-            # --- 8. QUIZ_DAY is calendar-only: no session effect -----------------
+            # --- 8. QUIZ_DAY = one attendance-bearing occurrence (product
+            # decision): an active QUIZ_DAY event materializes exactly one
+            # quiz-day session (LECTURE, is_extra=false, timetable_entry_id
+            # null) for its subject. BCS-503 has no Friday timetable session,
+            # so the bucket creates it: Friday baseline 5 + 1 surprise-extra
+            # + 1 quiz-day = 7. (This contract deliberately replaces the
+            # former "calendar-only" expectation — quiz-day attendance must
+            # flow through the canonical session pipeline.)
             r = await client.post("/api/v1/events", headers=admin_headers, json={
                 "event_type": "QUIZ_DAY", "start_date": "2026-11-06", "end_date": "2026-11-06",
                 "subject_id": bcs503["id"]})
@@ -245,8 +258,13 @@ async def main() -> int:
                 total = await count_sessions(db, ClassSession.date == date(2026, 11, 6))
                 extras = await count_sessions(
                     db, (ClassSession.date == date(2026, 11, 6)) & ClassSession.is_extra.is_(True))
-            check("15. QUIZ_DAY adds no sessions (5 + 1 surprise-extra only)",
-                  total == 6 and extras == 1, f"total={total} extras={extras}")
+                quiz_day = await count_sessions(
+                    db, (ClassSession.date == date(2026, 11, 6))
+                    & ClassSession.timetable_entry_id.is_(None) & ClassSession.is_extra.is_(False))
+            check("15. QUIZ_DAY materializes exactly one quiz-day session "
+                  "(5 + 1 surprise-extra + 1 quiz-day)",
+                  total == 7 and extras == 1 and quiz_day == 1,
+                  f"total={total} extras={extras} quiz_day={quiz_day}")
 
             # --- 9. Working Saturday materializes the substituted schedule -------
             r = await client.post("/api/v1/events", headers=admin_headers, json={
@@ -352,6 +370,9 @@ async def main() -> int:
                 d6 = await count_sessions(db, ClassSession.date == date(2026, 11, 6))
                 d6_x = await count_sessions(
                     db, (ClassSession.date == date(2026, 11, 6)) & ClassSession.is_extra.is_(True))
+                d6_q = await count_sessions(
+                    db, (ClassSession.date == date(2026, 11, 6))
+                    & ClassSession.timetable_entry_id.is_(None) & ClassSession.is_extra.is_(False))
                 d7 = await count_sessions(db, ClassSession.date == date(2026, 11, 7))
                 d7_c = await count_sessions(
                     db, (ClassSession.date == date(2026, 11, 7)) & ClassSession.is_cancelled.is_(True))
@@ -360,8 +381,10 @@ async def main() -> int:
             check("27. closure reversal: 11-02 restored (5 active, 0 cancelled)", d2 == 5 and d2_c == 0, f"{d2}/{d2_c}")
             check("28. CLASS_CANCELLED reversal: 11-03 restored (6 active, 0 cancelled)", d3 == 6 and d3_c == 0,
                   f"{d3}/{d3_c}")
-            check("29. extras removed on deactivation (11-05, 11-06)", d5 == 6 and d5_x == 0 and d6 == 5 and d6_x == 0,
-                  f"11-05={d5}({d5_x}) 11-06={d6}({d6_x})")
+            check("29. extras removed on deactivation (11-05, 11-06); the quiz-day "
+              "session is removed with its event (11-06 back to 5)",
+              d5 == 6 and d5_x == 0 and d6 == 5 and d6_x == 0 and d6_q == 0,
+              f"11-05={d5}({d5_x}) 11-06={d6}({d6_x}, quiz_day={d6_q})")
             check("30. working-Saturday projection fully reverted (11-07 back to 0 sessions)",
                   d7 == 0 and d7_c == 0, f"11-07={d7}({d7_c})")
             check("31. fully-attended closure left zero residue", d15 == 0, f"{d15}")

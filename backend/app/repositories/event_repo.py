@@ -40,6 +40,14 @@ class EventRepository:
         )
         return result.scalars().first() is not None
 
+    async def get_subject(self, subject_id: UUID):
+        """The Subject row (category/quiz flags) for a subject-scoped event."""
+        from app.models.academic import Subject
+        result = await self.db.execute(
+            select(Subject).where(Subject.id == subject_id)
+        )
+        return result.scalars().first()
+
     async def is_enrolled(self, user_id: UUID, subject_id: UUID) -> bool:
         """
         Whether the user holds an enrollment for the subject (student event

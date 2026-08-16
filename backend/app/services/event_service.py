@@ -99,9 +99,11 @@ class EventService:
                 "enrolled in."
             )
 
-    async def _ensure_subject(self, subject_id: UUID) -> None:
-        if not await self.repo.subject_exists(subject_id):
+    async def _ensure_subject(self, subject_id: UUID):
+        subject = await self.repo.get_subject(subject_id)
+        if subject is None:
             raise EventValidationError("Unknown subject_id")
+        return subject
 
     async def _check_duplicate(
         self,
@@ -126,14 +128,17 @@ class EventService:
             user, event_type=data.event_type, subject_id=data.subject_id
         )
         # Structural fields arrive validated by the Pydantic schema.
+        subject_category = None
         if data.subject_id is not None:
-            await self._ensure_subject(data.subject_id)
+            subject = await self._ensure_subject(data.subject_id)
+            subject_category = subject.category
         validate_event(
             event_type=data.event_type,
             start_date=data.start_date,
             end_date=data.end_date,
             subject_id=data.subject_id,
             class_type=data.class_type,
+            subject_category=subject_category,
             substitution_schedule_override=data.substitution_schedule_override,
             is_working_day=data.is_working_day,
         )
@@ -214,14 +219,17 @@ class EventService:
             user, event_type=event.event_type, subject_id=event.subject_id
         )
 
+        subject_category = None
         if event.subject_id is not None:
-            await self._ensure_subject(event.subject_id)
+            subject = await self._ensure_subject(event.subject_id)
+            subject_category = subject.category
         validate_event(
             event_type=event.event_type,
             start_date=event.start_date,
             end_date=event.end_date,
             subject_id=event.subject_id,
             class_type=event.class_type,
+            subject_category=subject_category,
             substitution_schedule_override=event.substitution_schedule_override,
             is_working_day=event.is_working_day,
         )

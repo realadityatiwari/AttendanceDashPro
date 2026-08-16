@@ -31,6 +31,12 @@ Design rules:
   cancelled, un-cancelled, or deleted. Cancelled sessions never receive
   attendance (record_attendance already rejects them with 409), so the
   "cancelled != absent" rule is preserved end to end.
+- Quiz-day attendance (product decision): QUIZ_DAY is NOT calendar-only — an
+  active QUIZ_DAY event materializes exactly one attendance-bearing quiz-day
+  session for its subject/date (bucket in _reconcile_date; shape mirrors the
+  quiz-schedule materialization script). The bucket is state-based, never
+  duplicates the script's sessions, and deletes only unattended quiz-day
+  sessions.
 - Sessions are only *created* inside the canonical baseline span
   ([min, max] date of scheduled sessions). Events outside that span still
   affect the calendar engine and reads, but never extend the session pipeline.
@@ -39,7 +45,9 @@ Design rules:
 
 No session deletions for scheduled (non-extra) classes: closures and
 cancellations are represented with `is_cancelled` (ADR 004 / audit Q12), never
-by removing rows.
+by removing rows. Quiz-day sessions (non-extra, no timetable binding) are the
+exception — like extras, they are reversible projections of an event, and an
+unattended one is removed when the event no longer implies it.
 """
 
 from datetime import date, timedelta
@@ -82,8 +90,10 @@ CLOSURE_TYPES = {
 }
 
 # Event types that have no session-level effect (calendar/read semantics only).
+# QUIZ_DAY is NOT in this set: product decision — a quiz day is one
+# attendance-bearing occurrence for its subject (see the quiz-day bucket in
+# _reconcile_date).
 NO_SESSION_EFFECT_TYPES = {
-    EventType.QUIZ_DAY,
     EventType.WORKING_DAY_OVERRIDE,
     EventType.WORKING_SATURDAY,
 }
@@ -166,14 +176,16 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, desired_extras, mid_sem_active = self._desired_schedule(
-                current, all_active_events, entries_by_dow
+            desired_scheduled, desired_extras, mid_sem_active, desired_quiz_days = self._desired_schedule(
+                current, all_active_events, entries_by_dow,
+                by_date.get(current, []), attended_ids,
             )
             await self._reconcile_date(
                 current,
                 desired_scheduled,
                 desired_extras,
                 mid_sem_active,
+                desired_quiz_days,
                 manage_mid_sem,
                 mid_sem_subject,
                 by_date.get(current, []),
@@ -183,12 +195,49 @@ class EventSessionSynchronizer:
 
     # -- desired-schedule computation (port of legacy getEffectiveDaySchedule) --
 
+    @staticmethod
+    def _cancellation_match(
+        scheduled: Dict[object, object],
+        subject_id: object,
+        class_type: ClassType,
+        existing: List[ClassSession],
+        attended_ids: set,
+    ) -> object:
+        """
+        The timetable occurrence a CLASS_CANCELLED / LAB_CANCELLED event
+        removes. Attendance-safe by preference: when the date already holds an
+        attended session for one matching occurrence, the cancellation falls
+        through to the unattended occurrence instead — historical sessions are
+        never cancelled, but the event's intent (one occurrence cancelled on
+        this date) still holds. Falls back to the first matching entry when
+        every occurrence is attended (or none is marked yet).
+        """
+        candidates = [
+            entry
+            for entry in scheduled.values()
+            if entry.subject_id == subject_id and entry.class_type == class_type
+        ]
+        if not candidates:
+            return None
+        if existing:
+            unattended_entry_ids = {
+                s.timetable_entry_id
+                for s in existing
+                if s.timetable_entry_id is not None and s.id not in attended_ids
+            }
+            for entry in candidates:
+                if entry.id in unattended_entry_ids:
+                    return entry
+        return candidates[0]
+
     def _desired_schedule(
         self,
         target: date,
         events: List[AcademicEvent],
         entries_by_dow: Dict[int, list],
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set]:
+        existing: List[ClassSession],
+        attended_ids: set,
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set, set]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
@@ -200,10 +249,13 @@ class EventSessionSynchronizer:
                              A subject is EXCLUDED when a practical
                              cancellation (CLASS_CANCELLED / LAB_CANCELLED)
                              is also active on this date — cancellation wins.
+          desired_quiz_days: subject_ids with an active QUIZ_DAY event on this
+                             date — each is one attendance-bearing quiz-day
+                             occurrence (see _reconcile_date).
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}, set()
+            return {}, {}, set(), set()
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
@@ -233,14 +285,8 @@ class EventSessionSynchronizer:
                 # Remove ONE matching occurrence (legacy splice semantics).
                 if event.class_type == ClassType.PRACTICAL:
                     cancelled_practical_subjects.add(event.subject_id)
-                match = next(
-                    (
-                        entry
-                        for entry in scheduled.values()
-                        if entry.subject_id == event.subject_id
-                        and entry.class_type == event.class_type
-                    ),
-                    None,
+                match = self._cancellation_match(
+                    scheduled, event.subject_id, event.class_type, existing, attended_ids
                 )
                 if match is not None:
                     del scheduled[match.id]
@@ -272,7 +318,18 @@ class EventSessionSynchronizer:
                 key = (subject_id, ClassType.PRACTICAL)
                 extras[key] = extras.get(key, 0) + 1
 
-        return scheduled, extras, mid_sem_active
+        # Quiz-day subjects: every active QUIZ_DAY event on this date implies
+        # one attendance-bearing occurrence for its subject (product decision;
+        # mirrored by the quiz-schedule materialization script for the seeded
+        # quiz dates — the bucket below never duplicates those).
+        quiz_day_subjects: set = {
+            event.subject_id
+            for event in ordered
+            if event.event_type == EventType.QUIZ_DAY
+            and event.subject_id is not None
+        }
+
+        return scheduled, extras, mid_sem_active, quiz_day_subjects
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -292,6 +349,7 @@ class EventSessionSynchronizer:
         desired_scheduled: Dict[object, object],
         desired_extras: Dict[Tuple[object, object], int],
         mid_sem_active: set,
+        desired_quiz_days: set,
         manage_mid_sem: bool,
         mid_sem_subject: object,
         existing: List[ClassSession],
@@ -301,6 +359,12 @@ class EventSessionSynchronizer:
 
         scheduled = [s for s in existing if not s.is_extra]
         extras = [s for s in existing if s.is_extra]
+
+        # Sessions created / deleted by this pass (tracked so the quiz-day
+        # bucket below sees the post-reconcile state and never counts a
+        # deleted session as covering its subject).
+        created: List[ClassSession] = []
+        removed_ids: set = set()
 
         # Scheduled (non-extra) sessions: cancel those no longer desired,
         # restore those desired again, create missing ones. Never touch
@@ -326,6 +390,7 @@ class EventSessionSynchronizer:
                     # projection: remove it when the event no longer implies
                     # it, instead of leaving an unbounded cancelled residue.
                     await self.session_repo.delete_session(session)
+                    removed_ids.add(session.id)
                 else:
                     session.is_cancelled = True
 
@@ -334,12 +399,14 @@ class EventSessionSynchronizer:
         }
         for entry_id in desired_scheduled_ids - existing_scheduled_ids:
             entry = desired_scheduled[entry_id]
-            self.session_repo.add_session(
-                subject_id=entry.subject_id,
-                date=target,
-                class_type=entry.class_type,
-                is_extra=False,
-                timetable_entry_id=entry.id,
+            created.append(
+                self.session_repo.add_session(
+                    subject_id=entry.subject_id,
+                    date=target,
+                    class_type=entry.class_type,
+                    is_extra=False,
+                    timetable_entry_id=entry.id,
+                )
             )
 
         # Extra sessions: matched by (subject_id, class_type) count. They are
@@ -353,12 +420,14 @@ class EventSessionSynchronizer:
         for key, desired_count in desired_extras.items():
             missing = desired_count - existing_extra_counts.get(key, 0)
             for _ in range(missing):
-                self.session_repo.add_session(
-                    subject_id=key[0],
-                    date=target,
-                    class_type=key[1],
-                    is_extra=True,
-                    timetable_entry_id=None,
+                created.append(
+                    self.session_repo.add_session(
+                        subject_id=key[0],
+                        date=target,
+                        class_type=key[1],
+                        is_extra=True,
+                        timetable_entry_id=None,
+                    )
                 )
 
         for key, existing_count in existing_extra_counts.items():
@@ -379,7 +448,59 @@ class EventSessionSynchronizer:
                 if session.id in attended_ids:
                     continue
                 await self.session_repo.delete_session(session)
+                removed_ids.add(session.id)
                 removed += 1
+
+        # Quiz-day attendance bucket (product decision): an active QUIZ_DAY
+        # event is ONE attendance-bearing occurrence for its subject —
+        # exactly one quiz-day session per (subject, date), shaped like the
+        # quiz-schedule materialization script (LECTURE, is_extra=false,
+        # timetable_entry_id=null). State-based and idempotent:
+        #   - created only when the subject has NO non-cancelled session on
+        #     the date (timetable, extra, or an existing quiz-day session all
+        #     cover the occurrence — never duplicates the script's sessions
+        #     on the seeded quiz dates);
+        #   - removed ONLY when no QUIZ_DAY event implies them anymore
+        #     (deactivated/moved) — a covered-by-another-session occurrence
+        #     is never deleted by unrelated event reconciliation (frozen
+        #     contract: quiz-day sessions are never cancelled/deleted by
+        #     other events; quiz-day attendance must stay recordable);
+        #   - attended quiz-day sessions are historical truth and are never
+        #     deleted (attendance safety, same as extras).
+        covered: Dict[object, int] = {}
+        for session in existing:
+            if session.is_cancelled or session.id in removed_ids:
+                continue
+            covered[session.subject_id] = covered.get(session.subject_id, 0) + 1
+        for session in created:
+            covered[session.subject_id] = covered.get(session.subject_id, 0) + 1
+
+        for subject_id in desired_quiz_days:
+            if covered.get(subject_id, 0) == 0:
+                created.append(
+                    self.session_repo.add_session(
+                        subject_id=subject_id,
+                        date=target,
+                        class_type=ClassType.LECTURE,
+                        is_extra=False,
+                        timetable_entry_id=None,
+                    )
+                )
+                covered[subject_id] = 1
+
+        quiz_day_sessions = [
+            s for s in existing
+            if s.timetable_entry_id is None
+            and not s.is_extra
+            and s.class_type == ClassType.LECTURE
+        ]
+        for session in sorted(quiz_day_sessions, key=lambda s: str(s.id)):
+            if session.id in attended_ids:
+                continue
+            if session.subject_id not in desired_quiz_days:
+                await self.session_repo.delete_session(session)
+                removed_ids.add(session.id)
+                covered[session.subject_id] = max(covered.get(session.subject_id, 0) - 1, 0)
 
         # Phase 9.1: mid-sem designation step. Runs only when the triggering
         # event is itself MID_SEM_PRACTICAL (the event's create/update/

@@ -228,7 +228,14 @@ async def main() -> int:
               all_ok, detail)
 
         # --- 7. Practical attendance --------------------------------------------
-        bcs551 = next(s for s in ov["subjects"] if s["subject_code"] == "BCS-551")
+        # The owner actively marks attendance on the live app (the admin's BCS-551
+        # practicals are recorded), so the pristine all-pending scenario is pinned
+        # to the zero-record seed student (enrolled in all subjects, no records) —
+        # the scenario's intent (canonical pipeline math, block collapse) is
+        # unaffected by the admin's live data.
+        r_ov_s = await client.get("/api/v1/analytics/overview", headers=student_headers)
+        ov_s = r_ov_s.json()
+        bcs551 = next(s for s in ov_s["subjects"] if s["subject_code"] == "BCS-551")
         # 4 Monday lab blocks through today (each a 2-period timetable block = ONE
         # occurrence), all pending for this user: total 4, pending 4.
         check("7. practical % uses the canonical class-session pipeline (no quiz "

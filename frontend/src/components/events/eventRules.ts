@@ -31,7 +31,7 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   },
   [EventType.CLASS_CANCELLED]: {
     eventType: EventType.CLASS_CANCELLED, requiresSubject: true, requiresClassType: true,
-    allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
+    allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL],
     isClosure: false, isGlobal: false,
   },
   // Phase 9.1 laboratory events: subject-scoped PRACTICAL events resolved by

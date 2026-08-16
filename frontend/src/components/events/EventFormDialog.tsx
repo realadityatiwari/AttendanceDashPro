@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AcademicEventPayload, AcademicEventResponse, ClassType, EventType, SubjectCategory } from "@/types/api";
-import { useSubjects, useEventMutations } from "@/hooks/useApi";
+import { useSubjects, useTimetable, useEventMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -94,6 +94,7 @@ const labelClass = "text-[10px] uppercase tracking-wider text-muted-foreground";
 export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = true }: EventFormDialogProps) {
   const isEdit = event !== null;
   const { subjects } = useSubjects();
+  const { timetable } = useTimetable();
   const { createEvent, updateEvent } = useEventMutations();
   const [form, setForm] = useState<FormState>(() => initialState(event, isAdmin));
   const [localError, setLocalError] = useState("");
@@ -122,15 +123,47 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   const rule = getRule(form.event_type);
   // Phase 9.1: the laboratory event types are scoped to the student's enrolled
   // practical/lab subjects (Subject.category === lab), mirroring the backend's
-  // PRACTICAL-only rules. Every other subject-scoped type keeps showing all
-  // enrolled subjects, unchanged. /api/v1/subjects is already
-  // enrollment-scoped (authenticated student).
+  // PRACTICAL-only rules. Quiz events (SURPRISE_QUIZ / QUIZ_DAY) are scoped to
+  // quiz-bearing (theory) subjects via the canonical quiz_applicable flag —
+  // practical subjects can never host quiz attendance (the backend registry
+  // rejects them with 422). CLASS_CANCELLED is additionally date-aware: only
+  // subjects with a class actually scheduled on the picked date (matching the
+  // selected class type) may be cancelled that day. /api/v1/subjects is
+  // already enrollment-scoped (authenticated student).
   const labScopedEvent = form.event_type === EventType.MID_SEM_PRACTICAL
     || form.event_type === EventType.LAB_CANCELLED;
+  const quizScopedEvent = form.event_type === EventType.SURPRISE_QUIZ
+    || form.event_type === EventType.QUIZ_DAY;
+  const isClassCancelled = form.event_type === EventType.CLASS_CANCELLED;
   const subjectsForEvent = useMemo(() => {
     const all = subjects ?? [];
-    return labScopedEvent ? all.filter(s => s.category === SubjectCategory.LAB) : all;
-  }, [subjects, labScopedEvent]);
+    if (labScopedEvent) {
+      return all.filter(s => s.category === SubjectCategory.LAB);
+    }
+    if (quizScopedEvent) {
+      return all.filter(s => s.quiz_applicable);
+    }
+    if (isClassCancelled) {
+      const entries = timetable ?? [];
+      const type = form.class_type === ClassType.LECTURE || form.class_type === ClassType.TUTORIAL
+        ? form.class_type
+        : "";
+      if (!form.start_date) {
+        return all.filter(s => entries.some(e =>
+          e.subject.id === s.id
+          && (e.class_type === ClassType.LECTURE || e.class_type === ClassType.TUTORIAL)));
+      }
+      // Backend day_of_week is 0=Monday; JS getDay() is 0=Sunday.
+      const jsDow = new Date(`${form.start_date}T00:00:00`).getDay();
+      const dow = (jsDow + 6) % 7;
+      return all.filter(s => entries.some(e =>
+        e.day_of_week === dow
+        && e.subject.id === s.id
+        && (e.class_type === ClassType.LECTURE || e.class_type === ClassType.TUTORIAL)
+        && (!type || e.class_type === type)));
+    }
+    return all;
+  }, [subjects, timetable, labScopedEvent, quizScopedEvent, isClassCancelled, form.start_date, form.class_type]);
 
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -381,6 +414,16 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                   </option>
                 ))}
               </select>
+              {isClassCancelled && subjectsForEvent.length === 0 && form.start_date && (
+                <p className="text-[10px] text-muted-foreground">
+                  No lectures or tutorials scheduled on {form.start_date} for your enrolled subjects.
+                </p>
+              )}
+              {quizScopedEvent && (
+                <p className="text-[10px] text-muted-foreground">
+                  Only quiz-bearing (theory) subjects can host quizzes.
+                </p>
+              )}
             </div>
           )}
 

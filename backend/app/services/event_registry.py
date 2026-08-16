@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import List, Optional
 
-from app.models.enums import ClassType, EventType
+from app.models.enums import ClassType, EventType, SubjectCategory
 from app.engines.calendar_engine import DAY_NAMES
 
 
@@ -94,7 +94,7 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         EventType.CLASS_CANCELLED, "Class Cancelled",
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[
-            ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL,
+            ClassType.LECTURE, ClassType.TUTORIAL,
         ],
     ),
     # Phase 9.1 laboratory events. Both are subject-scoped PRACTICAL events
@@ -160,6 +160,15 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
 # day-name representation (DAY_NAMES in calendar_engine.py).
 VALID_SUBSTITUTION_DAYS = list(DAY_NAMES)
 
+# Quiz events are scoped to quiz-bearing subjects. The canonical marker for a
+# practical/lab subject is `SubjectCategory.LAB` (Phase 9.1 canonical
+# metadata); quiz attendance only exists for theory subjects (eligibility
+# treats lab subjects as 404 / strictly excluded).
+QUIZ_BEARING_EVENT_TYPES = {
+    EventType.SURPRISE_QUIZ,
+    EventType.QUIZ_DAY,
+}
+
 
 def get_rule(event_type: EventType) -> EventTypeRule:
     rule = EVENT_TYPE_RULES.get(event_type)
@@ -175,6 +184,7 @@ def validate_event(
     end_date: date,
     subject_id: Optional[object] = None,
     class_type: Optional[ClassType] = None,
+    subject_category: Optional[SubjectCategory] = None,
     substitution_schedule_override: Optional[str] = None,
     is_working_day: Optional[bool] = None,
 ) -> None:
@@ -216,6 +226,19 @@ def validate_event(
                 "substitution_schedule_override must be a valid day name "
                 f"(one of: {', '.join(VALID_SUBSTITUTION_DAYS)})"
             )
+
+    # Quiz events (surprise quiz / quiz day) are theory-subject events: a lab
+    # subject can never carry quiz attendance (eligibility strictly excludes
+    # labs). The service resolves the subject's canonical category before
+    # validation.
+    if (
+        event_type in QUIZ_BEARING_EVENT_TYPES
+        and subject_category == SubjectCategory.LAB
+    ):
+        raise EventValidationError(
+            f"{rule.display_name} is only valid for theory subjects "
+            "(practical/lab subjects cannot host quizzes)"
+        )
 
     # Working-day state is an explicit per-event override for the dominant
     # event (engine honors it when set). The engine treats closure types as

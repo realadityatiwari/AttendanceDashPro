@@ -26,6 +26,9 @@ function Write-Warn { param([string]$Msg) Write-Host "  ! $Msg" -ForegroundColor
 function Write-Fail { param([string]$Msg) Write-Host "  ✘ $Msg" -ForegroundColor Red }
 
 function Test-PortListening {
+    # Pure TCP connectivity check. Used for PostgreSQL readiness polling only.
+    # Does NOT filter stale sockets — correct for DB readiness where we want
+    # to know if the port actually accepts connections right now.
     param([string]$TargetHost, [int]$Port)
     try {
         $tcp = [System.Net.Sockets.TcpClient]::new()
@@ -39,16 +42,52 @@ function Test-PortListening {
     }
 }
 
-function Test-PortOwnedBy {
-    # Returns $true if the process listening on $Port has a name matching $Pattern.
+function Get-ListenerPids {
+    # Returns all PIDs with a LISTENING socket on $Port via netstat.
+    # More reliable than Get-NetTCPConnection on Windows, which silently omits
+    # entries when multiple processes bind the same port (known PS/WMI issue).
+    param([int]$Port)
+    $result = [System.Collections.Generic.List[int]]::new()
+    try {
+        $lines = netstat -ano -p TCP 2>$null
+        foreach ($line in $lines) {
+            if ($line -match ":\s*$Port\s+\S+\s+LISTENING\s+(\d+)") {
+                $result.Add([int]$Matches[1])
+            }
+        }
+    } catch { }
+    return $result
+}
+
+function Test-ServiceRunning {
+    # Returns $true if at least one live process matching $Pattern owns a
+    # LISTENING socket on $Port. Uses netstat for complete enumeration.
+    # Immune to: stale sockets, Get-NetTCPConnection omission, StrictMode nulls.
     param([int]$Port, [string]$Pattern)
-    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if (-not $conns) { return $false }
-    foreach ($c in $conns) {
-        $proc = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
-        if ($proc -and $proc.Name -match $Pattern) { return $true }
-    }
+    try {
+        foreach ($lPid in (Get-ListenerPids -Port $Port)) {
+            try {
+                $proc = Get-Process -Id $lPid -ErrorAction SilentlyContinue
+                if ($null -ne $proc -and $proc.Name -match $Pattern) { return $true }
+            } catch { }
+        }
+    } catch { }
     return $false
+}
+
+function Get-OwningProcessName {
+    # Returns the name of the first live process owning a LISTEN socket on
+    # $Port, or 'unknown'. Uses netstat for complete enumeration.
+    param([int]$Port)
+    try {
+        foreach ($lPid in (Get-ListenerPids -Port $Port)) {
+            try {
+                $proc = Get-Process -Id $lPid -ErrorAction SilentlyContinue
+                if ($null -ne $proc -and $proc.Name -ne '') { return $proc.Name }
+            } catch { }
+        }
+    } catch { }
+    return 'unknown'
 }
 
 # ── resolve repo root robustly ─────────────────────────────────────────────────
@@ -174,15 +213,13 @@ $backendStarted = $false
 
 Write-Step "FastAPI backend (port $backendPort) ..."
 
-if (Test-PortListening -TargetHost $backendHost -Port $backendPort) {
-    if (Test-PortOwnedBy -Port $backendPort -Pattern "python") {
-        Write-Ok "Already running — reusing (Python process on port $backendPort)"
-    } else {
-        $owner = (Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Name } | Select-Object -First 1)
-        Write-Fail "Port $backendPort is occupied by an unrelated process: $owner"
-        Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
-        exit 1
-    }
+if (Test-ServiceRunning -Port $backendPort -Pattern "python") {
+    Write-Ok "Already running — reusing (Python process on port $backendPort)"
+} elseif (($liveOwner = Get-OwningProcessName -Port $backendPort) -ne 'unknown') {
+    # A live unrelated process owns this port
+    Write-Fail "Port $backendPort is occupied by an unrelated process: $liveOwner"
+    Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
+    exit 1
 } else {
     $backendProcess = Start-Process `
         -FilePath $pythonExe `
@@ -203,15 +240,13 @@ $frontendStarted = $false
 
 Write-Step "Next.js frontend (port $frontendPort) ..."
 
-if (Test-PortListening -TargetHost "127.0.0.1" -Port $frontendPort) {
-    if (Test-PortOwnedBy -Port $frontendPort -Pattern "node") {
-        Write-Ok "Already running — reusing (Node process on port $frontendPort)"
-    } else {
-        $owner = (Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Name } | Select-Object -First 1)
-        Write-Fail "Port $frontendPort is occupied by an unrelated process: $owner"
-        Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
-        exit 1
-    }
+if (Test-ServiceRunning -Port $frontendPort -Pattern "node") {
+    Write-Ok "Already running — reusing (Node process on port $frontendPort)"
+} elseif (($liveOwner = Get-OwningProcessName -Port $frontendPort) -ne 'unknown') {
+    # A live unrelated process owns this port
+    Write-Fail "Port $frontendPort is occupied by an unrelated process: $liveOwner"
+    Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
+    exit 1
 } else {
     $frontendProcess = Start-Process `
         -FilePath $npmCmd `

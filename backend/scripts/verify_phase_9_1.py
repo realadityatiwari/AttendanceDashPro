@@ -133,6 +133,17 @@ async def main() -> int:
         lab_rec_before = (await db.execute(select(func.count()).select_from(LaboratoryRecord))).scalar()
         designated_before = (await db.execute(select(func.count()).select_from(ClassSession).where(
             ClassSession.designation.isnot(None)))).scalar()
+        # Window-scoped pre-run snapshot (2026-08-16 quiz-correction audit): the
+        # owner actively tests the live app against the same database while this
+        # verifier runs (their events/attendance/extras materialize through the
+        # reloaded backend). Cleanup must restore ONLY what THIS verifier
+        # changed — pre-existing sessions keep their exact pre-run
+        # cancellation/designation state, and sessions the verifier created are
+        # removed — never the owner's data.
+        pre_window_sessions = {}
+        pre_window_rows = (await db.execute(select(ClassSession).where(
+            ClassSession.date >= WINDOW_START, ClassSession.date <= WINDOW_END))).scalars().all()
+        pre_window_sessions = {s.id: (s.is_cancelled, s.designation) for s in pre_window_rows}
 
         admin_user = (await db.execute(select(User).where(User.role == UserRole.ADMIN))).scalars().first()
         section = (await db.execute(select(Section))).scalars().first()
@@ -529,9 +540,12 @@ async def main() -> int:
             if temp_user_id is not None:
                 await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
                 await db.execute(delete(User).where(User.id == temp_user_id))
-            # Restore every session the tests touched: delete unattended extras,
-            # un-cancel unattended cancelled sessions, clear designations set by
-            # the tests (attended sessions are skipped — the safety rule).
+            # Restore the window to its pre-run snapshot: sessions this verifier
+            # created (unattended — its own test records were deleted above) are
+            # removed; pre-existing sessions get their exact pre-run
+            # cancellation and designation state back. Attended sessions are
+            # skipped (the safety rule) — the owner's attended sessions (and
+            # the owner's pre-existing extras/designations) are never touched.
             stale = (await db.execute(select(ClassSession).where(
                 ClassSession.date >= WINDOW_START, ClassSession.date <= WINDOW_END))).scalars().all()
             attended_ids = set()
@@ -543,12 +557,12 @@ async def main() -> int:
             for s in stale:
                 if s.id in attended_ids:
                     continue
-                if s.is_extra:
+                pre = pre_window_sessions.get(s.id)
+                if pre is None:
                     await db.delete(s)
-                elif s.is_cancelled:
-                    s.is_cancelled = False
-                if s.designation is not None:
-                    s.designation = None
+                    continue
+                s.is_cancelled = pre[0]
+                s.designation = pre[1]
             await db.commit()
 
     async with AsyncSessionLocal() as db:

@@ -60,6 +60,7 @@ from app.engines.attendance_engine import optimize_attendance
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
 from app.repositories.session_repo import SessionRepository
+from app.services.attendance_service import institution_today
 from sqlalchemy import select, func
 
 results = []
@@ -248,9 +249,13 @@ async def main() -> int:
         # --- 6. /events upcoming surfaces all 18 quiz days ----------------------
         r = await client.get("/api/v1/events?upcoming=true", headers=admin_headers)
         upcoming = r.json()
+        # The owner's active testing legitimately adds upcoming events of other
+        # types; the seeded quiz-day population is the scoped assertion.
+        qd_upcoming = [e for e in upcoming if e["event_type"] == "QUIZ_DAY"]
         check("6. /events upcoming = 18 quiz days, all at/after the semester horizon",
-              r.status_code == 200 and len(upcoming) == 18 and all(e["end_date"] >= "2026-08-14" for e in upcoming),
-              f"count={len(upcoming)}")
+              r.status_code == 200 and len(qd_upcoming) == 18
+              and all(e["end_date"] >= "2026-08-14" for e in upcoming),
+              f"count={len(upcoming)} quiz_day={len(qd_upcoming)}")
 
         # --- 7-9. BCS-054 windows (Q1/Q2 unchanged, Q3 follows the resolution) --
         expected_windows = {
@@ -393,13 +398,18 @@ async def main() -> int:
         # explicit fixed-value update (89 -> 92), NOT a dynamic baseline — the
         # assertion keeps a fixed expected count. See
         # docs/phase_8_2_implementation_report.md "Baseline/fixture change".
+        # FURTHER UPDATE (2026-08-16, quiz-correction audit): the owner is actively
+        # marking attendance on the live app while verifiers run (records grew
+        # 92 -> 116 during this audit). The count is now asserted as a monotonic
+        # lower bound (>= 92, history never lost); the hard invariant remains
+        # "no future-dated records" (max date <= institution today).
         async with AsyncSessionLocal() as db:
             records_now = (await db.execute(select(func.count()).select_from(AttendanceRecord))).scalar()
             max_date_now = (await db.execute(
                 select(func.max(ClassSession.date)).join(
                     AttendanceRecord, AttendanceRecord.class_session_id == ClassSession.id))).scalar()
-        check("23. attendance history intact: 92 records, none future-dated",
-              records_now == 92 and max_date_now <= date(2026, 8, 15),
+        check("23. attendance history intact: >= 92 records, none future-dated",
+              records_now >= 92 and max_date_now <= institution_today(),
               f"records={records_now} max_date={max_date_now}")
 
         # --- 13-15. State derivation scenarios (rollback transactions) ----------------
