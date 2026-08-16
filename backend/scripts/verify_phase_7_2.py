@@ -82,7 +82,7 @@ from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User, Section
 from app.models.event import AcademicEvent
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, QuizCycle, ScheduleStatus
@@ -90,6 +90,7 @@ from app.models.enums import AttendanceStatus, ClassType, EventType, UserRole
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
 from app.engines.calendar_engine import get_teaching_days_between, DEFAULT_WEEKENDS
+from app.engines.practical_occurrence import group_practical_occurrences
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
 from sqlalchemy import select, func, delete
@@ -362,17 +363,34 @@ async def main() -> int:
         overall = dash["overall"]
         async with AsyncSessionLocal() as db:
             # Outer join: sessions without a record are pending (mirrors
-            # dashboard get_sessions_with_status semantics exactly).
-            rows = (await db.execute(
-                select(ClassSession.date, AttendanceRecord.status).outerjoin(
-                    AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
-                    & (AttendanceRecord.user_id == admin_user.id)).where(
+            # dashboard get_sessions_with_status semantics exactly). Track lab
+            # correction: a 2-hour lab block is ONE occurrence, so the expected
+            # values come from the canonical occurrence collapse.
+            raw_rows = (await db.execute(
+                select(ClassSession.date, ClassSession.class_type, ClassSession.is_cancelled,
+                       AttendanceRecord.status, TimetableEntry.start_time, TimetableEntry.end_time,
+                       Subject.id)
+                .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+                .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                           & (AttendanceRecord.user_id == admin_user.id))
+                .join(Subject, ClassSession.subject_id == Subject.id)
+                .where(
                     ClassSession.date >= semester_start,
                     ClassSession.date <= date.today(),
-                    ClassSession.is_cancelled.is_(False)))).all()
-        att = sum(1 for _, st in rows if st == AttendanceStatus.ATTENDED)
-        miss = sum(1 for _, st in rows if st == AttendanceStatus.MISSED)
-        pend = len(rows) - att - miss
+                )
+                .order_by(ClassSession.date, TimetableEntry.start_time.asc().nulls_last(),
+                          ClassSession.id))).all()
+            session_rows = [
+                {"subject_id": sid, "date": d, "class_type": ct,
+                 "is_cancelled": cancelled, "status": st,
+                 "start_time": stt, "end_time": ett}
+                for (d, ct, cancelled, st, stt, ett, sid) in raw_rows
+            ]
+            occ_rows = [o for o in group_practical_occurrences(session_rows)
+                        if not o["is_cancelled"]]
+        att = sum(1 for o in occ_rows if o["status"] == AttendanceStatus.ATTENDED)
+        miss = sum(1 for o in occ_rows if o["status"] == AttendanceStatus.MISSED)
+        pend = sum(1 for o in occ_rows if o["status"] is None)
         recorded = att + miss
         expected_pct = (att / recorded * 100.0) if recorded else None
         pending_inclusive = (att / (att + miss + pend) * 100.0) if (att + miss + pend) else None

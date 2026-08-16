@@ -882,3 +882,29 @@ commit. DB untouched (18/691/92/18/9/18/30, lab tables empty, designations=0).
 - **HARD STOP after Phase 9.2.1** — Phase 9.2.2 (e.g., experiment-count
   guidance, FACULTY signing workflow, grading/viva) not started; no commit
   made.
+
+## Focused Track Correction walkthrough (after Phase 9.2.1)
+
+**Two-hour lab = one occurrence.** The timetable stores each two-hour lab as
+two contiguous one-hour periods (two ClassSession rows). `practical_occurrence.py`
+collapses them into one logical occurrence at read time everywhere: Track
+shows one card ("01:00 PM – 03:00 PM · PRACTICAL") with one Present/Absent
+action; one mutation creates exactly one AttendanceRecord; summary/history/
+analytics/calendar denominators count blocks, never rows; a cancelled block
+is excluded (never Pending/Absent). The attendance engine and its input
+shapes are unchanged.
+
+**Future dates view-only.** The mutation service rejects sessions dated after
+the institution-local today (400, canonical Asia/Kolkata clock). Track
+renders future sessions as "Upcoming" with no mutation controls and hides
+"Mark all present"; reads are never restricted, and future event-created
+sessions (e.g. a future MID_SEM_PRACTICAL) remain visible and designated.
+
+**Verification.** New `verify_track_lab_fix.py` 16/16. Frozen verifiers that
+encoded per-period counts were updated to the occurrence contract (6.6
+22/23/24, 8.1, 8.2 1/6/7, 9.1 12/13, 7.2 5/6, attendance-spec 3) — no
+assertion weakened. All frozen regressions green except the documented
+pre-existing drift: 7.1 25/26 (records 92→95) and 6.7 30/31 (22 events vs 18
+seeded QUIZ_DAY), which remain untouched pending owner authorization. DB ends
+byte-identical to the documented 9.2.1 baseline. Report:
+`docs/track_lab_attendance_correction_report.md`.

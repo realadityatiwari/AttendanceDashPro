@@ -5,8 +5,9 @@ import { DailySessionResponse, AttendanceStatus, AttendanceMutationRequest, Clas
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getLocalDateString } from "@/lib/date";
 
 interface TrackSessionCardProps {
   session: DailySessionResponse;
@@ -15,6 +16,13 @@ interface TrackSessionCardProps {
 
 export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
   const [isMutating, setIsMutating] = useState(false);
+
+  // Future academic dates are VIEW-ONLY (canonical local date; ISO string
+  // comparison — the same utility the Track page uses for navigation).
+  // Scheduled and event-created sessions stay visible as Upcoming, but
+  // Present/Absent cannot be recorded before the date (backend enforces this
+  // too — this is the UI layer of the same rule).
+  const isFuture = session.date > getLocalDateString();
 
   const handleMutate = async (status: AttendanceStatus) => {
     if (isMutating) return;
@@ -35,6 +43,17 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
       );
     }
 
+    // Future dates: no attendance mutation controls at all (view-only).
+    if (isFuture && session.status === AttendanceStatus.PENDING) {
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral" className="pointer-events-none">
+            <Clock className="h-3 w-3 mr-1" /> Upcoming
+          </Badge>
+        </div>
+      );
+    }
+
     if (session.status === AttendanceStatus.ATTENDED) {
       return (
         <div className="flex items-center justify-between w-full">
@@ -42,16 +61,18 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             <CheckCircle2 className="h-5 w-5" />
             <span>Present</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
-            onClick={() => handleMutate(AttendanceStatus.MISSED)}
-            disabled={isMutating}
-          >
-            {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Change
-          </Button>
+          {!isFuture && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => handleMutate(AttendanceStatus.MISSED)}
+              disabled={isMutating}
+            >
+              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Change
+            </Button>
+          )}
         </div>
       );
     }
@@ -63,21 +84,23 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             <XCircle className="h-5 w-5" />
             <span>Absent</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
-            onClick={() => handleMutate(AttendanceStatus.ATTENDED)}
-            disabled={isMutating}
-          >
-            {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Change
-          </Button>
+          {!isFuture && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => handleMutate(AttendanceStatus.ATTENDED)}
+              disabled={isMutating}
+            >
+              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Change
+            </Button>
+          )}
         </div>
       );
     }
 
-    // PENDING
+    // PENDING (past/today)
     return (
       <div className="grid grid-cols-2 gap-3 w-full">
         <Button 
@@ -115,6 +138,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
           <div className="flex flex-col">
             <span className="text-sm font-semibold text-foreground">
               {session.start_time || (session.is_extra ? "Extra Class" : "TBD")}
+              {session.end_time ? ` – ${session.end_time}` : ""}
             </span>
             <span className="text-xs text-muted-foreground font-mono mt-0.5">{session.subject_code}</span>
           </div>

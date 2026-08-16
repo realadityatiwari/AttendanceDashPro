@@ -1006,3 +1006,36 @@ management is an additive layer with no fabricated curriculum.
   designation, FACULTY role, marks/viva/grading, seeded curriculum, second
   lab attendance engine, Phase 9.2.2.
 - Full details: `docs/phase_9_2_1_implementation_report.md`.
+
+## Focused Track Correction (after Phase 9.2.1 — 2026-08-16)
+
+**Scope**: two Track attendance defects fixed as a focused correction (NOT a
+new phase; no Phase 9.3).
+
+- **Two-hour lab = ONE attendance occurrence.** BCS-551/552/553 labs are two
+  contiguous one-hour timetable periods (two ClassSession rows by design).
+  New `app/engines/practical_occurrence.py` collapses contiguous
+  same-subject/same-date PRACTICAL periods into ONE logical occurrence at
+  every consumer: Track daily view (one card "01:00 PM – 03:00 PM"), summary
+  denominators (blocks, not rows), history, dashboard/analytics weekly,
+  calendar session counts, and the laboratory summary. One Present/Absent
+  decision ⇒ one canonical AttendanceRecord; block status precedence
+  ATTENDED > MISSED > CANCELLED(no records) > PENDING; cancelled blocks
+  excluded (never Pending/Absent). Representative session id: recorded member
+  > cancelled member > first member. Attendance engine formulas and the
+  counting tuple shapes are unchanged — only the rows fed to them are
+  occurrence-collapsed.
+- **Future dates view-only.** `record_attendance` rejects sessions after the
+  institution-local date (400, `institution_today()` from
+  `settings.INSTITUTION_TIMEZONE`); Track renders future sessions as
+  Upcoming with no mutation controls and hides "Mark all present".
+- **Verifier updates** (contract-driven, per-row → occurrence semantics, no
+  weakening): 6.6 (22/23/24), 8.1 (3-5/7/11/16), 8.2 (1/6/7), 9.1 (12/13),
+  7.2 (5/6), attendance-spec (3). New focused `verify_track_lab_fix.py`
+  **16/16**. Frozen regressions green except documented pre-existing drift:
+  7.1 25/26 (records 92→95) and 6.7 30/31 (22 events vs 18 seeded) — NOT
+  modified.
+- **No schema/migration change; no ClassSession merged or deleted by this
+  work** (the frozen 6.6 window cleanup removed a pre-existing orphan extra
+  session, returning sessions to the documented 691/0 baseline).
+- Full report: `docs/track_lab_attendance_correction_report.md`.

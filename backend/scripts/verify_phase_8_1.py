@@ -63,12 +63,13 @@ from app.main import app
 from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User, Section
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.enums import AttendanceStatus, UserRole
 from app.engines.attendance_engine import optimize_attendance
+from app.engines.practical_occurrence import group_practical_occurrences
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from sqlalchemy import select, func
@@ -157,19 +158,38 @@ async def main() -> int:
         r = await client.get("/api/v1/analytics/overview", headers=admin_headers)
         ov = r.json()
         async with AsyncSessionLocal() as db:
-            rows = (await db.execute(
-                select(ClassSession.date, AttendanceRecord.status).outerjoin(
-                    AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
-                    & (AttendanceRecord.user_id == admin_user.id)).where(
+            raw_rows = (await db.execute(
+                select(ClassSession.date, ClassSession.class_type, ClassSession.is_cancelled,
+                       AttendanceRecord.status, TimetableEntry.start_time, TimetableEntry.end_time,
+                       Subject.id)
+                .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+                .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                           & (AttendanceRecord.user_id == admin_user.id))
+                .join(Subject, ClassSession.subject_id == Subject.id)
+                .where(
                     ClassSession.date >= semester_start,
                     ClassSession.date <= date.today(),
-                    ClassSession.is_cancelled.is_(False)))).all()
-        att = sum(1 for _, st in rows if st == AttendanceStatus.ATTENDED)
-        miss = sum(1 for _, st in rows if st == AttendanceStatus.MISSED)
-        pend = len(rows) - att - miss
+                )
+                .order_by(ClassSession.date, TimetableEntry.start_time.asc().nulls_last(),
+                          ClassSession.id))).all()
+            # Track lab correction: a 2-hour lab block is ONE attendance occurrence,
+            # so the expected overall/weekly values come from the canonical
+            # occurrence collapse of the session table (never per-period rows).
+            session_rows = [
+                {"subject_id": sid, "date": d, "class_type": ct,
+                 "is_cancelled": cancelled, "status": st,
+                 "start_time": stt, "end_time": ett}
+                for (d, ct, cancelled, st, stt, ett, sid) in raw_rows
+            ]
+            occ_rows = group_practical_occurrences(session_rows)
+        active_occ = [o for o in occ_rows if not o["is_cancelled"]]
+        att = sum(1 for o in active_occ if o["status"] == AttendanceStatus.ATTENDED)
+        miss = sum(1 for o in active_occ if o["status"] == AttendanceStatus.MISSED)
+        pend = len(active_occ) - att - miss
         recorded = att + miss
+        total_occ = len(active_occ)
         exp_current = (att / recorded * 100.0) if recorded else None
-        exp_forecast = ((att + pend) / len(rows) * 100.0) if rows else None
+        exp_forecast = ((att + pend) / total_occ * 100.0) if total_occ else None
         check("3. overall current = Sigma attended / Sigma recorded (ERP, "
               "recorded-only; pending excluded from the current denominator)",
               ov["overall"]["current_pct"] == exp_current
@@ -209,9 +229,12 @@ async def main() -> int:
 
         # --- 7. Practical attendance --------------------------------------------
         bcs551 = next(s for s in ov["subjects"] if s["subject_code"] == "BCS-551")
+        # 4 Monday lab blocks through today (each a 2-period timetable block = ONE
+        # occurrence), all pending for this user: total 4, pending 4.
         check("7. practical % uses the canonical class-session pipeline (no quiz "
-              "window): all-pending lab -> current null, forecast pending-as-attended",
-              bcs551["practical"]["total"] == 8 and bcs551["practical"]["pending"] == 8
+              "window): all-pending lab -> current null, forecast pending-as-attended; "
+              "a 2-hour lab block counts as ONE occurrence",
+              bcs551["practical"]["total"] == 4 and bcs551["practical"]["pending"] == 4
               and bcs551["current_practical_pct"] is None
               and bcs551["forecast_practical_pct"] == 100.0,
               f"total={bcs551['practical']['total']} cur={bcs551['current_practical_pct']} "
@@ -298,9 +321,10 @@ async def main() -> int:
         for w in weekly:
             ws = date.fromisoformat(w["week_start"])
             we = ws + timedelta(days=6)
-            w_att = sum(1 for d, st in rows if ws <= d <= we and st == AttendanceStatus.ATTENDED)
-            w_miss = sum(1 for d, st in rows if ws <= d <= we and st == AttendanceStatus.MISSED)
-            w_pend = sum(1 for d, st in rows if ws <= d <= we and st is None)
+            in_week = [o for o in occ_rows if ws <= o["date"] <= we and not o["is_cancelled"]]
+            w_att = sum(1 for o in in_week if o["status"] == AttendanceStatus.ATTENDED)
+            w_miss = sum(1 for o in in_week if o["status"] == AttendanceStatus.MISSED)
+            w_pend = sum(1 for o in in_week if o["status"] is None)
             w_rec = w_att + w_miss
             exp_pct = (w_att / w_rec * 100.0) if w_rec else None
             if w["current_pct"] != exp_pct or w["recorded"] != w_rec or w["pending"] != w_pend:

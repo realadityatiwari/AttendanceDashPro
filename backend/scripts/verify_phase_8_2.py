@@ -61,7 +61,7 @@ from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.event import AcademicEvent
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject
 from app.models.quiz import QuizSchedule, ScheduleStatus
@@ -71,6 +71,7 @@ from app.engines.attendance_engine import (
     compute_subject_stats,
     classify_attendance_health,
 )
+from app.engines.practical_occurrence import collapse_count_rows, group_practical_occurrences
 from app.services.attendance_service import AttendanceService
 from app.repositories.attendance_repo import AttendanceRepository
 from sqlalchemy import select, func, delete
@@ -115,6 +116,43 @@ async def main() -> int:
         subject_ids = {s.code: s.id for s in (await db.execute(select(Subject))).scalars().all()}
         today = date.today()
 
+        # Track lab correction: a 2-hour laboratory block (two contiguous
+        # timetable periods) is ONE attendance occurrence. Expected per-subject
+        # totals are the canonical occurrence collapse of the raw session table
+        # (app.engines.practical_occurrence) — never a per-period row count.
+        raw = (await db.execute(
+            select(ClassSession.subject_id, ClassSession.class_type, ClassSession.date,
+                   ClassSession.is_cancelled, TimetableEntry.start_time, TimetableEntry.end_time,
+                   AttendanceRecord.status)
+            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                       & (AttendanceRecord.user_id == admin_user.id))
+            .where(ClassSession.date <= today)
+            .order_by(ClassSession.date, TimetableEntry.start_time.asc().nulls_last(),
+                      ClassSession.id)
+        )).all()
+        by_subject: dict = {}
+        for (sid, ct, d, cancelled, st, et, status) in raw:
+            by_subject.setdefault(sid, []).append({
+                "subject_id": sid, "class_type": ct, "date": d,
+                "is_cancelled": cancelled, "start_time": st, "end_time": et,
+                "status": status,
+            })
+        expected_totals = {}
+        for sid, srows in by_subject.items():
+            counts = {"LECTURE": 0, "TUTORIAL": 0, "PRACTICAL": 0}
+            for _sid, ct, _st in collapse_count_rows(srows, include_subject=True):
+                counts[ct.name] += 1
+            expected_totals[sid] = counts
+        db_totals = {
+            code: {
+                "lecture": expected_totals[subject_ids[code]]["LECTURE"],
+                "tutorial": expected_totals[subject_ids[code]]["TUTORIAL"],
+                "practical": expected_totals[subject_ids[code]]["PRACTICAL"],
+            }
+            for code in THEORY | LABS
+        }
+
     admin_token = create_access_token(str(admin_user.id), admin_user.roll_number)
     student_token = create_access_token(str(student_user.id), student_user.roll_number)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
@@ -126,19 +164,6 @@ async def main() -> int:
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             # --- 1. Current-to-date session counts --------------------------------
-            async with AsyncSessionLocal() as db:
-                db_totals = {}
-                for code in THEORY | LABS:
-                    db_totals[code] = {}
-                    for ct, key in (("LECTURE", "lecture"), ("TUTORIAL", "tutorial"), ("PRACTICAL", "practical")):
-                        n = (await db.execute(
-                            select(func.count()).select_from(ClassSession).where(
-                                ClassSession.subject_id == subject_ids[code],
-                                ClassSession.class_type == ClassType[ct],
-                                ClassSession.date <= today,
-                                ClassSession.is_cancelled.is_(False),
-                            ))).scalar()
-                        db_totals[code][key] = n
             all_ok = True
             detail = ""
             for code in sorted(THEORY | LABS):
@@ -151,7 +176,8 @@ async def main() -> int:
                         all_ok = False
                         detail += f"{code}:{key}={got}vs{exp} "
             check("1. summary totals == actual current-to-date session counts "
-                  "(non-cancelled class_sessions <= today, per subject/type)",
+                  "(non-cancelled sessions <= today per subject/type; a 2-hour "
+                  "lab block counts as ONE practical occurrence)",
                   all_ok, detail)
 
             # --- 2. No fixed denominator (derived from the session table) ---------
@@ -241,17 +267,31 @@ async def main() -> int:
 
             # --- 6. Cancelled practical sessions excluded -------------------------
             async with AsyncSessionLocal() as db:
-                # Cancel an UNATTENDED past practical so the exclusion is observable
-                # purely on total/pending (attended/missed must stay unchanged).
+                # Cancel an UNATTENDED past practical BLOCK (a 2-hour lab is ONE
+                # occurrence; pick a block with no admin record on ANY member) so
+                # the exclusion is observable purely on total/pending.
+                p_raw = (await db.execute(
+                    select(ClassSession.id, ClassSession.date, ClassSession.is_cancelled,
+                           TimetableEntry.start_time, TimetableEntry.end_time,
+                           AttendanceRecord.status)
+                    .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+                    .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                               & (AttendanceRecord.user_id == admin_user.id))
+                    .where(ClassSession.subject_id == subject_ids["BCS-553"],
+                           ClassSession.class_type == ClassType.PRACTICAL,
+                           ClassSession.date <= today)
+                    .order_by(ClassSession.date, TimetableEntry.start_time.asc().nulls_last(),
+                              ClassSession.id)
+                )).all()
+                p_rows = [{"id": r.id, "date": r.date, "class_type": ClassType.PRACTICAL,
+                           "is_cancelled": r.is_cancelled, "start_time": r.start_time,
+                           "end_time": r.end_time, "status": r.status} for r in p_raw]
+                occs = group_practical_occurrences(p_rows)
+                target_block = next(
+                    o for o in occs if not o["is_cancelled"] and o["status"] is None
+                )
                 past_prac = (await db.execute(
-                    select(ClassSession).where(
-                        ClassSession.subject_id == subject_ids["BCS-553"],
-                        ClassSession.class_type == ClassType.PRACTICAL,
-                        ClassSession.date <= today,
-                        ClassSession.is_cancelled.is_(False),
-                        ~ClassSession.id.in_(select(AttendanceRecord.class_session_id).where(
-                            AttendanceRecord.user_id == admin_user.id)),
-                    ).order_by(ClassSession.date).limit(1)
+                    select(ClassSession).where(ClassSession.id == target_block["id"])
                 )).scalars().first()
                 svc = AttendanceService(db)
                 before = await svc.get_summary(admin_user.id, subject_ids["BCS-553"], "BCS-553", today)
@@ -280,7 +320,8 @@ async def main() -> int:
                     all_ok = False
                     detail += f"{code}:{b['practical']['total']}vs{db_totals[code]['practical']} "
             check("7. practical attendance remains canonical class-session attendance "
-                  "(P totals == session table; not experiment-derived)",
+                  "(P totals == occurrence collapse of the session table; not "
+                  "experiment-derived)",
                   all_ok and lab_exp_before == 0, detail)
 
             # --- 8. Experiment completion not inferred from attendance -------------

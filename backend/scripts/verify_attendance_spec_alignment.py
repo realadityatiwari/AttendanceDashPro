@@ -10,8 +10,10 @@ verification student, and a temporary partial-enrollment student):
       real attendance event).
   2.  Quiz-day sessions sit OUTSIDE every eligibility window
       (window_end == quiz_date - 1), so eligibility is untouched.
-  3.  A quiz-day session is recordable (enrolled student -> 200) and the
-      subject summary counts it once its date is reached (as_of semantics).
+  3.  Quiz-day sessions follow the future-date rule: a FUTURE quiz-day session
+      is view-only (mutation rejected 400, still visible in the daily read);
+      the subject summary counts it once its date is reached (as_of
+      semantics).
   4.  Student-controlled events (spec): subject-scoped extras on the
       student's OWN enrollments -> 201/200/200 (create/patch/delete);
       global/closure events -> 403; a subject the student is NOT enrolled
@@ -153,9 +155,11 @@ async def main() -> int:
             check("2. quiz-day sessions excluded from eligibility (window_end == quiz_date - 1)",
                   all_ok, detail)
 
-            # --- 3. Quiz-day session is recordable + counted by as_of ----------
+            # --- 3. Quiz-day sessions follow the future-date rule -----------------
             async with AsyncSessionLocal() as db:
-                # Earliest quiz-day-only session (future date, no attendance yet).
+                # Earliest quiz-day-only session (timetable_entry_id NULL). All
+                # scheduled quiz days are ahead of today, so this session is a
+                # FUTURE date: it stays visible (view-only) but cannot be marked.
                 target = (await db.execute(
                     select(ClassSession).where(
                         ClassSession.timetable_entry_id.is_(None),
@@ -168,8 +172,15 @@ async def main() -> int:
                 target_code = subj.code
             r = await client.post("/api/v1/attendance", headers=student_token_headers(student_token), json={
                 "class_session_id": str(target.id), "status": "Attended"})
-            check("3. quiz-day session recordable by enrolled student -> 200",
-                  r.status_code == 200, f"got {r.status_code} {r.text[:150]}")
+            r_daily = await client.get(f"/api/v1/attendance/daily/{target.date.isoformat()}",
+                                       headers=student_token_headers(student_token))
+            check("3. future quiz-day session is view-only: attendance mutation "
+                  "rejected (400, future date), session still visible in the daily "
+                  "read (recordable once its date is reached via the canonical "
+                  "mutation)",
+                  r.status_code == 400 and r_daily.status_code == 200
+                  and any(s["id"] == str(target.id) for s in r_daily.json()["sessions"]),
+                  f"got {r.status_code} {r.text[:150]}")
             if r.status_code == 200:
                 test_record_ids.append(uuid.UUID(r.json()["id"]))
 

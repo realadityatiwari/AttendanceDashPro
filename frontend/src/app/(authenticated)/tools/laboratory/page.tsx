@@ -19,6 +19,10 @@ export default function TrackAttendancePage() {
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const dateStr = getLocalDateString(selectedDate);
+  // Future academic dates are VIEW-ONLY: the schedule stays visible (Upcoming),
+  // but no attendance mutation controls are offered (the backend rejects
+  // future-date mutations too). Canonical local-date string comparison.
+  const isFutureDate = dateStr > getLocalDateString();
 
   const { profile } = useProfile();
   const semesterStart = profile?.semester_start ?? null;
@@ -197,15 +201,21 @@ export default function TrackAttendancePage() {
             </div>
             <Progress value={progressValue} variant="default" className="h-2" />
 
-            {pending > 0 && (
-              <Button
-                onClick={handleMarkAllPresent}
-                disabled={isMarkingAll}
-                className="w-full bg-success hover:bg-success/90 text-success-foreground"
-              >
-                {isMarkingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Mark all present
-              </Button>
+            {isFutureDate ? (
+              <p className="text-xs text-muted-foreground">
+                View-only — attendance unlocks on {dateStr}.
+              </p>
+            ) : (
+              pending > 0 && (
+                <Button
+                  onClick={handleMarkAllPresent}
+                  disabled={isMarkingAll}
+                  className="w-full bg-success hover:bg-success/90 text-success-foreground"
+                >
+                  {isMarkingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Mark all present
+                </Button>
+              )
             )}
           </Card>
 

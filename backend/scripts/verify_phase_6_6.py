@@ -294,20 +294,29 @@ async def main() -> int:
             check("21. calendar 11-03 working, sessions = 5 (cancelled one not counted)",
                   nov03 is not None and nov03["is_working_day"] is True and nov03["session_count"] == 5,
                   f"{nov03}")
-            check("22. calendar 11-07 working Saturday with 5 sessions",
-                  nov07 is not None and nov07["is_working_day"] is True and nov07["session_count"] == 5,
+            # Track lab correction: 11-07 replays the MONDAY schedule, whose
+            # 2-period BCS-551 lab block is ONE occurrence (3 lectures + 1 lab).
+            check("22. calendar 11-07 working Saturday with 4 sessions (Monday "
+                  "schedule; 2-hour lab counts once)",
+                  nov07 is not None and nov07["is_working_day"] is True and nov07["session_count"] == 4,
                   f"{nov07}")
 
             r = await client.get("/api/v1/attendance/daily/2026-11-02", headers=student_headers)
             daily = r.json()["sessions"]
-            check("23. daily 11-02: all 5 sessions Cancelled (distinguishable, not Pending)",
-                  len(daily) == 5 and all(s["is_cancelled"] for s in daily),
+            # Track lab correction: 11-02 (Monday) has 3 lectures + one 2-hour
+            # BCS-551 lab block = 4 occurrences, all cancelled by the closure.
+            check("23. daily 11-02: all 4 session occurrences Cancelled "
+                  "(distinguishable, not Pending; lab block is one occurrence)",
+                  len(daily) == 4 and all(s["is_cancelled"] for s in daily),
                   f"got {len(daily)} sessions")
 
             r = await client.get("/api/v1/attendance/daily/2026-11-05", headers=student_headers)
             daily = r.json()["sessions"]
-            check("24. daily 11-05: 6 classes + 1 extra (extra visible in Track pipeline)",
-                  len(daily) == 7 and sum(1 for s in daily if s["is_extra"] and s["subject_code"] == "BCS-501") == 1,
+            # Track lab correction: 11-05 (Thursday) = 4 lectures + one 2-hour
+            # BCS-552 lab block + 1 extra = 6 occurrences.
+            check("24. daily 11-05: 5 classes + 1 extra (lab block counts once; "
+                  "extra visible in Track pipeline)",
+                  len(daily) == 6 and sum(1 for s in daily if s["is_extra"] and s["subject_code"] == "BCS-501") == 1,
                   f"got {len(daily)} sessions")
 
             r = await client.get("/api/v1/attendance/history?date_from=2026-11-02&date_to=2026-11-03&status=Cancelled",

@@ -6,7 +6,8 @@ from sqlalchemy import func, or_, String
 from datetime import date
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
-from app.models.enums import AttendanceStatus
+from app.models.enums import AttendanceStatus, ClassType
+from app.engines.practical_occurrence import collapse_count_rows, group_practical_occurrences
 
 class AttendanceRepository:
     def __init__(self, db: AsyncSession):
@@ -42,39 +43,92 @@ class AttendanceRepository:
         # Cancelled sessions are excluded: a cancelled class is not a pending,
         # absent, or attended class (Phase 6.6 event->session integration; the
         # legacy engine applied the same rule via the effective schedule).
-        stmt = select(ClassSession.class_type, AttendanceRecord.status)\
-            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id))\
-            .filter(
-                ClassSession.subject_id == subject_id,
-                ClassSession.date <= end_date,
-                ClassSession.is_cancelled.is_(False),
-            )
+        #
+        # Track lab correction: contiguous two-period PRACTICAL blocks are
+        # collapsed into ONE logical occurrence (one lab = one attendance
+        # decision), so a 2-hour lab is never counted twice in any denominator.
+        # The collapse (app.engines.practical_occurrence) is the single source
+        # of occurrence semantics shared by every consumer.
+        stmt = select(
+            ClassSession.class_type,
+            AttendanceRecord.status,
+            ClassSession.date,
+            ClassSession.is_cancelled,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+        ).outerjoin(
+            AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).filter(
+            ClassSession.subject_id == subject_id,
+            ClassSession.date <= end_date,
+        ).order_by(
+            ClassSession.date,
+            TimetableEntry.start_time.asc().nulls_last(),
+            ClassSession.id,
+        )
 
         result = await self.db.execute(stmt)
-        return list(result.all())
+        rows = [
+            {
+                "class_type": row[0],
+                "status": row[1],
+                "date": row[2],
+                "is_cancelled": row[3],
+                "start_time": row[4],
+                "end_time": row[5],
+            }
+            for row in result.all()
+        ]
+        return collapse_count_rows(rows)
 
     async def get_subject_counts_for_user(self, user_id: UUID, end_date: date) -> List[Tuple[UUID, str, AttendanceStatus]]:
         """
         All enrolled-subject counts for a user up to end_date in ONE query
         (dashboard/analytics N+1 fix). Mirrors get_subject_counts_up_to_date
-        semantics exactly: cancelled sessions excluded; a missing record row is
-        Pending (outer join); scoped to the authenticated student's enrollments
+        semantics exactly: cancelled sessions excluded (practical blocks
+        collapsed to one occurrence); a missing record row is Pending (outer
+        join); scoped to the authenticated student's enrollments
         (StudentEnrollment join). Returns (subject_id, class_type, status).
         """
         from app.models.academic import StudentEnrollment
 
-        stmt = select(ClassSession.subject_id, ClassSession.class_type, AttendanceRecord.status)\
-            .join(StudentEnrollment, (StudentEnrollment.subject_id == ClassSession.subject_id)
-                  & (StudentEnrollment.user_id == user_id))\
+        stmt = select(
+            ClassSession.subject_id,
+            ClassSession.class_type,
+            AttendanceRecord.status,
+            ClassSession.date,
+            ClassSession.is_cancelled,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+        ).join(StudentEnrollment, (StudentEnrollment.subject_id == ClassSession.subject_id)
+               & (StudentEnrollment.user_id == user_id))\
             .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
                        & (AttendanceRecord.user_id == user_id))\
+            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)\
             .filter(
                 ClassSession.date <= end_date,
-                ClassSession.is_cancelled.is_(False),
+            ).order_by(
+                ClassSession.date,
+                TimetableEntry.start_time.asc().nulls_last(),
+                ClassSession.id,
             )
 
         result = await self.db.execute(stmt)
-        return list(result.all())
+        rows = [
+            {
+                "subject_id": row[0],
+                "class_type": row[1],
+                "status": row[2],
+                "date": row[3],
+                "is_cancelled": row[4],
+                "start_time": row[5],
+                "end_time": row[6],
+            }
+            for row in result.all()
+        ]
+        return collapse_count_rows(rows, include_subject=True)
 
     async def get_mid_sem_sessions(self, subject_ids) -> dict:
         """
@@ -103,18 +157,42 @@ class AttendanceRepository:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
         # attendance from the previous quiz boundary through the day before the quiz).
-        # Cancelled sessions are excluded for the same reason as above.
-        stmt = select(ClassSession.class_type, AttendanceRecord.status)\
-            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id))\
-            .filter(
-                ClassSession.subject_id == subject_id,
-                ClassSession.date >= start_date,
-                ClassSession.date <= end_date,
-                ClassSession.is_cancelled.is_(False),
-            )
+        # Cancelled sessions are excluded for the same reason as above (practical
+        # blocks collapsed to one occurrence).
+        stmt = select(
+            ClassSession.class_type,
+            AttendanceRecord.status,
+            ClassSession.date,
+            ClassSession.is_cancelled,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+        ).outerjoin(
+            AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).filter(
+            ClassSession.subject_id == subject_id,
+            ClassSession.date >= start_date,
+            ClassSession.date <= end_date,
+        ).order_by(
+            ClassSession.date,
+            TimetableEntry.start_time.asc().nulls_last(),
+            ClassSession.id,
+        )
 
         result = await self.db.execute(stmt)
-        return list(result.all())
+        rows = [
+            {
+                "class_type": row[0],
+                "status": row[1],
+                "date": row[2],
+                "is_cancelled": row[3],
+                "start_time": row[4],
+                "end_time": row[5],
+            }
+            for row in result.all()
+        ]
+        return collapse_count_rows(rows)
 
     async def get_sessions_with_status(self, user_id: UUID, start_date: date, end_date: date) -> List[dict]:
         """
@@ -133,9 +211,13 @@ class AttendanceRepository:
             ClassSession.class_type,
             ClassSession.is_extra,
             ClassSession.is_cancelled,
+            ClassSession.designation,
+            Subject.id.label('subject_id'),
             Subject.code.label('subject_code'),
             Subject.name.label('subject_name'),
             AttendanceRecord.status,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
         ).join(
             Subject, ClassSession.subject_id == Subject.id
         ).join(
@@ -145,13 +227,23 @@ class AttendanceRepository:
         ).outerjoin(
             AttendanceRecord,
             (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).filter(
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
-        ).order_by(ClassSession.date, ClassSession.class_type)
+        ).order_by(
+            ClassSession.date,
+            TimetableEntry.start_time.asc().nulls_last(),
+            ClassSession.id,
+        )
 
         result = await self.db.execute(stmt)
-        return [dict(row._mapping) for row in result.all()]
+        rows = [dict(row._mapping) for row in result.all()]
+        # Track lab correction: contiguous two-period PRACTICAL blocks are one
+        # logical occurrence for dashboard/analytics/calendar consumers (a lab
+        # counts once in weekly analytics and calendar session counts).
+        return group_practical_occurrences(rows)
 
     async def get_daily_sessions(self, user_id: UUID, target_date: date) -> List[dict]:
         from app.models.academic import Subject, StudentEnrollment
@@ -181,21 +273,28 @@ class AttendanceRepository:
             (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
         ).filter(
             ClassSession.date == target_date,
-        ).order_by(TimetableEntry.start_time.nulls_last(), ClassSession.class_type)
+        ).order_by(TimetableEntry.start_time.asc().nulls_last(), ClassSession.id)
 
         result = await self.db.execute(stmt)
-        return [dict(row._mapping) for row in result.all()]
+        rows = [dict(row._mapping) for row in result.all()]
+        # Track lab correction: a two-hour laboratory block (two contiguous
+        # timetable PRACTICAL periods) is ONE attendance occurrence. The daily
+        # read model collapses the block into a single card with the block
+        # status and the 01:00 PM – 03:00 PM span; attendance mutation against
+        # it records exactly ONE AttendanceRecord on the representative
+        # session. Non-practical sessions pass through unchanged.
+        return group_practical_occurrences(rows)
 
-    def _history_conditions(
+    def _history_base_conditions(
         self,
-        user_id: UUID,
         subject_code: Optional[str] = None,
-        status: Optional[str] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         search: Optional[str] = None,
     ):
-        """Shared WHERE clauses for the session-based history queries."""
+        """Shared non-status WHERE clauses for the session-based history queries.
+        The attendance status filter is applied at OCCURRENCE level after the
+        practical-block collapse (a lab block is one history row)."""
         from app.models.academic import Subject
 
         conditions = []
@@ -205,16 +304,6 @@ class AttendanceRepository:
             conditions.append(ClassSession.date <= date_to)
         if subject_code:
             conditions.append(Subject.code == subject_code)
-        if status == "Cancelled":
-            conditions.append(ClassSession.is_cancelled.is_(True))
-        elif status is not None:
-            resolved = AttendanceStatus(status)
-            if resolved == AttendanceStatus.PENDING:
-                conditions.append(
-                    AttendanceRecord.id.is_(None) & ClassSession.is_cancelled.is_(False)
-                )
-            else:
-                conditions.append(AttendanceRecord.status == resolved)
         if search:
             pattern = f"%{search}%"
             conditions.append(
@@ -227,31 +316,16 @@ class AttendanceRepository:
             )
         return conditions
 
-    async def get_history(
+    async def _fetch_history_occurrences(
         self,
         user_id: UUID,
-        limit: int = 50,
-        offset: int = 0,
-        subject_code: Optional[str] = None,
-        status: Optional[str] = None,
-        date_from: Optional[date] = None,
-        date_to: Optional[date] = None,
-        search: Optional[str] = None,
-    ) -> Tuple[List[dict], int]:
-        """
-        Semester-scoped history for the authenticated student: every class
-        session of their enrolled subjects within [date_from, date_to],
-        joined with the subject, timetable times, and their attendance record
-        (None = Pending). Cancelled sessions are included as their own state.
-        Mirrors the daily/Track read semantics; never creates rows.
-        """
+        conditions,
+    ) -> List[dict]:
+        """Every class-session row for the base history conditions, collapsed
+        into logical occurrences (contiguous two-period labs = one row)."""
         from app.models.academic import Subject, StudentEnrollment
 
-        conditions = self._history_conditions(
-            user_id, subject_code, status, date_from, date_to, search
-        )
-
-        base_stmt = (
+        stmt = (
             select(
                 ClassSession.id,
                 ClassSession.date,
@@ -278,34 +352,65 @@ class AttendanceRepository:
                 (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
             )
             .filter(*conditions)
-        )
-
-        page_stmt = base_stmt.order_by(
-            ClassSession.date.desc(),
-            TimetableEntry.start_time.desc().nulls_last(),
-            Subject.code.asc(),
-        ).limit(limit).offset(offset)
-
-        result = await self.db.execute(page_stmt)
-        records = [dict(row._mapping) for row in result.all()]
-
-        count_stmt = (
-            select(func.count(ClassSession.id))
-            .join(Subject, ClassSession.subject_id == Subject.id)
-            .join(
-                StudentEnrollment,
-                (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
+            .order_by(
+                ClassSession.date,
+                TimetableEntry.start_time.asc().nulls_last(),
+                ClassSession.id,
             )
-            .outerjoin(
-                AttendanceRecord,
-                (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
-            )
-            .filter(*conditions)
         )
-        count_result = await self.db.execute(count_stmt)
-        total_count = count_result.scalar() or 0
+        result = await self.db.execute(stmt)
+        rows = [dict(row._mapping) for row in result.all()]
+        return group_practical_occurrences(rows)
 
-        return records, total_count
+    @staticmethod
+    def _history_status_match(occ: dict, status: Optional[str]) -> bool:
+        """Occurrence-level status matching for history filters (a lab block
+        is one row: any member record resolves the block status)."""
+        if status == "Cancelled":
+            return bool(occ.get("is_cancelled"))
+        if status is None:
+            return True
+        resolved = AttendanceStatus(status)
+        if resolved == AttendanceStatus.PENDING:
+            return occ.get("status") is None and not occ.get("is_cancelled")
+        return occ.get("status") == resolved
+
+    async def get_history(
+        self,
+        user_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        subject_code: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        search: Optional[str] = None,
+    ) -> Tuple[List[dict], int]:
+        """
+        Semester-scoped history for the authenticated student: every class
+        session occurrence of their enrolled subjects within [date_from,
+        date_to], joined with the subject, timetable times, and their
+        attendance record (None = Pending). A two-hour laboratory block is ONE
+        history row. Cancelled occurrences are included as their own state.
+        Mirrors the daily/Track read semantics; never creates rows.
+        """
+        conditions = self._history_base_conditions(
+            subject_code, date_from, date_to, search
+        )
+        occurrences = await self._fetch_history_occurrences(user_id, conditions)
+        filtered = [
+            o for o in occurrences if self._history_status_match(o, status)
+        ]
+        total_count = len(filtered)
+
+        def sort_key(o: dict):
+            st = o.get("start_time")
+            st_secs = (st.hour * 3600 + st.minute * 60 + st.second) if st else 0
+            return (-o["date"].toordinal(), -st_secs, o.get("subject_code") or "")
+
+        filtered.sort(key=sort_key)
+        page = filtered[offset:offset + limit]
+        return page, total_count
 
     async def get_history_summary(
         self,
@@ -318,45 +423,27 @@ class AttendanceRepository:
     ) -> dict:
         """
         Aggregate counts over the full filtered history result set (not the
-        current page): cancelled is its own state; attended/missed/pending
-        exclude cancelled sessions, mirroring the Track daily counts.
+        current page), at OCCURRENCE level: a two-hour lab counts once.
+        Cancelled is its own state; attended/missed/pending exclude cancelled
+        occurrences, mirroring the Track daily counts.
         """
-        from app.models.academic import Subject, StudentEnrollment
-
-        conditions = self._history_conditions(
-            user_id, subject_code, status, date_from, date_to, search
+        conditions = self._history_base_conditions(
+            subject_code, date_from, date_to, search
         )
-
-        stmt = (
-            select(
-                func.count(ClassSession.id).filter(ClassSession.is_cancelled.is_(True)).label('cancelled'),
-                func.count(ClassSession.id).filter(
-                    ClassSession.is_cancelled.is_(False) & (AttendanceRecord.status == AttendanceStatus.ATTENDED)
-                ).label('attended'),
-                func.count(ClassSession.id).filter(
-                    ClassSession.is_cancelled.is_(False) & (AttendanceRecord.status == AttendanceStatus.MISSED)
-                ).label('missed'),
-                func.count(ClassSession.id).filter(
-                    ClassSession.is_cancelled.is_(False) & AttendanceRecord.id.is_(None)
-                ).label('pending'),
-            )
-            .join(Subject, ClassSession.subject_id == Subject.id)
-            .join(
-                StudentEnrollment,
-                (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
-            )
-            .outerjoin(
-                AttendanceRecord,
-                (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
-            )
-            .filter(*conditions)
+        occurrences = await self._fetch_history_occurrences(user_id, conditions)
+        filtered = [
+            o for o in occurrences if self._history_status_match(o, status)
+        ]
+        cancelled = sum(1 for o in filtered if o.get("is_cancelled"))
+        attended = sum(1 for o in filtered if o.get("status") == AttendanceStatus.ATTENDED)
+        missed = sum(1 for o in filtered if o.get("status") == AttendanceStatus.MISSED)
+        pending = sum(
+            1 for o in filtered
+            if o.get("status") is None and not o.get("is_cancelled")
         )
-
-        result = await self.db.execute(stmt)
-        row = result.one()
         return {
-            "cancelled": row.cancelled,
-            "attended": row.attended,
-            "missed": row.missed,
-            "pending": row.pending,
+            "cancelled": cancelled,
+            "attended": attended,
+            "missed": missed,
+            "pending": pending,
         }

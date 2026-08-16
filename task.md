@@ -993,3 +993,28 @@ authorization). Experiment management is an additive layer — never a second
 attendance engine; never fabricated curriculum; no experiment-count gate;
 no auto-designation; no FACULTY; no grading/viva. DB: 22/691/95/18/9/18/30,
 cancelled=0, extra=0, designated=0, lab tables 0/0.
+
+## Focused Track Correction (after Phase 9.2.1 — 2026-08-16)
+
+- [x] 2-hour lab block = ONE attendance occurrence across Track daily view,
+  summary, history, analytics, dashboard, calendar, laboratory summary
+  (`app/engines/practical_occurrence.py` collapse; one mutation ⇒ one
+  AttendanceRecord; no denominator inflation).
+- [x] Future dates view-only: mutation API 400 (institution-local date) +
+  Track Upcoming UI with no Present/Absent controls; reads unrestricted.
+- [x] New `verify_track_lab_fix.py` **16/16**; frozen regressions: 6.5 27/27,
+  6.6 36/36, 7.2 26/26, 8.1 22/22, 8.2 18/18, 9.1 28/28, 9.2 29/29,
+  attendance-spec 15/15; **6.7 30/31 + 7.1 25/26 remain the documented
+  pre-existing owner-data drift (NOT modified)**.
+- [x] Static gates: compileall, tsc --noEmit, ESLint, next build — all PASS.
+- [x] DB byte-equivalent to the documented 9.2.1 baseline: 22 events ·
+  691 sessions (0 cancelled, 0 extra) · 95 records · 18 enrollments ·
+  9 subjects · 18 quizzes · 30 users · 0 designated · lab tables 0/0.
+  No commit.
+- [x] Report: `docs/track_lab_attendance_correction_report.md`.
+
+## Do Not Touch (post-9.2.1 freeze)
+
+Attendance engine/formulas, quiz eligibility, Phase 6 event architecture,
+Phase 9.1 synchronizer/designation semantics, experiment management, all
+frozen verifiers (6.7/7.1 drift pending owner authorization).

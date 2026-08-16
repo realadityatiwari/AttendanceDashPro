@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 from typing import Optional, Dict, Any, List
+from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.attendance_repo import AttendanceRepository
@@ -8,6 +9,7 @@ from app.repositories.user_repo import UserRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
 from app.models.enums import AttendanceStatus
+from app.core.config import settings
 from app.engines.attendance_engine import (
     compute_subject_stats,
     normalize_class_type,
@@ -16,6 +18,17 @@ from app.engines.attendance_engine import (
     classify_attendance_health,
 )
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
+
+# Institutional timezone (settings.INSTITUTION_TIMEZONE, Asia/Kolkata) is the
+# canonical local clock for "today". Attendance mutation is rejected for any
+# session dated after this local date — future dates are view-only (Track
+# renders them, but Present/Absent cannot be recorded before the date).
+INSTITUTION_TZ = ZoneInfo(settings.INSTITUTION_TIMEZONE)
+
+
+def institution_today() -> date:
+    """The canonical institution-local current date (single source of truth)."""
+    return datetime.now(INSTITUTION_TZ).date()
 
 # Subject-level optimizer target (Phase 8.0 contract): the documented academic
 # attendance requirement for the general (non-quiz-window) subject optimizer.
@@ -155,6 +168,15 @@ class AttendanceService:
         enrolled = await self.repo.is_enrolled(user_id, session.subject_id)
         if not enrolled:
             raise HTTPException(status_code=403, detail="Not enrolled in this subject")
+
+        # Future dates are view-only: scheduled (and event-created) sessions stay
+        # visible in Track as Upcoming, but attendance cannot be recorded before
+        # the institution-local date. Reads are never restricted — only mutation.
+        if session.date > institution_today():
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot mark attendance for a future date",
+            )
             
         record = await self.repo.get_attendance_for_session(user_id, class_session_id)
         if record:

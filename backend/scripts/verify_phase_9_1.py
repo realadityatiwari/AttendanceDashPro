@@ -332,22 +332,24 @@ async def main() -> int:
                   f"got {r.status_code} {r.text[:150]}")
 
             # --- 12-13. Attendance + analytics propagation ------------------------
+            # Track lab correction: BCS-553's Friday lab is a TWO-period timetable
+            # block (13:00 + 14:00) = ONE attendance occurrence. Through 08-15 there
+            # are 5 lab blocks; 07-31 is cancelled (excluded): total 4.
+            # attended=1 (07-17 block), missed=1 (07-24 block) -> pct = 50.
             r = await client.get("/api/v1/attendance/summary/BCS-553", headers=temp_headers)
             b = r.json()
-            # 10 BCS-553 P sessions through 08-15 minus 1 cancelled (07-31): total 9;
-            # attended=1 (07-17), missed=1 (07-24) -> current_practical_pct = 50.
             check("12. practical percentage changes correctly through the canonical "
-                  "summary (recorded-only: 1/2 = 50%)",
+                  "summary (occurrence-based: 2-hour lab counts once, 1/2 = 50%)",
                   b["practical"]["attended"] == 1 and b["practical"]["missed"] == 1
-                  and b["practical"]["total"] == 9
+                  and b["practical"]["total"] == 4 and b["practical"]["pending"] == 2
                   and abs(b["current_practical_pct"] - 50.0) < 1e-9,
                   f"summary={b['practical']} pct={b['current_practical_pct']}")
 
             r = await client.get("/api/v1/analytics/overview", headers=temp_headers)
             ov = r.json()["overall"]
             check("13. overall analytics follow canonical rules (cancelled excluded, "
-                  "pending stays pending, current recorded-only: 1/2 = 50%)",
-                  ov["attended"] == 1 and ov["recorded"] == 2 and ov["pending"] == 7
+                  "pending stays pending, lab counted once, current recorded-only: 1/2 = 50%)",
+                  ov["attended"] == 1 and ov["recorded"] == 2 and ov["pending"] == 2
                   and ov["cancelled"] == 1 and abs(ov["current_pct"] - 50.0) < 1e-9,
                   f"overall={ov}")
 
