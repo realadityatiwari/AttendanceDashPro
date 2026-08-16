@@ -1,33 +1,242 @@
+#Requires -Version 5.1
 # start-dev.ps1
-Write-Host "Starting AttendanceDash Pro Development Environment..." -ForegroundColor Cyan
+# AttendanceDash Pro — one-command local development startup.
+#
+# Starts the complete stack in dependency order:
+#   1. PostgreSQL (Docker container: attendancedashpro_db, port 55432)
+#   2. FastAPI backend (127.0.0.1:8000)
+#   3. Next.js frontend (localhost:3100)
+#
+# Usage:
+#   .\start-dev.ps1
+#
+# Prerequisites:
+#   - Docker Desktop must be running
+#   - backend\.venv must exist   (python -m venv backend\.venv)
+#   - frontend\node_modules must exist  (cd frontend && npm install)
 
-$baseDir = Get-Location
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
-# Verify Prerequisites
-if (!(Test-Path "backend\.venv")) {
-    Write-Host "Error: backend\.venv not found. Please create the Python virtual environment." -ForegroundColor Red
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+function Write-Step { param([string]$Msg) Write-Host "  $Msg" -ForegroundColor Cyan }
+function Write-Ok   { param([string]$Msg) Write-Host "  ✔ $Msg" -ForegroundColor Green }
+function Write-Warn { param([string]$Msg) Write-Host "  ! $Msg" -ForegroundColor Yellow }
+function Write-Fail { param([string]$Msg) Write-Host "  ✘ $Msg" -ForegroundColor Red }
+
+function Test-PortListening {
+    param([string]$TargetHost, [int]$Port)
+    try {
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        $ar  = $tcp.BeginConnect($TargetHost, $Port, $null, $null)
+        $ok  = $ar.AsyncWaitHandle.WaitOne(500)
+        if ($ok) { $tcp.EndConnect($ar) }
+        $tcp.Close()
+        return $ok
+    } catch {
+        return $false
+    }
+}
+
+function Test-PortOwnedBy {
+    # Returns $true if the process listening on $Port has a name matching $Pattern.
+    param([int]$Port, [string]$Pattern)
+    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $conns) { return $false }
+    foreach ($c in $conns) {
+        $proc = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+        if ($proc -and $proc.Name -match $Pattern) { return $true }
+    }
+    return $false
+}
+
+# ── resolve repo root robustly ─────────────────────────────────────────────────
+
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if (-not $repoRoot -or -not (Test-Path (Join-Path $repoRoot "docker-compose.yml"))) {
+    # Fallback: walk up from current location looking for docker-compose.yml
+    $candidate = (Get-Location).Path
+    while ($candidate -and -not (Test-Path (Join-Path $candidate "docker-compose.yml"))) {
+        $parent = Split-Path -Parent $candidate
+        if ($parent -eq $candidate) { $candidate = $null; break }
+        $candidate = $parent
+    }
+    if (-not $candidate) {
+        Write-Fail "Cannot locate repository root (docker-compose.yml not found)."
+        exit 1
+    }
+    $repoRoot = $candidate
+}
+
+$backendDir  = Join-Path $repoRoot "backend"
+$frontendDir = Join-Path $repoRoot "frontend"
+$pythonExe   = Join-Path $backendDir ".venv\Scripts\python.exe"
+$npmCmd      = "npm.cmd"
+
+# ── header ─────────────────────────────────────────────────────────────────────
+
+Write-Host ""
+Write-Host "  AttendanceDash Pro — Development Environment" -ForegroundColor White
+Write-Host "  ─────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
+
+# ── prerequisite checks ────────────────────────────────────────────────────────
+
+Write-Step "Checking prerequisites..."
+
+# Python venv
+if (-not (Test-Path $pythonExe)) {
+    Write-Fail "Python venv not found at: $pythonExe"
+    Write-Host "    Run:  python -m venv backend\.venv  (then pip install -r backend\requirements.txt)" -ForegroundColor DarkGray
     exit 1
 }
 
-if (!(Test-Path "frontend\node_modules")) {
-    Write-Host "Error: frontend\node_modules not found. Please run 'npm install' inside frontend/." -ForegroundColor Red
+# Node modules
+if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
+    Write-Fail "frontend\node_modules not found."
+    Write-Host "    Run:  cd frontend ; npm install" -ForegroundColor DarkGray
     exit 1
 }
 
-# Start Backend
-Write-Host "Starting Backend API on 127.0.0.1:8000..." -ForegroundColor Green
-$backendProcess = Start-Process -FilePath "$baseDir\backend\.venv\Scripts\python.exe" -ArgumentList "-m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000" -WorkingDirectory "$baseDir\backend" -PassThru
+# Docker CLI
+if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {
+    Write-Fail "Docker CLI not found. Install Docker Desktop from https://www.docker.com/products/docker-desktop"
+    exit 1
+}
 
-# Start Frontend
-Write-Host "Starting Next.js Frontend on localhost:3100..." -ForegroundColor Green
-$frontendProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "run dev" -WorkingDirectory "$baseDir\frontend" -PassThru
+# Docker daemon
+$dockerInfo = docker info 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Docker daemon is not running. Please start Docker Desktop and try again."
+    exit 1
+}
+
+Write-Ok "Prerequisites OK"
+Write-Host ""
+
+# ── 1. PostgreSQL ──────────────────────────────────────────────────────────────
+
+$dbContainer   = "attendancedashpro_db"
+$dbHost        = "127.0.0.1"
+$dbPort        = 55432
+$dbReadyMsg    = ""
+
+Write-Step "PostgreSQL ($dbContainer) ..."
+
+$containerState = docker inspect --format "{{.State.Status}}" $dbContainer 2>&1
+if ($LASTEXITCODE -ne 0) {
+    # Container does not exist — create it via compose (safe: uses named volume defined in compose file)
+    Write-Warn "Container not found. Creating via docker compose (data volume preserved)..."
+    Push-Location $repoRoot
+    docker compose up -d attendancedash_db 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+    Pop-Location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "docker compose up failed. Check docker-compose.yml and Docker Desktop."
+        exit 1
+    }
+} elseif ($containerState -eq "running") {
+    Write-Ok "Already running — reusing"
+    $dbReadyMsg = "(was already running)"
+} else {
+    Write-Step "Container exists but is stopped — starting..."
+    docker start $dbContainer 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "docker start $dbContainer failed."
+        exit 1
+    }
+}
+
+# Poll PostgreSQL readiness (TCP) — up to 30 seconds
+if (-not $dbReadyMsg) {
+    $maxWaitSec = 30
+    $elapsed    = 0
+    Write-Step "Waiting for PostgreSQL to accept connections on $dbHost`:$dbPort ..."
+    while (-not (Test-PortListening -TargetHost $dbHost -Port $dbPort)) {
+        if ($elapsed -ge $maxWaitSec) {
+            Write-Fail "PostgreSQL did not become ready within ${maxWaitSec}s."
+            Write-Host "    Check:  docker logs $dbContainer" -ForegroundColor DarkGray
+            exit 1
+        }
+        Start-Sleep -Milliseconds 500
+        $elapsed += 1
+    }
+    Write-Ok "PostgreSQL ready on $dbHost`:$dbPort (waited ${elapsed}s)"
+}
 
 Write-Host ""
-Write-Host "Services started successfully." -ForegroundColor Cyan
-Write-Host "=============================="
-Write-Host "Frontend: http://localhost:3100"
-Write-Host "Backend:  http://127.0.0.1:8000"
-Write-Host "API Base: http://127.0.0.1:8000/api/v1"
-Write-Host "=============================="
+
+# ── 2. FastAPI backend ─────────────────────────────────────────────────────────
+
+$backendPort    = 8000
+$backendHost    = "127.0.0.1"
+$backendStarted = $false
+
+Write-Step "FastAPI backend (port $backendPort) ..."
+
+if (Test-PortListening -TargetHost $backendHost -Port $backendPort) {
+    if (Test-PortOwnedBy -Port $backendPort -Pattern "python") {
+        Write-Ok "Already running — reusing (Python process on port $backendPort)"
+    } else {
+        $owner = (Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Name } | Select-Object -First 1)
+        Write-Fail "Port $backendPort is occupied by an unrelated process: $owner"
+        Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
+        exit 1
+    }
+} else {
+    $backendProcess = Start-Process `
+        -FilePath $pythonExe `
+        -ArgumentList "-m uvicorn app.main:app --reload --host $backendHost --port $backendPort" `
+        -WorkingDirectory $backendDir `
+        -PassThru `
+        -WindowStyle Hidden
+    $backendStarted = $true
+    Write-Ok "Launched (PID $($backendProcess.Id))"
+}
+
 Write-Host ""
-Write-Host "Run .\stop-dev.ps1 to shut down the development servers safely." -ForegroundColor Yellow
+
+# ── 3. Next.js frontend ────────────────────────────────────────────────────────
+
+$frontendPort    = 3100
+$frontendStarted = $false
+
+Write-Step "Next.js frontend (port $frontendPort) ..."
+
+if (Test-PortListening -TargetHost "127.0.0.1" -Port $frontendPort) {
+    if (Test-PortOwnedBy -Port $frontendPort -Pattern "node") {
+        Write-Ok "Already running — reusing (Node process on port $frontendPort)"
+    } else {
+        $owner = (Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Name } | Select-Object -First 1)
+        Write-Fail "Port $frontendPort is occupied by an unrelated process: $owner"
+        Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
+        exit 1
+    }
+} else {
+    $frontendProcess = Start-Process `
+        -FilePath $npmCmd `
+        -ArgumentList "run dev" `
+        -WorkingDirectory $frontendDir `
+        -PassThru `
+        -WindowStyle Hidden
+    $frontendStarted = $true
+    Write-Ok "Launched (PID $($frontendProcess.Id))"
+}
+
+Write-Host ""
+
+# ── status summary ─────────────────────────────────────────────────────────────
+
+Write-Host "  AttendanceDash Pro Development Environment" -ForegroundColor White
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ("  PostgreSQL : RUNNING  $dbHost`:$dbPort  $dbReadyMsg").TrimEnd() -ForegroundColor Green
+Write-Host "  Backend   : RUNNING  $backendHost`:$backendPort" -ForegroundColor Green
+Write-Host "  Frontend  : RUNNING  localhost:$frontendPort" -ForegroundColor Green
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  Frontend : http://localhost:$frontendPort" -ForegroundColor Cyan
+Write-Host "  Backend  : http://$backendHost`:$backendPort" -ForegroundColor Cyan
+Write-Host "  API      : http://$backendHost`:$backendPort/api/v1" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Stop with:  .\stop-dev.ps1" -ForegroundColor Yellow
+Write-Host ""

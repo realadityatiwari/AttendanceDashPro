@@ -361,9 +361,17 @@ firebase deploy --only firestore:rules
 ## Run Locally (Canonical Development Workflow)
 
 **Prerequisites:**
-- PostgreSQL running locally
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and **running**
+  (PostgreSQL runs inside a Docker container — Docker must be up before `start-dev.ps1`)
 - Python virtual environment (`backend\.venv`)
+  ```powershell
+  python -m venv backend\.venv
+  backend\.venv\Scripts\pip install -r backend\requirements.txt
+  ```
 - Node.js & npm (`frontend\node_modules`)
+  ```powershell
+  cd frontend ; npm install ; cd ..
+  ```
 
 ### Start the Application
 
@@ -373,9 +381,24 @@ From the project root:
 .\start-dev.ps1
 ```
 
-**Expected URLs:**
-- **Frontend:** http://localhost:3100
-- **Backend API:** http://127.0.0.1:8000/api/v1
+`start-dev.ps1` handles the complete startup sequence automatically:
+
+1. Checks that Docker Desktop is running
+2. Starts the PostgreSQL container (`attendancedashpro_db`) if it is not already running
+3. Polls until PostgreSQL is accepting connections on `127.0.0.1:55432`
+4. Starts the FastAPI backend on `127.0.0.1:8000`
+5. Starts the Next.js frontend on `localhost:3100`
+
+If any service is already running it is reused — no duplicate processes are launched.
+
+**Expected URLs after startup:**
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3100 |
+| Backend | http://127.0.0.1:8000 |
+| API | http://127.0.0.1:8000/api/v1 |
+| API Docs | http://127.0.0.1:8000/docs |
 
 ### Stop the Application
 
@@ -383,7 +406,19 @@ From the project root:
 .\stop-dev.ps1
 ```
 
-*Note: For manual startup (e.g., debugging), you can run `npm run dev` in the frontend (it defaults to port 3100) and `backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` in the backend.*
+`stop-dev.ps1` stops the frontend (Node) and backend (Python) processes.
+**PostgreSQL is left running** — its data lives in a persistent Docker named volume
+(`attendancedashpro_attendancedash_data`) and is never deleted by the scripts.
+
+To also stop PostgreSQL:
+```powershell
+docker stop attendancedashpro_db
+```
+
+> [!IMPORTANT]
+> Never run `docker rm attendancedashpro_db` or `docker compose down -v` unless you intentionally want to destroy your local database.
+
+*Note: For manual startup (e.g., debugging), you can run `npm run dev` in the frontend (defaults to port 3100) and `backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` in the backend directory.*
 
 ---
 
