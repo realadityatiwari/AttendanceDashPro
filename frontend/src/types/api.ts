@@ -122,6 +122,9 @@ export interface DailySessionResponse {
   // presentation field from ClassSession.designation; never used in any
   // attendance calculation.
   designation: string | null;
+  // Option-C quiz-day context: True when the subject has an ACTIVE QUIZ_DAY
+  // event on this date. Presentation-only — never an attendance calculation.
+  is_quiz_day: boolean;
 }
 
 export interface DailySessionsResponse {
@@ -305,6 +308,9 @@ export enum EventType {
   CLASS_CANCELLED = "CLASS_CANCELLED",
   SURPRISE_QUIZ = "SURPRISE_QUIZ",
   QUIZ_DAY = "QUIZ_DAY",
+  // Unified holiday (closure family): one user-facing event for any
+  // non-working holiday day/range, with an optional reason/occasion note.
+  HOLIDAY = "HOLIDAY",
   PUBLIC_HOLIDAY = "PUBLIC_HOLIDAY",
   INSTITUTE_HOLIDAY = "INSTITUTE_HOLIDAY",
   WORKING_DAY_OVERRIDE = "WORKING_DAY_OVERRIDE",

@@ -250,12 +250,18 @@ async def main() -> int:
         r = await client.get("/api/v1/events?upcoming=true", headers=admin_headers)
         upcoming = r.json()
         # The owner's active testing legitimately adds upcoming events of other
-        # types; the seeded quiz-day population is the scoped assertion.
+        # types (and QUIZ_DAY rows without a quiz_schedules backing); the
+        # seeded quiz-day population is the scoped assertion.
         qd_upcoming = [e for e in upcoming if e["event_type"] == "QUIZ_DAY"]
+        async with AsyncSessionLocal() as db:
+            seeded_pairs = {(str(q.subject_id), q.date.isoformat())
+                            for q in (await db.execute(select(QuizSchedule))).scalars().all()}
+        qd_upcoming_seeded = [e for e in qd_upcoming
+                              if (e["subject_id"], e["start_date"]) in seeded_pairs]
         check("6. /events upcoming = 18 quiz days, all at/after the semester horizon",
-              r.status_code == 200 and len(qd_upcoming) == 18
+              r.status_code == 200 and len(qd_upcoming_seeded) == 18
               and all(e["end_date"] >= "2026-08-14" for e in upcoming),
-              f"count={len(upcoming)} quiz_day={len(qd_upcoming)}")
+              f"count={len(upcoming)} quiz_day={len(qd_upcoming)} seeded={len(qd_upcoming_seeded)}")
 
         # --- 7-9. BCS-054 windows (Q1/Q2 unchanged, Q3 follows the resolution) --
         expected_windows = {

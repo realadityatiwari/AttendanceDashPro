@@ -213,6 +213,12 @@ class DailySessionResponse(BaseModel):
     # presentation field from ClassSession.designation. NULL for regular
     # sessions; never used in any attendance calculation.
     designation: Optional[str] = None
+    # Option-C quiz-day context (presentation-only): True when the session's
+    # subject has an ACTIVE QUIZ_DAY academic event on this date. Never used
+    # in any attendance calculation — the canonical occurrence rule (Option B)
+    # is unchanged: a covered subject/date keeps its single attendance-bearing
+    # session, which Track simply labels with its quiz-day context.
+    is_quiz_day: bool = False
 
 class DailySessionsResponse(BaseModel):
     date: date

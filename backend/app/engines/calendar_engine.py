@@ -22,6 +22,7 @@ def get_event_priority(event_type: EventType) -> int:
         EventType.EMERGENCY_CLOSURE: 100,
         EventType.WORKING_DAY_OVERRIDE: 90,
         EventType.WORKING_SATURDAY: 80,
+        EventType.HOLIDAY: 70,
         EventType.PUBLIC_HOLIDAY: 70,
         EventType.SEMESTER_BREAK: 60,
         EventType.MID_SEMESTER_BREAK: 60,
@@ -85,11 +86,20 @@ def get_academic_day(
         # MID_SEMESTER_BREAK shares SEMESTER_BREAK's priority tier (60) and semantic
         # family (a break with no classes), so it is treated as a closure as well.
         is_closure = dominant_event.event_type in [
-            EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY, EventType.FESTIVAL_HOLIDAY, 
-            EventType.EMERGENCY_CLOSURE, EventType.SEMESTER_BREAK, EventType.MID_SEMESTER_BREAK
+            EventType.HOLIDAY, EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY,
+            EventType.FESTIVAL_HOLIDAY, EventType.EMERGENCY_CLOSURE,
+            EventType.SEMESTER_BREAK, EventType.MID_SEMESTER_BREAK
         ]
         
-        if dominant_event.is_working_day is not None or is_closure:
+        if dominant_event.event_type == EventType.WORKING_SATURDAY:
+            # A Working Saturday event flips ONLY Saturdays to working days.
+            # Non-Saturdays inside its date range keep the day's default
+            # resolution (weekdays stay working, Sundays stay non-working) —
+            # the event never forces a weekday non-working or a Sunday
+            # working merely because it falls inside the range.
+            if target_date.weekday() == 5:  # Python weekday(): 5 = Saturday
+                is_working_day = True
+        elif dominant_event.is_working_day is not None or is_closure:
             is_working_day = False if is_closure else dominant_event.is_working_day
             
         if dominant_event.substitution_schedule_override:

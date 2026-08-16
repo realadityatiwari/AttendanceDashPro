@@ -52,6 +52,13 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
     eventType: EventType.QUIZ_DAY, requiresSubject: true, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: false,
   },
+  // Unified holiday: the consolidated closure flow (single day or range with
+  // a reason/occasion note). The legacy holiday types remain supported for
+  // backward compatibility.
+  [EventType.HOLIDAY]: {
+    eventType: EventType.HOLIDAY, requiresSubject: false, requiresClassType: false,
+    allowedClassTypes: [], isClosure: true, isGlobal: true,
+  },
   [EventType.PUBLIC_HOLIDAY]: {
     eventType: EventType.PUBLIC_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
@@ -127,6 +134,7 @@ export const DEFAULT_DURATION_MODE: Record<EventType, DurationMode> = {
   [EventType.LAB_CANCELLED]: "single",
   // Naturally multi-day: breaks and the holiday/closure/working-day family
   // (still able to represent a single day by collapsing to one date).
+  [EventType.HOLIDAY]: "range",
   [EventType.PUBLIC_HOLIDAY]: "range",
   [EventType.INSTITUTE_HOLIDAY]: "range",
   [EventType.FESTIVAL_HOLIDAY]: "range",

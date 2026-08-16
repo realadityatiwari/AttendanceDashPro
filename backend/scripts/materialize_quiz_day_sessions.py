@@ -7,11 +7,13 @@ contributes to both the subject's attendance and overall attendance. The
 class_sessions table is the canonical session source, so quiz-day attendance
 is only recordable where a session exists.
 
-This script makes the canonical session set complete: for every SCHEDULED
-quiz schedule of a quiz-applicable subject, if the subject has no
-non-cancelled session on the quiz date, it inserts ONE session
-(class_type=LECTURE — quiz-applicable subjects are theory subjects with
-lectures; quiz-day attendance is a lecture-context event).
+Option A (separate occurrence): the Quiz Day is an INDEPENDENT attendance-
+bearing occurrence even when a normal lecture/tutorial exists on the same
+date. For every SCHEDULED quiz schedule of a quiz-applicable subject, this
+script inserts ONE quiz-day session (class_type=LECTURE — quiz-applicable
+subjects are theory subjects with lectures; quiz-day attendance is a
+lecture-context event), skipping only when a quiz-day-shaped session already
+exists. A normal timetable class never suppresses it.
 
 Properties:
 - Idempotent: re-running converges (existing quiz-day sessions are skipped).
@@ -88,12 +90,20 @@ async def run(undo: bool) -> int:
         created_count = 0
         skipped = 0
         for qs in schedules:
+            # Option A (separate quiz-day occurrence): the Quiz Day is an
+            # independent attendance-bearing occurrence even when a normal
+            # lecture/tutorial exists on the same date. The existence check is
+            # the canonical quiz-day shape (LECTURE, is_extra=false,
+            # timetable_entry_id NULL) — never (subject_id, date) alone, so a
+            # normal timetable class never suppresses quiz-day creation.
             existing = (
                 await db.execute(
                     select(ClassSession.id).where(
                         ClassSession.subject_id == qs.subject_id,
                         ClassSession.date == qs.date,
-                        ClassSession.is_cancelled.is_(False),
+                        ClassSession.class_type == QUIZ_DAY_CLASS_TYPE,
+                        ClassSession.is_extra.is_(False),
+                        ClassSession.timetable_entry_id.is_(None),
                     )
                 )
             ).scalars().first()

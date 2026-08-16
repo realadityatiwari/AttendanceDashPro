@@ -110,6 +110,10 @@ async def main() -> int:
     test_event_ids: list[uuid.UUID] = []
     test_record_ids: list[uuid.UUID] = []
     temp_user_id: uuid.UUID | None = None
+    # Sessions this run's CLASS_CANCELLED cancelled (exact ids, Option A: the
+    # cancellation targets the covering timetable lecture on a covered quiz
+    # date) — restored in the finally block, never by date/shape sweeps.
+    my_cancelled_ids: set = set()
     temp_enrollment_id: uuid.UUID | None = None
 
     try:
@@ -191,8 +195,14 @@ async def main() -> int:
             ra = await client.get(f"/api/v1/attendance/summary/{target_code}?as_of_date={on_day}", headers=student_token_headers(student_token))
             lec_before = rb.json().get("lecture", {}).get("total")
             lec_on = ra.json().get("lecture", {}).get("total")
-            check("3b. quiz-day session counts toward subject attendance on its date (as_of)",
-                  rb.status_code == 200 and ra.status_code == 200 and lec_on == lec_before + 1,
+            # Option A (separate occurrence): the earliest quiz-day session now
+            # sits on 2026-08-24 (BNC-501), a date that carries BOTH the normal
+            # lecture AND the independent quiz-day session — crossing the as_of
+            # boundary adds both (+2). Both are canonical lecture-class rows
+            # counted in subject attendance.
+            check("3b. quiz-day session counts toward subject attendance on its date "
+                  "(as_of; +2 = normal lecture + independent quiz-day occurrence)",
+                  rb.status_code == 200 and ra.status_code == 200 and lec_on == lec_before + 2,
                   f"as_of {before_day} L={lec_before} -> as_of {on_day} L={lec_on}")
 
             # Additive summary fields (attendance UI refinement).
@@ -283,7 +293,21 @@ async def main() -> int:
                 async with AsyncSessionLocal() as db:
                     after = (await db.execute(
                         select(ClassSession).where(ClassSession.id == quiz_session.id))).scalars().first()
-                check("7b. synchronizer guard: quiz-day session NOT cancelled by event sync",
+                    # Option A: the earliest quiz-day session sits on the covered
+                    # 08-24 (BNC-501), so CLASS_CANCELLED cancels the real
+                    # timetable lecture (its intent) while the quiz-day session
+                    # stays protected. Capture the cancelled lecture id so the
+                    # finally block restores the exact baseline.
+                    cancelled_lec = (await db.execute(
+                        select(ClassSession).where(
+                            ClassSession.subject_id == quiz_session.subject_id,
+                            ClassSession.date == quiz_session.date,
+                            ClassSession.timetable_entry_id.isnot(None),
+                            ClassSession.is_cancelled.is_(True)))).scalars().first()
+                    if cancelled_lec is not None:
+                        my_cancelled_ids.add(cancelled_lec.id)
+                check("7b. synchronizer guard: quiz-day session NOT cancelled by event sync "
+                      "(the covering timetable lecture is cancelled instead)",
                       after is not None and not after.is_cancelled,
                       f"is_cancelled={after.is_cancelled if after else 'missing'}")
             else:
@@ -317,6 +341,13 @@ async def main() -> int:
                     await db.delete(s)
                 elif s.is_cancelled:
                     s.is_cancelled = False
+            if my_cancelled_ids:
+                await db.execute(
+                    ClassSession.__table__.update()
+                    .where(ClassSession.id.in_(my_cancelled_ids),
+                           ClassSession.is_cancelled.is_(True))
+                    .values(is_cancelled=False)
+                )
             await db.commit()
 
         async with AsyncSessionLocal() as db:

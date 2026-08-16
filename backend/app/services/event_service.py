@@ -142,6 +142,16 @@ class EventService:
             substitution_schedule_override=data.substitution_schedule_override,
             is_working_day=data.is_working_day,
         )
+        # Unified holiday product rule: a NEW HOLIDAY must carry a
+        # reason/occasion (the note). Enforced at creation only — editing an
+        # existing holiday (including legacy holiday types that predate the
+        # note column) never requires it, so old events stay editable.
+        if data.event_type == EventType.HOLIDAY and (
+            data.note is None or not data.note.strip()
+        ):
+            raise EventValidationError(
+                "A Holiday requires a reason/occasion (note)."
+            )
         await self._check_duplicate(
             data.event_type,
             data.start_date,

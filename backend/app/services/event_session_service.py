@@ -31,11 +31,15 @@ Design rules:
   cancelled, un-cancelled, or deleted. Cancelled sessions never receive
   attendance (record_attendance already rejects them with 409), so the
   "cancelled != absent" rule is preserved end to end.
-- Quiz-day attendance (product decision): QUIZ_DAY is NOT calendar-only — an
-  active QUIZ_DAY event materializes exactly one attendance-bearing quiz-day
-  session for its subject/date (bucket in _reconcile_date; shape mirrors the
-  quiz-schedule materialization script). The bucket is state-based, never
-  duplicates the script's sessions, and deletes only unattended quiz-day
+- Quiz-day attendance (product decision — Option A): QUIZ_DAY is NOT
+  calendar-only — an active QUIZ_DAY event materializes exactly one
+  attendance-bearing quiz-day session for its subject/date (bucket in
+  _reconcile_date; shape mirrors the quiz-schedule materialization script),
+  INDEPENDENT of any normal timetable class on the same date. A covered
+  subject/date therefore has its regular occurrence(s) AND the quiz-day
+  occurrence, each markable and each counted once in subject attendance/ERP.
+  The bucket is shape-count based and idempotent (never duplicates the
+  script's sessions or itself), and deletes only unattended quiz-day
   sessions.
 - Sessions are only *created* inside the canonical baseline span
   ([min, max] date of scheduled sessions). Events outside that span still
@@ -79,8 +83,11 @@ EXTRA_OCCURRENCE_TYPES = {
 }
 
 # Closure types are handled entirely by the calendar engine (day becomes
-# non-working); they never reach the per-occurrence logic.
+# non-working); they never reach the per-occurrence logic. HOLIDAY is the
+# unified closure type (same semantics as the legacy holiday family, which
+# remains fully supported).
 CLOSURE_TYPES = {
+    EventType.HOLIDAY,
     EventType.PUBLIC_HOLIDAY,
     EventType.INSTITUTE_HOLIDAY,
     EventType.FESTIVAL_HOLIDAY,
@@ -467,40 +474,43 @@ class EventSessionSynchronizer:
         #     other events; quiz-day attendance must stay recordable);
         #   - attended quiz-day sessions are historical truth and are never
         #     deleted (attendance safety, same as extras).
-        covered: Dict[object, int] = {}
-        for session in existing:
-            if session.is_cancelled or session.id in removed_ids:
-                continue
-            covered[session.subject_id] = covered.get(session.subject_id, 0) + 1
-        for session in created:
-            covered[session.subject_id] = covered.get(session.subject_id, 0) + 1
-
-        for subject_id in desired_quiz_days:
-            if covered.get(subject_id, 0) == 0:
-                created.append(
-                    self.session_repo.add_session(
-                        subject_id=subject_id,
-                        date=target,
-                        class_type=ClassType.LECTURE,
-                        is_extra=False,
-                        timetable_entry_id=None,
-                    )
-                )
-                covered[subject_id] = 1
-
+        # Quiz-day attendance bucket (product decision — Option A): an active
+        # QUIZ_DAY event is ONE attendance-bearing occurrence for its subject,
+        # INDEPENDENT of any normal timetable class on the same date — a
+        # covered subject/date now has its regular occurrence(s) AND the
+        # quiz-day occurrence (each markable, each counted once in subject
+        # attendance and ERP). Creation is shape-count based and idempotent:
+        # exactly one quiz-day-shaped session (LECTURE, is_extra=false,
+        # timetable_entry_id=null) per subject in desired_quiz_days; multiple
+        # active QUIZ_DAY events for the same subject/date collapse to one
+        # (desired_quiz_days is a set). A normal timetable lecture NEVER
+        # suppresses quiz-day creation.
         quiz_day_sessions = [
             s for s in existing
             if s.timetable_entry_id is None
             and not s.is_extra
             and s.class_type == ClassType.LECTURE
         ]
+        existing_quiz_day_subjects = {
+            s.subject_id for s in quiz_day_sessions if s.subject_id in desired_quiz_days
+        }
+        for subject_id in desired_quiz_days - existing_quiz_day_subjects:
+            created.append(
+                self.session_repo.add_session(
+                    subject_id=subject_id,
+                    date=target,
+                    class_type=ClassType.LECTURE,
+                    is_extra=False,
+                    timetable_entry_id=None,
+                )
+            )
+
         for session in sorted(quiz_day_sessions, key=lambda s: str(s.id)):
             if session.id in attended_ids:
                 continue
             if session.subject_id not in desired_quiz_days:
                 await self.session_repo.delete_session(session)
                 removed_ids.add(session.id)
-                covered[session.subject_id] = max(covered.get(session.subject_id, 0) - 1, 0)
 
         # Phase 9.1: mid-sem designation step. Runs only when the triggering
         # event is itself MID_SEM_PRACTICAL (the event's create/update/

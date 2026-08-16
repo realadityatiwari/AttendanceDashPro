@@ -1051,3 +1051,16 @@ new phase; no Phase 9.3).
 - **Frozen regressions**: 6.5 27/27 · 6.6 36/36 · 7.2 26/26 · 8.2 18/18 · attendance-spec 15/15 · 9.1 28/28 · 9.2 29/29 · track-lab-fix 16/16. Pre-existing owner-data fixture drift untouched: 7.1 24/26 (checks 6/23), 6.7 28/31 (checks 4/6/7), 8.1 21/22 (check 7 — admin gained a BCS-551 2026-07-20 Missed record between runs).
 - **DB**: records 101 before and after (zero attendance data touched); sessions 695→693 via the frozen 6.6 documented startup cleanup of 2 unattended owner extra sessions (2 attended owner extras preserved).
 - Full report: `docs/history_filters_correction_report.md`.
+
+---
+
+## Focused Quiz Day Recovery + Verifier Hardening (2026-08-16)
+
+- **Recovery**: reactivated exactly the 18 seeded QUIZ_DAY events (quiz_schedules-backed + 08-14 creation window — never type/date/count); restored the 6 canonical uncovered-date quiz-day sessions via the idempotent `materialize_quiz_day_sessions.py` (10-16 BCS-502 correctly absent — Option-B covered; the audit's 7th row was the owner's 08-17 test-event session, intentionally not restored). Canonical 10-23 BCS-054 session restored and pinned by 7.1 check 5 (PASS).
+- **Hardening — ownership/artifact-scoped cleanup, the data-loss class fixed**: `verify_events_correction.py` no longer deletes by date/shape windows (removed MY_WINDOWS; cleans only captured event/session IDs) 42/42; `verify_track_lab_fix.py` cleans only its own sessions by captured ID — a **delta** (never the collapsed daily view, whose occurrence id on a lab day is a pre-existing timetable row) 16/16; `verify_history_filters.py` un-cancels only its captured BCS-551 block 20/20.
+- **Focused verifier**: new `verify_quiz_day_restore.py` 11/11 (twice, idempotent) — seed schedules/events present + active + UUID-stable, 6 canonical quiz-day sessions present, no duplicates, records 122 unchanged, owner 08-17 test event inactive, owner data preserved.
+- **Owner data healed/preserved**: BNC-501 07-31 extras re-materialized via the canonical sync and survive all verifier runs (extras 8 before/after); BCS-551 08-24 block intact.
+- **Frozen verifiers NOT weakened.** Remaining failures are owner-data drift from the owner's duplicate active BNC-501 08-24 quiz-day event (`6019a478`): 6.5 26/27 (check 20, surfaced by restoring the seeds), 6.7 28/31 (4/6/7), 7.1 25/26 (6). All other suites green (6.6, 7.2, 8.1, 8.2, 9.1, 9.2, attendance-spec, quiz-day-materialization).
+- **DB**: records 122 → 122 (no attendance mutation); sessions 698; events 38; quizzes 18/18 SCHEDULED. No commit.
+- Full report: `docs/quiz_day_recovery_report.md`.
+- **Phase 8.3 — dedicated Analytics page (T-3 product decision resolved, 2026-08-16)**: `/analytics` composes `GET /api/v1/analytics/overview` (overall current/forecast, weekly semester trend, subject-wise analytics with health + 75% optimizer). No new API, no backend change, no DB change, no React math — the read model's fields are rendered as-is (null-gap weeks, unreachable optimizer, both canonical bandings). Added `Analytics` nav entry. Verification: `tsc --noEmit` · ESLint · `next build`; `verify_phase_8_1.py` 22/22 + `verify_phase_8_2.py` 18/18 re-run; DB counts byte-identical (31/27/9/18/38/698/122).

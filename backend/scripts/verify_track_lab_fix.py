@@ -48,8 +48,10 @@ C. PHASE 9 LABORATORY INTEGRATION
        before and after — no fabricated curriculum/progress).
 
 State changes are this script's own artifacts (a temp user, events, records,
-designations, session state) and are removed in the finally block. No old
-assertion is weakened.
+designations, session state) and are removed in the finally block BY EXPLICIT
+ID captured during the run - never by a date/shape sweep (owner-created
+extras, cancellations and designations inside the window are off-limits).
+No old assertion is weakened.
 
 Usage:
     python scripts/verify_track_lab_fix.py
@@ -152,6 +154,11 @@ async def main() -> int:
 
     test_event_ids: list[uuid.UUID] = []
     test_record_ids: list[uuid.UUID] = []
+    # Sessions this script itself created (mid-sem extras) or temporarily
+    # mutated (the existing BCS-551 block it cancels for C13) - the ONLY
+    # rows the finally block may touch.
+    test_session_ids: list[uuid.UUID] = []
+    cancelled_member_ids: list[uuid.UUID] = []
 
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
@@ -240,6 +247,9 @@ async def main() -> int:
                   f"overall={ov}")
 
             # --- A7. Non-lab-day mid-sem extra stays a standalone occurrence ------
+            async with AsyncSessionLocal() as db:
+                pre_extra_ids = {s.id for s in
+                                 await practical_sessions(db, subject_ids["BCS-551"], D_EXTRA)}
             r = await client.post("/api/v1/events", headers=temp_headers, json={
                 "event_type": "MID_SEM_PRACTICAL", "start_date": D_EXTRA.isoformat(),
                 "end_date": D_EXTRA.isoformat(),
@@ -249,6 +259,10 @@ async def main() -> int:
                 test_event_ids.append(extra_mid_id)
             async with AsyncSessionLocal() as db:
                 extra_sess = await practical_sessions(db, subject_ids["BCS-551"], D_EXTRA)
+                # Delta only: sessions this event actually materialized (on this
+                # non-lab day the event creates exactly one extra; nothing on
+                # the date predates it).
+                test_session_ids.extend(s.id for s in extra_sess if s.id not in pre_extra_ids)
             check("A7. mid-sem on a non-lab day materializes exactly ONE standalone "
                   "practical occurrence (designated extra, not merged)",
                   r.status_code == 201 and len(extra_sess) == 1 and extra_sess[0].is_extra
@@ -298,6 +312,9 @@ async def main() -> int:
                   ok_today, detail)
 
             # --- B11. Future MID_SEM_PRACTICAL: visible, not markable, reversible --
+            async with AsyncSessionLocal() as db:
+                pre_fut_ids = {s.id for s in
+                               await practical_sessions(db, subject_ids["BCS-551"], D_FUT2)}
             r = await client.post("/api/v1/events", headers=temp_headers, json={
                 "event_type": "MID_SEM_PRACTICAL", "start_date": D_FUT2.isoformat(),
                 "end_date": D_FUT2.isoformat(),
@@ -308,6 +325,13 @@ async def main() -> int:
             r_daily = await client.get(f"/api/v1/attendance/daily/{D_FUT2.isoformat()}", headers=temp_headers)
             desig_daily = [s for s in r_daily.json()["sessions"]
                            if s["subject_code"] == "BCS-551" and s.get("designation") == "MID_SEM_PRACTICAL"]
+            # The daily view collapses a lab block to ONE occurrence whose id
+            # is the PRE-EXISTING first timetable row (on a lab day the mid-sem
+            # designates the existing block — no session is created). Capture
+            # only the delta this event materialized, never pre-existing rows.
+            async with AsyncSessionLocal() as db:
+                post_fut = await practical_sessions(db, subject_ids["BCS-551"], D_FUT2)
+                test_session_ids.extend(s.id for s in post_fut if s.id not in pre_fut_ids)
             fut_mark = None
             if desig_daily:
                 fut_mark = await client.post("/api/v1/attendance", headers=temp_headers, json={
@@ -344,6 +368,9 @@ async def main() -> int:
             # create the event and observe the block-level exclusion.
             r_pre = await client.get("/api/v1/attendance/summary/BCS-551", headers=temp_headers)
             pre_total = r_pre.json()["practical"]["total"]
+            async with AsyncSessionLocal() as db:
+                pre_members = await practical_sessions(db, subject_ids["BCS-551"], D_CANCEL)
+                cancelled_member_ids.extend(s.id for s in pre_members)
             r = await client.post("/api/v1/events", headers=temp_headers, json={
                 "event_type": "LAB_CANCELLED", "start_date": D_CANCEL.isoformat(),
                 "end_date": D_CANCEL.isoformat(),
@@ -396,25 +423,21 @@ async def main() -> int:
             if temp_user_id is not None:
                 await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
                 await db.execute(delete(User).where(User.id == temp_user_id))
-            # Restore every session the tests touched: delete unattended extras,
-            # un-cancel unattended cancelled sessions, clear designations.
-            stale = (await db.execute(select(ClassSession).where(
-                ClassSession.date >= WINDOW_START, ClassSession.date <= WINDOW_END))).scalars().all()
-            attended_ids = set()
-            if stale:
-                rec_rows = (await db.execute(
-                    select(AttendanceRecord.class_session_id).where(
-                        AttendanceRecord.class_session_id.in_([s.id for s in stale])))).all()
-                attended_ids = {r[0] for r in rec_rows}
-            for s in stale:
-                if s.id in attended_ids:
-                    continue
-                if s.is_extra:
+            # Clean up ONLY this script's own artifacts, by explicit ID captured
+            # during the run (sessions its mid-sem events created; the existing
+            # BCS-551 block it temporarily cancels for C13). Never sweep by
+            # date/shape: owner-created extras, cancellations and designations
+            # inside the window are off-limits.
+            if test_session_ids:
+                own_sessions = (await db.execute(
+                    select(ClassSession).where(ClassSession.id.in_(test_session_ids)))).scalars().all()
+                for s in own_sessions:
                     await db.delete(s)
-                elif s.is_cancelled:
+            if cancelled_member_ids:
+                cancelled_members = (await db.execute(
+                    select(ClassSession).where(ClassSession.id.in_(cancelled_member_ids)))).scalars().all()
+                for s in cancelled_members:
                     s.is_cancelled = False
-                if s.designation is not None:
-                    s.designation = None
             await db.commit()
 
     async with AsyncSessionLocal() as db:

@@ -918,3 +918,21 @@ byte-identical to the documented 9.2.1 baseline. Report:
 **Fix.** (1) The Load-more button renders only when `history` exists and more rows remain; while a filtered/page request is in flight a spinner row renders instead of the button. (2) The filter-signature reset effect clears `rows` immediately, so the previous filter's rows are never displayed or mixed into the new result — the skeleton shows while the filtered request loads. No `keepPreviousData`, so stale-filter data is never shown. The 2-hour lab occurrence collapse is untouched: BCS-551 history is 4 blocks, not 8 rows, under every filter.
 
 **Verification.** New `verify_history_filters.py` 20/20, exact DB baseline restored. Frozen regressions green except pre-existing owner-data fixture drift (7.1 24/26, 6.7 28/31, 8.1 21/22 — none weakened; 8.1 check 7 now sees the admin's owner-entered BCS-551 2026-07-20 Missed record). DB records 101 before and after; sessions 695→693 only via the frozen 6.6 documented startup cleanup of unattended owner extras. Report: `docs/history_filters_correction_report.md`.
+
+---
+
+## Walkthrough — Quiz Day Recovery + Verifier Hardening (2026-08-16)
+
+**Symptom.** 18 seeded QUIZ_DAY events inactive, 7 quiz-day sessions missing (incl. the canonical 10-23 BCS-054), and the owner's BNC-501 07-31 EXTRA_LECTURE/SURPRISE_QUIZ sessions deleted. The forensic audit traced the deletions to **date/shape-based cleanup** in `verify_events_correction.py` and the quiz-day deactivation sweep in the event sync.
+
+**Recovery.** Reactivated exactly the 18 seeds (quiz_schedules-backed + 08-14 creation window; owner events untouched). Restored the 6 canonical uncovered-date quiz-day sessions with the idempotent `materialize_quiz_day_sessions.py` — 10-16 BCS-502 is correctly absent (Option-B covered; the audit's 7th row was the owner's 08-17 test-event session, intentionally not restored). Attendance records untouched (122).
+
+**Hardening.** All three cleanup sites now use **ownership/artifact-scoped** cleanup with explicit captured IDs, never date/shape windows:
+- `verify_events_correction.py` — `finally` deletes only its own created events and materialized sessions.
+- `verify_track_lab_fix.py` — deletes only its own mid-sem sessions (**delta** capture; on a lab day the collapsed daily view's occurrence id is a pre-existing timetable row and must never be captured as "created"), and un-cancels only the block its LAB_CANCELLED check cancels.
+- `verify_history_filters.py` — un-cancels only the BCS-551 block its LAB_CANCELLED check cancels.
+
+**Healing.** Re-running the hardened events-correction verifier re-materialized the owner's 07-31 extras through the canonical sync; they now survive every verifier run. A BCS-551 08-24 block row my own hardening initially deleted (via the collapsed-daily-view id) was restored in the generator's exact shape.
+
+**Verification.** New `verify_quiz_day_restore.py` 11/11 (twice). Full suite: events-correction 42/42 · track-lab-fix 16/16 · history-filters 20/20 · 6.6 36/36 · 7.2 26/26 · 8.1 22/22 · 8.2 18/18 · 9.1 28/28 · 9.2 29/29 · attendance-spec 15/15 · quiz-day-materialization 14/14. Frozen verifiers NOT weakened; remaining reds are owner-data drift from the owner's duplicate active BNC-501 08-24 quiz-day event `6019a478` (6.5 check 20, 6.7 checks 4/6/7, 7.1 check 6). DB: records 122 unchanged, sessions 698, events 38, quizzes 18/18. Report: `docs/quiz_day_recovery_report.md`.
+**Phase 8.3 — Analytics page (T-3) implemented.** The roadmap's dedicated-analytics-page decision is now resolved: `/analytics` renders the canonical Phase 8.1 read model verbatim — overall current/forecast with recorded-only semantics, the full Monday-start weekly/semester-trend series (dash = gap, never 0%), and subject-wise cards with Attendance Health, L/T/P counts, practical %, and the backend 75% must-attend/safe-skip optimizer (including the unreachable state). No backend/DB/formula change; React formats only. `tsc`, ESLint, `next build` green; 8.1 22/22 and 8.2 18/18 re-run green; DB baseline byte-identical.

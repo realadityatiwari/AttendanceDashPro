@@ -11,12 +11,14 @@ ASGITransport + real DB + minted JWTs, the established pattern):
     quiz_applicable subjects); QUIZ_DAY is admin-only (student -> 403)
     while SURPRISE_QUIZ stays student-creatable for enrolled subjects
     (frozen STUDENT_CREATABLE_EVENT_TYPES contract);
-  * QUIZ_DAY is ONE attendance-bearing occurrence: exactly one quiz-day
-    session per (subject, date) (LECTURE, is_extra=false, timetable NULL),
-    created only when the subject has no non-cancelled session that date
-    (a timetable class, an extra, or an existing quiz-day session all
-    cover — never duplicates the seeded quiz-schedule script sessions),
-    removed only when the event is deactivated/moved, never when attended;
+  * QUIZ_DAY is ONE attendance-bearing occurrence per (subject, date)
+    (LECTURE, is_extra=false, timetable NULL), INDEPENDENT of any normal
+    timetable class (Option A): exactly one quiz-day session is created for
+    every active QUIZ_DAY event subject/date — a covered subject/date keeps
+    its regular occurrence(s) AND gains the quiz-day occurrence. Idempotent
+    (shape-count based, never duplicates itself or the seeded quiz-schedule
+    script sessions), removed only when the event is deactivated/moved,
+    never when attended;
   * attendance flows through the canonical session pipeline (Track, History,
     subject summary, analytics) and stays recordable after moves;
   * regressions: extra materialization, lab block collapse, lab cancellation,
@@ -32,7 +34,13 @@ Test dates (no overlap with any frozen verifier's window, no user data):
 State changes are this script's own artifacts (events titled
 "VerifyEventsCorrection ...", their sessions, attendance records, and
 cancellation state on the future window) and are removed in the finally
-block. No frozen verifier assertion is weakened.
+block. Cleanup is STRICTLY ownership-scoped: events by their note marker,
+sessions and cancellations by the EXACT row IDs captured when this run's
+events created/cancelled them (delta before/after each mutation). The
+verifier NEVER deletes or mutates rows merely because they match a
+date/type/session shape — the original version's shape/date sweep deleted
+the owner's live BNC-501 07-31 EXTRA_LECTURE/SURPRISE_QUIZ sessions and
+must never do that again. No frozen verifier assertion is weakened.
 
 Usage:
     python scripts/verify_events_correction.py
@@ -59,7 +67,6 @@ from app.models.academic import StudentEnrollment, Subject
 from app.models.quiz import QuizSchedule
 from app.models.laboratory import LaboratoryExperiment, LaboratoryRecord
 from app.models.enums import AttendanceStatus, ClassType, UserRole, SessionDesignation
-from app.services.attendance_service import institution_today
 from sqlalchemy import select, func, delete
 
 results = []
@@ -90,62 +97,21 @@ async def count_sessions(db, *conds):
     return (await db.execute(stmt)).scalar()
 
 
-async def cleanup_residue(db, subject_ids: dict) -> None:
-    """Startup: remove crashed-run residue of THIS script. Residue is matched
-    two ways (belt and braces): events carrying my note marker, and events on
-    my windows with exactly the (event_type, subject) combos this script
-    creates (catches drafts before the note marker existed). Sessions on my
-    windows that are extras or quiz-day-shaped are deleted with their records
-    (never the seeded script quiz-day session on 10-23), and cancellation
-    state on the future window is reset. User data is never touched."""
+async def cleanup_residue(db) -> None:
+    """Startup: remove crashed-run residue of THIS script. Ownership is the
+    note marker this verifier stamps on every event it creates (ev_payload).
+    Session rows are deliberately NOT touched here: they carry no event
+    linkage and no created_at, so any date/type/shape-based sweep could delete
+    owner/live rows — the original version deleted the owner's live BNC-501
+    07-31 EXTRA_LECTURE/SURPRISE_QUIZ sessions exactly that way. Sessions a
+    run creates are removed by the finally block's captured-ID cleanup; only a
+    hard kill mid-run can leave orphan sessions, which is strictly preferable
+    to ever deleting owner data."""
     note_events = (await db.execute(
         select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
     )).scalars().all()
-    pattern_events = (await db.execute(
-        select(AcademicEvent).where(AcademicEvent.start_date.in_(MY_WINDOWS))
-    )).scalars().all()
-    combo = {
-        ("CLASS_CANCELLED", subject_ids["BCS-501"]),
-        ("CLASS_CANCELLED", subject_ids["BCS-502"]),
-        ("SURPRISE_QUIZ", subject_ids["BCS-503"]),
-        ("SURPRISE_QUIZ", subject_ids["BCS-502"]),
-        ("QUIZ_DAY", subject_ids["BCS-503"]),
-        ("QUIZ_DAY", subject_ids["BCS-501"]),
-        ("EXTRA_LECTURE", subject_ids["BCS-054"]),
-        ("EXTRA_PRACTICAL", subject_ids["BCS-551"]),
-        ("EXTRA_TUTORIAL", subject_ids["BCS-501"]),
-        ("LAB_CANCELLED", subject_ids["BCS-553"]),
-    }
     for ev in note_events:
         await db.delete(ev)
-    for ev in pattern_events:
-        if ((ev.event_type.value if hasattr(ev.event_type, "value") else str(ev.event_type)),
-                ev.subject_id) in combo:
-            await db.delete(ev)
-
-    # Quiz-day-shaped sessions (timetable NULL, not extra, LECTURE) on my
-    # windows EXCEPT 10-23 (the script session lives there).
-    qd_cond = (
-        ClassSession.timetable_entry_id.is_(None),
-        ClassSession.is_extra.is_(False),
-        ClassSession.class_type == ClassType.LECTURE,
-        ClassSession.date.in_(set(FUT) | {PAST_A, PAST_B}),
-    )
-    extra_cond = (ClassSession.is_extra.is_(True), ClassSession.date.in_(MY_WINDOWS))
-    qd_sessions = (await db.execute(select(ClassSession).where(*qd_cond))).scalars().all()
-    extra_sessions = (await db.execute(select(ClassSession).where(*extra_cond))).scalars().all()
-    doomed = {s.id for s in qd_sessions} | {s.id for s in extra_sessions}
-    if doomed:
-        await db.execute(delete(AttendanceRecord).where(
-            AttendanceRecord.class_session_id.in_(doomed)))
-        await db.execute(delete(ClassSession).where(ClassSession.id.in_(doomed)))
-
-    # Cancellation residue on the future window (base rows my events cancelled).
-    await db.execute(
-        ClassSession.__table__.update()
-        .where(ClassSession.date.in_(FUT), ClassSession.is_cancelled.is_(True))
-        .values(is_cancelled=False)
-    )
     await db.commit()
 
 
@@ -153,7 +119,7 @@ async def main() -> int:
     async with AsyncSessionLocal() as db:
         section = (await db.execute(select(Section))).scalars().first()
         subject_ids = {s.code: s.id for s in (await db.execute(select(Subject))).scalars().all()}
-        await cleanup_residue(db, subject_ids)
+        await cleanup_residue(db)
         events_before = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
         sessions_before = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()
         cancelled_before = (await db.execute(select(func.count()).select_from(ClassSession).where(
@@ -221,6 +187,28 @@ async def main() -> int:
             if code is not None:
                 stmt = stmt.where(ClassSession.subject_id == subject_ids[code])
             return (await db.execute(stmt)).scalars().all()
+
+    # --- Ownership capture (cleanup is artifact-scoped, never shape-based) ----
+    # ClassSession rows have no event linkage and no created_at, so ownership
+    # is captured EXPLICITLY: the exact session IDs this run's events create
+    # (delta of matching rows before/after each mutation) and the exact rows
+    # this run's cancellation events cancel. The finally block deletes/restores
+    # ONLY these captured IDs. MY_WINDOWS and friends remain for SCENARIO
+    # SELECTION only — they never authorize deleting arbitrary rows.
+    my_session_ids: set = set()
+    my_cancelled_ids: set = set()
+
+    async def snapshot_session_ids(d: date, code: str = None, **filters) -> set:
+        async with AsyncSessionLocal() as db:
+            stmt = select(ClassSession.id).where(ClassSession.date == d)
+            if code is not None:
+                stmt = stmt.where(ClassSession.subject_id == subject_ids[code])
+            for col, val in filters.items():
+                if val is None:
+                    stmt = stmt.where(getattr(ClassSession, col).is_(None))
+                else:
+                    stmt = stmt.where(getattr(ClassSession, col) == val)
+            return set((await db.execute(stmt)).scalars().all())
 
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -294,6 +282,8 @@ async def main() -> int:
                     cancelled_sess = lec[0] if lec and lec[0].is_cancelled else None
                     ok = (len(rows) == 2 and len(lec) == 1 and lec[0].is_cancelled
                           and len(tut) == 1 and not tut[0].is_cancelled)
+                    if cancelled_sess is not None:
+                        my_cancelled_ids.add(cancelled_sess.id)
             check("3. CLASS_CANCELLED BCS-501/L 11-24 -> 201; lecture cancelled, "
                   "tutorial untouched", ok, f"got {r.status_code} {r.text[:200]}")
             if cancelled_sess is not None:
@@ -339,6 +329,9 @@ async def main() -> int:
                 ok = ok and len(rows) == 2 \
                     and any(s.class_type == ClassType.TUTORIAL and s.is_cancelled for s in rows) \
                     and any(s.class_type == ClassType.LECTURE and not s.is_cancelled for s in rows)
+                for s in rows:
+                    if s.class_type == ClassType.TUTORIAL and s.is_cancelled:
+                        my_cancelled_ids.add(s.id)
             check("5. CLASS_CANCELLED BCS-502/T 11-27 -> 201; tutorial cancelled, "
                   "lecture untouched", ok, f"got {r.status_code} {r.text[:200]}")
 
@@ -353,8 +346,10 @@ async def main() -> int:
                   r.status_code == 422, f"got {r.status_code} {r.text[:200]}")
 
             # --- 8. SURPRISE_QUIZ materializes one extra ------------------------
+            before = await snapshot_session_ids(FUT[0], "BCS-503", is_extra=True)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("SURPRISE_QUIZ", "BCS-503", FUT[0], class_type="L"))
+            my_session_ids |= (await snapshot_session_ids(FUT[0], "BCS-503", is_extra=True)) - before
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -371,12 +366,18 @@ async def main() -> int:
                 check("8b. future surprise-quiz extra is view-only (400)",
                       r.status_code == 400, f"got {r.status_code} {r.text[:150]}")
 
-            # --- 9. QUIZ_DAY never duplicates an existing occurrence -----------
-            # The surprise-quiz extra (check 8) already covers BCS-503 on 11-23,
-            # so the quiz-day bucket must NOT create a second occurrence — the
-            # "one attendance-bearing occurrence per (subject, date)" rule.
+            # --- 9. QUIZ_DAY coexists with a covering occurrence (Option A) ----
+            # The surprise-quiz extra (check 8) already exists for BCS-503 on
+            # 11-23, but the Quiz Day is an INDEPENDENT attendance occurrence —
+            # the bucket creates exactly one quiz-day session alongside it
+            # (5 + 1 extra + 1 quiz-day = 7 rows).
+            before = await snapshot_session_ids(FUT[0], "BCS-503", timetable_entry_id=None,
+                                                is_extra=False, class_type=ClassType.LECTURE)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("QUIZ_DAY", "BCS-503", FUT[0]))
+            my_session_ids |= (await snapshot_session_ids(
+                FUT[0], "BCS-503", timetable_entry_id=None,
+                is_extra=False, class_type=ClassType.LECTURE)) - before
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -386,43 +387,59 @@ async def main() -> int:
             qd = await quiz_day_sessions_on(FUT[0], "BCS-503")
             async with AsyncSessionLocal() as db:
                 total = await count_sessions(db, ClassSession.date == FUT[0])
-            check("9. QUIZ_DAY BCS-503 11-23 -> 201; no second occurrence "
-                  "(surprise-quiz extra covers; 5 + 1 extra = 6, quiz_day=0)",
-                  ok and len(qd) == 0 and total == 6,
+            check("9. QUIZ_DAY BCS-503 11-23 -> 201; exactly one quiz-day "
+                  "session created ALONGSIDE the covering surprise-extra "
+                  "(5 + 1 extra + 1 quiz-day = 7 rows, quiz_day=1)",
+                  ok and len(qd) == 1 and total == 7,
                   f"got {r.status_code} quiz_day={len(qd)} total={total}")
             r = await client.get(f"/api/v1/attendance/daily/{FUT[0].isoformat()}", headers=admin_headers)
             daily_1123 = r.json()["sessions"]
             qd_occ = [s for s in daily_1123 if s["subject_code"] == "BCS-503"]
-            check("9c. Track daily 11-23: 5 occurrences (BCS-551 block counts "
-                  "once), the surprise-quiz extra is the single BCS-503 occurrence",
-                  len(daily_1123) == 5 and len(qd_occ) == 1 and qd_occ[0]["is_extra"],
-                  f"daily={len(daily_1123)} bcs503={[(s['class_type'], s['is_extra']) for s in qd_occ]}")
+            check("9c. Track daily 11-23: 6 occurrences (BCS-551 block counts "
+                  "once); BCS-503 shows BOTH the surprise-quiz extra and the "
+                  "independent quiz-day occurrence",
+                  len(daily_1123) == 6 and len(qd_occ) == 2
+                  and any(s["is_extra"] for s in qd_occ)
+                  and any(not s["is_extra"] for s in qd_occ),
+                  f"daily={len(daily_1123)} bcs503={[(s['class_type'], s['is_extra'], s['start_time']) for s in qd_occ]}")
 
             # --- 10. Duplicate QUIZ_DAY rejected --------------------------------
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("QUIZ_DAY", "BCS-503", FUT[0]))
             async with AsyncSessionLocal() as db:
                 total = await count_sessions(db, ClassSession.date == FUT[0])
-            check("10. duplicate QUIZ_DAY BCS-503 11-23 -> 409, no extra occurrence",
-                  r.status_code == 409 and total == 6, f"got {r.status_code} total={total}")
+            check("10. duplicate QUIZ_DAY BCS-503 11-23 -> 409, no extra occurrence "
+                  "(still exactly one quiz-day session: 7 rows)",
+                  r.status_code == 409 and total == 7, f"got {r.status_code} total={total}")
 
             # --- 11. Reschedule to a covered date: no duplicate, old removed ----
+            before24 = await snapshot_session_ids(FUT[1], "BCS-503", timetable_entry_id=None,
+                                                  is_extra=False, class_type=ClassType.LECTURE)
             r = await client.patch(f"/api/v1/events/{quiz_day_event_id}", headers=admin_headers,
                                    json={"start_date": FUT[1].isoformat(), "end_date": FUT[1].isoformat()})
+            my_session_ids |= (await snapshot_session_ids(
+                FUT[1], "BCS-503", timetable_entry_id=None,
+                is_extra=False, class_type=ClassType.LECTURE)) - before24
             ok = r.status_code == 200
             async with AsyncSessionLocal() as db:
                 d23 = await count_sessions(db, ClassSession.date == FUT[0])
                 d24 = await count_sessions(db, ClassSession.date == FUT[1])
             qd24 = await quiz_day_sessions_on(FUT[1], "BCS-503")
             qd23 = await quiz_day_sessions_on(FUT[0], "BCS-503")
-            check("11. PATCH quiz-day 11-23 -> 11-24: old occurrence removed "
-                  "(5 + surprise extra), none on 11-24 (covered by Tue L+T)",
-                  ok and d23 == 6 and len(qd23) == 0 and d24 == 6 and len(qd24) == 0,
+            check("11. PATCH quiz-day 11-23 -> 11-24: old unattended occurrence "
+                  "removed (5 + surprise extra), exactly one quiz-day session "
+                  "created on the covered 11-24 (Tue L+T + quiz-day = 7 rows)",
+                  ok and d23 == 6 and len(qd23) == 0 and d24 == 7 and len(qd24) == 1,
                   f"11-23={d23}(qd={len(qd23)}) 11-24={d24}(qd={len(qd24)})")
 
             # --- 12. Reschedule to an uncovered date: occurrence appears --------
+            before27 = await snapshot_session_ids(FUT[4], "BCS-503", timetable_entry_id=None,
+                                                  is_extra=False, class_type=ClassType.LECTURE)
             r = await client.patch(f"/api/v1/events/{quiz_day_event_id}", headers=admin_headers,
                                    json={"start_date": FUT[4].isoformat(), "end_date": FUT[4].isoformat()})
+            my_session_ids |= (await snapshot_session_ids(
+                FUT[4], "BCS-503", timetable_entry_id=None,
+                is_extra=False, class_type=ClassType.LECTURE)) - before27
             ok = r.status_code == 200
             async with AsyncSessionLocal() as db:
                 d27 = await count_sessions(db, ClassSession.date == FUT[4])
@@ -452,7 +469,11 @@ async def main() -> int:
             check("14. QUIZ_DAY BCS-503 11-28 (Saturday): 201, zero sessions",
                   ok and n == 0, f"got {r.status_code} rows={n}")
 
-            # --- 15. Covered-date creation suppression --------------------------
+            # --- 15. Covered date: quiz-day session created independently ------
+            # BCS-501 on 11-24 has a cancelled lecture + a tutorial, but the
+            # Quiz Day is an INDEPENDENT attendance occurrence (Option A): the
+            # bucket creates exactly one quiz-day session even though the
+            # tutorial covers the date. Deleting the event removes it.
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("QUIZ_DAY", "BCS-501", FUT[1]))
             ok = r.status_code == 201
@@ -461,12 +482,15 @@ async def main() -> int:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
                 await client.delete(f"/api/v1/events/{test_event_ids[-1]}", headers=admin_headers)
             check("15. QUIZ_DAY BCS-501 11-24 (lecture cancelled, tutorial covers): "
-                  "201, no quiz-day session created",
-                  ok and len(qd) == 0, f"got {r.status_code} quiz_day={len(qd)}")
+                  "201, exactly one quiz-day session created (Option A), removed "
+                  "on event delete",
+                  ok and len(qd) == 1, f"got {r.status_code} quiz_day={len(qd)}")
 
             # --- 16. Past surprise quiz: attendance through the pipeline --------
+            before = await snapshot_session_ids(PAST_A, "BCS-502", is_extra=True)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("SURPRISE_QUIZ", "BCS-502", PAST_A, class_type="L"))
+            my_session_ids |= (await snapshot_session_ids(PAST_A, "BCS-502", is_extra=True)) - before
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -501,8 +525,13 @@ async def main() -> int:
                       f"got {subj['lecture']['attended'] if subj else None}")
 
             # --- 17. Past quiz day: attendance through the pipeline -------------
+            before = await snapshot_session_ids(PAST_A, "BCS-503", timetable_entry_id=None,
+                                                is_extra=False, class_type=ClassType.LECTURE)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("QUIZ_DAY", "BCS-503", PAST_A))
+            my_session_ids |= (await snapshot_session_ids(
+                PAST_A, "BCS-503", timetable_entry_id=None,
+                is_extra=False, class_type=ClassType.LECTURE)) - before
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -566,8 +595,10 @@ async def main() -> int:
                   ok and len(extras) == 1, f"07-31 extras={len(extras)}")
 
             # --- 20. Seeded quiz date: script session never duplicated ----------
+            before = await snapshot_session_ids(SEED, "BCS-054", is_extra=True)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("EXTRA_LECTURE", "BCS-054", SEED, class_type="L"))
+            my_session_ids |= (await snapshot_session_ids(SEED, "BCS-054", is_extra=True)) - before
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -592,8 +623,10 @@ async def main() -> int:
                   f"extras={len(extras)} script_qd={len(qd_seed)}")
 
             # --- 21. Regression: EXTRA_PRACTICAL + block collapse ---------------
+            before = await snapshot_session_ids(FUT[3], "BCS-551", is_extra=True)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("EXTRA_PRACTICAL", "BCS-551", FUT[3], class_type="P"))
+            my_session_ids |= (await snapshot_session_ids(FUT[3], "BCS-551", is_extra=True)) - before
             ok = r.status_code == 201
             extra_pract_id = uuid.UUID(r.json()["id"]) if ok else None
             extras = await sessions_on(FUT[3], "BCS-551", is_extra=True)
@@ -612,8 +645,10 @@ async def main() -> int:
             # 11-25 (Wednesday) has no BCS-501 class (Wed schedule: BCS-054 L,
             # BCS-503 L, BNC-501 L, BCS-502 L, BCS-058 L, BCS-054 T), so the
             # extra tutorial is the only BCS-501 occurrence that day.
+            before = await snapshot_session_ids(FUT[2], "BCS-501", is_extra=True)
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("EXTRA_TUTORIAL", "BCS-501", FUT[2], class_type="T"))
+            my_session_ids |= (await snapshot_session_ids(FUT[2], "BCS-501", is_extra=True)) - before
             ok = r.status_code == 201
             extra_tut_id = uuid.UUID(r.json()["id"]) if ok else None
             extras = await sessions_on(FUT[2], "BCS-501", is_extra=True)
@@ -641,6 +676,8 @@ async def main() -> int:
                 ))).scalars().all()
                 cancelled_553 = [s for s in rows553 if s.is_cancelled]
                 cancelled_sess = cancelled_553[0] if len(cancelled_553) == 1 else None
+                for s in cancelled_553:
+                    my_cancelled_ids.add(s.id)
             r = await client.get(f"/api/v1/attendance/daily/{FUT[4].isoformat()}", headers=admin_headers)
             occ553 = [s for s in r.json()["sessions"] if s["subject_code"] == "BCS-553"]
             check("23. LAB_CANCELLED BCS-553 11-27 -> block occurrence cancelled "
@@ -673,32 +710,27 @@ async def main() -> int:
     finally:
         # --- Cleanup: exact restoration ---------------------------------------
         async with AsyncSessionLocal() as db:
+            # Events: ownership by the note marker this verifier always stamps.
             events = (await db.execute(
                 select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
             )).scalars().all()
             for ev in events:
                 await db.delete(ev)
 
-            qd_cond = (
-                ClassSession.timetable_entry_id.is_(None),
-                ClassSession.is_extra.is_(False),
-                ClassSession.class_type == ClassType.LECTURE,
-                ClassSession.date.in_(set(FUT) | {PAST_A, PAST_B}),
-            )
-            extra_cond = (ClassSession.is_extra.is_(True), ClassSession.date.in_(MY_WINDOWS))
-            qd_sessions = (await db.execute(select(ClassSession).where(*qd_cond))).scalars().all()
-            extra_sessions = (await db.execute(select(ClassSession).where(*extra_cond))).scalars().all()
-            doomed = {s.id for s in qd_sessions} | {s.id for s in extra_sessions}
-            if doomed:
+            # Sessions/cancellations: ONLY the exact IDs this run captured when
+            # its events created/cancelled them. Never a date/type/shape sweep
+            # (that class of cleanup deleted the owner's BNC-501 07-31 extras).
+            if my_session_ids:
                 await db.execute(delete(AttendanceRecord).where(
-                    AttendanceRecord.class_session_id.in_(doomed)))
-                await db.execute(delete(ClassSession).where(ClassSession.id.in_(doomed)))
-
-            await db.execute(
-                ClassSession.__table__.update()
-                .where(ClassSession.date.in_(FUT), ClassSession.is_cancelled.is_(True))
-                .values(is_cancelled=False)
-            )
+                    AttendanceRecord.class_session_id.in_(my_session_ids)))
+                await db.execute(delete(ClassSession).where(ClassSession.id.in_(my_session_ids)))
+            if my_cancelled_ids:
+                await db.execute(
+                    ClassSession.__table__.update()
+                    .where(ClassSession.id.in_(my_cancelled_ids),
+                           ClassSession.is_cancelled.is_(True))
+                    .values(is_cancelled=False)
+                )
             await db.commit()
 
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()

@@ -13,6 +13,7 @@ import {
   CalendarDays,
   CalendarRange,
   Gauge,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu, ShellModalId } from "@/components/layout/UserMenu";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Laboratory", href: "/laboratory", icon: TestTubes },
   { label: "Quiz Eligibility", href: "/tools/quiz-schedule", icon: CalendarClock },
   { label: "Attendance", href: "/subjects", icon: BookOpen },
+  { label: "Analytics", href: "/analytics", icon: TrendingUp },
   { label: "History", href: "/history", icon: History },
   { label: "Calendar", href: "/calendar", icon: CalendarRange },
   { label: "Events", href: "/tools/events", icon: CalendarDays },

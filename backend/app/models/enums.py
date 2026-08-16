@@ -17,6 +17,12 @@ class EventType(str, Enum):
     CLASS_CANCELLED = "CLASS_CANCELLED"
     SURPRISE_QUIZ = "SURPRISE_QUIZ"
     QUIZ_DAY = "QUIZ_DAY"
+    # Unified holiday (closure family): one user-facing event for any
+    # non-working holiday day/range with a reason/occasion note. Backend
+    # compatibility: the legacy PUBLIC_HOLIDAY / INSTITUTE_HOLIDAY /
+    # FESTIVAL_HOLIDAY types remain fully supported (same closure semantics);
+    # HOLIDAY is the consolidated creation path.
+    HOLIDAY = "HOLIDAY"
     PUBLIC_HOLIDAY = "PUBLIC_HOLIDAY"
     INSTITUTE_HOLIDAY = "INSTITUTE_HOLIDAY"
     WORKING_DAY_OVERRIDE = "WORKING_DAY_OVERRIDE"

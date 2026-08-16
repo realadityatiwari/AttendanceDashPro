@@ -154,31 +154,47 @@ async def main() -> int:
             r = await client.get("/api/v1/events", headers=student_headers)
             events = r.json()
             # The 18 seeded QUIZ_DAY events are the authoritative seed population
-            # (Phase 6.5); the owner's active testing legitimately adds other
-            # event types, so the integrity assertion scopes to QUIZ_DAY rows:
-            # every row returned by the default (active-only) filter is active,
-            # and all 18 seeded quiz days are present.
+            # (Phase 6.5): every seeded quiz day mirrors a quiz_schedules row.
+            # The owner's active testing legitimately adds other QUIZ_DAY rows
+            # (and other event types), so the integrity assertion scopes to the
+            # seed population: every row returned by the default (active-only)
+            # filter is active, and all 18 seeded quiz days are present.
             qd_events = [e for e in events if e["event_type"] == "QUIZ_DAY"]
+            async with AsyncSessionLocal() as db:
+                seeded_pairs = {(str(q.subject_id), q.date.isoformat())
+                                for q in (await db.execute(select(QuizSchedule))).scalars().all()}
+            qd_seeded = [e for e in qd_events
+                         if (e["subject_id"], e["start_date"]) in seeded_pairs]
             check("4. GET /events default = active only (all 18 seeded QUIZ_DAY active)",
                   r.status_code == 200 and all(e["active"] for e in events)
-                  and len(qd_events) == 18,
-                  f"count={len(events)} quiz_day={len(qd_events)}")
+                  and len(qd_seeded) == 18,
+                  f"count={len(events)} quiz_day={len(qd_events)} seeded={len(qd_seeded)}")
             r = await client.get("/api/v1/events?date_from=2026-11-01&date_to=2026-10-01", headers=student_headers)
             check("5. inverted date range on /events -> 422", r.status_code == 422, f"got {r.status_code}")
             r = await client.get("/api/v1/events?upcoming=true", headers=student_headers)
             # upcoming=true must return every seed quiz day (end_date >= today);
             # user-created upcoming events may coexist.
             qd_upcoming = [e for e in r.json() if e["event_type"] == "QUIZ_DAY"]
+            qd_upcoming_seeded = [e for e in qd_upcoming
+                                  if (e["subject_id"], e["start_date"]) in seeded_pairs]
             check("6. upcoming=true keeps end_date >= today (all 18 quiz days)",
-                  r.status_code == 200 and len(qd_upcoming) == 18
+                  r.status_code == 200 and len(qd_upcoming_seeded) == 18
                   and all(e["end_date"] >= "2026-08-14" for e in r.json()),
-                  f"count={len(r.json())} quiz_day={len(qd_upcoming)}")
+                  f"count={len(r.json())} quiz_day={len(qd_upcoming)} seeded={len(qd_upcoming_seeded)}")
 
             # --- Phase 6.5 seeding integrity (scoped to the seed population) -----
             async with AsyncSessionLocal() as db:
-                qd_types = (await db.execute(
-                    select(AcademicEvent.event_type, func.count()).group_by(AcademicEvent.event_type)
-                    .where(AcademicEvent.event_type == EventType.QUIZ_DAY))).all()
+                qd_total = (await db.execute(
+                    select(func.count()).select_from(AcademicEvent).where(
+                        AcademicEvent.event_type == EventType.QUIZ_DAY))).scalar()
+                # Seed population: QUIZ_DAY rows that mirror a quiz_schedules
+                # row (subject + date) - the only events Phase 6.5 seeds.
+                qd_seeded = (await db.execute(
+                    select(func.count()).select_from(AcademicEvent).where(
+                        AcademicEvent.event_type == EventType.QUIZ_DAY,
+                        AcademicEvent.subject_id == QuizSchedule.subject_id,
+                        AcademicEvent.start_date == QuizSchedule.date,
+                    ))).scalar()
                 qd_inactive = (await db.execute(
                     select(func.count()).select_from(AcademicEvent).where(
                         AcademicEvent.event_type == EventType.QUIZ_DAY,
@@ -188,8 +204,8 @@ async def main() -> int:
                         QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED))).scalar()
             check("7. seeding integrity: 18 seeded QUIZ_DAY events, all active, "
                   "no fabricated dates",
-                  sum(c for _, c in qd_types) == 18 and qd_inactive == 0,
-                  f"quiz_day={sum(c for _, c in qd_types)} inactive={qd_inactive}")
+                  qd_seeded == 18 and qd_inactive == 0,
+                  f"seeded={qd_seeded} total={qd_total} inactive={qd_inactive}")
             check("8. seed count matches authoritative SCHEDULED quiz_schedules",
                   scheduled_quizzes == 18, f"scheduled_quizzes={scheduled_quizzes}")
 

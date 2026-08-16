@@ -29,7 +29,12 @@ export function classTypeLabel(type: ClassType | null): string | null {
   return null;
 }
 
-const HOLIDAY_TYPES = new Set([EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY, EventType.FESTIVAL_HOLIDAY]);
+const HOLIDAY_TYPES = new Set([
+  EventType.HOLIDAY,
+  EventType.PUBLIC_HOLIDAY,
+  EventType.INSTITUTE_HOLIDAY,
+  EventType.FESTIVAL_HOLIDAY,
+]);
 
 interface EventRowProps {
   event: AcademicEventResponse;
@@ -98,6 +103,12 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Info className="size-3 shrink-0" aria-hidden />
               Follows {event.substitution_schedule_override.toLowerCase()} schedule
+            </p>
+          )}
+          {event.note && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Info className="size-3 shrink-0" aria-hidden />
+              {event.note}
             </p>
           )}
         </div>

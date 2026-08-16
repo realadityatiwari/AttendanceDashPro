@@ -133,7 +133,8 @@ class EligibilityService:
         if milestone:
             window = get_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
             raw_counts = await self.attendance_repo.get_subject_counts_between(
-                user_id, subject_model.id, window['window_start'], window['window_end']
+                user_id, subject_model.id, window['window_start'], window['window_end'],
+                exclude_quiz_day=True,
             )
         counts: Dict[str, Any] = {
             'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},

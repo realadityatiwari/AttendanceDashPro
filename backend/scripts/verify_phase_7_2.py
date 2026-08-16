@@ -6,7 +6,10 @@ Verifies the Phase 7.2 product contract end-to-end against the real database:
  Q-D6  raw-range vs teaching-day counting (decision: equivalence  -  no defect):
    1.  For all 18 theory subject/cycle combos, the eligibility window counts
        (raw non-cancelled sessions) equal a teaching-day-resolved enumeration,
-       and every counted session lies on an engine teaching day.
+       and every counted session lies on an engine teaching day. Quiz-day
+       sessions (LECTURE, is_extra=false, timetable NULL) are excluded from
+       BOTH sides (Option A product rule: they are attendance/ERP occurrences
+       but not eligibility L/T opportunities).
    2.  A closure event cancels its day's sessions -> they stop being counted
        (and reject attendance with 409)  -  the legacy "no class that day" rule.
    3.  An EXTRA_LECTURE on a working day materializes one is_extra session and
@@ -93,7 +96,7 @@ from app.engines.calendar_engine import get_teaching_days_between, DEFAULT_WEEKE
 from app.engines.practical_occurrence import group_practical_occurrences
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, or_
 from sqlalchemy.orm import selectinload
 
 results = []
@@ -113,7 +116,14 @@ async def main() -> int:
     async with AsyncSessionLocal() as db:
         # Startup cleanup: stale artifacts from crashed runs on the test
         # windows this verifier uses (10-05/10-06 closures+extras, 11-07 guard).
+        # Only artifacts THIS verifier creates are candidates: closure events
+        # (INSTITUTE_HOLIDAY, global) and BCS-054 extras/surprises; sessions
+        # are only ever created for BCS-054 (its closure cancels every
+        # subject's sessions, so the un-cancel restore stays subject-agnostic).
+        # Seeded events and sessions on these dates are never touched.
         test_dates = [date(2026, 10, 5), date(2026, 10, 6), date(2026, 11, 7)]
+        bcs054_id = (await db.execute(
+            select(Subject.id).where(Subject.code == "BCS-054"))).scalar_one()
         stale = (await db.execute(
             select(ClassSession).where(ClassSession.date.in_(test_dates))
         )).scalars().all()
@@ -122,21 +132,41 @@ async def main() -> int:
         for s in stale:
             if s.id in attended_ids:
                 continue
-            if s.is_extra or s.date.weekday() >= 5:
+            if s.subject_id == bcs054_id and (s.is_extra or s.date.weekday() >= 5):
                 await db.delete(s)
                 removed += 1
             elif s.is_cancelled:
                 s.is_cancelled = False
                 restored += 1
         stale_events = (await db.execute(
-            select(AcademicEvent).where(AcademicEvent.start_date.in_(test_dates))
+            select(AcademicEvent).where(
+                AcademicEvent.start_date.in_(test_dates),
+                AcademicEvent.event_type.in_(
+                    [EventType.INSTITUTE_HOLIDAY, EventType.EXTRA_LECTURE,
+                     EventType.SURPRISE_QUIZ]),
+                or_(AcademicEvent.subject_id.is_(None),
+                    AcademicEvent.subject_id == bcs054_id),
+            )
         )).scalars().all()
         for ev in stale_events:
             await db.delete(ev)
         if removed or restored or stale_events:
             await db.commit()
-            print(f"cleanup: removed {removed} stale extra/projection session(s), "
-                  f"restored {restored} cancelled session(s), removed {len(stale_events)} stale event(s)")
+        # Option A (separate quiz-day occurrence): a closure on the seeded
+        # 10-05 BCS-058 quiz date removes the unattended quiz-day session (a
+        # non-working day implies no sessions); once the closure artifact is
+        # gone, the canonical synchronizer must restore it (the active seed
+        # QUIZ_DAY event implies it again). Re-running the canonical sync over
+        # the test dates converges on the canonical baseline regardless of
+        # what a previous/crashed run left behind.
+        from app.services.event_session_service import EventSessionSynchronizer
+        dummy = AcademicEvent(event_type=EventType.INSTITUTE_HOLIDAY,
+                              start_date=test_dates[0], end_date=test_dates[-1])
+        await EventSessionSynchronizer(db).sync_event(
+            dummy, span_override=(test_dates[0], test_dates[-1]))
+        await db.commit()
+        print(f"cleanup: removed {removed} stale extra/projection session(s), "
+              f"restored {restored} cancelled session(s), removed {len(stale_events)} stale event(s)")
 
         events_before = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
         sessions_before = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()
@@ -211,6 +241,15 @@ async def main() -> int:
                     if s.date not in teaching:
                         all_ok = False
                         detail += f"{code}/{cycle}:off-teaching-day {s.date} "
+                        continue
+                    # Option A (separate quiz-day occurrence): quiz-day sessions
+                    # (LECTURE, is_extra=false, timetable NULL) are attendance
+                    # occurrences for subject attendance/ERP but are EXCLUDED
+                    # from the eligibility L/T calculation — the eligibility
+                    # service filters them out, so the independent enumeration
+                    # must too (normal timetable lectures stay included).
+                    if (s.timetable_entry_id is None and not s.is_extra
+                            and s.class_type == ClassType.LECTURE):
                         continue
                     t = s.class_type.value
                     if t in counted:
@@ -340,7 +379,10 @@ async def main() -> int:
                         await db.delete(ev)
                         await db.commit()
             async with AsyncSessionLocal() as db:
-                # Restore any residue the synchronizer left on the test dates.
+                # Restore any residue the synchronizer left on the test dates
+                # (same scoping as the startup cleanup: extras/surprises are
+                # only ever BCS-054; the closure's cancelled rows - any
+                # subject - are un-cancelled).
                 stale = (await db.execute(
                     select(ClassSession).where(ClassSession.date.in_(
                         [date(2026, 10, 5), date(2026, 10, 6), date(2026, 11, 7)])))).scalars().all()
@@ -348,12 +390,24 @@ async def main() -> int:
                 for s in stale:
                     if s.id in attended_ids:
                         continue
-                    if s.is_extra or s.date.weekday() >= 5:
+                    if s.subject_id == bcs054_id and (s.is_extra or s.date.weekday() >= 5):
                         await db.delete(s)
                     elif s.is_cancelled:
                         s.is_cancelled = False
                 if stale:
                     await db.commit()
+                # Option A: the closure test removed the unattended quiz-day
+                # session on the seeded 10-05 BCS-058 quiz date. Re-run the
+                # canonical synchronizer over the test dates so the active seed
+                # QUIZ_DAY event re-materializes it — the exact baseline (incl.
+                # check 22's session count) is restored by the canonical
+                # mechanism, never by manual row fabrication.
+                from app.services.event_session_service import EventSessionSynchronizer
+                dummy = AcademicEvent(event_type=EventType.INSTITUTE_HOLIDAY,
+                                      start_date=date(2026, 10, 5), end_date=date(2026, 11, 7))
+                await EventSessionSynchronizer(db).sync_event(
+                    dummy, span_override=(date(2026, 10, 5), date(2026, 11, 7)))
+                await db.commit()
                 print(f"cleanup: removed {len(test_event_ids)} verification event row(s), "
                       f"restored {len(stale)} session residue on the test dates")
 

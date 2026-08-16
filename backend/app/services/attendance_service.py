@@ -3,6 +3,7 @@ from uuid import UUID
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.user_repo import UserRepository
@@ -297,7 +298,42 @@ class AttendanceService:
 
     async def get_daily_sessions(self, user_id: UUID, target_date: date) -> DailySessionsResponse:
         records = await self.repo.get_daily_sessions(user_id, target_date)
-        
+
+        # Option A: is_quiz_day identifies the ACTUAL quiz-day ClassSession —
+        # the shape-created occurrence (LECTURE, is_extra=false,
+        # timetable_entry_id=null, non-cancelled) for a subject with an active
+        # QUIZ_DAY event covering this date. It is NOT a "this date is a Quiz
+        # Day" flag: a normal timetable lecture on the same quiz date is an
+        # independent attendance occurrence and stays unflagged.
+        from app.models.event import AcademicEvent
+        from app.models.academic import Subject
+        from app.models.enums import EventType, ClassType
+        from app.models.timetable import ClassSession
+        quiz_day_subjects = (
+            select(Subject.id)
+            .join(AcademicEvent, AcademicEvent.subject_id == Subject.id)
+            .where(
+                AcademicEvent.event_type == EventType.QUIZ_DAY,
+                AcademicEvent.active.is_(True),
+                AcademicEvent.start_date <= target_date,
+                AcademicEvent.end_date >= target_date,
+            )
+        )
+        quiz_day_session_ids = set(
+            (
+                await self.db.execute(
+                    select(ClassSession.id).where(
+                        ClassSession.date == target_date,
+                        ClassSession.subject_id.in_(quiz_day_subjects),
+                        ClassSession.class_type == ClassType.LECTURE,
+                        ClassSession.is_extra.is_(False),
+                        ClassSession.timetable_entry_id.is_(None),
+                        ClassSession.is_cancelled.is_(False),
+                    )
+                )
+            ).scalars().all()
+        )
+
         sessions = []
         for r in records:
             # Format time if available
@@ -319,6 +355,7 @@ class AttendanceService:
                 is_cancelled=r["is_cancelled"],
                 is_extra=r["is_extra"],
                 designation=r["designation"].value if r["designation"] else None,
+                is_quiz_day=r["id"] in quiz_day_session_ids,
             ))
             
         return DailySessionsResponse(date=target_date, sessions=sessions)

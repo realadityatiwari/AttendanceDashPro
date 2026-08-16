@@ -153,12 +153,28 @@ class AttendanceRepository:
         return {subject_id: (str(session_id), session_date)
                 for subject_id, session_id, session_date in result.all()}
 
-    async def get_subject_counts_between(self, user_id: UUID, subject_id: UUID, start_date: date, end_date: date) -> List[Tuple[str, AttendanceStatus]]:
+    async def get_subject_counts_between(
+        self,
+        user_id: UUID,
+        subject_id: UUID,
+        start_date: date,
+        end_date: date,
+        exclude_quiz_day: bool = False,
+    ) -> List[Tuple[str, AttendanceStatus]]:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
         # attendance from the previous quiz boundary through the day before the quiz).
         # Cancelled sessions are excluded for the same reason as above (practical
         # blocks collapsed to one occurrence).
+        #
+        # exclude_quiz_day (product decision — Option A): Quiz-Day sessions are
+        # attendance occurrences for SUBJECT ATTENDANCE / ERP, but they must
+        # NOT become additional LECTURE/TUTORIAL opportunities inside the
+        # eligibility L/T calculation (the eligibility window starts inclusive
+        # on the previous quiz date, so a quiz-day session on that date would
+        # otherwise enter the next window). The canonical quiz-day shape is
+        # LECTURE + is_extra=false + timetable_entry_id IS NULL — normal
+        # lectures (timetable-bound) remain fully included.
         stmt = select(
             ClassSession.class_type,
             AttendanceRecord.status,
@@ -174,7 +190,14 @@ class AttendanceRepository:
             ClassSession.subject_id == subject_id,
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
-        ).order_by(
+        )
+        if exclude_quiz_day:
+            stmt = stmt.filter(
+                ~(ClassSession.timetable_entry_id.is_(None)
+                  & ~ClassSession.is_extra
+                  & (ClassSession.class_type == ClassType.LECTURE))
+            )
+        stmt = stmt.order_by(
             ClassSession.date,
             TimetableEntry.start_time.asc().nulls_last(),
             ClassSession.id,

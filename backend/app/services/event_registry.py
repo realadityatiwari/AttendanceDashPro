@@ -122,6 +122,14 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         EventType.QUIZ_DAY, "Quiz Day",
         requires_subject=True, requires_class_type=False,
     ),
+    # Unified holiday: the consolidated user-facing holiday type. Same
+    # closure semantics as the legacy holiday family (PUBLIC_HOLIDAY /
+    # INSTITUTE_HOLIDAY / FESTIVAL_HOLIDAY remain supported and readable);
+    # the reason/occasion travels in the optional `note` field.
+    EventType.HOLIDAY: _rule(
+        EventType.HOLIDAY, "Holiday",
+        is_closure=True, is_global=True,
+    ),
     EventType.PUBLIC_HOLIDAY: _rule(
         EventType.PUBLIC_HOLIDAY, "Public Holiday",
         is_closure=True, is_global=True,
@@ -247,4 +255,13 @@ def validate_event(
         raise EventValidationError(
             f"{rule.display_name} is a closure; is_working_day cannot be set "
             "(the calendar engine treats closure days as non-working)"
+        )
+
+    # A Working Saturday is by definition a working day on Saturdays — an
+    # explicit non-working override is contradictory and is rejected instead
+    # of being silently ignored.
+    if event_type == EventType.WORKING_SATURDAY and is_working_day is False:
+        raise EventValidationError(
+            "Working Saturday is always a working day on Saturdays; "
+            "is_working_day=false is contradictory"
         )

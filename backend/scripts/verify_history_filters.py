@@ -150,6 +150,10 @@ async def main() -> int:
 
     test_event_ids: list[uuid.UUID] = []
     test_record_ids: list[uuid.UUID] = []
+    # The only session state this script mutates: the existing BCS-551 block
+    # on D_CANCEL that its LAB_CANCELLED event temporarily cancels. Captured
+    # by ID; the finally block touches nothing else in the window.
+    cancelled_member_ids: list[uuid.UUID] = []
     shapes_ok = True
 
     try:
@@ -349,6 +353,12 @@ async def main() -> int:
                   f"total={h['total_count']}")
 
             # --- 13. State Cancelled (LAB_CANCELLED event) -------------------------
+            async with AsyncSessionLocal() as db:
+                pre_cancel = (await db.execute(select(ClassSession).where(
+                    ClassSession.subject_id == subject_ids["BCS-551"],
+                    ClassSession.date == D_CANCEL,
+                    ClassSession.class_type == ClassType.PRACTICAL))).scalars().all()
+                cancelled_member_ids.extend(s.id for s in pre_cancel)
             r = await client.post("/api/v1/events", headers=temp_headers, json={
                 "event_type": "LAB_CANCELLED", "start_date": D_CANCEL.isoformat(),
                 "end_date": D_CANCEL.isoformat(),
@@ -445,24 +455,15 @@ async def main() -> int:
             if temp_user_id is not None:
                 await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
                 await db.execute(delete(User).where(User.id == temp_user_id))
-            # Restore session state the tests touched: un-cancel, clear designations.
-            stale = (await db.execute(select(ClassSession).where(
-                ClassSession.date >= WINDOW_START, ClassSession.date <= WINDOW_END))).scalars().all()
-            attended_ids = set()
-            if stale:
-                rec_rows = (await db.execute(
-                    select(AttendanceRecord.class_session_id).where(
-                        AttendanceRecord.class_session_id.in_([s.id for s in stale])))).all()
-                attended_ids = {r[0] for r in rec_rows}
-            for s in stale:
-                if s.id in attended_ids:
-                    continue
-                if s.is_extra:
-                    await db.delete(s)
-                elif s.is_cancelled:
+            # Restore ONLY the session state this script touched: un-cancel the
+            # BCS-551 block its LAB_CANCELLED event temporarily cancelled (by
+            # captured ID). Never sweep by date/shape: owner-created extras,
+            # cancellations and designations inside the window are off-limits.
+            if cancelled_member_ids:
+                cancelled_members = (await db.execute(
+                    select(ClassSession).where(ClassSession.id.in_(cancelled_member_ids)))).scalars().all()
+                for s in cancelled_members:
                     s.is_cancelled = False
-                if s.designation is not None:
-                    s.designation = None
             await db.commit()
 
     check("18. response shape consistent across every filtered request",

@@ -107,7 +107,7 @@
         "commencementDate": "2026-07-15",
         "milestones": [
           { "type": "QUIZ", "milestoneId": "q1", "date": "2026-09-11", "metadata": { "quizCycle": 1 } },
-          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-10-02", "metadata": { "quizCycle": 2 } },
+          { "type": "QUIZ", "milestoneId": "q2", "date": "2026-10-05", "metadata": { "quizCycle": 2 } },
           { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-26", "metadata": { "quizCycle": 3 } }
         ]
       }

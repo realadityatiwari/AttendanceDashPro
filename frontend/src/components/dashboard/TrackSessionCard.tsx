@@ -126,7 +126,21 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
   // Phase 9.1: a session designated as the mid-semester practical is labeled
   // as such in Track (from the backend session field — never computed here);
   // everything else keeps its canonical class type.
+  //
+  // Option A (separate quiz-day occurrence): the backend flags ONLY the
+  // materialized quiz-day session (LECTURE, is_extra=false, no timetable
+  // time) — normal timetable lectures on the same quiz date are independent
+  // occurrences and are NOT flagged. The flagged session gets its own card
+  // labeled "Quiz Day"/"QUIZ DAY" instead of "TBD", and stays a fully
+  // independent attendance occurrence (single Present/Absent, single record).
+  const isQuizDaySession =
+    session.is_quiz_day &&
+    session.class_type === ClassType.LECTURE &&
+    !session.is_extra &&
+    !session.start_time;
+
   const displayType = session.designation === "MID_SEM_PRACTICAL" ? "MID-SEM PRACTICAL" :
+                      isQuizDaySession ? "QUIZ DAY" :
                       session.class_type === ClassType.LECTURE ? "LECTURE" :
                       session.class_type === ClassType.TUTORIAL ? "TUTORIAL" : "PRACTICAL";
 
@@ -137,14 +151,26 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
         <div className="flex justify-between items-start">
           <div className="flex flex-col">
             <span className="text-sm font-semibold text-foreground">
-              {session.start_time || (session.is_extra ? "Extra Class" : "TBD")}
-              {session.end_time ? ` – ${session.end_time}` : ""}
+              {isQuizDaySession
+                ? "Quiz Day"
+                : session.start_time || (session.is_extra ? "Extra Class" : "TBD")}
+              {!isQuizDaySession && session.end_time ? ` – ${session.end_time}` : ""}
             </span>
             <span className="text-xs text-muted-foreground font-mono mt-0.5">{session.subject_code}</span>
           </div>
-          <Badge variant="outline" className="text-[10px] tracking-wider py-0 h-5">
-            {displayType}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            {/* Option A: the backend flags only the actual quiz-day
+                ClassSession (shape: LECTURE, is_extra=false, no timetable
+                time). Normal lectures on the same date stay unflagged. */}
+            {session.is_quiz_day && (
+              <Badge variant="primary" className="text-[10px] tracking-wider py-0 h-5">
+                Quiz Day
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] tracking-wider py-0 h-5">
+              {displayType}
+            </Badge>
+          </div>
         </div>
 
         {/* Subject Name */}

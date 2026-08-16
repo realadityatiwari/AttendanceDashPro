@@ -24,7 +24,21 @@ import {
 } from "@/components/events/eventRules";
 import { AlertCircle } from "lucide-react";
 
-const TYPE_OPTIONS = Object.values(EventType);
+// Unified holiday flow: the three legacy holiday types are consolidated into
+// the single HOLIDAY option for NEW events. They remain fully supported
+// backend types, so when EDITING an existing legacy-holiday event the form
+// keeps its actual type (never silently converts it on save).
+const LEGACY_HOLIDAY_TYPES: EventType[] = [
+  EventType.PUBLIC_HOLIDAY,
+  EventType.INSTITUTE_HOLIDAY,
+  EventType.FESTIVAL_HOLIDAY,
+];
+
+function adminTypeOptions(isEdit: boolean, editingType: EventType | null): EventType[] {
+  return Object.values(EventType).filter(
+    t => !LEGACY_HOLIDAY_TYPES.includes(t) || (isEdit && t === editingType)
+  );
+}
 
 interface EventFormDialogProps {
   open: boolean;
@@ -57,7 +71,7 @@ interface FormState {
 }
 
 function initialState(event: AcademicEventResponse | null, isAdmin: boolean): FormState {
-  const defaultType = event?.event_type ?? (isAdmin ? EventType.PUBLIC_HOLIDAY : EventType.EXTRA_LECTURE);
+  const defaultType = event?.event_type ?? (isAdmin ? EventType.HOLIDAY : EventType.EXTRA_LECTURE);
   // Existing events carry their true duration: start_date == end_date means
   // single-day. New events default per event type (DEFAULT_DURATION_MODE).
   const hasDates = Boolean(event?.start_date && event?.end_date);
@@ -104,8 +118,12 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   // Until they do, switching event type follows the new type's default mode.
   const [durationModeTouched, setDurationModeTouched] = useState(false);
 
-  // Students may only create the flexible subject-scoped types.
-  const typeOptions = isAdmin ? TYPE_OPTIONS : STUDENT_CREATABLE_EVENT_TYPES;
+  // Students may only create the flexible subject-scoped types; admins see
+  // every type with the legacy holiday trio consolidated into HOLIDAY (kept
+  // in the list only when editing an event that already has that type).
+  const typeOptions = isAdmin
+    ? adminTypeOptions(isEdit, event?.event_type ?? null)
+    : STUDENT_CREATABLE_EVENT_TYPES;
 
   // Re-seed the form whenever the dialog is (re)opened for a different event.
   const [lastKey, setLastKey] = useState<string | null>(null);
@@ -272,6 +290,12 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       setLocalError("This event type requires a class type.");
       return;
     }
+    // Unified holiday product rule: a reason/occasion is required for a new
+    // Holiday (the backend enforces this too).
+    if (form.event_type === EventType.HOLIDAY && form.note.trim() === "") {
+      setLocalError("A reason/occasion is required for a holiday.");
+      return;
+    }
 
     // Single-day is represented by start_date == end_date (the backend has no
     // separate duration concept); the picked date is mirrored into both.
@@ -282,7 +306,11 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       end_date: singleDay ? form.start_date : form.end_date,
       subject_id: rule.requiresSubject ? form.subject_id : null,
       class_type: rule.requiresClassType ? (form.class_type as ClassType) : null,
-      is_working_day: form.is_working_day === "" ? null : form.is_working_day === "true",
+      // Working Saturday implies its own working-day semantics — never send a
+      // contradictory explicit override.
+      is_working_day: form.event_type === EventType.WORKING_SATURDAY
+        ? null
+        : form.is_working_day === "" ? null : form.is_working_day === "true",
       substitution_schedule_override: form.substitution_schedule_override || null,
       note: form.note.trim() === "" ? null : form.note.trim(),
       active: form.active,
@@ -453,16 +481,19 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </div>
           ))}
 
-          {(form.event_type === EventType.MID_SEM_PRACTICAL || form.event_type === EventType.LAB_CANCELLED) && (
+          {(form.event_type === EventType.MID_SEM_PRACTICAL || form.event_type === EventType.LAB_CANCELLED
+            || form.event_type === EventType.HOLIDAY) && (
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-note">
-                {form.event_type === EventType.LAB_CANCELLED ? "Reason (optional)" : "Note (optional)"}
+                {form.event_type === EventType.HOLIDAY ? "Reason / Occasion (required)" : "Reason (optional)"}
               </label>
               <Input
                 id="event-form-note"
                 type="text"
                 className={selectClass}
-                placeholder={form.event_type === EventType.LAB_CANCELLED ? "e.g. Technical issue" : "e.g. Mid-semester practical"}
+                placeholder={form.event_type === EventType.HOLIDAY
+                  ? "e.g. Republic Day, Institute Holiday, Diwali"
+                  : form.event_type === EventType.LAB_CANCELLED ? "e.g. Technical issue" : "e.g. Mid-semester practical"}
                 value={form.note}
                 maxLength={200}
                 onChange={e => set("note", e.target.value)}
@@ -478,7 +509,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                 className={selectClass}
                 value={form.is_working_day}
                 onChange={e => set("is_working_day", e.target.value)}
-                disabled={rule.isClosure}
+                disabled={rule.isClosure || form.event_type === EventType.WORKING_SATURDAY}
               >
                 <option value="">Not specified</option>
                 <option value="true">Working</option>
@@ -487,6 +518,12 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               {rule.isClosure && (
                 <p className="text-[10px] text-muted-foreground">
                   Closure types are always non-working (engine rule).
+                </p>
+              )}
+              {form.event_type === EventType.WORKING_SATURDAY && (
+                <p className="text-[10px] text-muted-foreground">
+                  Working Saturday is always a working day on Saturdays (weekdays
+                  inside the range keep their normal state).
                 </p>
               )}
             </div>
