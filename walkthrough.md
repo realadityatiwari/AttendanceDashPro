@@ -908,3 +908,13 @@ pre-existing drift: 7.1 25/26 (records 92→95) and 6.7 30/31 (22 events vs 18
 seeded QUIZ_DAY), which remain untouched pending owner authorization. DB ends
 byte-identical to the documented 9.2.1 baseline. Report:
 `docs/track_lab_attendance_correction_report.md`.
+
+## Focused History Filters Correction (2026-08-16)
+
+**Symptom.** /history loads unfiltered but crashes with `TypeError: Cannot read properties of undefined (reading 'total_count')` as soon as any filter is applied.
+
+**Diagnosis.** The backend History API is correct — every filter (subject/state/inclusive dates/search), occurrence-level status matching (cancelled lab blocks = one Cancelled row), filtered `total_count`, and a summary over the full filtered set were verified in-process. The defect is frontend state logic: `useAttendanceHistory` keys SWR on the request URL, so any filter change (and any Load-more offset change) is a new SWR key with `history === undefined` while fetching. The Load-more button rendered whenever `isLoading` was true, then dereferenced `history!.total_count`.
+
+**Fix.** (1) The Load-more button renders only when `history` exists and more rows remain; while a filtered/page request is in flight a spinner row renders instead of the button. (2) The filter-signature reset effect clears `rows` immediately, so the previous filter's rows are never displayed or mixed into the new result — the skeleton shows while the filtered request loads. No `keepPreviousData`, so stale-filter data is never shown. The 2-hour lab occurrence collapse is untouched: BCS-551 history is 4 blocks, not 8 rows, under every filter.
+
+**Verification.** New `verify_history_filters.py` 20/20, exact DB baseline restored. Frozen regressions green except pre-existing owner-data fixture drift (7.1 24/26, 6.7 28/31, 8.1 21/22 — none weakened; 8.1 check 7 now sees the admin's owner-entered BCS-551 2026-07-20 Missed record). DB records 101 before and after; sessions 695→693 only via the frozen 6.6 documented startup cleanup of unattended owner extras. Report: `docs/history_filters_correction_report.md`.

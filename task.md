@@ -1013,6 +1013,18 @@ cancelled=0, extra=0, designated=0, lab tables 0/0.
   No commit.
 - [x] Report: `docs/track_lab_attendance_correction_report.md`.
 
+## Focused History Filters Correction (2026-08-16)
+
+- [x] /history filters crashed: `TypeError: Cannot read properties of undefined (reading 'total_count')` at `history/page.tsx:322`.
+- [x] Root cause (frontend-only): SWR keys history on the request URL; any filter change is a new key, so `history` is `undefined` while `isLoading` — the Load-more button rendered and dereferenced `history!.total_count`. Backend History API audited healthy (all filters, inclusive dates, occurrence-level status matching, filtered `total_count`/`summary`).
+- [x] Fix: Load-more gated on `history && rows.length < history.total_count` (spinner row while loading); filter-change effect also clears `rows` (no stale-row mixing; skeleton while the filtered request loads).
+- [x] Practical occurrence grouping preserved: a 2-hour lab block is ONE history row under every filter (verifier pins BCS-551 = 4 blocks, not 8 rows).
+- [x] New `backend/scripts/verify_history_filters.py` **20/20**; DB baseline restored exactly.
+- [x] Static gates: compileall, tsc --noEmit, next build PASS; ESLint on the changed file shows only 2 PRE-EXISTING `set-state-in-effect` errors (present at HEAD; none added).
+- [x] Frozen regressions: 6.5 27/27 · 6.6 36/36 · 7.2 26/26 · 8.2 18/18 · attendance-spec 15/15 · 9.1 28/28 · 9.2 29/29 · track-lab-fix 16/16. Pre-existing owner-data fixture drift untouched: 7.1 24/26 (checks 6/23), 6.7 28/31 (checks 4/6/7), 8.1 21/22 (check 7 — admin gained a BCS-551 2026-07-20 Missed record between runs). None weakened.
+- [x] DB: records 101 before and after (no attendance data touched); sessions 695→693 via the frozen 6.6 documented startup cleanup of 2 unattended owner extra sessions (2 attended owner extras preserved). No commit.
+- [x] Report: `docs/history_filters_correction_report.md`.
+
 ## Do Not Touch (post-9.2.1 freeze)
 
 Attendance engine/formulas, quiz eligibility, Phase 6 event architecture,

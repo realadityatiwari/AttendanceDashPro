@@ -140,6 +140,10 @@ export default function HistoryPage() {
     if (lastSig !== filterSig) {
       setLastSig(filterSig);
       setOffset(0);
+      // Drop rows from the previous filter immediately so stale items are
+      // never shown (or mixed into the new result) while the filtered
+      // request loads — the skeleton renders instead.
+      setRows([]);
     }
   }, [filterSig, lastSig]);
 
@@ -309,7 +313,7 @@ export default function HistoryPage() {
             ))}
           </div>
 
-          {(isLoading || (history && rows.length < history.total_count)) && (
+          {history && rows.length < history.total_count ? (
             <Button
               variant="outline"
               className="w-full"
@@ -319,9 +323,17 @@ export default function HistoryPage() {
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
-              Load more ({history!.total_count - rows.length} remaining)
+              Load more ({history.total_count - rows.length} remaining)
             </Button>
-          )}
+          ) : isLoading ? (
+            // history is undefined while a filtered/page request is in
+            // flight (SWR gives a fresh key per URL); render a loading row
+            // instead of a button that dereferences history.total_count.
+            <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading sessions…
+            </div>
+          ) : null}
 
           <p className="text-center text-xs text-muted-foreground">
             Showing {rows.length} of {history ? history.total_count : "..."} sessions

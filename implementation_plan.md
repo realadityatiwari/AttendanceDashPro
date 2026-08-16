@@ -1039,3 +1039,15 @@ new phase; no Phase 9.3).
   work** (the frozen 6.6 window cleanup removed a pre-existing orphan extra
   session, returning sessions to the documented 691/0 baseline).
 - Full report: `docs/track_lab_attendance_correction_report.md`.
+
+## Focused History Filters Correction (after Phase 9.2.1 — 2026-08-16)
+
+**Scope**: /history filter crash fixed as a focused read/filter correction (NOT a phase; no Phase 9.3 started).
+
+- **Root cause**: frontend-only. `useAttendanceHistory` keys SWR on the request URL; any filter change (or Load-more offset change) is a new key, so `history` is `undefined` with `isLoading=true` while fetching. The Load-more button rendered under `(isLoading || (history && ...))` while `rows` still held the previous filter's items, then dereferenced `history!.total_count` — the reported `TypeError: Cannot read properties of undefined (reading 'total_count')` at `history/page.tsx:322`.
+- **Backend**: audited fully healthy — subject/status/date_from/date_to/search filters, inclusive dates clamped to semester+today, occurrence-level status matching (cancelled blocks = one Cancelled occurrence), filtered `total_count` and full-set `summary`; inverted range = deterministic empty intersection. No backend change.
+- **Fix**: Load-more button gated on `history && rows.length < history.total_count` with a spinner row while loading; the filter-signature reset effect also clears `rows` so the previous filter's rows are never shown/mixed (skeleton while the filtered request loads). No `keepPreviousData` (would show stale-filter rows).
+- **Verifier**: new `verify_history_filters.py` **20/20** (temp student BCS-501 + BCS-551; unfiltered shape/totals, theory/practical subject filters, 2-hour lab = one occurrence, inclusive from/to/from+to, search by code/name/type case-insensitive, Present/Absent/Pending/Cancelled states, combined filters, zero-result, pagination + Load-More accumulation without duplication, clearing filters, shape consistency, exact baseline restore).
+- **Frozen regressions**: 6.5 27/27 · 6.6 36/36 · 7.2 26/26 · 8.2 18/18 · attendance-spec 15/15 · 9.1 28/28 · 9.2 29/29 · track-lab-fix 16/16. Pre-existing owner-data fixture drift untouched: 7.1 24/26 (checks 6/23), 6.7 28/31 (checks 4/6/7), 8.1 21/22 (check 7 — admin gained a BCS-551 2026-07-20 Missed record between runs).
+- **DB**: records 101 before and after (zero attendance data touched); sessions 695→693 via the frozen 6.6 documented startup cleanup of 2 unattended owner extra sessions (2 attended owner extras preserved).
+- Full report: `docs/history_filters_correction_report.md`.
