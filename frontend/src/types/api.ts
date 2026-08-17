@@ -250,6 +250,9 @@ export interface CriterionResult {
   threshold: number;
   passed: boolean;
   explanation: string;
+  // That criterion's own Must Attend / Safe Skip, derived by the backend from
+  // the criterion's counting window and the lecture/tutorial average formula.
+  optimization?: OptimizationResult | null;
 }
 
 export interface FinalCriterionResult {

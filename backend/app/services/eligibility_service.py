@@ -10,7 +10,9 @@ from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.attendance import EligibilityResult
 from app.engines.eligibility_engine import evaluate_quiz_eligibility
-from app.engines.calendar_engine import get_attendance_window, DEFAULT_WEEKENDS
+from app.engines.calendar_engine import (
+    get_attendance_window, get_cumulative_attendance_window, DEFAULT_WEEKENDS,
+)
 from app.models.enums import AttendanceStatus
 from app.models.quiz import ScheduleStatus
 from app.engines.attendance_engine import normalize_class_type
@@ -85,6 +87,28 @@ class EligibilityService:
             ))
         return results
 
+    @staticmethod
+    def _build_counts(raw_counts) -> Dict[str, Any]:
+        """Aggregates raw (class_type, status) rows into the canonical L/T
+        count shape consumed by the eligibility engine."""
+        counts: Dict[str, Any] = {
+            'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+            'T': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+        }
+        for class_type_str, status in raw_counts:
+            t = normalize_class_type(class_type_str.value)
+            if t not in counts:
+                continue
+
+            counts[t]['tot'] += 1
+            if status == AttendanceStatus.ATTENDED:
+                counts[t]['att'] += 1
+            elif status == AttendanceStatus.MISSED:
+                counts[t]['miss'] += 1
+            else:
+                counts[t]['pending'] += 1
+        return counts
+
     async def _evaluate_subject(
         self,
         user_id: UUID,
@@ -123,35 +147,32 @@ class EligibilityService:
         # and caused Friday to resolve non-working and Sunday working.
         default_weekends = DEFAULT_WEEKENDS
         
-        # 4. Fetch Attendance — strictly bounded to the quiz's attendance window
+        # 4. Fetch Attendance — strictly bounded to the quiz's attendance windows
         #    (ADR 010 / reference engine: Quiz N counts from the previous quiz
         #    boundary through the day before the quiz; Q1 counts from commencement).
         #    Unresolved cycles (missing milestone, e.g. BCS-054 Q3) yield no counts
         #    and the engine emits the placeholder result below.
+        #
+        #    Two windows are evaluated (Phase 1 eligibility correction):
+        #      - Criterion I  = cycle window (previous quiz -> day before quiz)
+        #      - Criterion II = cumulative window (commencement -> day before quiz)
+        #    Both use the same lecture/tutorial average formula.
         milestone = next((m for m in milestones if m.metadata.get('quizCycle') == quiz_cycle), None)
         raw_counts = []
+        cumulative_raw_counts = []
         if milestone:
             window = get_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
             raw_counts = await self.attendance_repo.get_subject_counts_between(
                 user_id, subject_model.id, window['window_start'], window['window_end'],
                 exclude_quiz_day=True,
             )
-        counts: Dict[str, Any] = {
-            'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
-            'T': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
-        }
-        for class_type_str, status in raw_counts:
-            t = normalize_class_type(class_type_str.value)
-            if t not in counts:
-                continue
-            
-            counts[t]['tot'] += 1
-            if status == AttendanceStatus.ATTENDED:
-                counts[t]['att'] += 1
-            elif status == AttendanceStatus.MISSED:
-                counts[t]['miss'] += 1
-            else:
-                counts[t]['pending'] += 1
+            cumulative_window = get_cumulative_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
+            cumulative_raw_counts = await self.attendance_repo.get_subject_counts_between(
+                user_id, subject_model.id, cumulative_window['window_start'], cumulative_window['window_end'],
+                exclude_quiz_day=True,
+            )
+        counts: Dict[str, Any] = self._build_counts(raw_counts)
+        cumulative_counts: Dict[str, Any] = self._build_counts(cumulative_raw_counts)
         
         # 5. Evaluate (persisted policy thresholds are authoritative for both
         #    qualifying routes; the engine's hardcoded 70/75/75 is the fallback)
@@ -161,6 +182,7 @@ class EligibilityService:
                 'lecture_threshold': cycle_model.policy.lecture_threshold,
                 'combined_threshold': cycle_model.policy.combined_threshold or cycle_model.policy.lecture_threshold,
             },
+            cumulative_counts=cumulative_counts,
         )
         
         # Enrich with subject identity + the confirmed quiz date (None when the

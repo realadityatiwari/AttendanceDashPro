@@ -315,9 +315,13 @@ async def main() -> int:
               f"state={bcs501_q1.get('state')} reachable={bcs501_q1.get('optimization', {}).get('is_reachable')}")
 
         # --- 16. Criterion I contract --------------------------------------------
+        # Phase 1 (eligibility mathematics correction): Criterion I no longer
+        # uses lecture attendance alone — BOTH criteria use the same
+        # lecture/tutorial average formula and differ only in the counting
+        # window (cycle window for Criterion I, cumulative for Criterion II).
         crit_i = bcs501_q1["criterion_i"]
-        check("16. Criterion I = lecture % vs policy lecture threshold (70)",
-              crit_i["value"] == bcs501_q1["lecture_pct"]
+        check("16. Criterion I = lecture/tutorial average vs policy threshold (70)",
+              crit_i["value"] == bcs501_q1["average_pct"]
               and crit_i["threshold"] == 70.0
               and crit_i["passed"] == (crit_i["value"] >= 70.0)
               and bcs501_q1["lecture_threshold"] == 70.0

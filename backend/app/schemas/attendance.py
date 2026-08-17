@@ -129,13 +129,20 @@ class EligibilityState(str, Enum):
     UNRESOLVED = "UNRESOLVED"
 
 class CriterionResult(BaseModel):
-    """One qualifying route of the official policy (S4 PRODUCT SPEC §5):
-    Criterion I — Lecture attendance; Criterion II — Combined average."""
+    """One qualifying route of the official policy (S4 PRODUCT SPEC §5).
+    Both Criterion I and Criterion II use the SAME lecture/tutorial average
+    formula — (Lecture % + Tutorial %) / 2 — and differ only in the counting
+    window:
+      - Criterion I  = cycle window (previous quiz boundary -> day before quiz)
+      - Criterion II = cumulative window (commencement -> day before quiz)
+    `optimization` is that criterion's own Must Attend / Safe Skip, derived
+    from its window counts and the same average formula (backend-computed)."""
     name: str
     value: Optional[float] = None
     threshold: float
     passed: bool
     explanation: str
+    optimization: Optional[OptimizationResult] = None
 
 class FinalCriterionResult(BaseModel):
     """Combination of the qualifying routes:

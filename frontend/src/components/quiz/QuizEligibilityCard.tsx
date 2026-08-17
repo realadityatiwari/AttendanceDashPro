@@ -27,11 +27,21 @@ function fmtDate(iso: string | null): string {
 }
 
 function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null; passed: boolean }) {
+  const opt = criterion?.optimization;
+  const hasOpt = !!opt && (opt.lecture_deficit > 0 || opt.tutorial_deficit > 0 || opt.safe_skip_lecture > 0 || opt.safe_skip_tutorial > 0);
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{criterion?.name ?? "—"}</p>
         <p className="text-xs text-muted-foreground mt-0.5">{criterion?.explanation ?? "—"}</p>
+        {hasOpt && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Must attend: <span className="font-bold tabular-nums">{opt.lecture_deficit} lecture{opt.lecture_deficit === 1 ? "" : "s"}</span>
+            {opt.tutorial_deficit > 0 && <span className="font-bold tabular-nums"> · {opt.tutorial_deficit} tutorial{opt.tutorial_deficit === 1 ? "" : "s"}</span>}
+            {" "}· Safe skip: <span className="font-bold tabular-nums">{opt.safe_skip_lecture} lecture{opt.safe_skip_lecture === 1 ? "" : "s"}</span>
+            {opt.safe_skip_tutorial > 0 && <span className="font-bold tabular-nums"> · {opt.safe_skip_tutorial} tutorial{opt.safe_skip_tutorial === 1 ? "" : "s"}</span>}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {passed ? (
@@ -177,14 +187,14 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 {eligibility.optimization && (
                   <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
                     <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Must Attend</p>
+                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Must Attend <span className="font-normal normal-case tracking-normal">(best route)</span></p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.tutorial_deficit}</span></p>
                       )}
                     </div>
                     <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Safe Skip</p>
+                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Safe Skip <span className="font-normal normal-case tracking-normal">(best route)</span></p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_lecture}</span></p>
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_tutorial}</span></p>

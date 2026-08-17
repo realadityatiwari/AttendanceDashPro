@@ -135,11 +135,12 @@ def get_teaching_days_between(
         current += timedelta(days=1)
     return teaching_days
 
-def get_attendance_window(
-    subject: Subject, 
+def _resolve_attendance_window(
+    subject: Subject,
     milestone_id: str,
     events: List[AcademicEvent],
-    default_weekends: List[int]
+    default_weekends: List[int],
+    from_commencement: bool = False,
 ) -> Dict[str, Any]:
     if not subject.timeline:
         raise ValueError(f"Subject {subject.code} has no timeline")
@@ -148,13 +149,20 @@ def get_attendance_window(
     if not milestone:
         raise ValueError(f"Unknown milestone {milestone_id}")
         
-    window_start = subject.timeline.commencement_date
-    
-    quiz_cycle = milestone.metadata.get('quizCycle')
-    if quiz_cycle and quiz_cycle > 1:
-        prev_quiz = next((m for m in subject.timeline.milestones if m.type == 'QUIZ' and m.metadata.get('quizCycle') == quiz_cycle - 1), None)
-        if prev_quiz:
-            window_start = prev_quiz.date
+    if from_commencement:
+        # Criterion II counting window: commencement of first class/lecture
+        # through the day before the quiz (cumulative, never re-anchored at a
+        # previous quiz boundary).
+        window_start = subject.timeline.commencement_date
+    else:
+        # Criterion I counting window: Quiz N counts from the previous quiz
+        # boundary (commencement for Quiz I) through the day before the quiz.
+        window_start = subject.timeline.commencement_date
+        quiz_cycle = milestone.metadata.get('quizCycle')
+        if quiz_cycle and quiz_cycle > 1:
+            prev_quiz = next((m for m in subject.timeline.milestones if m.type == 'QUIZ' and m.metadata.get('quizCycle') == quiz_cycle - 1), None)
+            if prev_quiz:
+                window_start = prev_quiz.date
             
     window_end = milestone.date - timedelta(days=1)
     
@@ -170,3 +178,27 @@ def get_attendance_window(
         "teaching_days": len(teaching_dates),
         "effective_teaching_dates": teaching_dates
     }
+
+def get_attendance_window(
+    subject: Subject, 
+    milestone_id: str,
+    events: List[AcademicEvent],
+    default_weekends: List[int]
+) -> Dict[str, Any]:
+    """Criterion I attendance window: previous quiz boundary (or commencement
+    for Quiz I) through the day before the quiz."""
+    return _resolve_attendance_window(
+        subject, milestone_id, events, default_weekends, from_commencement=False
+    )
+
+def get_cumulative_attendance_window(
+    subject: Subject,
+    milestone_id: str,
+    events: List[AcademicEvent],
+    default_weekends: List[int]
+) -> Dict[str, Any]:
+    """Criterion II attendance window: commencement of first class/lecture
+    through the day before the quiz (cumulative semester-to-date window)."""
+    return _resolve_attendance_window(
+        subject, milestone_id, events, default_weekends, from_commencement=True
+    )
