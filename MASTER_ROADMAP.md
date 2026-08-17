@@ -474,7 +474,10 @@ change, no DB change, no new formula, no React math; the legacy 3-state
 SAFE/WATCH/CRITICAL overall status and the Phase 8.2 4-state subject health are
 rendered exactly as emitted. `npx tsc --noEmit` · ESLint · `next build` green;
 Phase 8.1 verifier 22/22 + Phase 8.2 verifier 18/18 re-run green; DB baseline
-byte-identical.
+byte-identical. **PAGE REMOVED (2026-08-17)** — the dedicated `/analytics` route
+and its nav entry were removed; the Phase 8.1 read model remains and is consumed
+by the Dashboard (overall forecast + weekly series) and the Attendance tab
+(per-subject health/optimizer/practical %). No backend/DB change.
 
 ## Phase 8.2 — Attendance Monitoring + Lab Domain Correction (COMPLETE 2026-08-15)
 
