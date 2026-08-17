@@ -88,7 +88,7 @@ from app.models.event import AcademicEvent
 from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
-from app.models.quiz import QuizSchedule, QuizCycle, ScheduleStatus
+from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.enums import AttendanceStatus, ClassType, EventType, UserRole
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
@@ -97,7 +97,6 @@ from app.engines.practical_occurrence import group_practical_occurrences
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
 from sqlalchemy import select, func, delete, or_
-from sqlalchemy.orm import selectinload
 
 results = []
 
@@ -549,54 +548,70 @@ async def main() -> int:
               "schedule, per-user scoped)",
               r.status_code == 200 and cc_student == cc_admin, f"got {cc_student}")
 
-        # 15. Date-aware rollback scenarios (service-level, same session)
+# 15. Date-aware rollback scenarios (service-level, same session).
+        # Phase 2: quiz dates are authoritative from active QUIZ_DAY events, so
+        # the scenarios move/deactivate the EVENTS (not quiz_schedules).
         async with AsyncSessionLocal() as db:
             service = EligibilityService(db)
-            all_schedules = (await db.execute(
-                select(QuizSchedule).options(selectinload(QuizSchedule.quiz_cycle)))).scalars().all()
+            quiz_events = (await db.execute(
+                select(AcademicEvent).where(
+                    AcademicEvent.event_type == EventType.QUIZ_DAY,
+                    AcademicEvent.active.is_(True),
+                ).order_by(AcademicEvent.subject_id, AcademicEvent.start_date))).scalars().all()
+            ranks = {}
+            per_subject_count = {}
+            for e in quiz_events:
+                per_subject_count[e.subject_id] = per_subject_count.get(e.subject_id, 0) + 1
+                ranks[e.id] = per_subject_count[e.subject_id]
             try:
-                # Scenario A: all Quiz I dates past -> next upcoming is Quiz II
-                for s in all_schedules:
-                    if s.quiz_cycle.cycle_number == 1:
-                        s.date = date(2026, 8, 1)
+                # Scenario A: every rank-1 quiz event moved to the past
+                for e in quiz_events:
+                    if ranks[e.id] == 1:
+                        e.start_date = date(2026, 8, 1)
+                        e.end_date = date(2026, 8, 1)
                 cc = await service.get_current_quiz_cycle(admin_user.id)
-                check("15a. date-aware: with all Quiz I dates past, current-cycle "
-                      "selects Quiz II (next upcoming 2026-09-14, basis next_upcoming)",
+                check("15a. date-aware: with every Quiz I quiz event moved to the "
+                      "past, current-cycle selects Quiz II (next upcoming "
+                      "2026-09-14, basis next_upcoming)",
                       cc["quiz_cycle"] == 2 and cc["quiz_date"] == date(2026, 9, 14)
                       and cc["basis"] == "next_upcoming", f"got {cc}")
 
-                # Scenario B: Quiz I + Quiz II past -> Quiz III
-                for s in all_schedules:
-                    if s.quiz_cycle.cycle_number in (1, 2):
-                        s.date = date(2026, 8, 1)
+                # Scenario B: ranks 1+2 moved to the past (distinct past dates
+                # keep the effective dates from collapsing by date-dedup)
+                for e in quiz_events:
+                    if ranks[e.id] == 2:
+                        e.start_date = date(2026, 8, 2)
+                        e.end_date = date(2026, 8, 2)
                 cc = await service.get_current_quiz_cycle(admin_user.id)
-                check("15b. date-aware: with Quiz I + Quiz II past, current-cycle "
-                      "selects Quiz III (next upcoming 2026-10-09, basis next_upcoming)",
+                check("15b. date-aware: with Quiz I + Quiz II events moved to the "
+                      "past, current-cycle selects Quiz III (next upcoming "
+                      "2026-10-09, basis next_upcoming)",
                       cc["quiz_cycle"] == 3 and cc["quiz_date"] == date(2026, 10, 9)
                       and cc["basis"] == "next_upcoming", f"got {cc}")
 
-                # Scenario C: all dates past -> latest resolved cycle (III)
-                for s in all_schedules:
-                    s.date = date(2026, 8, 1)
+                # Scenario C: all quiz events moved to the past -> latest resolved
+                for e in quiz_events:
+                    if ranks[e.id] == 3:
+                        e.start_date = date(2026, 8, 3)
+                        e.end_date = date(2026, 8, 3)
                 cc = await service.get_current_quiz_cycle(admin_user.id)
-                check("15c. date-aware: with every quiz date past, current-cycle "
-                      "falls back to the latest resolved cycle (Quiz III, basis "
-                      "latest_resolved) without inventing a date",
-                      cc["quiz_cycle"] == 3 and cc["quiz_date"] == date(2026, 8, 1)
+                check("15c. date-aware: with every quiz event moved to the past, "
+                      "current-cycle falls back to the latest resolved cycle "
+                      "(Quiz III, basis latest_resolved)",
+                      cc["quiz_cycle"] == 3 and cc["quiz_date"] == date(2026, 8, 3)
                       and cc["basis"] == "latest_resolved", f"got {cc}")
 
-                # Scenario D: all schedules unresolved -> documented fallback Quiz I
-                for s in all_schedules:
-                    s.date = None
-                    s.schedule_status = ScheduleStatus.UNRESOLVED
+                # Scenario D: all quiz events deactivated -> documented fallback
+                for e in quiz_events:
+                    e.active = False
                 cc = await service.get_current_quiz_cycle(admin_user.id)
-                check("15d. date-aware: with no resolved schedule, current-cycle "
+                check("15d. date-aware: with no active quiz event, current-cycle "
                       "returns the documented fallback (Quiz I, has_schedule=false, "
                       "no invented date)",
                       cc["quiz_cycle"] == 1 and cc["has_schedule"] is False
                       and cc["quiz_date"] is None and cc["basis"] == "fallback", f"got {cc}")
             finally:
-                # Discard every schedule mutation  -  the frozen baseline is
+                # Discard every event mutation  -  the frozen baseline is
                 # restored by the rollback (never committed).
                 await db.rollback()
 
@@ -612,20 +627,19 @@ async def main() -> int:
 
         # 17. UNRESOLVED only when genuinely unresolved (rollback)
         async with AsyncSessionLocal() as db:
-            q3_row = (await db.execute(
-                select(QuizSchedule).where(
-                    QuizSchedule.subject_id == subject_ids["BCS-054"],
-                    QuizSchedule.quiz_cycle_id == (await db.execute(
-                        select(QuizCycle.id).where(QuizCycle.cycle_number == 3))).scalar_one(),
-                ))).scalar_one()
-            q3_row.date = None
-            q3_row.schedule_status = ScheduleStatus.UNRESOLVED
+            q3_event = (await db.execute(
+                select(AcademicEvent).where(
+                    AcademicEvent.event_type == EventType.QUIZ_DAY,
+                    AcademicEvent.subject_id == subject_ids["BCS-054"],
+                    AcademicEvent.start_date == date(2026, 10, 23),
+                ))).scalars().first()
+            q3_event.active = False
             await db.flush()
             service = EligibilityService(db)
             result = await service.get_quiz_eligibility(admin_user.id, subject_ids["BCS-054"], 3,
                                                         semester_start=semester_start)
             check("17. UNRESOLVED only when genuinely unresolved  -  no fabricated "
-                  "date/result for a removed schedule",
+                  "date/result for a deactivated quiz event",
                   result.state == EligibilityState.UNRESOLVED
                   and result.quiz_date is None and result.lecture.total == 0,
                   f"state={result.state} date={result.quiz_date}")

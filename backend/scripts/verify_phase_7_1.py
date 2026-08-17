@@ -479,27 +479,35 @@ async def main() -> int:
 
             await db.rollback()
 
-        # 15. UNRESOLVED scenario (rollback): BCS-054 Q3 date removed
+        # 15. UNRESOLVED scenario (rollback): BCS-054 Quiz III QUIZ_DAY event
+        # deactivated. Phase 2: active QUIZ_DAY events are the authoritative
+        # quiz-date source — an event without an active QUIZ_DAY is genuinely
+        # unresolved.
         async with AsyncSessionLocal() as db:
-            q3_row = (await db.execute(
-                select(QuizSchedule).where(
-                    QuizSchedule.subject_id == bcs054_id,
-                    QuizSchedule.quiz_cycle_id == (await db.execute(
-                        select(QuizCycle.id).where(QuizCycle.cycle_number == 3))).scalar_one(),
-                ))).scalar_one()
-            q3_row.date = None
-            q3_row.schedule_status = ScheduleStatus.UNRESOLVED
-            await db.flush()
-            service = EligibilityService(db)
-            result = await service.get_quiz_eligibility(admin_user.id, bcs054_id, 3, semester_start=semester_start)
-            check("15. UNRESOLVED only when genuinely unresolved (removed date scenario)",
-                  result.state == EligibilityState.UNRESOLVED
-                  and result.is_eligible is False
-                  and result.quiz_date is None
-                  and result.optimization is None
-                  and result.lecture.total == 0
-                  and bool(result.explanation),
-                  f"state={result.state} quiz_date={result.quiz_date}")
+            q3_event = (await db.execute(
+                select(AcademicEvent).where(
+                    AcademicEvent.event_type == EventType.QUIZ_DAY,
+                    AcademicEvent.subject_id == bcs054_id,
+                    AcademicEvent.start_date == expected_q3,
+                ))).scalars().first()
+            if q3_event is None:
+                check("15. UNRESOLVED only when genuinely unresolved (deactivated "
+                      "quiz event scenario)", False,
+                      "no BCS-054 Q3 QUIZ_DAY event found")
+            else:
+                q3_event.active = False
+                await db.flush()
+                service = EligibilityService(db)
+                result = await service.get_quiz_eligibility(admin_user.id, bcs054_id, 3, semester_start=semester_start)
+                check("15. UNRESOLVED only when genuinely unresolved (deactivated "
+                      "quiz event scenario)",
+                      result.state == EligibilityState.UNRESOLVED
+                      and result.is_eligible is False
+                      and result.quiz_date is None
+                      and result.optimization is None
+                      and result.lecture.total == 0
+                      and bool(result.explanation),
+                      f"state={result.state} quiz_date={result.quiz_date}")
             await db.rollback()
 
     # --- 24. Quiz-day + surprise-quiz canonicality --------------------------------

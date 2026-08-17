@@ -1,10 +1,14 @@
 """
 Controlled, idempotent academic-event seeding (Phase 6.5).
 
-Source of truth: the quiz_schedules table (authoritative project data — the
-real scheduled quiz dates). For every SCHEDULED quiz with a confirmed date a
-single QUIZ_DAY academic event is created (subject-scoped, one-day range).
-BCS-054 Quiz III is UNRESOLVED (no date) and is naturally excluded.
+Bootstrap direction (Phase 2): this seed runs ONLY at seed time, when the
+quiz_schedules projection (populated from timetable.json by
+seed_academic_baseline.py) is the initial dataset. From that point on, active
+QUIZ_DAY AcademicEvents are the authoritative runtime source of quiz dates for
+Quiz Eligibility — quiz_schedules is the derived projection, never a second
+manually maintained source of truth. For every SCHEDULED quiz with a confirmed
+date a single QUIZ_DAY academic event is created (subject-scoped, one-day
+range). BCS-054 Quiz III is UNRESOLVED (no date) and is naturally excluded.
 
 NOT seeded (no authoritative source exists in the repository):
 - public/institute/festival holidays      (no institutional holiday list)

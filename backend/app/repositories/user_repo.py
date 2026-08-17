@@ -7,7 +7,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from app.models.user import User, Section
 from app.models.academic import StudentEnrollment, Subject, Semester, AcademicSession
-from app.models.quiz import QuizSchedule, ScheduleStatus
+from app.models.event import AcademicEvent
+from app.models.enums import EventType
 
 class UserRepository:
     def __init__(self, db: AsyncSession):
@@ -49,13 +50,15 @@ class UserRepository:
 
         first_quiz_date: Optional[date] = None
         if user.id is not None:
-            stmt = select(func.min(QuizSchedule.date)).join(
+            # Quiz dates are authoritative from active QUIZ_DAY AcademicEvents
+            # (Phase 2) — earliest active quiz date across enrolled subjects.
+            stmt = select(func.min(AcademicEvent.start_date)).join(
                 StudentEnrollment,
-                StudentEnrollment.subject_id == QuizSchedule.subject_id,
+                StudentEnrollment.subject_id == AcademicEvent.subject_id,
             ).where(
                 StudentEnrollment.user_id == user.id,
-                QuizSchedule.date.is_not(None),
-                QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED,
+                AcademicEvent.event_type == EventType.QUIZ_DAY,
+                AcademicEvent.active.is_(True),
             )
             result = await self.db.execute(stmt)
             first_quiz_date = result.scalar_one_or_none()

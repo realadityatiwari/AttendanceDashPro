@@ -287,21 +287,21 @@ class DashboardService:
         if not quiz_applicable:
             return empty
 
-        # Phase 8.1 N+1 fix: one grouped schedule query + one batched
-        # eligibility evaluation (single canonical engine path), replacing the
-        # previous per-subject schedule + eligibility loops.
-        schedules_by_subject = await self.quiz_repo.get_quiz_schedules_for_subjects(
+        # Phase 8.1 N+1 fix: one grouped effective-quiz-dates query + one
+        # batched eligibility evaluation (single canonical engine path),
+        # replacing the previous per-subject schedule + eligibility loops.
+        # Quiz dates are authoritative from active QUIZ_DAY AcademicEvents
+        # (Phase 2), with positional cycle ranks.
+        effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
             [s.id for s in quiz_applicable]
         )
-        schedules = [s for lst in schedules_by_subject.values() for s in lst]
-
-        resolved = [s for s in schedules if s.date is not None and s.schedule_status.value == "SCHEDULED"]
-        future = [s for s in resolved if s.date >= date.today()]
-        pick = min(future, key=lambda s: s.date) if future else (max(resolved, key=lambda s: s.quiz_cycle.cycle_number) if resolved else None)
+        resolved = [(cyc, d) for lst in effective_by_subject.values() for cyc, d in lst]
+        future = [(cyc, d) for cyc, d in resolved if d >= date.today()]
+        pick = min(future, key=lambda x: x[1]) if future else (max(resolved, key=lambda x: x[0]) if resolved else None)
         if pick is None:
             return empty
 
-        cycle_number = pick.quiz_cycle.cycle_number
+        cycle_number, quiz_date = pick
         cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(cycle_number)
         threshold = cycle_model.policy.lecture_threshold if cycle_model and cycle_model.policy else None
 
@@ -324,8 +324,8 @@ class DashboardService:
 
         return QuizSnapshotSection(
             quiz_cycle=cycle_number,
-            quiz_label=pick.quiz_cycle.label,
-            quiz_date=pick.date,
+            quiz_label=cycle_model.label if cycle_model else None,
+            quiz_date=quiz_date,
             threshold=threshold,
             eligible=eligible,
             attention=attention,
