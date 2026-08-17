@@ -4,7 +4,7 @@
 #
 # Starts the complete stack in dependency order:
 #   1. PostgreSQL (Docker container: attendancedashpro_db, port 55432)
-#   2. FastAPI backend (127.0.0.1:8000)
+#   2. FastAPI backend (127.0.0.1:8080)
 #   3. Next.js frontend (localhost:3100)
 #
 # Usage:
@@ -207,7 +207,7 @@ Write-Host ""
 
 # ── 2. FastAPI backend ─────────────────────────────────────────────────────────
 
-$backendPort    = 8000
+$backendPort    = 8080
 $backendHost    = "127.0.0.1"
 $backendStarted = $false
 
@@ -221,14 +221,43 @@ if (Test-ServiceRunning -Port $backendPort -Pattern "python") {
     Write-Host "    Free the port or stop that process, then retry." -ForegroundColor DarkGray
     exit 1
 } else {
+    $logOut = Join-Path $backendDir "backend_out.log"
+    $logErr = Join-Path $backendDir "backend_err.log"
     $backendProcess = Start-Process `
         -FilePath $pythonExe `
-        -ArgumentList "-m uvicorn app.main:app --reload --host $backendHost --port $backendPort" `
+        -ArgumentList "-m uvicorn app.main:app --host $backendHost --port $backendPort" `
         -WorkingDirectory $backendDir `
         -PassThru `
-        -WindowStyle Hidden
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $logOut `
+        -RedirectStandardError $logErr
+
+    Write-Step "Waiting for backend to bind to port $backendPort ..."
+    $maxWaitSec = 10
+    $elapsed = 0
+    while (-not (Test-PortListening -TargetHost $backendHost -Port $backendPort)) {
+        if ($backendProcess.HasExited) {
+            Write-Fail "Backend process crashed immediately (Exit Code: $($backendProcess.ExitCode))."
+            if (Test-Path $logErr) {
+                Write-Host "    Last error output:" -ForegroundColor DarkGray
+                Get-Content $logErr -Tail 5 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+            }
+            exit 1
+        }
+        if ($elapsed -ge $maxWaitSec) {
+            Write-Fail "Backend failed to bind to port $backendPort within ${maxWaitSec}s."
+            if (Test-Path $logErr) {
+                Write-Host "    Last error output:" -ForegroundColor DarkGray
+                Get-Content $logErr -Tail 5 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+            }
+            exit 1
+        }
+        Start-Sleep -Milliseconds 500
+        $elapsed += 1
+    }
+
     $backendStarted = $true
-    Write-Ok "Launched (PID $($backendProcess.Id))"
+    Write-Ok "Launched and listening (PID $($backendProcess.Id))"
 }
 
 Write-Host ""

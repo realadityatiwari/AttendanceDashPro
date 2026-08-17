@@ -4,7 +4,7 @@
 #
 # Stops (in reverse order):
 #   1. Next.js frontend   (port 3100 — node process)
-#   2. FastAPI backend    (port 8000 — python process)
+#   2. FastAPI backend    (port 8080 — python process)
 #
 # PostgreSQL behaviour:
 #   The database container (attendancedashpro_db) is LEFT RUNNING.
@@ -63,7 +63,7 @@ Stop-DevPort -Port 3100 -ExpectedProcessPattern "node" -ServiceName "Next.js fro
 Write-Host ""
 
 # Stop backend (Uvicorn / Python)
-Stop-DevPort -Port 8000 -ExpectedProcessPattern "python" -ServiceName "FastAPI backend"
+Stop-DevPort -Port 8080 -ExpectedProcessPattern "python" -ServiceName "FastAPI backend"
 
 Write-Host ""
 Write-Host "  ────────────────────────────────────────────────────" -ForegroundColor DarkGray
