@@ -1,5 +1,12 @@
 # Phase 7.1 — Canonical Quiz Eligibility Contract + Reference Subject Cards
 
+> **SUPERSEDED (2026-08-19)** — This report documents the Phase 7.1 build as of
+> 2026-08-15. Its scope was superseded by the Phase 7.2 architecture rework and
+> the accepted Phase 4A/4B fixes (F2 reachability-aware eligibility selection,
+> D1/D2/D3 frontend eligibility states). Retained for historical record; see
+> `docs/phase_7_2_implementation_report.md` and the current verification
+> scripts for live behavior.
+
 Implementation report (2026-08-15). Authorized scope: implement the production quiz
 eligibility experience on the existing canonical architecture — complete quiz
 schedule, truthful eligibility states (ELIGIBLE / RECOVERABLE / NOT_ELIGIBLE /

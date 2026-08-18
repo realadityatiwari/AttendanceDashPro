@@ -16,6 +16,8 @@ const CYCLES = [
   { number: 3, label: "Quiz III" },
 ];
 
+const QUIZ_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
 export default function QuizEligibilityPage() {
   const { subjects, isLoading, isError } = useSubjects();
   // Date-aware default tab (Phase 7.2): the backend picks the canonical
@@ -93,7 +95,7 @@ export default function QuizEligibilityPage() {
               key={`${subject.code}-${activeCycle}`}
               subjectCode={subject.code}
               cycle={activeCycle}
-              cycleLabel={CYCLES.find((c) => c.number === activeCycle)?.label ?? `Quiz ${activeCycle}`}
+              cycleLabel={CYCLES.find((c) => c.number === activeCycle)?.label ?? `Quiz ${QUIZ_ROMAN[activeCycle] ?? activeCycle}`}
             />
           ))}
         </div>

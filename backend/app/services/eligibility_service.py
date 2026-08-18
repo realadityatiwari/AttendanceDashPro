@@ -187,7 +187,6 @@ class EligibilityService:
             domain_subject, quiz_cycle, counts, events, default_weekends,
             policy_thresholds={
                 'lecture_threshold': cycle_model.policy.lecture_threshold,
-                'combined_threshold': cycle_model.policy.combined_threshold or cycle_model.policy.lecture_threshold,
             },
             cumulative_counts=cumulative_counts,
         )

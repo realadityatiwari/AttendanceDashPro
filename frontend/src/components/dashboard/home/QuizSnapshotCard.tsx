@@ -7,6 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatShortDate } from "@/lib/date";
 
+const QUIZ_LABELS: Record<string, string> = {
+  Quiz1: "Quiz I",
+  Quiz2: "Quiz II",
+  Quiz3: "Quiz III",
+};
+
 interface QuizSnapshotCardProps {
   quiz: QuizSnapshotSection;
 }
@@ -18,7 +24,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Quiz Snapshot</CardTitle>
           {quiz.has_snapshot && quiz.quiz_label && (
-            <Badge variant="primary">{quiz.quiz_label}</Badge>
+            <Badge variant="primary">{QUIZ_LABELS[quiz.quiz_label] ?? quiz.quiz_label}</Badge>
           )}
         </div>
       </CardHeader>
