@@ -26,13 +26,27 @@ function fmtDate(iso: string | null): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T00:00:00`));
 }
 
+// Presentation-only criterion titles: both criteria use the SAME
+// (Lecture % + Tutorial %) / 2 average and differ only in the counting window,
+// so both render as "Attendance Average". The backend-emitted name remains the
+// fallback for any unrecognized title. No values or math are touched.
+const CRITERION_TITLES: Record<string, string> = {
+  "Criterion I — Lecture + Tutorial Average": "Criterion I — Attendance Average",
+  "Criterion II — Lecture + Tutorial Average": "Criterion II — Attendance Average",
+};
+
+function criterionTitle(name: string | null | undefined): string {
+  if (!name) return "—";
+  return CRITERION_TITLES[name] ?? name;
+}
+
 function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null; passed: boolean }) {
   const opt = criterion?.optimization;
   const hasOpt = !!opt && (opt.lecture_deficit > 0 || opt.tutorial_deficit > 0 || opt.safe_skip_lecture > 0 || opt.safe_skip_tutorial > 0);
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{criterion?.name ?? "—"}</p>
+        <p className="text-sm font-medium text-foreground">{criterionTitle(criterion?.name)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">
             Average: <span className="font-bold tabular-nums text-foreground">{fmtPct(criterion?.value ?? null)}</span>
