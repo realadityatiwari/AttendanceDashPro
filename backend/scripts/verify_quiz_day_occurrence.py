@@ -18,9 +18,10 @@ ASGITransport + real DB + minted JWTs, the established pattern):
     (attended +2 / recorded +2 in scenario A).
   * Eligibility isolation (the critical invariant): the quiz-day session is
     EXCLUDED from the eligibility L/T window counts while the normal lecture
-    remains included — the eligibility lecture total must NOT increase merely
-    because the quiz-day occurrence was added, even though subject
-    attendance and ERP both include it.
+    remains included — under events-authoritative quiz dates (Phase 2/3) the
+    new event on D is itself Quiz I, and the eligibility totals must equal
+    the quiz-day-excluded DB reference for its window, even though subject
+    attendance and ERP both include the quiz-day occurrence.
 
 State changes are this script's own artifacts (one "VerifyQuizDayOccurrence"
 QUIZ_DAY event on a runtime-picked past covered date, the quiz-day session it
@@ -51,6 +52,9 @@ from app.models.event import AcademicEvent
 from app.models.timetable import ClassSession
 from app.models.attendance import AttendanceRecord
 from app.models.academic import Subject, Semester
+from app.repositories.attendance_repo import AttendanceRepository
+from app.engines.attendance_engine import normalize_class_type
+from app.models.enums import AttendanceStatus
 from sqlalchemy import select, func, delete
 
 results = []
@@ -61,15 +65,36 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"  -- {detail}" if detail and not ok else ""))
 
 
+def aggregate(raw_counts) -> dict:
+    """Raw repo (class_type, status) rows -> canonical L/T count shape."""
+    out = {
+        'L': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+        'T': {'tot': 0, 'att': 0, 'miss': 0, 'pending': 0},
+    }
+    for class_type_str, status in raw_counts:
+        t = normalize_class_type(class_type_str.value)
+        if t not in out:
+            continue
+        out[t]['tot'] += 1
+        if status == AttendanceStatus.ATTENDED:
+            out[t]['att'] += 1
+        elif status == AttendanceStatus.MISSED:
+            out[t]['miss'] += 1
+        else:
+            out[t]['pending'] += 1
+    return out
+
+
 EVENT_TITLE_PREFIX = "VerifyQuizDayOccurrence"
 SUBJECT_CODE = "BCS-502"
 
 # Past working dates available for the covered-date checks (no overlap with any
 # frozen verifier's mutation window: 07-31/08-01 belong to events-correction,
-# 11-02..12 to 7.1, 10-23 is the seeded canonical session). D is additionally
-# clamped to the subject's actual semester start so the lecture is genuinely
-# inside the Quiz I eligibility window (making check 8 a real proof).
-PAST_CANDIDATES = [date(2026, 7, 15) + timedelta(days=i) for i in range(32)]  # 07-15..08-15
+# 11-02..12 to 7.1, 10-23 is the seeded canonical session). D starts the day
+# AFTER the subject's semester start so the Quiz I eligibility window
+# [semester_start, D-1] is non-empty under events-authoritative quiz dates
+# (Phase 2/3: the new event on D IS Quiz I) — making check 8 a real proof.
+PAST_CANDIDATES = [date(2026, 7, 16) + timedelta(days=i) for i in range(31)]  # 07-16..08-15
 
 
 async def main() -> int:
@@ -103,6 +128,7 @@ async def main() -> int:
     transport = httpx.ASGITransport(app=app)
     test_event_id: uuid.UUID | None = None
     quiz_session_id: uuid.UUID | None = None
+    lecture_id: uuid.UUID | None = None
     record_ids: list = []
 
     try:
@@ -245,20 +271,31 @@ async def main() -> int:
                   f"501={other_now['lecture']['attended']}/{other_now['lecture']['total']}")
 
             # --- 8. Eligibility isolation (the critical invariant) ------------
-            # D is inside the Quiz I window (asserted), the normal lecture is a
-            # window session, and the quiz-day occurrence must NOT add an L
-            # opportunity — so the eligibility lecture total is unchanged even
-            # though subject attendance (+2 total) and ERP include the quiz-day
-            # record. This is the three-way separation rule (Rule 5).
+            # Under events-authoritative quiz dates (Phase 2/3) the new event
+            # on D IS Quiz I, so its window is [semester_start, D-1] and D is
+            # its own quiz date. The quiz-day occurrence must NOT enter the
+            # eligibility L/T counts: lecture/tutorial totals must equal the
+            # DB reference for that window with quiz-day-shaped sessions
+            # excluded (Rule 5 — the three-way separation rule), even though
+            # subject attendance (+2) and ERP include the quiz-day record.
             elig_after = (await client.get(
                 f"/api/v1/quiz-eligibility/{SUBJECT_CODE}/1", headers=student_headers)).json()
-            check("8. Eligibility: quiz-day occurrence does NOT inflate the L/T "
-                  "window (lecture total unchanged) while subject attendance "
-                  "and ERP still include it",
-                  w_start <= d <= w_end
-                  and elig_after["lecture"]["total"] == base_elig_lec_tot,
-                  f"window=[{w_start},{w_end}] D={d} "
-                  f"elig L tot={elig_after['lecture']['total']}(base {base_elig_lec_tot}) "
+            w_start = date.fromisoformat(elig_after["window_start"])
+            w_end = date.fromisoformat(elig_after["window_end"])
+            async with AsyncSessionLocal() as db:
+                ref_counts = aggregate(await AttendanceRepository(db).get_subject_counts_between(
+                    student_user.id, subject_ids[SUBJECT_CODE], w_start, w_end,
+                    exclude_quiz_day=True))
+            check("8. Eligibility isolation (Rule 5): quiz-day occurrence does "
+                  "NOT enter the L/T window counts (totals == quiz-day-excluded "
+                  "DB reference) while subject attendance and ERP include it",
+                  elig_after["quiz_date"] == d.isoformat()
+                  and w_start == semester_start and w_end == d - timedelta(days=1)
+                  and elig_after["lecture"]["total"] == ref_counts["L"]["tot"]
+                  and elig_after["tutorial"]["total"] == ref_counts["T"]["tot"],
+                  f"quiz_date={elig_after.get('quiz_date')} window=[{w_start},{w_end}] "
+                  f"elig L tot={elig_after['lecture']['total']}(ref {ref_counts['L']['tot']}) "
+                  f"T tot={elig_after['tutorial']['total']}(ref {ref_counts['T']['tot']}) "
                   f"subject L tot={s_c['lecture']['total']}(base {base_lec_tot})")
 
             # capture this run's attendance records for exact cleanup
@@ -272,8 +309,18 @@ async def main() -> int:
 
     finally:
         async with AsyncSessionLocal() as db:
-            if record_ids:
-                await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(record_ids)))
+            # Exact captured ids; fall back to a fresh query when any check
+            # failed before the capture ran (prevents an FK crash on the
+            # session delete and leaves zero residue).
+            ids = list(record_ids)
+            if not ids:
+                ids = (await db.execute(
+                    select(AttendanceRecord.id).where(
+                        AttendanceRecord.user_id == student_user.id,
+                        AttendanceRecord.class_session_id.in_(
+                            [s for s in (lecture_id, quiz_session_id) if s is not None])))).scalars().all()
+            if ids:
+                await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(ids)))
             if quiz_session_id is not None:
                 await db.execute(delete(ClassSession).where(ClassSession.id == quiz_session_id))
             if test_event_id is not None:

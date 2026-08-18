@@ -165,10 +165,22 @@ def _resolve_attendance_window(
                 window_start = prev_quiz.date
             
     window_end = milestone.date - timedelta(days=1)
-    
+
+    # Degenerate window (quiz dated on/before its own boundary, e.g. a quiz
+    # event on the commencement date): legitimate under events-authoritative
+    # quiz dates (Phase 2/3) — a quiz with no countable days is an EMPTY
+    # window, not an error. Callers naturally get zero counts for it
+    # (inverted BETWEEN ranges return no rows; get_teaching_days_between
+    # already returns [] for start > end).
     if window_start > window_end:
-        raise ValueError("Window end before window start")
-        
+        return {
+            "subject_code": subject.code,
+            "window_start": window_start,
+            "window_end": window_end,
+            "teaching_days": 0,
+            "effective_teaching_dates": []
+        }
+
     teaching_dates = get_teaching_days_between(window_start, window_end, events, default_weekends)
     
     return {
