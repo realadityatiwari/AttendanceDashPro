@@ -409,6 +409,199 @@ async def main() -> int:
                   f"L_tot={result.lecture.total} T_tot={result.tutorial.total}")
             await db.rollback()
 
+        # ------------- J. F2 regression: top-level optimization must be consistent
+        # with the canonical state (rollback transaction; BCS-501 cycle II).
+        # The F2 defect: a criterion with ZERO pending classes gets the engine's
+        # 0/0 "nothing left to decide" optimization (is_reachable=False) and then
+        # wins the old min-deficit top-level pick over a genuinely recoverable
+        # Criterion II, leaving state=RECOVERABLE with a contradictory
+        # top-level is_reachable=False. The fix (1) makes the zero-pending
+        # early return target-aware (reachable when the current average already
+        # meets the threshold) and (2) picks the best REACHABLE route at the
+        # top level. This section shapes BCS-501 cycle-II attendance records so
+        # that Criterion I (cycle window) is zero-pending and below threshold
+        # while Criterion II (cumulative window) is recoverable, then asserts
+        # the full reachability contract.
+        async with AsyncSessionLocal() as db:
+            service = EligibilityService(db)
+            repo = AttendanceRepository(db)
+            w_cyc = (q1, q2 - timedelta(days=1))
+            w_cum = (semester_start, q2 - timedelta(days=1))
+
+            async def lt_sessions(start, end):
+                return (await db.execute(
+                    select(ClassSession).where(
+                        ClassSession.subject_id == bcs501_id,
+                        ClassSession.date.between(start, end),
+                        ClassSession.is_cancelled.is_(False),
+                        ~(ClassSession.timetable_entry_id.is_(None)
+                          & ~ClassSession.is_extra
+                          & (ClassSession.class_type == ClassType.LECTURE)),
+                    ).order_by(ClassSession.date, ClassSession.id))).scalars().all()
+
+            cyc_sessions = await lt_sessions(*w_cyc)
+            cum_sessions = await lt_sessions(*w_cum)
+            pre_sessions = [s for s in cum_sessions if s.date < q1]
+            cyc_L = [s for s in cyc_sessions if s.class_type == ClassType.LECTURE]
+            cyc_T = [s for s in cyc_sessions if s.class_type == ClassType.TUTORIAL]
+            pre_L = [s for s in pre_sessions if s.class_type == ClassType.LECTURE]
+            pre_T = [s for s in pre_sessions if s.class_type == ClassType.TUTORIAL]
+            CL, CT = len(cyc_L), len(cyc_T)
+            PL, PT = len(pre_L), len(pre_T)
+
+            # Deterministic bounded search for a shaping (cycle misses, pending
+            # pre-q1 sessions, pre-q1 misses) satisfying, on the SERVICE-visible
+            # counts (same L/T average formula as the engine):
+            #   Criterion I:   zero pending, avg < 75  -> unreachable (0/0, False)
+            #   Criterion II:  current < 75 <= best     -> not passed yet, recoverable
+            def find_shape():
+                for mL in range(0, CL + 1):
+                    for mT in range(0, CT + 1):
+                        if mL + mT == 0:
+                            continue
+                        lec_i = (CL - mL) / CL * 100.0 if CL else 0.0
+                        tut_i = (CT - mT) / CT * 100.0 if CT else None
+                        avg_i = (lec_i + tut_i) / 2.0 if tut_i is not None else lec_i
+                        if avg_i >= 75.0:
+                            continue
+                        for pendL in (0, 1):
+                            for pendT in (0, 1):
+                                if pendL + pendT == 0:
+                                    continue
+                                for pmL in range(0, PL - pendL + 1):
+                                    for pmT in range(0, PT - pendT + 1):
+                                        paL, paT = PL - pmL - pendL, PT - pmT - pendT
+                                        lec_ii = (paL + CL - mL) / (PL + CL) * 100.0
+                                        tut_ii = ((paT + CT - mT) / (PT + CT) * 100.0
+                                                  if (PT + CT) else None)
+                                        cur_ii = (lec_ii + tut_ii) / 2.0 if tut_ii is not None else lec_ii
+                                        lec_ii_best = (paL + pendL + CL - mL) / (PL + CL) * 100.0
+                                        tut_ii_best = ((paT + pendT + CT - mT) / (PT + CT) * 100.0
+                                                       if (PT + CT) else None)
+                                        best_ii = (lec_ii_best + tut_ii_best) / 2.0 if tut_ii_best is not None else lec_ii_best
+                                        if cur_ii < 75.0 <= best_ii:
+                                            return (mL, mT, pendL, pendT, pmL, pmT)
+                return None
+
+            shape = find_shape()
+            check("J0. F2 regression constructible on live BCS-501 cycle-II windows "
+                  "(zero-pending unreachable Criterion I + recoverable Criterion II)",
+                  shape is not None and CL > 0 and CT > 0 and PL > 0 and PT > 0,
+                  f"CL={CL} CT={CT} PL={PL} PT={PT} shape={shape}")
+            if shape is not None:
+                mL, mT, pendL, pendT, pmL, pmT = shape
+
+                # Shape the records (deterministic order: date, id).
+                def mark(sessions, n_att, n_miss, n_pend):
+                    for s in sessions[:n_att]:
+                        db.add(AttendanceRecord(user_id=admin_user.id, class_session_id=s.id,
+                                                status=AttendanceStatus.ATTENDED))
+                    for s in sessions[n_att:n_att + n_miss]:
+                        db.add(AttendanceRecord(user_id=admin_user.id, class_session_id=s.id,
+                                                status=AttendanceStatus.MISSED))
+                    # the trailing n_pend sessions stay unrecorded (pending)
+
+                existing = (await db.execute(
+                    select(AttendanceRecord).where(
+                        AttendanceRecord.user_id == admin_user.id,
+                        AttendanceRecord.class_session_id.in_([s.id for s in cum_sessions])))).scalars().all()
+                for rec in existing:
+                    await db.delete(rec)
+                await db.flush()
+
+                mark(cyc_L, CL - mL, mL, 0)
+                mark(cyc_T, CT - mT, mT, 0)
+                mark(pre_L, PL - pmL - pendL, pmL, pendL)
+                mark(pre_T, PT - pmT - pendT, pmT, pendT)
+                await db.flush()
+
+                counts_i = aggregate(await repo.get_subject_counts_between(
+                    admin_user.id, bcs501_id, *w_cyc, exclude_quiz_day=True))
+                counts_ii = aggregate(await repo.get_subject_counts_between(
+                    admin_user.id, bcs501_id, *w_cum, exclude_quiz_day=True))
+                opt_i = optimize_attendance(
+                    counts_i['L']['tot'], counts_i['L']['att'], counts_i['L']['miss'], counts_i['L']['pending'],
+                    counts_i['T']['tot'], counts_i['T']['att'], counts_i['T']['miss'], counts_i['T']['pending'],
+                    75.0)
+                opt_ii = optimize_attendance(
+                    counts_ii['L']['tot'], counts_ii['L']['att'], counts_ii['L']['miss'], counts_ii['L']['pending'],
+                    counts_ii['T']['tot'], counts_ii['T']['att'], counts_ii['T']['miss'], counts_ii['T']['pending'],
+                    75.0)
+
+                result = await service.get_quiz_eligibility(admin_user.id, bcs501_id, 2, semester_start=semester_start)
+                check("J1. F2: RECOVERABLE with zero-pending unreachable Criterion I + "
+                      "recoverable Criterion II -> top-level picks the reachable route "
+                      "(is_reachable=True, Criterion II's own optimization)",
+                      result.state == EligibilityState.RECOVERABLE
+                      and result.is_eligible is False
+                      and result.recoverable is True
+                      and result.criterion_i.passed is False
+                      and result.criterion_i.optimization.is_reachable is False
+                      and result.criterion_i.optimization.lecture_deficit == 0
+                      and result.criterion_i.optimization.tutorial_deficit == 0
+                      and result.criterion_ii.passed is False
+                      and result.criterion_ii.optimization.is_reachable is True
+                      and result.optimization.is_reachable is True
+                      and result.optimization.lecture_deficit == opt_ii.lecture_deficit
+                      and result.optimization.tutorial_deficit == opt_ii.tutorial_deficit
+                      and result.optimization.safe_skip_lecture == opt_ii.safe_skip_lecture
+                      and result.optimization.safe_skip_tutorial == opt_ii.safe_skip_tutorial
+                      and (result.optimization.lecture_deficit + result.optimization.tutorial_deficit) >= 1,
+                      f"state={result.state.value} top={result.optimization.model_dump()} "
+                      f"opt_i={result.criterion_i.optimization.model_dump()} "
+                      f"opt_ii={result.criterion_ii.optimization.model_dump()} "
+                      f"counts_i={counts_i} counts_ii={counts_ii}")
+
+                # J2. Converse: both criteria zero-pending and unreachable.
+                for rec in (await db.execute(
+                        select(AttendanceRecord).where(
+                            AttendanceRecord.user_id == admin_user.id,
+                            AttendanceRecord.class_session_id.in_([s.id for s in cum_sessions])))).scalars().all():
+                    await db.delete(rec)
+                await db.flush()
+                for s in cum_sessions:
+                    db.add(AttendanceRecord(user_id=admin_user.id, class_session_id=s.id,
+                                            status=AttendanceStatus.MISSED))
+                result = await service.get_quiz_eligibility(admin_user.id, bcs501_id, 2, semester_start=semester_start)
+                check("J2. Converse: both criteria zero-pending and unreachable -> "
+                      "NOT_ELIGIBLE with accurate unreachable top-level",
+                      result.state == EligibilityState.NOT_ELIGIBLE
+                      and result.criterion_i.optimization.is_reachable is False
+                      and result.criterion_ii.optimization.is_reachable is False
+                      and result.optimization.is_reachable is False
+                      and result.optimization.lecture_deficit == 0
+                      and result.optimization.tutorial_deficit == 0,
+                      f"state={result.state.value} top={result.optimization.model_dump()}")
+
+                # J3. Already eligible with zero pending: per-criterion and
+                # top-level optimizations must be reachable (no contradictory
+                # unreachable top-level state on an ELIGIBLE result).
+                for rec in (await db.execute(
+                        select(AttendanceRecord).where(
+                            AttendanceRecord.user_id == admin_user.id,
+                            AttendanceRecord.class_session_id.in_([s.id for s in cum_sessions])))).scalars().all():
+                    await db.delete(rec)
+                await db.flush()
+                for s in cum_sessions:
+                    db.add(AttendanceRecord(user_id=admin_user.id, class_session_id=s.id,
+                                            status=AttendanceStatus.ATTENDED))
+                result = await service.get_quiz_eligibility(admin_user.id, bcs501_id, 2, semester_start=semester_start)
+                check("J3. Already eligible with zero pending: per-criterion + top-level "
+                      "optimizations reachable with zero deficits",
+                      result.state == EligibilityState.ELIGIBLE
+                      and result.criterion_i.passed is True
+                      and result.criterion_ii.passed is True
+                      and result.criterion_i.optimization.is_reachable is True
+                      and result.criterion_ii.optimization.is_reachable is True
+                      and result.optimization.is_reachable is True
+                      and result.optimization.lecture_deficit == 0
+                      and result.optimization.tutorial_deficit == 0,
+                      f"state={result.state.value} top={result.optimization.model_dump()} "
+                      f"opt_i={result.criterion_i.optimization.model_dump()} "
+                      f"opt_ii={result.criterion_ii.optimization.model_dump()}")
+
+            await db.rollback()
+
         # -------------------------------------------------------------- Restoration
         async with AsyncSessionLocal() as db:
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()

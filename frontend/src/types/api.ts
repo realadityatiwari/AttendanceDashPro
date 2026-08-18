@@ -16,10 +16,10 @@ export interface StudentProfile {
 }
 
 export enum SubjectCategory {
-  CORE = "CORE",
-  ELECTIVE = "ELECTIVE",
+  // Backend contract (app.models.enums.SubjectCategory): the API emits only
+  // "theory" and "lab" — no other categories exist.
+  THEORY = "theory",
   LAB = "lab",
-  MANDATORY = "MANDATORY"
 }
 
 export interface SubjectResponse {

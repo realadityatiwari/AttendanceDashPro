@@ -204,9 +204,12 @@ def evaluate_quiz_eligibility(
     best_ii = _best_avg(cumulative_counts if cumulative_counts is not None else attendance_counts)
 
     # 6. Canonical state derivation. The top-level Must Attend / Safe Skip is
-    #    the best route: the criterion with the fewest classes still required
+    #    the best REACHABLE route: among criteria whose own optimization can
+    #    actually reach the threshold, the fewest classes still required wins
     #    (ties prefer Criterion I), so guidance never requires more attendance
-    #    than the OR semantics demand.
+    #    than the OR semantics demand and never surfaces an unreachable route
+    #    for a RECOVERABLE state (a zero-pending criterion's 0/0 early return
+    #    would otherwise win the min-deficit tie while being unreachable).
     if criterion_i.passed or criterion_ii.passed:
         state = EligibilityState.ELIGIBLE
         explanation = (
@@ -227,9 +230,10 @@ def evaluate_quiz_eligibility(
             "remaining attendance window."
         )
 
-    best_opt = criterion_i.optimization if (
-        _total_deficit(criterion_i.optimization) <= _total_deficit(criterion_ii.optimization)
-    ) else criterion_ii.optimization
+    best_opt = min(
+        (criterion_i.optimization, criterion_ii.optimization),
+        key=lambda o: (not o.is_reachable, _total_deficit(o)),
+    )
 
     return EligibilityResult(
         quiz_cycle=quiz_cycle,

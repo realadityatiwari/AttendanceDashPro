@@ -10,12 +10,17 @@ import { EligibilityState, type CriterionResult } from "@/types/api";
 import { AlertCircle, Calendar, ChevronDown, ChevronUp, Calculator, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STATE_BADGE: Record<EligibilityState, { label: string; variant: "success" | "warning" | "danger" | "neutral" }> = {
+const STATE_BADGE: Partial<Record<EligibilityState, { label: string; variant: "success" | "warning" | "danger" | "neutral" }>> = {
   [EligibilityState.ELIGIBLE]: { label: "Eligible", variant: "success" },
   [EligibilityState.RECOVERABLE]: { label: "Recoverable", variant: "warning" },
   [EligibilityState.NOT_ELIGIBLE]: { label: "Not Eligible", variant: "danger" },
   [EligibilityState.UNRESOLVED]: { label: "Unresolved", variant: "neutral" },
 };
+
+// Defensive fallback (D2): a future/unknown state emitted by the backend must
+// never crash the card. Render a neutral "Unknown" badge and keep the rest of
+// the card intact — the state is NOT reinterpreted as any known state.
+const UNKNOWN_STATE_BADGE = { label: "Unknown", variant: "neutral" } as const;
 
 function fmtPct(value: number | null): string {
   return value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;
@@ -43,6 +48,10 @@ function criterionTitle(name: string | null | undefined): string {
 function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null; passed: boolean }) {
   const opt = criterion?.optimization;
   const hasOpt = !!opt && (opt.lecture_deficit > 0 || opt.tutorial_deficit > 0 || opt.safe_skip_lecture > 0 || opt.safe_skip_tutorial > 0);
+  // D1: only a reachable route is actionable guidance. An unreachable
+  // criterion still shows its counts, percentages, threshold, PASS/FAIL and
+  // explanation above — only the "Must attend / Safe skip" line is withheld.
+  const showGuidance = hasOpt && opt.is_reachable === true;
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -61,7 +70,7 @@ function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null
           </span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{criterion?.explanation ?? "—"}</p>
-        {hasOpt && (
+        {showGuidance && (
           <p className="text-xs text-muted-foreground mt-1">
             Must attend: <span className="font-bold tabular-nums">{opt.lecture_deficit} lecture{opt.lecture_deficit === 1 ? "" : "s"}</span>
             {opt.tutorial_deficit > 0 && <span className="font-bold tabular-nums"> · {opt.tutorial_deficit} tutorial{opt.tutorial_deficit === 1 ? "" : "s"}</span>}
@@ -107,7 +116,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
     );
   }
 
-  const status = STATE_BADGE[eligibility.state];
+  const status = STATE_BADGE[eligibility.state] ?? UNKNOWN_STATE_BADGE;
   const hasTutorials = (eligibility.tutorial?.total ?? 0) > 0;
   const required = eligibility.required_percentage ?? eligibility.lecture_threshold ?? 75;
 
@@ -217,7 +226,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                     {eligibility.final_criterion?.passed ? "ELIGIBLE" : "NOT ELIGIBLE"}
                   </Badge>
                 </div>
-                {eligibility.optimization && (
+                {eligibility.optimization && eligibility.optimization.is_reachable === true && (
                   <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
                     <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
                       <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Must Attend <span className="font-normal normal-case tracking-normal">(best route)</span></p>
@@ -232,6 +241,13 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_tutorial}</span></p>
                       )}
+                    </div>
+                  </div>
+                )}
+                {eligibility.optimization && eligibility.optimization.is_reachable === false && eligibility.state === EligibilityState.NOT_ELIGIBLE && (
+                  <div className="border-t border-border/50 pt-3">
+                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                      Eligibility cannot be recovered within the remaining attendance window.
                     </div>
                   </div>
                 )}

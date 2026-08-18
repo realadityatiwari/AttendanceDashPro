@@ -88,12 +88,17 @@ def optimize_attendance(
     remaining_t = pending_t
     
     if remaining_l == 0 and remaining_t == 0:
+        # Nothing left to attend: the target is trivially reachable (with
+        # zero additional attendance) when the CURRENT average already meets
+        # it; otherwise it can never be reached.
+        lec_pct = (att_l / tot_l * 100.0) if tot_l > 0 else 0.0
+        tut_pct = (att_t / tot_t * 100.0) if tot_t > 0 else None
         return OptimizationResult(
             lecture_deficit=0,
             tutorial_deficit=0,
             safe_skip_lecture=0,
             safe_skip_tutorial=0,
-            is_reachable=False # Technically already determined by current pct
+            is_reachable=meets_attendance_target(lec_pct, tut_pct, target_pct)
         )
         
     valid_combos = []
