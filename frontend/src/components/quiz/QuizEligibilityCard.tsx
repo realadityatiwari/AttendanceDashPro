@@ -33,7 +33,20 @@ function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{criterion?.name ?? "—"}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{criterion?.explanation ?? "—"}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="text-muted-foreground">
+            Average: <span className="font-bold tabular-nums text-foreground">{fmtPct(criterion?.value ?? null)}</span>
+          </span>
+          <span className="text-muted-foreground">
+            Required: <span className="font-bold tabular-nums text-foreground">
+              {criterion?.threshold != null ? `${criterion.threshold.toFixed(0)}%` : "—"}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Formula: <span className="text-foreground">(Lecture % + Tutorial %) / 2</span>
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">{criterion?.explanation ?? "—"}</p>
         {hasOpt && (
           <p className="text-xs text-muted-foreground mt-1">
             Must attend: <span className="font-bold tabular-nums">{opt.lecture_deficit} lecture{opt.lecture_deficit === 1 ? "" : "s"}</span>
@@ -85,6 +98,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
   const required = eligibility.required_percentage ?? eligibility.lecture_threshold ?? 75;
 
   const lectureVariant = eligibility.lecture_pct !== null && eligibility.lecture_pct >= required ? "success" : "warning";
+  const tutorialVariant = eligibility.tutorial_pct !== null && eligibility.tutorial_pct >= required ? "success" : "warning";
   const averageVariant = eligibility.average_pct !== null && eligibility.average_pct >= required ? "success" : "warning";
 
   return (
@@ -100,12 +114,14 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
-                {cycleLabel} · {fmtDate(eligibility.window_start)} – {fmtDate(eligibility.window_end)}
+                {cycleLabel} · Quiz on {fmtDate(eligibility.quiz_date)}
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1 w-1 rounded-full bg-border inline-block" />
-                Quiz on {fmtDate(eligibility.quiz_date)}
-              </span>
+              {eligibility.state !== EligibilityState.UNRESOLVED && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1 w-1 rounded-full bg-border inline-block" />
+                  Criterion I window: {fmtDate(eligibility.window_start)} – {fmtDate(eligibility.window_end)}
+                </span>
+              )}
             </div>
           </div>
           <Badge variant={status.variant}>{status.label}</Badge>
@@ -123,6 +139,9 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
         <>
           <div className="p-4 space-y-4">
             <div className="space-y-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Criterion I window counts · Average = (Lecture % + Tutorial %) / 2
+              </p>
               <div>
                 <div className="flex items-baseline justify-between text-sm mb-1.5">
                   <span className="font-medium text-foreground">
@@ -146,7 +165,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                     </span>
                     <span className="tabular-nums text-muted-foreground">{fmtPct(eligibility.tutorial_pct)}</span>
                   </div>
-                  <Progress value={eligibility.tutorial_pct ?? 0} variant={lectureVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
+                  <Progress value={eligibility.tutorial_pct ?? 0} variant={tutorialVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
                 </div>
               )}
               <div>

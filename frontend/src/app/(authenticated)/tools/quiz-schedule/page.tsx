@@ -50,7 +50,7 @@ export default function QuizEligibilityPage() {
             A subject is eligible when <span className="font-medium text-foreground">Criterion I OR Criterion II</span> meets the required
             percentage — 70% for Quiz I, 75% for Quiz II and Quiz III. Both criteria use the same{" "}
             <span className="font-medium text-foreground">(Lecture % + Tutorial %) / 2</span> average and differ only in the counting window:
-            Criterion I counts from the previous quiz, Criterion II from the start of the semester. Only theory subjects with a confirmed quiz schedule appear here.
+            Criterion I counts from the previous quiz, Criterion II from the start of the semester. Only theory subjects with confirmed quiz dates appear here.
           </p>
         </div>
       </GlassCard>
