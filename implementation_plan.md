@@ -1065,3 +1065,35 @@ new phase; no Phase 9.3).
 - **DB**: records 122 → 122 (no attendance mutation); sessions 698; events 38; quizzes 18/18 SCHEDULED. No commit.
 - Full report: `docs/quiz_day_recovery_report.md`.
 - **Phase 8.3 — dedicated Analytics page (T-3 product decision resolved, 2026-08-16)**: `/analytics` composes `GET /api/v1/analytics/overview` (overall current/forecast, weekly semester trend, subject-wise analytics with health + 75% optimizer). No new API, no backend change, no DB change, no React math — the read model's fields are rendered as-is (null-gap weeks, unreachable optimizer, both canonical bandings). Added `Analytics` nav entry. Verification: `tsc --noEmit` · ESLint · `next build`; `verify_phase_8_1.py` 22/22 + `verify_phase_8_2.py` 18/18 re-run; DB counts byte-identical (31/27/9/18/38/698/122). **REMOVED (2026-08-17)**: the dedicated `/analytics` route + nav entry were removed; the read model is still consumed by the Dashboard and Attendance surfaces. No backend/DB change.
+
+---
+
+## PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
+
+Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F NOT STARTED.
+
+### 11.0 — Architecture & Discovery Audit (COMPLETE)
+
+Read-only audit establishing the Phase 11 baseline: zero notification substrate exists (no model/table/endpoint, no scheduler, no Web Push/SW/PWA — PWA is Phase 13); `class_reminders` is the only preference with an active consumer; `auto_mark_present` and `week_starts_on` remain storage-only (auto-mark must NOT ship without an explicit product decision). Phase 11 = in-app notifications generated on-read; delivery model decision-gated (11C). Report: `docs/phase_11/phase_11_architecture_audit.md`.
+
+### 11A — Backend Notification Read Model & Contracts (COMPLETE)
+
+Smallest safe slice, fully additive, zero DB change:
+
+- Additive `NotificationKind` enum (CLASS_REMINDER, QUIZ_APPROACHING, ATTENDANCE_THRESHOLD, MUST_ATTEND, SAFE_SKIP, ACADEMIC_EVENT) — `backend/app/models/enums.py`.
+- `backend/app/schemas/notification.py` — `NotificationItem` (deterministic natural-key `id`, kind, date, optional subject context, message, canonical reference fields for 11B dedup) + `NotificationsResponse` (server-generated `as_of`).
+- `backend/app/services/notification_service.py` — read-only projection of existing engine/service outputs (AttendanceService subject summaries, engine banding + optimizer, `get_current_quiz_cycle`, `get_sessions_with_status`, dashboard upcoming-events selection); no persistence; **notifications consume engine outputs, never calculate attendance**.
+- `GET /api/v1/notifications` (JWT owner only; no client `user_id`) — `backend/app/api/v1/endpoints/notifications.py`, registered in `backend/app/api/api.py`.
+- CLASS_REMINDER gated by the `class_reminders` preference (missing row = documented default off); `auto_mark_present` / `week_starts_on` remain inert.
+- Verifier: `backend/scripts/verify_phase_11a.py` **19/19**. compileall PASS. Alembic head unchanged (`c1d2e3f4a5b6`); frozen-table baseline byte-identical (31 users · 47 events · 715 sessions · 142 records · 27 enrollments · 9 subjects · 18 quizzes · feedback 0 · userpreferences 0); no commit.
+- Report: `docs/phase_11/phase_11a_implementation_report.md`.
+
+### 11B–11F (NOT STARTED)
+
+- **11B** — notification persistence/read-state (migration + `notifications` table + repository; 11A natural-key `id` is the dedup key). **Next authorized slice.**
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep).
+- **11D** — frontend notification center UX.
+- **11E** — remaining reminder-preferences wiring.
+- **11F** — phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN).
+
+**HARD STOP after 11A** — no commit made; 11B NOT STARTED.

@@ -964,3 +964,31 @@ byte-identical to the documented 9.2.1 baseline. Report:
 
 - **Phase 11 — Notifications & Reminders (NEXT)** — consumes the Phase 10 preference values (class_reminders etc.); notifications must consume engine outputs, never independently calculate attendance.
 - **HARD STOP after Phase 10E** — no commit made; Phase 11 NOT STARTED; browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 11 Walkthrough (Notifications & Reminders)
+
+> **PHASE 11 IN PROGRESS (2026-08-20).** Audit: `docs/phase_11/phase_11_architecture_audit.md`; 11A: `docs/phase_11/phase_11a_implementation_report.md`. 11.0 + 11A complete; 11B–11F NOT STARTED. No commit made.
+
+## What Phase 11 Did So Far
+
+1. **11.0 — Architecture & Discovery Audit (read-only).** Confirmed Phase 11 has zero delivery substrate today (no notification model/table/endpoint, no scheduler, no Web Push/SW/PWA — Phase 13 owns PWA), that `class_reminders` was the only preference with an active consumer candidate, and that `auto_mark_present` / `week_starts_on` remain storage-only (auto-mark must NOT be implemented without an explicit product decision). Recommended the smallest safe slice: **11A — backend notification read model + contracts**, generated on-read like every existing read model, with no DB change and no new infrastructure.
+2. **11A — Backend notification read model & contracts.** Additive `NotificationKind` enum (CLASS_REMINDER, QUIZ_APPROACHING, ATTENDANCE_THRESHOLD, MUST_ATTEND, SAFE_SKIP, ACADEMIC_EVENT); `schemas/notification.py` (`NotificationItem` with deterministic natural-key `id` + reference fields, `NotificationsResponse` with server-generated `as_of`); `services/notification_service.py` (read-only projection of engine outputs, no persistence); `GET /api/v1/notifications` (JWT owner only, no client `user_id`), registered in `backend/app/api/api.py`.
+   - **CLASS_REMINDER** — gated by the `class_reminders` preference (missing row = documented default off); current institutional week (Monday–Sunday) unmarked, non-cancelled sessions via the canonical `get_sessions_with_status` (enrollment-scoped, practical occurrences collapsed).
+   - **QUIZ_APPROACHING** — the canonical "next upcoming quiz" (`get_current_quiz_cycle`, basis `next_upcoming`); no invented lookahead.
+   - **ATTENDANCE_THRESHOLD** — canonical `classify_attendance_status` WATCH/CRITICAL (the same attention concept the dashboard uses).
+   - **MUST_ATTEND / SAFE_SKIP** — the attendance engine's own `optimize_attendance` output (`is_reachable`, deficit / safe-skip) at the canonical 75% target.
+   - **ACADEMIC_EVENT** — the identical selection the dashboard upcoming-events section uses (active, `end_date >= today`, enrolled-scoped, sorted, capped at 4).
+3. **Verified.** `verify_phase_11a.py` **19/19** (auth, shape, server-generated `as_of`, client-identity spoof ignored, enrollment isolation/scoping, class_reminders off/on, cancelled excluded, week scope, auto_mark_present/week_starts_on inert, canonical quiz/attendance/event cross-checks, frozen-table baseline byte-identical, no notification table created, alembic head unchanged, exact artifact cleanup). compileall PASS. Alembic head `c1d2e3f4a5b6` unchanged; DB baseline byte-identical to the Phase 10E freeze (31 users · 47 events · 715 sessions · 142 records · 27 enrollments · 9 subjects · 18 quizzes · feedback 0 · userpreferences 0).
+
+## Database State After 11A
+
+- **ZERO mutation** — no migration, no notification table, no data change. Frozen system untouched.
+
+## What's Next
+
+- **Phase 11B (requires explicit authorization)** — notification persistence/read-state (migration + `notifications` table + repository, extending `NotificationService`; the 11A natural-key `id` is the dedup key).
+- Remaining Phase 11: 11C delivery model (decision-gated: in-app only vs scheduled sweep), 11D frontend notification center UX, 11E remaining preference wiring, 11F phase completion.
+- Open product decisions: multi-day reminder horizon, quiz horizon, delivery model, `auto_mark_present` semantics (recommendation: remains storage-only).
+- **HARD STOP after 11A** — no commit made; 11B NOT STARTED; browser/manual testing remains the user's responsibility.

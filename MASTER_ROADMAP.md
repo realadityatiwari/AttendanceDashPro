@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** Phase 11 — Notifications & Reminders (pending roadmap reconciliation/review).
+> **Next phase:** Phase 11 — Notifications & Reminders **IN PROGRESS** (11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ — 11B–11F not started).
 
 ---
 
@@ -54,7 +54,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 8 | Attendance Analytics / Intelligence | ✅ **COMPLETE & FROZEN** — 8.0 audit ✅ · 8.1 canonical analytics read model ✅ · 8.2 frontend consumption ✅ · Attendance UI refinement ✅ · Lab domain correction (practical attendance separation) ✅. |
 | 9 | Laboratory System | ✅ **COMPLETE & FROZEN** — 9.0 audit ✅ · 9.1 event integration (Mid-Sem/Lab Cancelled) ✅ · 9.2.0 audit ✅ · 9.2.1 experiment management (curriculum/records/UI/API) ✅ · Focused corrections (Track lab, History filters, Quiz Day recovery) ✅. |
 | 10 | Settings, Feedback & Account Management | ✅ **COMPLETE & FROZEN** — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. |
-| **11** | **Notifications & Reminders** | ⚪ **NEXT** |
+| **11** | **Notifications & Reminders** | 🟡 **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F not started |
 | 12 | Mobile / Responsive Experience | ⚪ Planned |
 | 13 | PWA / Installability | ⚪ Planned |
 | 14 | Firebase Retirement | 🔴 Later |
@@ -676,24 +676,36 @@ Complete:
 
 ---
 
-# 🟢 Phase 11 — Notifications & Reminders (NEXT)
+# 🟡 Phase 11 — Notifications & Reminders (IN PROGRESS)
 
 Only after the academic/event architecture is stable.
 
+**Status: IN PROGRESS — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F not started.**
+
 Potential features:
 
-- Upcoming class reminder
-- Quiz approaching
-- Attendance-below-threshold warning
-- Must-attend warning
-- Safe-skip information
-- Academic event notification
+- Upcoming class reminder ✅ (11A — CLASS_REMINDER, gated by the `class_reminders` preference)
+- Quiz approaching ✅ (11A — QUIZ_APPROACHING, canonical next-upcoming quiz cycle)
+- Attendance-below-threshold warning ✅ (11A — ATTENDANCE_THRESHOLD, engine banding)
+- Must-attend warning ✅ (11A — MUST_ATTEND, engine optimizer deficit)
+- Safe-skip information ✅ (11A — SAFE_SKIP, engine optimizer safe-skip)
+- Academic event notification ✅ (11A — ACADEMIC_EVENT, dashboard upcoming-events selection)
 
 ### Architectural rule
 
 Notifications consume engine outputs.
 
 They do **not** independently calculate attendance.
+
+### Sub-phase status
+
+- **11.0** Architecture & Discovery Audit — ✅ COMPLETE (`docs/phase_11/phase_11_architecture_audit.md`).
+- **11A** Backend notification read model & contracts (`GET /api/v1/notifications`, additive `NotificationKind`, on-read generation, `verify_phase_11a.py` 19/19) — ✅ COMPLETE (`docs/phase_11/phase_11a_implementation_report.md`). Zero DB change; no migration; no frontend; no scheduler.
+- **11B** Notification persistence/read-state — ⚪ NOT STARTED (next authorized slice).
+- **11C** Delivery model — ⚪ NOT STARTED (decision-gated: in-app only vs scheduled sweep).
+- **11D** Frontend notification center UX — ⚪ NOT STARTED.
+- **11E** Reminder preferences wiring (class_reminders gate lives inside 11A; remaining preference consumption) — ⚪ NOT STARTED.
+- **11F** Phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN) — ⚪ NOT STARTED.
 
 ---
 

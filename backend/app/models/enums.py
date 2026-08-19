@@ -76,3 +76,15 @@ class WeekStartsOn(str, Enum):
     architecture consumes this value; Phase 11 wiring is out of scope."""
     SUNDAY = "SUNDAY"
     MONDAY = "MONDAY"
+
+class NotificationKind(str, Enum):
+    """Phase 11A notification kinds. ADDITIVE — new kinds may be appended;
+    existing values are never renamed. Each kind is emitted by
+    NotificationService as a read-only projection of existing engine/service
+    outputs; notifications never compute attendance themselves."""
+    CLASS_REMINDER = "CLASS_REMINDER"
+    QUIZ_APPROACHING = "QUIZ_APPROACHING"
+    ATTENDANCE_THRESHOLD = "ATTENDANCE_THRESHOLD"
+    MUST_ATTEND = "MUST_ATTEND"
+    SAFE_SKIP = "SAFE_SKIP"
+    ACADEMIC_EVENT = "ACADEMIC_EVENT"

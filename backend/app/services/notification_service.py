@@ -1,0 +1,208 @@
+from datetime import date, timedelta
+from typing import List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.repositories.attendance_repo import AttendanceRepository
+from app.repositories.user_repo import UserRepository
+from app.repositories.calendar_repo import CalendarRepository
+from app.repositories.preference_repo import PreferenceRepository
+from app.services.attendance_service import AttendanceService, institution_today
+from app.services.eligibility_service import EligibilityService
+from app.engines.attendance_engine import classify_attendance_status
+from app.schemas.notification import NotificationItem, NotificationsResponse
+from app.models.enums import NotificationKind
+
+# Human-readable class-type labels for notification messages (presentation only).
+_CLASS_TYPE_LABELS = {"L": "Lecture", "T": "Tutorial", "P": "Practical"}
+
+
+class NotificationService:
+    """Read-only notification projection (Phase 11A).
+
+    Architectural rule: notifications CONSUME engine/service outputs; they do
+    not independently calculate attendance. Every value emitted here is the
+    existing canonical output of attendance_engine / eligibility_engine /
+    calendar_engine (via their services and repositories) — this service only
+    selects, labels and sorts them. No persistence: the read model is generated
+    on-read; notification storage/dedup is Phase 11B.
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.attendance_repo = AttendanceRepository(db)
+        self.user_repo = UserRepository(db)
+        self.calendar_repo = CalendarRepository(db)
+        self.preference_repo = PreferenceRepository(db)
+        self.attendance_service = AttendanceService(db)
+        self.eligibility_service = EligibilityService(db)
+
+    async def get_notifications(self, user) -> NotificationsResponse:
+        as_of = institution_today()
+        subjects = await self.user_repo.get_enrolled_subjects(user.id)
+
+        items: List[NotificationItem] = []
+        items += await self._class_reminders(user, as_of, subjects)
+        items += await self._quiz_approaching(user, as_of, subjects)
+        items += await self._attendance_items(user, as_of, subjects)
+        items += await self._academic_events(user, as_of, subjects)
+
+        items.sort(key=lambda x: (x.date, x.kind.value, x.id))
+        return NotificationsResponse(items=items, as_of=as_of)
+
+    async def _class_reminders(self, user, as_of: date, subjects) -> List[NotificationItem]:
+        """Upcoming (unmarked, non-cancelled) classes within the current
+        institutional week — the same repository-defined weekly scope the
+        dashboard Weekly section uses (Monday..Sunday). Gated by the user's
+        `class_reminders` preference (a missing row means the documented
+        default: off)."""
+        pref = await self.preference_repo.get(user.id)
+        if pref is None or not pref.class_reminders:
+            return []
+
+        week_start = as_of - timedelta(days=as_of.weekday())
+        week_end = week_start + timedelta(days=6)
+        rows = await self.attendance_repo.get_sessions_with_status(user.id, as_of, week_end)
+
+        items: List[NotificationItem] = []
+        for r in rows:
+            if r["is_cancelled"] or r["status"] is not None:
+                continue
+            if r["date"] == as_of:
+                when = "today"
+            else:
+                when = r["date"].strftime("%A, %d %b")
+            time_suffix = f" at {r['start_time']}" if r.get("start_time") else ""
+            type_label = _CLASS_TYPE_LABELS.get(r["class_type"].value, r["class_type"].value)
+            items.append(NotificationItem(
+                id=f"{NotificationKind.CLASS_REMINDER.value}:{r['id']}",
+                kind=NotificationKind.CLASS_REMINDER,
+                date=r["date"],
+                subject_code=r["subject_code"],
+                subject_name=r["subject_name"],
+                message=f"{r['subject_code']} {type_label} {when}{time_suffix}",
+                session_id=r["id"],
+            ))
+        return items
+
+    async def _quiz_approaching(self, user, as_of: date, subjects) -> List[NotificationItem]:
+        """The next upcoming quiz at/after today — the canonical "currently
+        relevant quiz cycle" (get_current_quiz_cycle, basis "next_upcoming").
+        A quiz with a confirmed date that has not happened yet IS
+        "approaching"; no invented lookahead horizon."""
+        if not [s for s in subjects if s.quiz_applicable]:
+            return []
+        cycle = await self.eligibility_service.get_current_quiz_cycle(user.id)
+        if cycle["basis"] != "next_upcoming" or cycle["quiz_date"] is None:
+            return []
+        label = cycle["quiz_label"] or f"Quiz {cycle['quiz_cycle']}"
+        return [NotificationItem(
+            id=f"{NotificationKind.QUIZ_APPROACHING.value}:{cycle['quiz_cycle']}",
+            kind=NotificationKind.QUIZ_APPROACHING,
+            date=cycle["quiz_date"],
+            message=f"{label} approaching on {cycle['quiz_date'].strftime('%d %b %Y')}",
+            quiz_cycle=cycle["quiz_cycle"],
+        )]
+
+    async def _attendance_items(self, user, as_of: date, subjects) -> List[NotificationItem]:
+        """Per-subject attention / must-attend / safe-skip notifications — pure
+        projections of the canonical AttendanceService subject summaries (the
+        engine's own banding and optimizer); no re-computation."""
+        applicable = [s for s in subjects if s.attendance_applicable]
+        if not applicable:
+            return []
+        summaries_map = await self.attendance_service.get_subject_summaries(
+            user_id=user.id,
+            subjects=applicable,
+            as_of_date=as_of,
+        )
+
+        items: List[NotificationItem] = []
+        for subject in applicable:
+            summary = summaries_map.get(subject.id)
+            if summary is None:
+                continue
+
+            status = classify_attendance_status(summary.current_avg_pct)
+            if status in ("WATCH", "CRITICAL"):
+                if summary.current_avg_pct is not None:
+                    pct_text = f"{summary.current_avg_pct:.1f}%"
+                else:
+                    pct_text = "no recorded attendance"
+                items.append(NotificationItem(
+                    id=f"{NotificationKind.ATTENDANCE_THRESHOLD.value}:{subject.code}",
+                    kind=NotificationKind.ATTENDANCE_THRESHOLD,
+                    date=as_of,
+                    subject_code=subject.code,
+                    subject_name=subject.name,
+                    message=f"{subject.code} attendance is {status.lower()} ({pct_text})",
+                ))
+
+            opt = summary.optimization
+            if opt is not None and opt.is_reachable:
+                if (opt.lecture_deficit or 0) + (opt.tutorial_deficit or 0) > 0:
+                    parts = self._count_parts(opt.lecture_deficit, opt.tutorial_deficit)
+                    items.append(NotificationItem(
+                        id=f"{NotificationKind.MUST_ATTEND.value}:{subject.code}",
+                        kind=NotificationKind.MUST_ATTEND,
+                        date=as_of,
+                        subject_code=subject.code,
+                        subject_name=subject.name,
+                        message=f"{subject.code}: attend {' + '.join(parts)} to reach {summary.required_pct:.0f}%",
+                    ))
+                if (opt.safe_skip_lecture or 0) + (opt.safe_skip_tutorial or 0) > 0:
+                    parts = self._count_parts(opt.safe_skip_lecture, opt.safe_skip_tutorial)
+                    items.append(NotificationItem(
+                        id=f"{NotificationKind.SAFE_SKIP.value}:{subject.code}",
+                        kind=NotificationKind.SAFE_SKIP,
+                        date=as_of,
+                        subject_code=subject.code,
+                        subject_name=subject.name,
+                        message=f"{subject.code}: safe to skip {' + '.join(parts)}",
+                    ))
+        return items
+
+    @staticmethod
+    def _count_parts(lectures: int, tutorials: int) -> List[str]:
+        parts = []
+        if lectures:
+            parts.append(f"{lectures} lecture{'s' if lectures != 1 else ''}")
+        if tutorials:
+            parts.append(f"{tutorials} tutorial{'s' if tutorials != 1 else ''}")
+        return parts
+
+    async def _academic_events(self, user, as_of: date, subjects) -> List[NotificationItem]:
+        """Upcoming academic events — the identical canonical selection the
+        dashboard upcoming-events section uses (active, end_date >= today,
+        enrolled-scoped, sorted by (start_date, event_type), capped at 4)."""
+        enrolled_ids = {s.id for s in subjects}
+        subject_by_id = {s.id: s for s in subjects}
+
+        events = await self.calendar_repo.get_all_events()
+        upcoming = []
+        for e in events:
+            if not e.active or e.end_date < as_of:
+                continue
+            if e.subject_id is not None and e.subject_id not in enrolled_ids:
+                continue
+            upcoming.append(e)
+
+        upcoming.sort(key=lambda x: (x.start_date, x.event_type.value))
+        return [NotificationItem(
+            id=f"{NotificationKind.ACADEMIC_EVENT.value}:{e.id}",
+            kind=NotificationKind.ACADEMIC_EVENT,
+            date=e.start_date,
+            subject_code=subject_by_id[e.subject_id].code if e.subject_id and e.subject_id in subject_by_id else None,
+            subject_name=subject_by_id[e.subject_id].name if e.subject_id and e.subject_id in subject_by_id else None,
+            message=self._event_message(e, subject_by_id),
+            event_id=e.id,
+        ) for e in upcoming[:4]]
+
+    @staticmethod
+    def _event_message(e, subject_by_id) -> str:
+        subject = subject_by_id.get(e.subject_id) if e.subject_id else None
+        label = e.event_type.value.replace('_', ' ').title()
+        if e.start_date == e.end_date:
+            date_text = e.start_date.strftime("%d %b %Y")
+        else:
+            date_text = f"{e.start_date.strftime('%d %b')} - {e.end_date.strftime('%d %b %Y')}"
+        prefix = f"{subject.code} " if subject else ""
+        return f"{prefix}{label} on {date_text}"

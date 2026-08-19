@@ -1044,3 +1044,32 @@ frozen verifiers (6.7/7.1 drift pending owner authorization).
 - [x] **Phase 8.3 Analytics page (T-3 resolved)**: new dedicated `/analytics` route rendering the canonical Phase 8.1 read model (`GET /api/v1/analytics/overview`) — overall current/forecast (recorded-only), full Monday-start semester-trend series (null-gap), subject-wise rows (Attendance Health, L/T/P counts, practical %, backend 75% must-attend/safe-skip optimizer). Pure frontend composition; no backend/DB/formula change; legacy 3-state overall status + Phase 8.2 4-state subject health rendered as emitted. tsc/ESLint/`next build` green; 8.1 22/22 + 8.2 18/18 re-run green; DB baseline byte-identical.
 - [x] **Analytics page removed (2026-08-17)**: dedicated `/analytics` route + top-nav entry deleted; the Attendance tab is the primary detailed attendance surface. The Phase 8.1 read model (`GET /api/v1/analytics/overview`) and typed client are preserved — Dashboard (overall forecast + weekly series) and Attendance tab (per-subject health/optimizer/practical %) still consume them. No backend, DB, formula, or semantics change; no commit.
 - [x] **Option A — separate Quiz-Day occurrence (semantic correction)**: Quiz Day is now an INDEPENDENT attendance-bearing occurrence even on covered dates (normal lecture AND quiz-day session coexist; each markable, each one record, both aggregate into the quiz subject's attendance and ERP). Eligibility isolation: quiz-day-shaped sessions (LECTURE, is_extra=false, timetable_entry_id NULL) are EXCLUDED from eligibility L/T window counts (repo filter + service flag) — the normal lecture stays included. Synchronizer bucket is shape-count idempotent (no coverage gate); `materialize_quiz_day_sessions.py` follows the same semantics (12 covered-date sessions created; 698→710). Track renders the quiz-day session as its own "Quiz Day"/"QUIZ DAY" card. New `verify_quiz_day_occurrence.py` 10/10 (scenarios A/B/C, subject scoping, ERP +2/+2, eligibility denominator unchanged, exact restore). C-class rewrites with explanatory comments: events-correction 9/9c/10/11/15 (42/42), quiz-day-materialization 3/5b (14/14), quiz-day-restore F/G/idempotency (11/11), 7.2 check-1 enumeration + closure-residue canonical re-sync (26/26), attendance-spec 3b/7-cleanup (15/15). Records 122 unchanged; events 38; sessions 710; cancelled 0. Remaining pre-existing owner-drift: 6.7 check 7 (`6019a478` shares the DB-level seed identity). No commit.
+
+---
+
+# PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
+
+Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F **NOT STARTED**.
+
+## Phase 11.0 — Architecture & Discovery Audit (COMPLETE, read-only)
+
+- [x] Confirmed zero notification substrate: no model/table/endpoint, no scheduler, no Web Push/SW/PWA (PWA = Phase 13).
+- [x] Confirmed `class_reminders` = the only preference with an active consumer candidate; `auto_mark_present` / `week_starts_on` remain storage-only (auto-mark must NOT ship without an explicit product decision).
+- [x] Established the architecture: in-app notifications generated **on-read**; no new infra; delivery model decision-gated (11C).
+- [x] Report: `docs/phase_11/phase_11_architecture_audit.md`. HARD STOP — no implementation.
+
+## Phase 11A — Backend Notification Read Model & Contracts (COMPLETE)
+
+- [x] Additive `NotificationKind` enum (CLASS_REMINDER · QUIZ_APPROACHING · ATTENDANCE_THRESHOLD · MUST_ATTEND · SAFE_SKIP · ACADEMIC_EVENT) in `app/models/enums.py`.
+- [x] `app/schemas/notification.py` — `NotificationItem` (deterministic natural-key `id`, kind, date, subject context, message, canonical reference fields for 11B dedup) + `NotificationsResponse` (server-generated `as_of`).
+- [x] `app/services/notification_service.py` — read-only projection of engine/service outputs (canonical banding + optimizer, current quiz cycle, `get_sessions_with_status`, dashboard upcoming-events selection); no persistence. **Notifications consume engine outputs; they never calculate attendance.**
+- [x] `GET /api/v1/notifications` — JWT owner only, client `user_id` never accepted; registered in `backend/app/api/api.py`.
+- [x] CLASS_REMINDER gated by the `class_reminders` preference (missing row = default off), current-week horizon, cancelled excluded; `auto_mark_present` / `week_starts_on` proven inert.
+- [x] `verify_phase_11a.py` **19/19**: auth, shape, server `as_of`, identity-spoof ignored, enrollment isolation/scoping, reminders off/on, cancelled + week-scope exclusion, preference inertness, canonical quiz/attendance/event cross-checks, frozen-table baseline byte-identical, no notification table created, alembic head unchanged (`c1d2e3f4a5b6`), exact artifact cleanup.
+- [x] Static gates: `compileall` PASS. DB: ZERO mutation (31 users · 47 events · 715 sessions · 142 records · 27 enrollments · 9 subjects · 18 quizzes · feedback 0 · userpreferences 0). No commit.
+- [x] Report: `docs/phase_11/phase_11a_implementation_report.md`.
+
+## Deferred (intentionally NOT done here)
+
+- **11B** — notification persistence/read-state (next authorized slice). 11C delivery model (decision-gated). 11D frontend UX. 11E remaining preference wiring. 11F phase completion. `auto_mark_present` semantics — owner product decision.
+- Browser/manual testing — the user's responsibility. **HARD STOP after 11A — no commit.**
