@@ -25,7 +25,9 @@ import {
   DashboardSummaryResponse,
   DailySessionsResponse,
   AttendanceMutationRequest,
-  AnalyticsOverviewResponse
+  AnalyticsOverviewResponse,
+  UserPreferences,
+  UserPreferencesUpdate
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -365,4 +367,37 @@ export function useMutateAttendance() {
   };
 
   return { mutateAttendance };
+}
+
+// Phase 10D user preferences (GET/PUT /api/v1/student/preferences). The SWR
+// key is gated on `enabled` so the preferences are fetched when the Settings
+// modal is opened (or when a caller first needs them), never unconditionally
+// at shell mount. STORAGE/PREFERENCE DATA ONLY — nothing consumes the values
+// until Phase 11.
+export function usePreferences(enabled = true) {
+  const { data, error, isLoading, mutate } = useSWR<UserPreferences>(
+    enabled ? '/api/v1/student/preferences' : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    preferences: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+// Phase 10D preference save (PUT, full-object replacement). Returns the
+// server's complete preference object; callers update the SWR cache with it
+// (mutate(saved, false)) so no extra round-trip is needed after a save.
+export function usePreferenceMutation() {
+  const savePreferences = async (payload: UserPreferencesUpdate): Promise<UserPreferences> => {
+    return apiFetch('/api/v1/student/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  return { savePreferences };
 }

@@ -15,6 +15,28 @@ export interface StudentProfile {
   first_quiz_date?: string | null;
 }
 
+// --- Phase 10D user preferences (GET/PUT /api/v1/student/preferences) ---
+// STORAGE/PREFERENCE DATA ONLY. Nothing in the app consumes these values:
+// no reminders are sent, no attendance is auto-marked, and no calendar/
+// analytics week calculation changes. Phase 11 wires them into features.
+export type WeekStart = "SUNDAY" | "MONDAY";
+
+export interface UserPreferences {
+  class_reminders: boolean;
+  auto_mark_present: boolean;
+  week_starts_on: WeekStart;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+// PUT payload — full-object replacement; all three fields are required and
+// user_id is never sent (the backend owns the identity from the JWT).
+export interface UserPreferencesUpdate {
+  class_reminders: boolean;
+  auto_mark_present: boolean;
+  week_starts_on: WeekStart;
+}
+
 export enum SubjectCategory {
   // Backend contract (app.models.enums.SubjectCategory): the API emits only
   // "theory" and "lab" — no other categories exist.

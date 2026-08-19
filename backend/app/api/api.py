@@ -1,9 +1,10 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, student, subjects, timetable, attendance, quiz, calendar, events, laboratory, dashboard, analytics, feedback
+from app.api.v1.endpoints import auth, student, subjects, timetable, attendance, quiz, calendar, events, laboratory, dashboard, analytics, feedback, preferences
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(student.router, prefix="/student", tags=["student"])
+api_router.include_router(preferences.router, prefix="/student", tags=["student"])
 api_router.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
 api_router.include_router(timetable.router, prefix="/timetable", tags=["timetable"])
 api_router.include_router(attendance.router, prefix="/attendance", tags=["attendance"])

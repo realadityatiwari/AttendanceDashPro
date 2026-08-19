@@ -69,3 +69,10 @@ class FeedbackType(str, Enum):
     SUGGESTION = "SUGGESTION"
     QUESTION = "QUESTION"
     PRAISE = "PRAISE"
+
+class WeekStartsOn(str, Enum):
+    """User preference: the weekday the calendar week is considered to start
+    (Phase 10D). STORAGE/PREFERENCE DATA ONLY — nothing in the current
+    architecture consumes this value; Phase 11 wiring is out of scope."""
+    SUNDAY = "SUNDAY"
+    MONDAY = "MONDAY"
