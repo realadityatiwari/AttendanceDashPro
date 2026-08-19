@@ -4,7 +4,9 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅ — 6.0–6.7 all verified. Phase 7.0 (Quiz Eligibility & Schedule Reality) **AUDIT COMPLETE** ✅ — read-only audit delivered (`docs/phase_7_0_quiz_eligibility_audit.md`). Phase 7.1 (Canonical Quiz Eligibility Contract + Reference Subject Cards) **COMPLETE** ✅ — 26/26 verification + full regression; see `docs/phase_7_1_implementation_report.md`. Phase 7.2 (Quiz Eligibility Analytics Refinement) **COMPLETE** ✅ — 26/26 verification + full regression (6.5/6.6/6.7/7.1 all green); see `docs/phase_7_2_implementation_report.md`. Phase 8.0 (Attendance Analytics & Intelligence Audit / Contract Design) **COMPLETE / FROZEN** ✅ — read-only audit + contract design delivered (`docs/phase_8_0_attendance_analytics_audit.md`); zero code, zero DB change. Phase 8.1 (Canonical Analytics Read Model) **COMPLETE** ✅ — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. Phase 8.2 (Frontend Consumption of the Canonical Analytics Read Model) **COMPLETE** ✅ — typed analytics client + backend-derived subject/overall/weekly analytics; tsc/ESLint/`next build` green; zero backend/DB change. **Attendance UI Refinement (spec alignment + reference UI) COMPLETE** ✅ — authoritative attendance spec aligned (student-adjustable subject-scoped events, quiz-day attendance sessions, event sync guard, attendance-mutation 500 fix) + reference Attendance cards; 15/15 spec verifier + full frozen regression (6.5/6.6/6.7/7.1/7.2/8.1 all green); see `docs/attendance_ui_refinement_report.md`. **Phase 8.2 (Attendance Monitoring + Lab Domain Correction) COMPLETE** ✅ — Attendance page corrected to attendance-only (quiz strategy removed; the "14" traced to the canonical session table — real 14 lectures through today, not a quiz window); canonical backend-owned Attendance Health (HEALTHY ≥75 / WATCH 65–<75 / AT_RISK 60–<65 / CRITICAL <60) added; compact card redesign; lab domain separation with the smallest safe session-bound mid-sem designation (admin-only `ClassSession.designation`, migration applied, no fabricated experiment data); 18/18 Phase 8.2 verifier + full frozen regression (6.5/6.6/6.7/7.1/7.2/8.1/attendance-spec all green); see `docs/phase_8_2_implementation_report.md`.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **CURRENTLY ACTIVE** — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all **COMPLETE & FROZEN** ✅. Focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure) **COMPLETE** ✅.
+> 
+> **Next phase:** To be selected after roadmap reconciliation/review.
 
 ---
 
@@ -48,9 +50,9 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 4.5 | Data Integrity & Account Foundation | 🟢 Complete / Frozen |
 | 5 | Attendance History | 🟢 Complete / Frozen |
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
-| 7 | Quiz Eligibility & Schedule UX | 🟡 **7.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: eligibility math verified against legacy engines & real DB data; schedule reality captured (BCS-054 Q3 UNRESOLVED); 10 decision points (Q-D1…Q-D10) documented for Aditya. Implementation blocked on decisions. |
-| 8 | Attendance Analytics / Intelligence | ✅ **8.0 AUDIT COMPLETE / FROZEN (2026-08-15)** — read-only audit + contract design (`docs/phase_8_0_attendance_analytics_audit.md`). **8.1 CANONICAL ANALYTICS READ MODEL COMPLETE (2026-08-15)** — 22/22 verification + full regression (6.5/6.6/6.7/7.1/7.2 all green); see `docs/phase_8_1_implementation_report.md`. **8.2 FRONTEND CONSUMPTION COMPLETE (2026-08-15)** — typed `useAnalyticsOverview`, backend practical % + 75% must-attend/safe-skip on Subjects, forecast + weekly series on Dashboard, dead components removed; no backend/DB change. **ATTENDANCE UI REFINEMENT COMPLETE (2026-08-15)** — spec alignment: student-adjustable subject-scoped events (shared schedule; global/closure admin-only), quiz-day attendance sessions materialized (sessions 684→691, eligibility untouched), synchronizer guard, attendance-mutation 500 fix; reference Attendance cards; 15/15 spec verifier + 6.5/6.6/6.7/7.1/7.2/8.1 regressions all green; see `docs/attendance_ui_refinement_report.md`. **8.2 ATTENDANCE MONITORING + LAB DOMAIN CORRECTION COMPLETE (2026-08-15)** — Attendance page corrected to attendance-only (quiz strategy removed; "14" traced to canonical session table — real, not quiz-window); canonical backend-owned Attendance Health (HEALTHY ≥75 / WATCH 65–<75 / AT_RISK 60–<65 / CRITICAL <60); compact card redesign; lab domain separation + smallest safe session-bound mid-sem designation (admin-only `class_sessions.designation`, migration `e5f6a7b8c9d0`, no fabricated experiment data); 18/18 verifier + 6.5/6.6/6.7/7.1/7.2/8.1/attendance-spec regressions all green; see `docs/phase_8_2_implementation_report.md`. |
-| 9 | Laboratory System | 🟡 **9.0 AUDIT COMPLETE (2026-08-15)** — read-only audit: lab domain, `laboratory_experiments`/`laboratory_records` (0 rows each), 3 lab subjects (BCS-551/552/553), 146 PRACTICAL sessions, curriculum source confirmed unavailable; 7 product decisions documented. **9.1 COMPLETE (2026-08-15)** — Mid-Sem Practical + Lab Cancelled as canonical Academic Events through the canonical ClassSession pipeline (no separate lab attendance system); migration `a1b2c3d4e5f6`; 28/28 verifier + all frozen regressions green; see `docs/phase_9_1_implementation_report.md`. **9.2.0 AUDIT COMPLETE (2026-08-15)** — read-only audit of experiment management domain; DB baseline (22 events · 691 sessions · 95 records · 0 lab experiments · 0 lab records); schema gaps identified (no class_session_id FK, no audit columns); proposed migrations A+B; API + UI/IA designed; **curriculum blocker confirmed**: no authoritative experiment catalog exists; Phase 9.2.1 scope defined; see `docs/phase_9_2_0_laboratory_experiment_audit.md`. **9.2.1 COMPLETE (2026-08-16)** — laboratory experiment management: migrations `f1a2b3c4d5e6f` + `f6a5b4c3d2e1f` (experiment `description`/`is_active`/UNIQUE(subject_id, experiment_number); record `class_session_id`/`signed_by`/`created_by`/`updated_by`); full repository/service/API surface (summary, curriculum, records POST/PATCH/DELETE, activity, admin catalog POST/PATCH/DELETE, admin signing); dedicated `/laboratory` frontend route (Practical Attendance / Experiments / Activity tabs); empty curriculum stays an honest empty state — **no fabricated experiment data, attendance engine untouched**; 29/29 verifier + 6.5/6.6/7.2/8.1/attendance-spec/8.2/9.1 frozen regressions green (6.7/7.1 drift-only failures documented); see `docs/phase_9_2_1_implementation_report.md`. **FOCUSED TRACK CORRECTION (2026-08-16)** — a 2-hour lab block (two contiguous timetable periods) is now ONE attendance occurrence (read-model collapse in `app/engines/practical_occurrence.py`; Track/summary/history/analytics/dashboard/calendar all count the lab once; one mutation ⇒ one AttendanceRecord) and future dates are view-only (mutation API 400 + Upcoming UI, no mark-all); no schema change, no ClassSession merge, attendance engine untouched; new `verify_track_lab_fix.py` 16/16; frozen verifiers updated only where they encoded the old per-period counts (6.6 22/23/24, 8.1, 8.2 1/6/7, 9.1 12/13, 7.2 5/6, attendance-spec 3); 7.1/6.7 drift unchanged; see `docs/track_lab_attendance_correction_report.md`. **FOCUSED HISTORY FILTERS CORRECTION (2026-08-16)** — /history filters crashed with `Cannot read properties of undefined (reading 'total_count')`; backend History API audited healthy (subject/state/inclusive-date/search filters, occurrence-level status matching, filtered total_count + summary), root cause was frontend Load-more rendering while SWR returns history=undefined for the new filter key; Load-more now gated on `history` + stale rows dropped on filter change (skeleton while loading, no row mixing); frontend-only fix, practical occurrence grouping untouched; new `verify_history_filters.py` 20/20; frozen regressions green except pre-existing owner-data drift (7.1 24/26, 6.7 28/31, 8.1 21/22 — all fixture drift, none weakened); see `docs/history_filters_correction_report.md`. **FOCUSED QUIZ DAY RECOVERY + VERIFIER HARDENING (2026-08-16)** — forensic audit found all 18 seeded QUIZ_DAY events inactive, 7 quiz-day sessions missing (incl. the canonical 10-23 BCS-054), and owner BNC-501 07-31 extras deleted by date/shape-based verifier cleanup; reactivated exactly the 18 seeds (quiz_schedules-backed + 08-14 creation window; owner events untouched), restored the 6 canonical uncovered-date quiz-day sessions via the idempotent `materialize_quiz_day_sessions.py` (10-16 BCS-502 correctly absent — Option-B covered; the audit's 7th row was the owner's 08-17 test-event session, intentionally not restored); hardened 3 verifiers to ownership/artifact-scoped cleanup (events-correction 42/42, track-lab-fix 16/16, history-filters 20/20 — explicit captured IDs, never date/shape windows; track-lab captures only session deltas, never the collapsed daily view's pre-existing block row); new `verify_quiz_day_restore.py` 11/11 ×2; owner 07-31 extras healed via the canonical sync and preserved; records 122 unchanged, sessions 698, events 38, quizzes 18/18; frozen verifiers NOT weakened — remaining reds are owner-data drift from the owner's duplicate active BNC-501 08-24 quiz-day event `6019a478` (6.5 check 20, 6.7 checks 4/6/7, 7.1 check 6; 7.1 check 5 PASSES proving the 10-23 canonical session restored); see `docs/quiz_day_recovery_report.md`. |
+| 7 | Quiz Eligibility & Schedule UX | ✅ **COMPLETE & FROZEN** — 7.0 audit ✅ · 7.1 contract/UI ✅ · 7.2 analytics refinement ✅ · **Hardening** ✅ (backend reachability consistency, frontend degradation safety, pycache removal, dead code cleanup, exact math restored and verified). |
+| 8 | Attendance Analytics / Intelligence | ✅ **COMPLETE & FROZEN** — 8.0 audit ✅ · 8.1 canonical analytics read model ✅ · 8.2 frontend consumption ✅ · Attendance UI refinement ✅ · Lab domain correction (practical attendance separation) ✅. |
+| 9 | Laboratory System | 🟡 **IN PROGRESS** — 9.0 audit ✅ · 9.1 event integration (Mid-Sem/Lab Cancelled) ✅ · 9.2.0 audit ✅ · 9.2.1 experiment management (curriculum/records/UI/API) ✅. Curriculum empty-state honest. Focused corrections (Track lab, History filters, Quiz Day recovery) ✅. |
 | 10 | Settings, Feedback & Account Management | ⚪ Planned |
 | 11 | Notifications & Reminders | ⚪ Planned |
 | 12 | Mobile / Responsive Experience | ⚪ Planned |
@@ -378,37 +380,32 @@ The event system must feed the existing engines instead of creating parallel rul
 
 # 🟡 Phase 7 — Quiz Eligibility & Schedule UX
 
-**7.0 AUDIT COMPLETE (2026-08-15)** — see `docs/phase_7_0_quiz_eligibility_audit.md`. Read-only audit; no code changed. Headline finding: the backend's `is_eligible` (reachability) diverges from the legacy "currently-meets-threshold" definition (Q-D1), and the reference-UI data contract (window lecture/tutorial %, Criterion I/II, recoverable state, quiz date, explanation) is not yet exposed by the API (Q-D2). Implementation (Phase 7.1+) requires decisions Q-D1…Q-D10 from the product owner.
+## Phase 7.3 — Quiz Eligibility Hardening
 
-**7.1 IMPLEMENTATION COMPLETE (2026-08-15) — PASS** — see `docs/phase_7_1_implementation_report.md`. BCS-054 Q3 resolved to 2026-10-23 (canonical 18/18 schedule); canonical eligibility states (ELIGIBLE/RECOVERABLE/NOT_ELIGIBLE/UNRESOLVED) with the official "(Criterion I) OR (Criterion II)" policy; extended eligibility API (no parallel system); reference subject-card UI on `/tools/quiz-schedule` (cycle tabs, View Calculation); `verify_phase_7_1.py` 26/26; regression 6.5 23/23, 6.6 36/36, 6.7 31/31. DB mutation: BCS-054 Q3 schedule row + the canonical 18th QUIZ_DAY event (minimal, reversible). Dashboard snapshot corrected automatically via the new `is_eligible` semantics (dashboard code untouched).
+Phase 7.3 is **COMPLETE & FROZEN**. This incorporates the final hardening passes originally requested/tracked outside the main roadmap structure (historically tracked as Phase 4A/4B/4C logic):
 
-**7.2 IMPLEMENTATION COMPLETE (2026-08-15) — PASS** — see `docs/phase_7_2_implementation_report.md`. Q-D6 raw-range counting resolved as NOT a defect under the locked spec (session table IS the teaching-day-resolved schedule; closure/extra/weekend-guard regression-proven); Q-D8 overall denominator = recorded-only (ERP/legacy/S4 §10; pending never converted to absent, made explicit on the quiz card); Q-D7 = intentional product restriction (event mutations stay admin-only; eligibility is read-time; regression-proven); date-aware default Quiz tab via new canonical `GET /api/v1/quiz-eligibility/current-cycle` (next upcoming → latest resolved → fallback Quiz I; frontend preselects, manual tabs override, no invented dates). `verify_phase_7_2.py` 26/26; regression 6.5 23/23, 6.6 36/36, 6.7 31/31, 7.1 26/26. Zero DB mutations (exact baseline restored).
+- **Backend reachability consistency:** Fixed zero-pending optimization reachability semantics. Top-level optimization now prefers reachable routes before minimizing attendance deficit, preserving Criterion I tie-breaking where appropriate. Dashboard attention classification now receives consistent reachability information.
+- **Frontend safety:** Unreachable NOT_ELIGIBLE states no longer display misleading actionable Must Attend/Safe Skip guidance. Unknown/future eligibility states now degrade safely to a neutral "Unknown" badge instead of crashing. `SubjectCategory` TypeScript contract corrected to match backend values.
+- **Cleanup & Infrastructure:** Removed dead `combined_threshold` plumbing from the service. Purged stale `__pycache__` files from tracking and local environments (which previously masked canonical math). Normalized Quiz I/II/III presentation labels without changing the persisted API contract. Added missing trailing newline to `eligibility_engine.py`. Added SUPERSEDED notice to the stale Phase 7.1 historical implementation report.
+- **Verification:** Phase 1 eligibility verifier: 18/18. Phase 7.1 verifier: 26/26. Phase 3 propagation verifier: 26/26. TypeScript, ESLint, and production build all green. Database baseline restored exactly.
 
-The backend eligibility architecture is already substantially implemented and audited.
+### 🔒 The Authoritative Quiz Eligibility Contract
 
-Now complete the user-facing experience.
+The following semantics are fully verified, implemented, and frozen:
+- Both Criterion I and Criterion II use: `(Lecture % + Tutorial %) / 2`
+- No-tutorial subjects collapse naturally to lecture percentage.
+- Quiz thresholds: Quiz I = 70%, Quiz II = 75%, Quiz III = 75%.
+- Criterion I uses the cycle-specific attendance window.
+- Criterion II uses the cumulative attendance window from semester commencement.
+- Final eligibility uses **Criterion I OR Criterion II**.
+- Must Attend / Safe Skip is calculated per criterion using that criterion's own window.
+- Top-level optimization selects the best reachable route.
+- Active `QUIZ_DAY` AcademicEvents are authoritative for quiz dates.
+- Option-A quiz-day occurrences are independent attendance-bearing sessions but excluded from L/T eligibility counts.
+- Subject isolation is preserved. Event lifecycle changes propagate through eligibility automatically.
+- **The backend remains the authoritative source of eligibility mathematics and verdicts.**
 
-For every relevant subject:
-
-- Quiz I
-- Quiz II
-- Quiz III
-- Required percentage
-- Quiz date
-- Attendance window
-- Current percentage
-- Eligibility
-- Must Attend
-- Safe Skip
-- Lecture/tutorial breakdown
-- Unresolved state
-- Policy ambiguity
-
-### Critical rule
-
-The existing eligibility engine remains authoritative.
-
-Do not move quiz calculations into React.
+The existing eligibility engine remains authoritative. Do not move quiz calculations into React.
 
 ---
 
@@ -1074,13 +1071,13 @@ PHASE 4.5
     ↓
 PHASE 5  ← COMPLETE
     ↓
-PHASE 6
+PHASE 6  ← COMPLETE
     ↓
-PHASE 7
+PHASE 7  ← COMPLETE
    ↓
-PHASE 8
+PHASE 8  ← COMPLETE
    ↓
-PHASE 9
+PHASE 9  ← IN PROGRESS
    ↓
 PHASE 10
    ↓
@@ -1332,10 +1329,14 @@ PHASE 4.5 ████████████████████  COMPLETE
 PHASE 5  ████████████████████  COMPLETE 🔒 (Attendance History)
 
 PHASE 6  ████████████████████  COMPLETE 🔒
-PHASE 7  ████████████████████  COMPLETE 🔒 (7.0 audit · 7.1 contract+UI · 7.2 analytics refinement)
+PHASE 7  ████████████████████  COMPLETE 🔒 (7.0 audit · 7.1 contract+UI · 7.2 analytics · 7.3 hardening)
+PHASE 8  ████████████████████  COMPLETE 🔒 (8.0 audit · 8.1 read model · 8.2 UI/lab correction)
+PHASE 9  ████████████░░░░░░░░  IN PROGRESS (9.0 audit · 9.1 events · 9.2.1 experiments complete)
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
+
+> **Next phase:** To be selected after roadmap reconciliation/review.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):
