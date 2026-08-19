@@ -938,3 +938,29 @@ byte-identical to the documented 9.2.1 baseline. Report:
 **Phase 8.3 — Analytics page (T-3) implemented.** The roadmap's dedicated-analytics-page decision is now resolved: `/analytics` renders the canonical Phase 8.1 read model verbatim — overall current/forecast with recorded-only semantics, the full Monday-start weekly/semester-trend series (dash = gap, never 0%), and subject-wise cards with Attendance Health, L/T/P counts, practical %, and the backend 75% must-attend/safe-skip optimizer (including the unreachable state). No backend/DB/formula change; React formats only. `tsc`, ESLint, `next build` green; 8.1 22/22 and 8.2 18/18 re-run green; DB baseline byte-identical.
 
 **Analytics page removed (2026-08-17).** The dedicated `/analytics` route and its top-nav entry were removed; the Attendance tab is now the primary detailed attendance surface. The Phase 8.1 read model (`GET /api/v1/analytics/overview`) and its typed client (`useAnalyticsOverview`, `AnalyticsOverviewResponse` family) are unchanged and still power the Dashboard (overall forecast + weekly series) and the Attendance tab (per-subject health/optimizer/practical %). No backend, DB, formula, or semantics change.
+
+---
+
+# AttendanceDash Pro — Phase 10 Walkthrough (Settings, Feedback & Account Management)
+
+> **PHASE 10 COMPLETE & FROZEN (2026-08-20).** Audit: `docs/phase_10_completion_audit_report.md`; final: `docs/phase_10e_implementation_report.md`. No commit made; Phase 11 NOT STARTED.
+
+## What Phase 10 Did
+
+1. **10.0 audit** — read-only reality check of the Phase 2 Settings/Feedback/Profile foundations (contracts, frontend integration, DB state); findings fed the phase.
+2. **10A — Settings UI** — the Phase 2 Settings modal became a real surface (Notifications / Attendance / Calendar) with a single visual target per control, driven by real preference data.
+3. **10B — Program + Profile completion** — `sections.program` column (migration `b1c2d3e4f5a6`), seeded `CSE`; `program` resolved from the stored section value in the profile read model (never parsed from the section name); `StudentProfileResponse` completed (program, section, semester, session, academic dates); ProfileModal edits persist via the real API; Profile page reconciled with the modal.
+4. **10C — Real feedback system** — `feedback` table (migration `b1c2d3e4f5a7`) + model/repo/schema; `POST /api/v1/feedback` (JWT auth, 201, feedback_type enum BUG/SUGGESTION/QUESTION/PRAISE, message 10–1000 trimmed, optional context → null, server-side user_id/created_at; no GET/list/admin surface); FeedbackModal submits for real and never fakes success.
+5. **10D — User preferences API + UI** — `user_preferences` table (migration `c1d2e3f4a5b6`) + `GET/PUT /api/v1/student/preferences` (lazy-create with server defaults false/false/MONDAY, replace semantics, user-isolated, no client identity selector); SettingsModal fully API-backed. **Storage/preference data only** — nothing sends reminders, marks attendance, or alters calendar/analytics.
+6. **10E — Freeze corrections, verification & governance reconciliation** — audit found READY WITH MINOR FIXES; corrections applied (stale `not implemented` copy in FeedbackModal replaced with honest service-unavailable copy; stale program comment in `schemas/student.py` updated; new `backend/scripts/verify_phase_10c.py` added — closes the Phase 10C verification gap); all four governance docs reconciled (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md).
+
+## Verification (Phase 10E)
+
+- `verify_phase_10c.py` **23/23**; `verify_phase_10d.py` **18/18**; compileall PASS; `tsc --noEmit` exit 0; targeted ESLint on Phase 10 frontend files exit 0; `next build` PASS.
+- DB baseline restored byte-identical: 31 users (1 ADMIN) · 1 section (CSE-51, program CSE) · 47 events · 715 sessions (0 cancelled, 0 extra) · 142 records · 27 enrollments · 9 subjects · 28 timetable entries · 18 quizzes · 3 quiz cycles · 3 eligibility policies · 1 session · 1 semester · feedback 0 · userpreferences 0 · lab 0/0.
+- Alembic: linear chain, single head `c1d2e3f4a5b6` == `alembic current`. Pre-existing full-repo ESLint findings (6 errors/3 warnings in login/signup/history/AuthContext/GlassCard/lib/api, origin pre-Phase-10) documented but **out of scope** — not touched.
+
+## What's Next
+
+- **Phase 11 — Notifications & Reminders (NEXT)** — consumes the Phase 10 preference values (class_reminders etc.); notifications must consume engine outputs, never independently calculate attendance.
+- **HARD STOP after Phase 10E** — no commit made; Phase 11 NOT STARTED; browser/manual testing remains the user's responsibility.

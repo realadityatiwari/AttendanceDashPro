@@ -30,10 +30,10 @@ type FeedbackState =
 const MIN_MESSAGE_LENGTH = 10;
 
 /**
- * Feedback form. Submits to the documented backend contract
+ * Feedback form. Submits to the real backend contract
  * `POST /api/v1/feedback` (body: { feedback_type, message }, JWT auth).
- * The endpoint does not exist yet, so submission genuinely fails with a
- * clear "service unavailable" error — the form never fakes persistence.
+ * Success is shown only after a genuine 2xx response; any failure surfaces
+ * an explicit error — the form never fakes persistence.
  */
 export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   const [feedbackType, setFeedbackType] = useState<FeedbackType | null>(null);
@@ -85,7 +85,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
         status: "error",
         message:
           `Your feedback could not be saved: ${detail} ` +
-          "The POST /api/v1/feedback endpoint is not implemented yet, so nothing was persisted. This is tracked in task.md.",
+          "The feedback service is temporarily unavailable. Nothing was persisted.",
       });
     }
   };

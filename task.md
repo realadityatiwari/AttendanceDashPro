@@ -2,7 +2,7 @@
 
 ## PHASE 2 — DESKTOP SHELL & GLOBAL UX
 
-Status: **COMPLETE** (13 Aug 2026) — see BLOCKED markers in `implementation_plan.md`
+Status: **COMPLETE** (13 Aug 2026) — all BLOCKED markers resolved by **Phase 10** (COMPLETE & FROZEN, see below); remaining non-Phase-2 items are future-phase work.
 
 ## Objective
 
@@ -15,8 +15,8 @@ Reproduce the desktop reference interface (compact top navigation, profile dropd
 - [x] Shared modal foundation (`ShellDialog`) — backdrop, focus, Escape, scroll lock, responsive width, dialog semantics, consistent header/close/spacing
 - [x] Profile modal from real `/student/me` data (identity + academic context)
 - [x] Appearance modal — Dark selected; Light/System explicitly disabled (BLOCKED: Phase 1 tokens are dark-locked)
-- [x] Feedback modal — validation, loading, success, error, duplicate-submission guard; posts to `POST /api/v1/feedback` (BLOCKED: endpoint not implemented; error surfaced honestly, no fake success)
-- [x] Settings modal — controls disabled + persistence notice (BLOCKED: no user-preferences backend)
+- [x] Feedback modal — validation, loading, success, error, duplicate-submission guard; posts to `POST /api/v1/feedback` — **RESOLVED (Phase 10C):** endpoint live, verified 23/23; errors are honest, never fake success
+- [x] Settings modal — controls disabled + persistence notice — **RESOLVED (Phase 10D):** real `GET/PUT /student/preferences`, verified 18/18; storage-only until Phase 11 consumers
 - [x] Install App — beforeinstallprompt capture + standalone detection; explains missing PWA infra (BLOCKED: no manifest/service worker); no fake installed state
 - [x] Sign Out via existing `AuthContext.logout()` (JWT removal + redirect), auth architecture untouched
 - [x] Backend: `GET /student/me` extended with read-only academic context (additive contract change; no schema/DB/engine changes)
@@ -26,7 +26,7 @@ Reproduce the desktop reference interface (compact top navigation, profile dropd
 - Home / Track / Quiz Eligibility / Attendance / History / Events page content redesigns (dedicated phases)
 - Events functionality (list/calendar, Upcoming/Today/Past, Add Event, persistence) — dedicated Events phase
 - Mobile navigation — dedicated later phase (nav hidden below `md`)
-- Program field, feedback persistence, settings persistence, Light/System themes, PWA infra — see BLOCKED markers in `implementation_plan.md`
+- Program field, feedback persistence, settings persistence — **resolved by Phase 10** (see implementation_plan.md "RESOLVED BY PHASE 10"); Light/System themes, PWA infra, reminders/auto-mark consumption — still future-phase work (see implementation_plan.md "BLOCKED / BACKEND REQUIRED")
 
 ## Validation
 

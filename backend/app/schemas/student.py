@@ -23,8 +23,8 @@ class StudentProfile(BaseModel):
     section_name: Optional[str] = None
     # Academic context (read-only, resolved on demand from the user's
     # section -> semester -> academic session chain and quiz schedules).
-    # `program` is always None today: the schema has no program/branch
-    # column; only section names (e.g. "CSE-51") exist.
+    # `program` (Phase 10B) is populated from the stored `sections.program`
+    # value — never derived from the section name.
     program: Optional[str] = None
     semester_name: Optional[str] = None
     academic_session: Optional[str] = None

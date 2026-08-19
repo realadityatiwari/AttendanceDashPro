@@ -23,18 +23,19 @@ Status: **IMPLEMENTED** (see individual BLOCKED markers below)
 - **Shared dialog behavior** — `ShellDialog` foundation: backdrop, focus management, Escape, body scroll lock, responsive width, accessible dialog semantics, consistent header, close button, consistent spacing, restrained animation. All global modals share it. (frontend `src/components/shell/ShellDialog.tsx`)
 - **Route mapping** — visual labels mapped to existing routes without inventing URLs: Home → `/dashboard`, Track → `/tools/laboratory`, Quiz Eligibility → `/tools/quiz-schedule`, Attendance → `/subjects`, History → `/history`, Events → `/tools/events`.
 
-### BLOCKED / BACKEND REQUIRED
+### RESOLVED BY PHASE 10 (COMPLETE & FROZEN)
 
-- **Profile → Program** — the backend model has no program/branch column (only section names like "CSE-51" exist). The modal shows "—" and documents the gap. Requires a `program` column on `sections` (or equivalent) + seed data.
-- **Feedback persistence** — no feedback table/endpoint exists in the backend. The frontend submits to `POST /api/v1/feedback` and surfaces an explicit "service unavailable" error — it never fakes success. Backend work for a later phase:
-  - New table `feedback` (id, user_id FK → users, feedback_type enum BUG/SUGGESTION/QUESTION/PRAISE, message text, created_at).
-  - Alembic migration, model, repository, Pydantic schema, `POST /api/v1/feedback` endpoint (JWT auth), registration in `backend/app/api/api.py`.
-- **Settings persistence** — no user-preferences table/endpoint exists anywhere. Controls are disabled with an explicit notice; no fake local-only persistence. Backend work for a later phase:
-  - New table `user_preferences` (user_id PK/FK, class_reminders bool, auto_mark_present bool, week_starts_on enum SUNDAY/MONDAY, updated_at).
-  - Alembic migration, model, repository, `GET/PUT /api/v1/settings` (or `/student/preferences`) endpoints, registration in `backend/app/api/api.py`.
-- **Appearance (Light/System)** — Phase 1 design tokens are locked to the dark palette (`globals.css` forces dark `:root` values; root layout hard-codes `dark`). Light/System are disabled until the Phase 1 tokens support a light palette; theme preference persistence requires `user_preferences`.
+The following Phase 2 BLOCKED items were completed end-to-end by Phase 10 and are **no longer blocked**:
+
+- **Profile → Program** — **RESOLVED (10B):** `sections.program` column added (migration `b1c2d3e4f5a6`), populated, and `program` returned from the stored section value in the profile read model (`StudentProfileResponse`); never derived from the section name.
+- **Feedback persistence** — **RESOLVED (10C):** `feedback` table (id, user_id FK → users, feedback_type enum BUG/SUGGESTION/QUESTION/PRAISE, message, context, created_at) + migration `b1c2d3e4f5a7`, model, repository, schema, and `POST /api/v1/feedback` (JWT auth, 201, no GET/list surface), registered in `backend/app/api/api.py`. Verified by `backend/scripts/verify_phase_10c.py` (23/23). Frontend errors are honest — a real non-2xx never fakes success.
+- **Settings persistence** — **RESOLVED (10D):** `user_preferences` table (user_id PK/FK, class_reminders, auto_mark_present, week_starts_on enum SUNDAY/MONDAY, created_at/updated_at) + migration `c1d2e3f4a5b6`, model, repository, schema, `GET/PUT /api/v1/student/preferences` (lazy-create, replace semantics, server defaults, user-isolated), registered in `backend/app/api/api.py`. Verified by `backend/scripts/verify_phase_10d.py` (18/18). **Storage/preference data only** — nothing sends reminders or marks attendance.
+
+### BLOCKED / BACKEND REQUIRED (still open)
+
+- **Appearance (Light/System)** — Phase 1 design tokens are locked to the dark palette (`globals.css` forces dark `:root` values; root layout hard-codes `dark`). Preference storage now exists (`user_preferences`, Phase 10D) but there is no theme field in the table yet; Light/System remain disabled until the Phase 1 tokens support a light palette and a theme preference is added to the preference contract.
 - **Install App** — no PWA infrastructure in this build (no web app manifest, no service worker, no `next-pwa`). The modal explains installation and is only usable if a future PWA phase provides the manifest + SW. "Installed" state is only ever reported from a real `userChoice` outcome or real `display-mode: standalone`.
-- **Class reminders / Auto-mark present** — features do not exist in the product architecture (no notifications, no auto-marking). Disabled in Settings.
+- **Class reminders / Auto-mark present** — the features themselves do not exist in the product architecture (notifications & reminders are Phase 11; auto-marking is not in the roadmap). The preference VALUES are now real (stored via `/student/preferences`, Phase 10D) but nothing consumes them yet — Phase 11 notifications will consume them.
 - **Mobile navigation** — nav links hidden below `md`; the mobile navigation pattern is a dedicated later phase (bottom nav per S4 spec).
 
 ### Backend change made (explicitly justified API integration)

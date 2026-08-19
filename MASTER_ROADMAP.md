@@ -4,9 +4,9 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **CURRENTLY ACTIVE** — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all **COMPLETE & FROZEN** ✅. Focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure) **COMPLETE** ✅.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** To be selected after roadmap reconciliation/review.
+> **Next phase:** Phase 11 — Notifications & Reminders (pending roadmap reconciliation/review).
 
 ---
 
@@ -52,9 +52,9 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | **6** | **Calendar & Academic Events** | ✅ **COMPLETE & FROZEN** — 6.0 audit ✅ · 6.1 foundational corrections ✅ · 6.2 calendar read model & API ✅ · 6.3 calendar UI ✅ · 6.4 events page upgrade ✅ · 6.5 persistence/admin/seeding ✅ · 6.6 event→engine integration ✅ · 6.7 verification/freeze ✅ |
 | 7 | Quiz Eligibility & Schedule UX | ✅ **COMPLETE & FROZEN** — 7.0 audit ✅ · 7.1 contract/UI ✅ · 7.2 analytics refinement ✅ · **Hardening** ✅ (backend reachability consistency, frontend degradation safety, pycache removal, dead code cleanup, exact math restored and verified). |
 | 8 | Attendance Analytics / Intelligence | ✅ **COMPLETE & FROZEN** — 8.0 audit ✅ · 8.1 canonical analytics read model ✅ · 8.2 frontend consumption ✅ · Attendance UI refinement ✅ · Lab domain correction (practical attendance separation) ✅. |
-| 9 | Laboratory System | 🟡 **IN PROGRESS** — 9.0 audit ✅ · 9.1 event integration (Mid-Sem/Lab Cancelled) ✅ · 9.2.0 audit ✅ · 9.2.1 experiment management (curriculum/records/UI/API) ✅. Curriculum empty-state honest. Focused corrections (Track lab, History filters, Quiz Day recovery) ✅. |
-| 10 | Settings, Feedback & Account Management | ⚪ Planned |
-| 11 | Notifications & Reminders | ⚪ Planned |
+| 9 | Laboratory System | ✅ **COMPLETE & FROZEN** — 9.0 audit ✅ · 9.1 event integration (Mid-Sem/Lab Cancelled) ✅ · 9.2.0 audit ✅ · 9.2.1 experiment management (curriculum/records/UI/API) ✅ · Focused corrections (Track lab, History filters, Quiz Day recovery) ✅. |
+| 10 | Settings, Feedback & Account Management | ✅ **COMPLETE & FROZEN** — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. |
+| **11** | **Notifications & Reminders** | ⚪ **NEXT** |
 | 12 | Mobile / Responsive Experience | ⚪ Planned |
 | 13 | PWA / Installability | ⚪ Planned |
 | 14 | Firebase Retirement | 🔴 Later |
@@ -614,9 +614,17 @@ otherwise freezable; Phase 9.2 (experiment management) NOT started.
 
 ---
 
-# 🟡 Phase 10 — Settings, Feedback & Account Management
+# ✅ Phase 10 — Settings, Feedback & Account Management
 
-Turn the Phase 2 foundations into real functionality.
+**COMPLETE & FROZEN** (10.0 · 10A · 10B · 10C · 10D · 10E). The Phase 2 foundations became real functionality end-to-end (UI → API → service → repository → database):
+
+- **Settings (10A):** `SettingsModal` surface with the three preference toggles.
+- **Profile (10B):** `sections.program` column + migration, `program` resolved from the stored section value in the profile read model, `StudentProfileResponse` completed (program/section/semester/session/academic dates), ProfileModal edits persisted via the real API.
+- **Feedback (10C):** real `POST /api/v1/feedback` (feedback type, message 10–1000 trimmed, optional context, server timestamp, server-side user association); never fakes a successful submission; no GET/list/admin surface in this phase; verified by `backend/scripts/verify_phase_10c.py` (23/23).
+- **Preferences (10D):** `user_preferences` table + GET/PUT `/api/v1/student/preferences` (lazy-create, replace semantics, server defaults false/false/MONDAY, user-isolated, no client identity); **storage/preference data only** — nothing sends reminders, marks attendance, or alters calendar/analytics; verified by `backend/scripts/verify_phase_10d.py` (18/18).
+- **Freeze (10E):** audit report `docs/phase_10_completion_audit_report.md`, corrections (stale feedback copy removed, stale profile comment updated, Phase 10C verifier added), full regression + DB baseline proof + governance reconciliation in `docs/phase_10e_implementation_report.md`. All verifiers green, DB restored exactly, migration chain linear at head `c1d2e3f4a5b6`.
+
+Original scope for reference:
 
 ## Settings
 
@@ -668,7 +676,7 @@ Complete:
 
 ---
 
-# 🟡 Phase 11 — Notifications & Reminders
+# 🟢 Phase 11 — Notifications & Reminders (NEXT)
 
 Only after the academic/event architecture is stable.
 
@@ -1331,12 +1339,13 @@ PHASE 5  ████████████████████  COMPLETE 
 PHASE 6  ████████████████████  COMPLETE 🔒
 PHASE 7  ████████████████████  COMPLETE 🔒 (7.0 audit · 7.1 contract+UI · 7.2 analytics · 7.3 hardening)
 PHASE 8  ████████████████████  COMPLETE 🔒 (8.0 audit · 8.1 read model · 8.2 UI/lab correction)
-PHASE 9  ████████████░░░░░░░░  IN PROGRESS (9.0 audit · 9.1 events · 9.2.1 experiments complete)
+PHASE 9  ████████████████████  COMPLETE 🔒 (9.0 audit · 9.1 events · 9.2.1 experiments · corrections)
+PHASE 10 ████████████████████  COMPLETE 🔒 (10.0 audit · 10A settings · 10B program/profile · 10C feedback · 10D preferences · 10E freeze)
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
 
-> **Next phase:** To be selected after roadmap reconciliation/review.
+> **Next phase:** Phase 11 — Notifications & Reminders (pending roadmap reconciliation/review).
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):
