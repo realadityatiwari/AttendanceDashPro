@@ -60,3 +60,12 @@ class SessionDesignation(str, Enum):
     attendance mutation — designation changes nothing about counting.
     """
     MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL"
+
+class FeedbackType(str, Enum):
+    """User feedback categories (Phase 10C). Values MUST match the frontend
+    FeedbackModal exactly — never renamed, never extended without a
+    coordinated frontend contract change."""
+    BUG = "BUG"
+    SUGGESTION = "SUGGESTION"
+    QUESTION = "QUESTION"
+    PRAISE = "PRAISE"

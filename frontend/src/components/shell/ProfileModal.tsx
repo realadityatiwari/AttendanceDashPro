@@ -67,10 +67,7 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
         ) : (
           <>
             <ShellField label="University Roll Number" value={rollNumber} mono />
-            <ShellField
-              label="Program"
-              unavailable
-            />
+            <ShellField label="Program" value={profile?.program} />
             <ShellField label="Semester" value={profile?.semester_name} />
             <ShellField label="Academic Session" value={profile?.academic_session} />
             <ShellField
@@ -86,8 +83,8 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
       </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Program data is not stored in the backend model yet; the remaining
-        fields are resolved from your section, semester and quiz schedules.
+        Program is resolved from your section; the remaining fields are
+        resolved from your section, semester and quiz schedules.
       </p>
     </ShellDialog>
   );

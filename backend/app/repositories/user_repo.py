@@ -64,7 +64,7 @@ class UserRepository:
             first_quiz_date = result.scalar_one_or_none()
 
         return {
-            "program": None,
+            "program": user.section.program if user.section is not None else None,
             "semester_name": semester_name,
             "academic_session": academic_session,
             "semester_start": semester_start,

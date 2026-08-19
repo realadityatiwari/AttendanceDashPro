@@ -6,3 +6,4 @@ from .attendance import AttendanceRecord
 from .event import AcademicEvent
 from .quiz import QuizCycle, EligibilityPolicy, QuizSchedule
 from .laboratory import LaboratoryExperiment, LaboratoryRecord
+from .feedback import Feedback

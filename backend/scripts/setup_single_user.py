@@ -29,11 +29,14 @@ async def setup_single_user():
         
         if not section:
             print("Creating Section 'CSE-51'...")
-            section = Section(name="CSE-51", semester_id=semester.id)
+            section = Section(name="CSE-51", semester_id=semester.id, program="CSE")
             session.add(section)
             await session.flush()
         else:
             print(f"Reusing existing Section 'CSE-51' (ID: {section.id})")
+            if not section.program:
+                section.program = "CSE"
+                print("  Setting program = 'CSE' on existing section")
 
         # 3. Update User
         uid = "HCRbV7Kld3Wo9IHLJHRGlBau4Mq2"

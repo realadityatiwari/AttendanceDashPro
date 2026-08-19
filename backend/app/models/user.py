@@ -10,6 +10,9 @@ from sqlalchemy.dialects.postgresql import UUID
 class Section(Base):
     __tablename__ = "sections"
     name: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Cohort/program grouping the section belongs to (Phase 10B), e.g. "CSE"
+    # for section "CSE-51". Stored data; never derived from section.name.
+    program: Mapped[str | None] = mapped_column(String, nullable=True)
     semester_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("semesters.id"))
 
     users: Mapped[List["User"]] = relationship(back_populates="section")
