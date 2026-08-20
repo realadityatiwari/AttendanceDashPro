@@ -25,6 +25,17 @@ Verifies the Phase 11B contract end-to-end against the real database
   - The 11A semantics are unchanged (class_reminders gating, cancelled / out-
     of-week exclusions, inert preferences) — spot-checked against the 11A
     contract, and the Phase 11A verifier re-runs clean afterwards.
+  - Quiz/event/attendance parity (checks 17/19/20) is asserted in the
+    ACCUMULATION-COMPATIBLE direction: the persisted inbox keeps rows until
+    dismissed, so the checks verify the live canonical state is covered by
+    the inbox (every currently banded subject has its ATTENDANCE_THRESHOLD /
+    MUST_ATTEND / SAFE_SKIP row, the canonical current quiz cycle is
+    persisted unique per cycle, the dashboard top-4 event selection is
+    covered unique per event), that run-generated rows (those whose
+    notification_id is not in the pre-run admin baseline) match the
+    canonical conditions at generation time, and that the run's single GET
+    created at most one quiz row / four event rows — making the checks
+    deterministic regardless of pre-existing admin inbox rows.
   - No frozen system is touched: full snapshot byte-identical before/after,
     and the alembic head is verified unchanged.
 
@@ -134,6 +145,9 @@ async def main() -> int:
         # block can restore the inbox to exactly this row set.
         admin_notif_baseline = set((await db.execute(
             select(Notification.id).where(Notification.user_id == admin.id))).scalars().all())
+        # String form for comparing against JSON response notification_ids
+        # (the API serializes UUIDs as strings).
+        admin_baseline_str = {str(x) for x in admin_notif_baseline}
 
         # Subject for A: quiz-applicable and attendance-applicable.
         enroll = (await db.execute(select(StudentEnrollment).where(
@@ -441,9 +455,12 @@ async def main() -> int:
                   r_empty.status_code == 422, f"got {r_empty.status_code}")
 
             # --- 17. Persisted attendance kinds == canonical summaries --------------
-            # The admin inbox carries the ATTENDANCE_THRESHOLD / MUST_ATTEND /
-            # SAFE_SKIP rows; cross-check each against the canonical engine
-            # output at the same as-of date.
+            # Accumulation-compatible parity (documented 11B semantics: rows
+            # stay until dismissed): the live canonical banding must be COVERED
+            # by the persisted inbox (every subject currently in a band has its
+            # row), every run-generated row must match the canonical conditions
+            # at generation time, and no duplicate (kind, subject) rows exist.
+            # Pre-existing admin rows are legitimate persistence, not a defect.
             body_admin = (await c.get("/api/v1/notifications", headers=headers_admin)).json()
             async with AsyncSessionLocal() as db:
                 subjects = (await db.execute(select(Subject).join(StudentEnrollment).where(
@@ -451,32 +468,62 @@ async def main() -> int:
                 subjects = [s for s in subjects if s.attendance_applicable]
                 summaries = await AttendanceService(db).get_subject_summaries(
                     user_id=admin_id, subjects=subjects, as_of_date=institution_today())
-            code_to_subject = {s.code: s for s in subjects}
             att_rows = [i for i in body_admin["items"] if i["kind"] == "ATTENDANCE_THRESHOLD"]
             must_rows = [i for i in body_admin["items"] if i["kind"] == "MUST_ATTEND"]
             skip_rows = [i for i in body_admin["items"] if i["kind"] == "SAFE_SKIP"]
-            att_ok = all(
-                classify_attendance_status(
-                    summaries[code_to_subject[i["subject_code"]].id].current_avg_pct)
-                in ("WATCH", "CRITICAL") for i in att_rows
-            ) if att_rows else True
-            must_ok = all(
-                (lambda o: o is not None and o.is_reachable
-                 and (o.lecture_deficit or 0) + (o.tutorial_deficit or 0) > 0)(
-                    summaries[code_to_subject[i["subject_code"]].id].optimization)
-                for i in must_rows
-            ) if must_rows else True
-            skip_ok = all(
-                (lambda o: o is not None and o.is_reachable
-                 and (o.safe_skip_lecture or 0) + (o.safe_skip_tutorial or 0) > 0)(
-                    summaries[code_to_subject[i["subject_code"]].id].optimization)
-                for i in skip_rows
-            ) if skip_rows else True
+            run_att = [i for i in att_rows
+                       if i.get("notification_id") not in admin_baseline_str]
+            run_must = [i for i in must_rows
+                        if i.get("notification_id") not in admin_baseline_str]
+            run_skip = [i for i in skip_rows
+                        if i.get("notification_id") not in admin_baseline_str]
+
+            att_codes = {i["subject_code"] for i in att_rows}
+            must_codes = {i["subject_code"] for i in must_rows}
+            skip_codes = {i["subject_code"] for i in skip_rows}
+            unique_ok = len(att_codes) == len(att_rows) \
+                and len(must_codes) == len(must_rows) \
+                and len(skip_codes) == len(skip_rows)
+
+            def _deficit(s) -> int:
+                o = s.optimization
+                return 0 if o is None else (o.lecture_deficit or 0) + (o.tutorial_deficit or 0)
+
+            def _safe_skip(s) -> int:
+                o = s.optimization
+                return 0 if o is None else (o.safe_skip_lecture or 0) + (o.safe_skip_tutorial or 0)
+
+            coverage_ok = True
+            run_ok = True
+            for s in subjects:
+                summary = summaries.get(s.id)
+                if summary is None:
+                    continue
+                band = classify_attendance_status(summary.current_avg_pct)
+                opt = summary.optimization
+                reachable = opt is not None and opt.is_reachable
+                if band in ("WATCH", "CRITICAL") and s.code not in att_codes:
+                    coverage_ok = False
+                if reachable and _deficit(summary) > 0 and s.code not in must_codes:
+                    coverage_ok = False
+                if reachable and _safe_skip(summary) > 0 and s.code not in skip_codes:
+                    coverage_ok = False
+                if s.code in {i["subject_code"] for i in run_att} \
+                        and band not in ("WATCH", "CRITICAL"):
+                    run_ok = False
+                if s.code in {i["subject_code"] for i in run_must} \
+                        and not (reachable and _deficit(summary) > 0):
+                    run_ok = False
+                if s.code in {i["subject_code"] for i in run_skip} \
+                        and not (reachable and _safe_skip(summary) > 0):
+                    run_ok = False
             check("17. persisted ATTENDANCE_THRESHOLD / MUST_ATTEND / SAFE_SKIP "
                   "match the canonical subject summaries (engine banding + "
-                  "optimizer)",
-                  att_ok and must_ok and skip_ok,
-                  f"att={len(att_rows)} must={len(must_rows)} skip={len(skip_rows)}")
+                  "optimizer; coverage + run-generated correctness + uniqueness)",
+                  coverage_ok and run_ok and unique_ok,
+                  f"att={len(att_rows)} must={len(must_rows)} "
+                  f"skip={len(skip_rows)} run_att={len(run_att)} "
+                  f"run_must={len(run_must)} run_skip={len(run_skip)}")
 
             # --- 18. 11A semantics unchanged (gating / exclusions / inertness) ------
             # s4 is out-of-week: it must never produce a CLASS_REMINDER row
@@ -524,27 +571,53 @@ async def main() -> int:
                   f"reminder_rows {reminder_rows_before}->{reminder_rows_after}")
 
             # --- 19. QUIZ_APPROACHING matches canonical current cycle ---------------
+            # The persisted inbox ACCUMULATES rows per the documented 11B semantics
+            # ("a previously generated notification stays in the inbox until
+            # dismissed"), so parity with the LIVE canonical cycle must be asserted
+            # in the accumulation-compatible direction: the canonical cycle row is
+            # persisted, occurrence identity is unique per cycle (no duplicate
+            # rows), and this run's single GET created at most one quiz row.
+            # Pre-existing admin rows from earlier use are legitimate persistence,
+            # not a defect — the check must not depend on a clean admin inbox.
             async with AsyncSessionLocal() as db:
                 cycle = await EligibilityService(db).get_current_quiz_cycle(admin_id)
             admin_quiz = [i for i in body_admin["items"] if i["kind"] == "QUIZ_APPROACHING"]
+            run_quiz = [i for i in admin_quiz
+                        if i.get("notification_id") not in admin_baseline_str]
             if cycle["basis"] == "next_upcoming":
-                quiz_ok = len(admin_quiz) == 1 \
-                    and admin_quiz[0]["quiz_cycle"] == cycle["quiz_cycle"] \
-                    and admin_quiz[0]["date"] == cycle["quiz_date"].isoformat()
+                unique_cycles = len({i["quiz_cycle"] for i in admin_quiz}) == len(admin_quiz)
+                matches_canonical = any(
+                    i["quiz_cycle"] == cycle["quiz_cycle"]
+                    and i["date"] == cycle["quiz_date"].isoformat()
+                    for i in admin_quiz)
+                quiz_ok = unique_cycles and matches_canonical and len(run_quiz) <= 1
             else:
                 quiz_ok = len(admin_quiz) == 0
-            check("19. persisted QUIZ_APPROACHING matches the canonical current "
-                  f"quiz cycle (basis={cycle['basis']})", quiz_ok,
-                  f"items={[(i['quiz_cycle'], i['date']) for i in admin_quiz]}")
+            check("19. persisted QUIZ_APPROACHING includes the canonical current "
+                  f"quiz cycle (basis={cycle['basis']}; unique per cycle, "
+                  f"run-generated <= 1)", quiz_ok,
+                  f"items={[(i['quiz_cycle'], i['date']) for i in admin_quiz]} "
+                  f"run={[(i['quiz_cycle'], i['date']) for i in run_quiz]}")
 
-            # --- 20. ACADEMIC_EVENT persisted rows == dashboard selection -----------
+            # --- 20. ACADEMIC_EVENT persisted rows cover the dashboard selection ----
+            # Same accumulation semantics: the inbox is a superset of the live
+            # top-4 selection (stale rows legitimately remain until dismissed), so
+            # assert coverage (dash selection ⊆ persisted), uniqueness per event,
+            # and a bounded number of run-generated rows (cap-4, single GET).
             dash = (await c.get("/api/v1/dashboard/summary", headers=headers_admin)).json()
             dash_event_ids = {e["id"] for e in dash.get("upcoming_events", [])}
-            note_event_ids = {i.get("event_id") for i in body_admin["items"]
-                              if i["kind"] == "ACADEMIC_EVENT"}
-            check("20. persisted ACADEMIC_EVENT rows equal the dashboard "
-                  "upcoming-events selection", dash_event_ids == note_event_ids,
-                  f"dash={dash_event_ids} notes={note_event_ids}")
+            notes = [i for i in body_admin["items"] if i["kind"] == "ACADEMIC_EVENT"]
+            note_event_ids = {i.get("event_id") for i in notes}
+            run_events = [i for i in notes
+                          if i.get("notification_id") not in admin_baseline_str]
+            unique_events = len(note_event_ids) == len(notes)
+            events_ok = unique_events and dash_event_ids <= note_event_ids \
+                and len(run_events) <= 4
+            check("20. persisted ACADEMIC_EVENT rows cover the dashboard "
+                  "upcoming-events selection (unique per event, "
+                  f"run-generated <= 4)", events_ok,
+                  f"dash={dash_event_ids} notes={note_event_ids} "
+                  f"run={len(run_events)}")
 
     finally:
         async with AsyncSessionLocal() as db:

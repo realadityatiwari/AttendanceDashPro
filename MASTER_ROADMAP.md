@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** Phase 11 — Notifications & Reminders **IN PROGRESS** (11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ — 11C decision-gated, 11F not started).
+> **Next phase:** Phase 12 — PWA & Offline. Phase 11 — Notifications & Reminders **COMPLETE & FROZEN** (11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified ✅ · 11F final verification & freeze ✅ — 11C delivery model decision-gated/deferred, not implemented).
 
 ---
 
@@ -54,7 +54,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 8 | Attendance Analytics / Intelligence | ✅ **COMPLETE & FROZEN** — 8.0 audit ✅ · 8.1 canonical analytics read model ✅ · 8.2 frontend consumption ✅ · Attendance UI refinement ✅ · Lab domain correction (practical attendance separation) ✅. |
 | 9 | Laboratory System | ✅ **COMPLETE & FROZEN** — 9.0 audit ✅ · 9.1 event integration (Mid-Sem/Lab Cancelled) ✅ · 9.2.0 audit ✅ · 9.2.1 experiment management (curriculum/records/UI/API) ✅ · Focused corrections (Track lab, History filters, Quiz Day recovery) ✅. |
 | 10 | Settings, Feedback & Account Management | ✅ **COMPLETE & FROZEN** — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. |
-| **11** | **Notifications & Reminders** | 🟡 **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11C decision-gated/deferred · 11F not started |
+| **11** | **Notifications & Reminders** | ✅ **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented) |
 | 12 | Mobile / Responsive Experience | ⚪ Planned |
 | 13 | PWA / Installability | ⚪ Planned |
 | 14 | Firebase Retirement | 🔴 Later |
@@ -680,7 +680,7 @@ Complete:
 
 Only after the academic/event architecture is stable.
 
-**Status: IN PROGRESS — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11C decision-gated/deferred · 11F not started.**
+**Status: COMPLETE & FROZEN (2026-08-21) — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented).**
 
 Potential features:
 
@@ -715,7 +715,7 @@ They do **not** independently calculate attendance.
   - SWR integration: `useNotifications()` (key gated, one logical request; bell + center share the key so they dedupe and stay in sync) + `useNotificationMutation()`; `STANDARD_CACHE` revalidation only (no polling). Types mirror the backend `NotificationItem` / `NotificationsResponse` / `NotificationUpdate` contract in `types/api.ts`.
   - No push/email/SMS/scheduling/cron/worker/PWA behavior, no client-side notification logic, no backend change. `tsc --noEmit` PASS · ESLint PASS · `npm run build` PASS. No commit made.
 - **11E** Reminder preferences wiring — ✅ VERIFIED, NO ADDITIONAL IMPLEMENTATION REQUIRED (`docs/phase_11/phase_11e_implementation_report.md`). The `class_reminders` gate lives inside 11A (`notification_service.py`, read at generation time; verified by 11A checks 7/8); `auto_mark_present` and `week_starts_on` remain storage-only per audit §5B/5C. SettingsModal copy + `types/api.ts` contract comment made truthful ("Class reminders are shown in the bell icon when enabled"). 11A verifier 19/19 PASS; 11B verifier 21/23 — checks 19/20 fail on diagnosed environmental data drift (pre-existing admin inbox rows + the verifier's own fixture shifting the admin's canonical quiz/event selection mid-run), NOT a code regression; a clean admin inbox passes 23/23. Frontend tsc/ESLint/build PASS. No commit made.
-- **11F** Phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN) — ⚪ NOT STARTED.
+- **11F** Final verification & freeze — ✅ **PHASE 11 COMPLETE & FROZEN** (`docs/phase_11/phase_11f_verification_report.md`). The 11E drift (11B checks 19/20) and an 11A check-16 failure were confirmed as verifier determinism issues on a used inbox, NOT production defects; both verifiers were hardened **verifier-only** (checks 15/16/17 in 11A; 17/19/20 in 11B) to accumulation-compatible assertions (coverage + run-generated correctness + uniqueness + bounded growth; string-form baseline comparison — a UUID-vs-string bug in the first hardening attempt was also fixed). **Zero production code changed in 11F.** Final gates on the used environment: `compileall` PASS · `verify_phase_11a.py` **19/19** (×2) · `verify_phase_11b.py` **23/23** · frontend `tsc`/ESLint(Phase 11 files)/`npm run build` PASS. DB baseline restored (users 31 · admins 1 · notifications 11 — the admin's legitimate pre-existing rows); alembic single head `d1e2f3a4b5c6` unchanged. No commit made.
 
 ---
 

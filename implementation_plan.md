@@ -1070,7 +1070,7 @@ new phase; no Phase 9.3).
 
 ## PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11C decision-gated/deferred · 11F NOT STARTED.
+Status: **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11F final verification & freeze ✅ · 11C decision-gated/deferred (NOT implemented).
 
 ### 11.0 — Architecture & Discovery Audit (COMPLETE)
 
@@ -1126,9 +1126,17 @@ Discovery-first audit of the remaining preference→notification wiring (audit �
 - DB baseline restored (users 31 · admins 1 · notifications 10 = admin's pre-existing rows); alembic single head `d1e2f3a4b5c6` unchanged. Frontend: `tsc` PASS · ESLint PASS · `npm run build` PASS. No commit.
 - Report: `docs/phase_11/phase_11e_implementation_report.md`.
 
-### 11C / 11F (NOT STARTED)
+### 11F — Final Verification & Freeze (COMPLETE — PHASE 11 COMPLETE & FROZEN)
 
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented.
-- **11F** — phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN) — should also decide whether to harden `verify_phase_11b.py` checks 19/20 to compare only run-generated rows, making the gate deterministic on a used inbox.
+- **Audit:** working tree clean at `4117992` (11E); preference matrix reconciled (`class_reminders` consumed only at `notification_service.py:143-145`; `auto_mark_present`/`week_starts_on` storage-only; `event_session_service.py:215` prose, not a consumer); architecture coherent (11A read contract → 11B persistence → 11D API consumption); alembic single head `d1e2f3a4b5c6`.
+- **Drift resolved, verifier-only:** the 11E failures (11B checks 19/20) and a fresh 11A check-16 failure were confirmed as determinism issues on a used admin inbox, NOT production defects. Both verifiers hardened to **accumulation-compatible** assertions (checks 15/16/17 in 11A; 17/19/20 in 11B): coverage (live canonical state ⊆ persisted inbox) + run-generated correctness (rows created during the run match conditions at generation time) + uniqueness + bounded growth (≤1 quiz / ≤4 events). A UUID-vs-string baseline comparison bug in the first hardening attempt was also fixed (`admin_baseline_str`). **Zero production code changed.**
+- **Final gates (used environment):** `compileall` PASS · `verify_phase_11a.py` **19/19** (×2, before & after the 11B run) · `verify_phase_11b.py` **23/23** · frontend `tsc --noEmit` PASS · ESLint on Phase 11 files PASS (whole-tree ESLint has 6 pre-existing errors in non-Phase-11 files — recorded as backlog, untouched per boundary) · `npm run build` PASS.
+- **DB/migration:** baseline restored — users 31 · admins 1 · notifications 11 (the admin's legitimate pre-existing rows incl. the new SAFE_SKIP BCS-501 row and the legitimately stale BCS-503 row) · events 49; alembic single head/current `d1e2f3a4b5c6`, unchanged; no frozen-table mutation; no duplicate rows.
+- **Freeze:** Phase 11 (11.0/11A/11B/11D/11E) **COMPLETE & FROZEN**. Known accepted limitation: inbox rows accumulate until dismissed by design (11B semantics); the dismiss/read UX is the remediation.
+- Report: `docs/phase_11/phase_11f_verification_report.md`. **No commit made.**
 
-**HARD STOP after 11E** — no commit made; 11C remains decision-gated/deferred; 11E VERIFIED (no additional implementation required); 11F NOT STARTED.
+### 11C (NOT IMPLEMENTED — DECISION-GATED, DEFERRED)
+
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented; may be omitted from Phase 11 entirely.
+
+**HARD STOP after 11F** — no commit made; Phase 11 COMPLETE & FROZEN (11A ✅ · 11B ✅ · 11D ✅ · 11E ✅ · 11F ✅); 11C remains decision-gated/deferred and NOT implemented.

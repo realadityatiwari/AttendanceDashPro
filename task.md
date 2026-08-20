@@ -1049,7 +1049,7 @@ frozen verifiers (6.7/7.1 drift pending owner authorization).
 
 # PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11C decision-gated/deferred · 11F **NOT STARTED**.
+Status: **COMPLETE & FROZEN** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11F final verification & freeze ✅ · 11C decision-gated/deferred · NOT implemented.
 
 ## Phase 11.0 — Architecture & Discovery Audit (COMPLETE, read-only)
 
@@ -1104,7 +1104,16 @@ Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read mode
 - [x] Frontend gates: `npx tsc --noEmit` PASS · ESLint (changed files) PASS · `npm run build` PASS.
 - [x] Report: `docs/phase_11/phase_11e_implementation_report.md`.
 
+## Phase 11F — Final Verification & Freeze (COMPLETE — PHASE 11 COMPLETE & FROZEN)
+
+- [x] Audit: working tree clean at `4117992` (11E); commit chain 11A `0e4a992` · 11B `cbc6528` · 11D `7da57ae` · 11E `4117992`; preference matrix reconciled — `class_reminders` consumed only at `notification_service.py:143-145`; `auto_mark_present`/`week_starts_on` storage-only; `event_session_service.py:215` prose, not a consumer; architecture coherent (11A read contract → 11B persistence → 11D API consumption).
+- [x] Drift confirmed, NOT product defects: 11E's 11B checks 19/20 + a fresh 11A check-16 failure = accumulated admin inbox rows (documented 11B "rows stay until dismissed") + verifier fixtures shifting the admin's canonical quiz/event/attendance state mid-run.
+- [x] Verifier-only hardening (accumulation-compatible): 11A checks 15/16/17 and 11B checks 17/19/20 now assert coverage + run-generated correctness + uniqueness + bounded growth; fixed a UUID-vs-string baseline comparison bug (`admin_baseline_str = {str(x) ...}`). Zero production code changed.
+- [x] Final gates (used environment): `compileall` PASS · `verify_phase_11a.py` **19/19** (×2) · `verify_phase_11b.py` **23/23** · frontend `tsc --noEmit` PASS · ESLint (Phase 11 files) PASS · `npm run build` PASS.
+- [x] DB baseline restored: users 31 · admins 1 · notifications 11 (admin's legitimate pre-existing rows) · events 49; alembic single head/current `d1e2f3a4b5c6`; no frozen-table mutation; no duplicate rows.
+- [x] Report: `docs/phase_11/phase_11f_verification_report.md`.
+
 ## Deferred (intentionally NOT done here)
 
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11F** phase completion — also decide whether to harden `verify_phase_11b.py` checks 19/20 (compare only run-generated rows) for determinism on a used inbox. `auto_mark_present` semantics — owner product decision.
-- Browser/manual testing — the user's responsibility. **HARD STOP after 11E — no commit; 11C remains decision-gated/deferred; 11E VERIFIED (no additional implementation required); 11F NOT STARTED.**
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented; may be omitted from Phase 11 entirely). Whole-tree ESLint debt in non-Phase-11 files (login/signup/history pages, `GlassCard`, `AuthContext`, `lib/api`) — recorded as backlog, untouched. `auto_mark_present` semantics — owner product decision.
+- Browser/manual testing — the user's responsibility. **HARD STOP after 11F — no commit; Phase 11 COMPLETE & FROZEN (11A ✅ · 11B ✅ · 11D ✅ · 11E ✅ · 11F ✅); 11C remains decision-gated/deferred and NOT implemented.**
