@@ -16,9 +16,10 @@ export interface StudentProfile {
 }
 
 // --- Phase 10D user preferences (GET/PUT /api/v1/student/preferences) ---
-// STORAGE/PREFERENCE DATA ONLY. Nothing in the app consumes these values:
-// no reminders are sent, no attendance is auto-marked, and no calendar/
-// analytics week calculation changes. Phase 11 wires them into features.
+// Phase 11 wiring: `class_reminders` gates the CLASS_REMINDER notifications
+// (bell icon / notification center). `auto_mark_present` and `week_starts_on`
+// remain STORAGE/PREFERENCE DATA ONLY: no attendance is auto-marked and no
+// calendar/analytics week calculation changes.
 export type WeekStart = "SUNDAY" | "MONDAY";
 
 export interface UserPreferences {

@@ -1049,7 +1049,7 @@ frozen verifiers (6.7/7.1 drift pending owner authorization).
 
 # PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11C decision-gated/deferred · 11E/11F **NOT STARTED**.
+Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified — no additional implementation required ✅ · 11C decision-gated/deferred · 11F **NOT STARTED**.
 
 ## Phase 11.0 — Architecture & Discovery Audit (COMPLETE, read-only)
 
@@ -1094,7 +1094,17 @@ Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read mode
 - [x] Authorization — client never sends `user_id`; ownership is JWT-derived server-side. No client-side notification logic, no push/email/SMS/scheduling/cron/worker/PWA (11C decision-gated, not invented).
 - [x] Static gates: `npx tsc --noEmit` PASS · ESLint (changed files) PASS · `npm run build` PASS. No backend file changed; no migration; no frontend behavior beyond the notification surface. No commit.
 
+## Phase 11E — Remaining Preference Wiring (VERIFIED — NO ADDITIONAL IMPLEMENTATION REQUIRED)
+
+- [x] Discovery: repo-wide audit of preference consumption — `class_reminders` is the ONLY consumer (`NotificationService._class_reminders`, read at generation time; missing row = documented default off). No other notification kind reads any preference; no preference is read anywhere else in the Phase 11 surface.
+- [x] `auto_mark_present` / `week_starts_on` confirmed storage-only (audit §5B/§5C; 11A checks 11/12; 11B check 18) — no implementation justified; auto-mark requires an explicit product decision.
+- [x] SettingsModal copy made truthful ("Class reminders are shown in the bell icon when enabled"; other preferences explicitly storage-only) + `types/api.ts` `UserPreferences` contract comment reconciled. No backend change, no migration, no new verifier (11A verifier already exercises the full preference matrix).
+- [x] Backend gates: `compileall` PASS · `verify_phase_11a.py` **19/19 PASS** · `verify_phase_11b.py` **21/23** (checks 19/20 = diagnosed environmental data drift: the admin's pre-existing inbox rows from 17:58 persist per the documented 11B semantics, and the verifier's own temp QUIZ_DAY fixture on the admin's subject shifts the admin's canonical quiz cycle/event selection mid-run — not a code regression; backend byte-identical to the 23/23 run; no code modified to force a pass).
+- [x] DB baseline restored (users 31 · admins 1 · notifications 10 = admin's pre-existing rows; verifier artifacts removed); alembic single head `d1e2f3a4b5c6` unchanged.
+- [x] Frontend gates: `npx tsc --noEmit` PASS · ESLint (changed files) PASS · `npm run build` PASS.
+- [x] Report: `docs/phase_11/phase_11e_implementation_report.md`.
+
 ## Deferred (intentionally NOT done here)
 
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11E** remaining preference wiring. **11F** phase completion. `auto_mark_present` semantics — owner product decision.
-- Browser/manual testing — the user's responsibility. **HARD STOP after 11D — no commit; 11C remains decision-gated/deferred; 11E NOT STARTED.**
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11F** phase completion — also decide whether to harden `verify_phase_11b.py` checks 19/20 (compare only run-generated rows) for determinism on a used inbox. `auto_mark_present` semantics — owner product decision.
+- Browser/manual testing — the user's responsibility. **HARD STOP after 11E — no commit; 11C remains decision-gated/deferred; 11E VERIFIED (no additional implementation required); 11F NOT STARTED.**

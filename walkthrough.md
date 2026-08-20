@@ -969,7 +969,7 @@ byte-identical to the documented 9.2.1 baseline. Report:
 
 # AttendanceDash Pro — Phase 11 Walkthrough (Notifications & Reminders)
 
-> **PHASE 11 IN PROGRESS (2026-08-20).** Audit: `docs/phase_11/phase_11_architecture_audit.md`; 11A: `docs/phase_11/phase_11a_implementation_report.md`; 11B: `docs/phase_11/phase_11b_implementation_report.md`; 11D: `docs/phase_11/phase_11d_implementation_report.md`. 11.0 + 11A + 11B + 11D complete; 11C decision-gated/deferred; 11E/11F NOT STARTED. No commit made.
+> **PHASE 11 IN PROGRESS (2026-08-20).** Audit: `docs/phase_11/phase_11_architecture_audit.md`; 11A: `docs/phase_11/phase_11a_implementation_report.md`; 11B: `docs/phase_11/phase_11b_implementation_report.md`; 11D: `docs/phase_11/phase_11d_implementation_report.md`; 11E: `docs/phase_11/phase_11e_implementation_report.md`. 11.0 + 11A + 11B + 11D complete; 11E verified — no additional implementation required; 11C decision-gated/deferred; 11F NOT STARTED. No commit made.
 
 ## What Phase 11 Did So Far
 
@@ -1064,7 +1064,8 @@ byte-identical to the documented 9.2.1 baseline. Report:
 
 ## What's Next
 
-- **11E** remaining preference wiring (the `class_reminders` gate already lives inside 11A), then **11F** phase completion (consolidated verifier + governance reconciliation + COMPLETE & FROZEN).
+- **PHASE 11E VERIFIED (2026-08-20).** Discovery-first audit of the remaining preference wiring concluded **no additional implementation required**: `class_reminders` is the only consumer (the 11A gate, read at generation time; verified by 11A checks 7/8 and 11B check 18); `auto_mark_present` / `week_starts_on` confirmed storage-only per audit §5B/§5C (11A checks 11/12, 11B check 18). The audit-named 11E file change was delivered: SettingsModal copy + `types/api.ts` contract comment made truthful ("Class reminders are shown in the bell icon when enabled"). No backend change, no migration, no new verifier. Gates: `compileall` PASS · `verify_phase_11a.py` **19/19 PASS** · `verify_phase_11b.py` **21/23** — checks 19/20 fail on **diagnosed environmental data drift, not a code regression**: the admin's pre-existing inbox rows (created 17:58 today) persist per the documented 11B "rows stay until dismissed" semantics, and the verifier's own temp QUIZ_DAY fixture on the admin's own subject shifts the admin's canonical quiz cycle to 2 and reorders the top-4 event selection mid-run; checks 19/20 assume a clean admin inbox (a clean inbox passes 23/23; no code modified to force a pass). DB baseline restored (users 31 · admins 1 · notifications 10); alembic single head `d1e2f3a4b5c6` unchanged. Frontend `tsc`/ESLint/`npm run build` PASS. No commit made.
+- **What's Next:** **11F** phase completion (consolidated verifier + governance reconciliation + COMPLETE & FROZEN) — should also decide whether to harden `verify_phase_11b.py` checks 19/20 to compare only run-generated rows for determinism on a used inbox.
 - **11C** delivery model remains decision-gated (in-app only vs scheduled sweep) and may be omitted from Phase 11 entirely.
 - Open product decisions: delivery model, multi-day reminder horizon, quiz horizon, `auto_mark_present` semantics (recommendation: remains storage-only).
-- **HARD STOP after 11D** — no commit made; 11C remains decision-gated/deferred; 11E NOT STARTED; 11F NOT STARTED; browser/manual testing remains the user's responsibility.
+- **HARD STOP after 11E** — no commit made; 11C remains decision-gated/deferred; 11E VERIFIED (no additional implementation required); 11F NOT STARTED; browser/manual testing remains the user's responsibility.

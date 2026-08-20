@@ -43,9 +43,10 @@ const WEEK_OPTIONS: { value: WeekStart; label: string }[] = [
  * full-object PUT with honest loading/saving/saved/error states — success is
  * never faked and retry stays available after a failure.
  *
- * These are STORAGE/PREFERENCE DATA ONLY: saving them sends no reminders,
- * marks no attendance, and changes no calendar/analytics calculation. Phase 11
- * consumes the stored values in future features.
+ * Phase 11 wiring: `class_reminders` gates the bell-icon CLASS_REMINDER
+ * notifications (shown in the notification center when enabled). The other
+ * two are STORAGE/PREFERENCE DATA ONLY: saving them marks no attendance and
+ * changes no calendar/analytics calculation.
  */
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   // SWR key is gated on `open` so preferences are fetched when the modal is
@@ -211,9 +212,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             <div className="flex gap-2.5 rounded-lg border border-border bg-background p-3">
               <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                These are preferences only — they are saved to your account and
-                will be used by future features. Saving them does not send
-                reminders, mark attendance, or change calendar calculations.
+                Class reminders are shown in the bell icon when enabled. The
+                other preferences are saved to your account for future features
+                — saving them does not mark attendance or change calendar
+                calculations.
               </p>
             </div>
 
