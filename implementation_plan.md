@@ -1070,7 +1070,7 @@ new phase; no Phase 9.3).
 
 ## PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F NOT STARTED.
+Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11C–11F NOT STARTED (11C decision-gated).
 
 ### 11.0 — Architecture & Discovery Audit (COMPLETE)
 
@@ -1088,12 +1088,25 @@ Smallest safe slice, fully additive, zero DB change:
 - Verifier: `backend/scripts/verify_phase_11a.py` **19/19**. compileall PASS. Alembic head unchanged (`c1d2e3f4a5b6`); frozen-table baseline byte-identical (31 users · 47 events · 715 sessions · 142 records · 27 enrollments · 9 subjects · 18 quizzes · feedback 0 · userpreferences 0); no commit.
 - Report: `docs/phase_11/phase_11a_implementation_report.md`.
 
-### 11B–11F (NOT STARTED)
+### 11B — Notification Persistence + Read-State API (COMPLETE)
 
-- **11B** — notification persistence/read-state (migration + `notifications` table + repository; 11A natural-key `id` is the dedup key). **Next authorized slice.**
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep).
-- **11D** — frontend notification center UX.
+Smallest safe slice, fully additive; one new migration; no frozen system touched:
+
+- Migration `d1e2f3a4b5c6_add_notifications.py` (additive, single alembic head chaining `c1d2e3f4a5b6`) — `notifications` table + `notificationkind` enum (`backend/alembic/versions/`). `user_id` FK NOT NULL (JWT-derived owner; never client-supplied), `kind`, `occurrence_key`, `date`, nullable `subject_code`/`subject_name`, `message`, nullable typed source references (`session_id` / `quiz_cycle` / `event_id`), `is_read` / `is_dismissed` BOOLEAN NOT NULL DEFAULT FALSE, `id`/`created_at`/`updated_at` from the Base mixin. `UNIQUE(user_id, kind, occurrence_key)` = DB-enforced idempotency. No relationships to attendance/events/quiz/lab tables.
+- `backend/app/models/notification.py` — `Notification` model (registered in `backend/app/models/__init__.py`).
+- `backend/app/repositories/notification_repo.py` — owner-scoped repository; `upsert` (PostgreSQL `ON CONFLICT DO UPDATE`, refreshing only message/subject references/updated_at; preserves date/is_read/is_dismissed/created_at), `get_inbox` (newest first, dismissed excluded), `get_by_id`, `count_unread`, `count_for_user`, `update_state` (idempotent), `delete`.
+- `backend/app/services/notification_service.py` (extends 11A) — generation snapshots each Phase 11A projection into a row via deterministic identity (`occurrence_key` mirrors the 11A natural-key reference: session id / quiz cycle / event id / subject code); `GET` serves the persisted inbox newest-first with `unread_count`; `update_state` for PATCH. 11A projection semantics unchanged.
+- `backend/app/schemas/notification.py` — additive `notification_id` + `is_read` on `NotificationItem`; `unread_count` on `NotificationsResponse`; `NotificationUpdate` (at least one of `is_read`/`is_dismissed`; empty body → 422).
+- `backend/app/api/v1/endpoints/notifications.py` — `PATCH /api/v1/notifications/{notification_id}` (read/dismiss; owner-scoped → 404 cross-user / nonexistent). `GET /api/v1/notifications` contract preserved (now the persisted inbox).
+- Read/unread/dismiss persisted state is per the audit 11B contract ("read-state API"; PATCH read/dismiss). No push/email/SMS/scheduling/Celery/Redis/cron/browser notification/worker introduced — 11C remains decision-gated and deferred.
+- Verifier: `backend/scripts/verify_phase_11b.py` **23/23**; Phase 11A verifier re-run **19/19** (re-scoped checks 13/14/18/19 to prove the table exists as the 11B surface and that the verifier restores it to its pre-run state — projection semantics untouched); `compileall` PASS; alembic single head `d1e2f3a4b5c6` before/after; DB baseline restored (31 users · notifications 0; snapshot byte-identical incl. notifications); no commit.
+- Report: `docs/phase_11/phase_11b_implementation_report.md`.
+
+### 11C–11F (NOT STARTED)
+
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented during 11B.
+- **11D** — frontend notification center UX (bell + unread badge, read/dismiss actions).
 - **11E** — remaining reminder-preferences wiring.
 - **11F** — phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN).
 
-**HARD STOP after 11A** — no commit made; 11B NOT STARTED.
+**HARD STOP after 11B** — no commit made; 11C NOT STARTED.

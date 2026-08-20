@@ -8,3 +8,4 @@ from .quiz import QuizCycle, EligibilityPolicy, QuizSchedule
 from .laboratory import LaboratoryExperiment, LaboratoryRecord
 from .feedback import Feedback
 from .preference import UserPreference
+from .notification import Notification

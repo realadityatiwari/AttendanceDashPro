@@ -10,20 +10,33 @@ from app.services.eligibility_service import EligibilityService
 from app.engines.attendance_engine import classify_attendance_status
 from app.schemas.notification import NotificationItem, NotificationsResponse
 from app.models.enums import NotificationKind
+from app.repositories.notification_repo import NotificationRepository
 
 # Human-readable class-type labels for notification messages (presentation only).
 _CLASS_TYPE_LABELS = {"L": "Lecture", "T": "Tutorial", "P": "Practical"}
 
 
 class NotificationService:
-    """Read-only notification projection (Phase 11A).
+    """Notification projection + persistence (Phase 11A + 11B).
 
     Architectural rule: notifications CONSUME engine/service outputs; they do
     not independently calculate attendance. Every value emitted here is the
     existing canonical output of attendance_engine / eligibility_engine /
     calendar_engine (via their services and repositories) — this service only
-    selects, labels and sorts them. No persistence: the read model is generated
-    on-read; notification storage/dedup is Phase 11B.
+    selects, labels and sorts them.
+
+    11A: the read model is generated on-read.
+    11B: generation snapshots each projection into a persisted notification row
+    via NotificationRepository.upsert, which keys on UNIQUE(user_id, kind,
+    occurrence_key) — the deterministic identity derived from the projection's
+    canonical reference (session id / quiz cycle / event id / subject code).
+    Regeneration of the same occurrence refreshes the row in place (message +
+    subject references) and PRESERVES date, is_read, is_dismissed and
+    created_at, so read/dismissed notifications never reappear or reset while
+    their source condition still holds (audit §8-3/5). The inbox served to the
+    client is the persisted inbox, newest first, with the unread count; a
+    previously generated notification stays in the inbox (until dismissed) even
+    after its source condition passes.
     """
 
     def __init__(self, db: AsyncSession):
@@ -34,6 +47,7 @@ class NotificationService:
         self.preference_repo = PreferenceRepository(db)
         self.attendance_service = AttendanceService(db)
         self.eligibility_service = EligibilityService(db)
+        self.notification_repo = NotificationRepository(db)
 
     async def get_notifications(self, user) -> NotificationsResponse:
         as_of = institution_today()
@@ -45,8 +59,80 @@ class NotificationService:
         items += await self._attendance_items(user, as_of, subjects)
         items += await self._academic_events(user, as_of, subjects)
 
-        items.sort(key=lambda x: (x.date, x.kind.value, x.id))
-        return NotificationsResponse(items=items, as_of=as_of)
+        # Phase 11B: snapshot the generated projections into persisted rows.
+        # Idempotent by construction — the same occurrence upserts, never
+        # duplicates. The inbox is then the persisted rows, newest first.
+        for item in items:
+            await self.notification_repo.upsert(
+                user_id=user.id,
+                kind=item.kind,
+                occurrence_key=self._occurrence_key(item),
+                date=item.date,
+                message=item.message,
+                subject_code=item.subject_code,
+                subject_name=item.subject_name,
+                session_id=item.session_id,
+                quiz_cycle=item.quiz_cycle,
+                event_id=item.event_id,
+            )
+
+        rows = await self.notification_repo.get_inbox(user.id)
+        unread_count = await self.notification_repo.count_unread(user.id)
+        return NotificationsResponse(
+            items=[self._to_item(r) for r in rows],
+            as_of=as_of,
+            unread_count=unread_count,
+        )
+
+    async def update_state(
+        self,
+        user,
+        notification_id,
+        is_read: Optional[bool] = None,
+        is_dismissed: Optional[bool] = None,
+    ) -> Optional[NotificationItem]:
+        """Phase 11B PATCH: apply read/dismiss state to one persisted row.
+        Owner-scoped (a non-owned id yields None -> 404). Idempotent: repeating
+        the same transition is a no-op success."""
+        row = await self.notification_repo.update_state(
+            user_id=user.id,
+            notification_id=notification_id,
+            is_read=is_read,
+            is_dismissed=is_dismissed,
+        )
+        return self._to_item(row) if row is not None else None
+
+    @staticmethod
+    def _occurrence_key(item: NotificationItem) -> str:
+        """Deterministic natural-key reference of the projection, mirroring the
+        11A item `id` suffix (kind:reference). This is the DB idempotency
+        component: CLASS_REMINDER -> session id, QUIZ_APPROACHING -> quiz
+        cycle, ACADEMIC_EVENT -> event id, attendance kinds -> subject code."""
+        if item.kind in (NotificationKind.ATTENDANCE_THRESHOLD,
+                         NotificationKind.MUST_ATTEND,
+                         NotificationKind.SAFE_SKIP):
+            return item.subject_code
+        if item.kind == NotificationKind.QUIZ_APPROACHING:
+            return str(item.quiz_cycle)
+        if item.kind == NotificationKind.ACADEMIC_EVENT:
+            return str(item.event_id)
+        return str(item.session_id)
+
+    @staticmethod
+    def _to_item(row) -> NotificationItem:
+        return NotificationItem(
+            id=f"{row.kind.value}:{row.occurrence_key}",
+            notification_id=row.id,
+            kind=row.kind,
+            date=row.date,
+            subject_code=row.subject_code,
+            subject_name=row.subject_name,
+            message=row.message,
+            session_id=row.session_id,
+            quiz_cycle=row.quiz_cycle,
+            event_id=row.event_id,
+            is_read=row.is_read,
+        )
 
     async def _class_reminders(self, user, as_of: date, subjects) -> List[NotificationItem]:
         """Upcoming (unmarked, non-cancelled) classes within the current

@@ -1049,7 +1049,7 @@ frozen verifiers (6.7/7.1 drift pending owner authorization).
 
 # PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B–11F **NOT STARTED**.
+Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11C–11F **NOT STARTED** (11C decision-gated).
 
 ## Phase 11.0 — Architecture & Discovery Audit (COMPLETE, read-only)
 
@@ -1069,7 +1069,21 @@ Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read mode
 - [x] Static gates: `compileall` PASS. DB: ZERO mutation (31 users · 47 events · 715 sessions · 142 records · 27 enrollments · 9 subjects · 18 quizzes · feedback 0 · userpreferences 0). No commit.
 - [x] Report: `docs/phase_11/phase_11a_implementation_report.md`.
 
+## Phase 11B — Notification Persistence + Read-State API (COMPLETE)
+
+- [x] Migration `d1e2f3a4b5c6_add_notifications.py` — additive, single alembic head chaining `c1d2e3f4a5b6`; `notifications` table (`user_id` FK NOT NULL, `kind`, `occurrence_key`, `date`, nullable subject/source-reference columns, `message`, `is_read`/`is_dismissed` NOT NULL DEFAULT FALSE, Base-mixin id/timestamps) + `notificationkind` enum; `UNIQUE(user_id, kind, occurrence_key)` DB-enforced idempotency; no relationships to frozen tables. Applied and current.
+- [x] `app/models/notification.py` — `Notification` model; registered in `app/models/__init__.py`.
+- [x] `app/repositories/notification_repo.py` — owner-scoped (JWT-derived `user_id` only): `upsert` (`ON CONFLICT DO UPDATE` — refreshes message/subject refs/updated_at only; preserves date/is_read/is_dismissed/created_at), `get_inbox` (newest first, dismissed excluded), `get_by_id`, `count_unread`, `count_for_user`, `update_state`, `delete`.
+- [x] `app/services/notification_service.py` (extends 11A) — deterministic identity `occurrence_key` mirroring the 11A natural-key `id` reference (session id / quiz cycle / event id / subject code); snapshot-on-read persistence; persisted inbox newest-first + `unread_count`; `update_state`. **11A projection semantics unchanged** (gating, exclusions, inert preferences).
+- [x] Schemas — additive `notification_id` + `is_read` on `NotificationItem`, `unread_count` on `NotificationsResponse`, `NotificationUpdate` (≥1 of `is_read`/`is_dismissed`; empty body → 422).
+- [x] API — `PATCH /api/v1/notifications/{notification_id}` read/dismiss (owner-scoped → 404 cross-user/nonexistent; idempotent); `GET /api/v1/notifications` contract preserved (now the persisted inbox).
+- [x] Security — JWT → `get_current_user()` → `user.id`; client `user_id` in body/query never accepted (spoof ignored); cross-user PATCH 404; unauthenticated 401. No admin notification management.
+- [x] Read/unread = the audit 11B contract (PATCH read/dismiss + unread count); **no** push/email/SMS/scheduling/Celery/Redis/cron/browser-notification/service-worker/PWA/channels/delivery-providers introduced (11C deferred, not invented).
+- [x] `verify_phase_11b.py` **23/23**: single-head migration, table+enum exist, snapshot persistence, repeated-GET dedup (no row growth), stable identity/notification_ids, distinct occurrences distinct (s1/s3/event), all six kinds persist + re-upsert same row ids, refresh preserves date/created_at/read/dismissed while message updates, PATCH read → unread_count−1, repeated PATCH idempotent, dismissal hides + survives regeneration, cross-user isolation, cross-user/nonexistent PATCH 404, `?user_id=` spoof ignored, 401 unauthenticated, empty PATCH 422, attendance kinds == canonical summaries, 11A semantics unchanged (cancelled/out-of-week excluded, inert prefs, reminders-off stops new rows), quiz == canonical cycle, events == dashboard selection, frozen snapshot byte-identical, alembic head unchanged, exact artifact cleanup (admin inbox restored to pre-run baseline).
+- [x] Phase 11A verifier re-run **19/19** — checks 13/14/18/19 re-scoped for the 11B surface (table exists; verifier restores notifications to pre-run state); projection semantics untouched.
+- [x] Static gates: `compileall` PASS. DB: baseline restored (31 users; notifications 0). No frontend files changed. No commit.
+
 ## Deferred (intentionally NOT done here)
 
-- **11B** — notification persistence/read-state (next authorized slice). 11C delivery model (decision-gated). 11D frontend UX. 11E remaining preference wiring. 11F phase completion. `auto_mark_present` semantics — owner product decision.
-- Browser/manual testing — the user's responsibility. **HARD STOP after 11A — no commit.**
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11D** frontend UX (bell + unread badge, center, read/dismiss actions). **11E** remaining preference wiring. **11F** phase completion. `auto_mark_present` semantics — owner product decision.
+- Browser/manual testing — the user's responsibility. **HARD STOP after 11B — no commit; 11C NOT STARTED.**

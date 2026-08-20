@@ -5,9 +5,8 @@ Verifies the Phase 11A contract end-to-end against the real database
 (httpx ASGITransport + real DB + minted JWTs, the established pattern):
 
   - GET /api/v1/notifications is a pure READ model: it never mutates
-    attendance / class_sessions / academic_events / quiz / laboratory data,
-    it creates no notification table, and its output is generated on-read
-    from the existing engines/services.
+    attendance / class_sessions / academic_events / quiz / laboratory data
+    and its output is generated on-read from the existing engines/services.
   - The owner is always the authenticated user; a client-supplied user_id
     is ignored.
   - CLASS_REMINDER is gated by the user's `class_reminders` preference (a
@@ -20,10 +19,19 @@ Verifies the Phase 11A contract end-to-end against the real database
     dashboard upcoming-events selection) — cross-checked against those
     services directly.
 
+C-class re-scope (Phase 11B, migration d1e2f3a4b5c6): the notifications
+table now EXISTS and GET /api/v1/notifications snapshots projections into
+persisted rows (idempotent upserts). The Phase 11A projection semantics are
+unchanged — checks 13/14 are re-scoped to prove the table exists (11B) and
+that this verifier leaves the notifications table exactly as it found it
+(its admin user's inbox rows are restored to the pre-run row set).
+
 State changes are this script's own artifacts (two temp users, one temp
-enrollment, three temp class sessions, two temp preference rows), deleted by
-explicit captured IDs in the finally block. No frozen system is touched and
-the alembic head is verified unchanged.
+enrollment, three temp class sessions, two temp preference rows, the
+notification rows created for those temp users and any newly created rows
+for the pre-existing admin user), deleted by explicit captured IDs in the
+finally block. No frozen system is touched and the alembic head is verified
+unchanged.
 
 Usage:
     python scripts/verify_phase_11a.py
@@ -51,6 +59,7 @@ from app.models.quiz import QuizCycle, EligibilityPolicy, QuizSchedule
 from app.models.laboratory import LaboratoryExperiment, LaboratoryRecord
 from app.models.user import Section, User
 from app.models.preference import UserPreference
+from app.models.notification import Notification
 from app.models.enums import UserRole, ClassType, WeekStartsOn
 from app.services.attendance_service import institution_today
 from app.services.eligibility_service import EligibilityService
@@ -100,6 +109,7 @@ async def main() -> int:
             "timetable_entries": await table_count(db, TimetableEntry),
             "quiz_cycles": await table_count(db, QuizCycle),
             "eligibility_policies": await table_count(db, EligibilityPolicy),
+            "notifications": await table_count(db, Notification),
         }
 
         as_of = institution_today()
@@ -115,6 +125,13 @@ async def main() -> int:
 
         admin = (await db.execute(select(User).where(
             User.role == UserRole.ADMIN).limit(1))).scalars().first()
+
+        # C-class (11B): capture the admin's PRE-EXISTING notification rows so
+        # the finally block can restore the inbox to exactly this row set (the
+        # GET requests below persist rows for the admin as a real side effect).
+        admin_notif_baseline = set((await db.execute(
+            select(Notification.id).where(Notification.user_id == admin.id))).scalars().all())
+
         enroll = (await db.execute(select(StudentEnrollment).where(
             StudentEnrollment.user_id == admin.id).limit(1))).scalars().first()
         subject = await db.get(Subject, enroll.subject_id)
@@ -318,7 +335,16 @@ async def main() -> int:
     finally:
         async with AsyncSessionLocal() as db:
             # Remove ONLY this verifier's artifacts (explicit IDs); everything
-            # pre-existing is preserved.
+            # pre-existing is preserved. Notification rows are deleted first
+            # (they reference the users being removed; the admin's rows are
+            # restored to the pre-run row set captured above).
+            await db.execute(delete(Notification).where(
+                Notification.user_id.in_([user_u_id, user_v_id])))
+            if admin_notif_baseline is not None:
+                await db.execute(delete(Notification).where(
+                    Notification.user_id == admin_id,
+                    Notification.id.not_in(list(admin_notif_baseline)),
+                ))
             await db.execute(delete(ClassSession).where(ClassSession.id.in_([s1_id, s2_id, s3_id])))
             await db.execute(delete(StudentEnrollment).where(
                 StudentEnrollment.user_id.in_([user_u_id, user_v_id])))
@@ -351,6 +377,7 @@ async def main() -> int:
             "timetable_entries": await table_count(db, TimetableEntry),
             "quiz_cycles": await table_count(db, QuizCycle),
             "eligibility_policies": await table_count(db, EligibilityPolicy),
+            "notifications": await table_count(db, Notification),
         }
         notifications_table = (await db.execute(text(
             "SELECT to_regclass('public.notifications')"))).scalar()
@@ -362,25 +389,37 @@ async def main() -> int:
                 ClassSession.id.in_([s1_id, s2_id, s3_id])))).scalar(),
             "prefs": (await db.execute(select(func.count()).select_from(UserPreference).where(
                 UserPreference.user_id.in_([user_u_id, user_v_id])))).scalar(),
+            # C-class (11B): no notification rows may remain for the temp
+            # users, and the admin's inbox must be exactly the pre-run set.
+            "notif_temp": (await db.execute(select(func.count()).select_from(Notification).where(
+                Notification.user_id.in_([user_u_id, user_v_id])))).scalar(),
+            "notif_admin_beyond_baseline": (await db.execute(select(func.count()).select_from(
+                Notification).where(
+                Notification.user_id == admin_id,
+                Notification.id.not_in(list(admin_notif_baseline)),
+            ))).scalar(),
         }
 
     same = snap == snap_after
     check("13. notification generation mutated NO frozen-table data "
-          "(full snapshot byte-identical)",
+          "(full snapshot byte-identical, notifications included)",
           same, f"diff={ {k: (snap[k], snap_after[k]) for k in snap if snap[k] != snap_after.get(k)} }")
-    check("14. no notification persistence table was created (Phase 11A is "
-          "on-read only)", notifications_table is None,
+    # C-class (11B): the persistence surface now exists (migration
+    # d1e2f3a4b5c6); check 13 proves this verifier restores it exactly.
+    check("14. notifications table exists (Phase 11B persistence surface) "
+          "and this verifier restores it to its pre-run state",
+          notifications_table is not None and same,
           f"to_regclass={notifications_table}")
 
     before_heads = subprocess.check_output(
         [sys.executable, "-m", "alembic", "heads"], cwd=str(BACKEND_DIR), text=True).strip()
     after_heads = subprocess.check_output(
         [sys.executable, "-m", "alembic", "heads"], cwd=str(BACKEND_DIR), text=True).strip()
-    check("18. alembic head unchanged (no migration created)",
+    check("18. alembic head unchanged (no migration created during the run)",
           before_heads == after_heads,
           f"before={before_heads!r} after={after_heads!r}")
     check("19. exact cleanup: only this verifier's artifacts removed, "
-          "pre-existing rows preserved",
+          "pre-existing rows preserved (notifications restored to baseline)",
           same and all(v == 0 for v in leftover.values()),
           f"leftover={leftover}")
 
