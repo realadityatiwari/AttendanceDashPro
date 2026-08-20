@@ -36,7 +36,7 @@ The following Phase 2 BLOCKED items were completed end-to-end by Phase 10 and ar
 - **Appearance (Light/System)** — Phase 1 design tokens are locked to the dark palette (`globals.css` forces dark `:root` values; root layout hard-codes `dark`). Preference storage now exists (`user_preferences`, Phase 10D) but there is no theme field in the table yet; Light/System remain disabled until the Phase 1 tokens support a light palette and a theme preference is added to the preference contract.
 - **Install App** — no PWA infrastructure in this build (no web app manifest, no service worker, no `next-pwa`). The modal explains installation and is only usable if a future PWA phase provides the manifest + SW. "Installed" state is only ever reported from a real `userChoice` outcome or real `display-mode: standalone`.
 - **Class reminders / Auto-mark present** — the features themselves do not exist in the product architecture (notifications & reminders are Phase 11; auto-marking is not in the roadmap). The preference VALUES are now real (stored via `/student/preferences`, Phase 10D) but nothing consumes them yet — Phase 11 notifications will consume them.
-- **Mobile navigation** — nav links hidden below `md`; the mobile navigation pattern is a dedicated later phase (bottom nav per S4 spec).
+- **Mobile navigation** — DONE in Phase 12A (2026-08-21): bottom nav below `md` (S4 4-tab contract) + More sheet; remaining page-level responsiveness is Phase 12B-12F.
 
 ### Backend change made (explicitly justified API integration)
 
@@ -1140,3 +1140,30 @@ Discovery-first audit of the remaining preference→notification wiring (audit �
 - **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented; may be omitted from Phase 11 entirely.
 
 **HARD STOP after 11F** — no commit made; Phase 11 COMPLETE & FROZEN (11A ✅ · 11B ✅ · 11D ✅ · 11E ✅ · 11F ✅); 11C remains decision-gated/deferred and NOT implemented.
+
+---
+
+## Phase 12 — Mobile / Responsive Experience
+
+### 12.0 architecture & implementation-readiness audit (COMPLETE, 2026-08-21)
+
+- Read-only audit, NO code or data changes: `docs/phase_12/phase_12_architecture_audit.md`.
+- Verdict: READY FOR ONLY A PHASE 12 SUB-PHASE (12A). Key findings: mobile navigation ABSENT (TopNav nav `hidden md:flex`); touch targets all below 40px (buttons h-6..h-9, icon-only size-6..9); ShellDialog dialogs cannot scroll (content clipped on short screens); Laboratory tab bar nowrap ~380px clipped by the shell (highest overflow risk); NO BACKEND CHANGE REQUIRED.
+- S4 prior art (`docs/17_AI_HANDOFF.md:41-43`): exactly 4 bottom tabs (Dashboard/Subjects/History/Profile) + Academic Tools from Profile, never a 5th tab. Legacy `frontend/public/css/responsive.css` (NOT imported) documents 5 breakpoints + 44px touch minimums + FAB — treated as design reference only.
+- Governance inconsistency fixed: Phase 12 was mislabeled "PWA & Offline" (MASTER_ROADMAP + walkthrough) — now "Mobile / Responsive Experience"; PWA/Installability is Phase 13.
+
+### 12A responsive foundation + mobile navigation (COMPLETE, 2026-08-21)
+
+Scope (foundation only; page-level work is 12B-12F):
+
+- NEW `frontend/src/components/layout/MobileBottomNav.tsx` — fixed bottom nav `md:hidden`, exactly 4 tabs (Home `/dashboard`, Attendance `/subjects`, History `/history`, Profile `/profile`), Profile as the S4-compatible anchor opening a controlled More bottom sheet (side=bottom, safe-area padding, rounded-t-2xl) hosting Profile + 5 tools (Track `/tools/laboratory`, Laboratory `/laboratory`, Quiz Eligibility `/tools/quiz-schedule`, Calendar `/calendar`, Events `/tools/events`). Active state = usePathname exact match; icons mirror TopNav (LayoutDashboard/BookOpen/History/CircleUserRound). Rows min-h-14 tabs / h-12 sheet rows = >=40px touch targets. No new routes; desktop nav untouched.
+- `AppShell.tsx` — renders `<MobileBottomNav />`; container `p-4 pb-28 md:p-6 lg:p-8` (bottom clearance only below md; desktop padding byte-identical).
+- `ui/button.tsx` — touch-target foundation: mobile base sizes with `sm:` desktop restores — default `h-10 sm:h-8`, xs `h-9 sm:h-6`, sm `h-10 sm:h-7`, lg `h-11 sm:h-9`, icon `size-10 sm:size-8`, icon-xs `size-9 sm:size-6`, icon-sm `size-10 sm:size-7`, icon-lg `size-11 sm:size-9`. NOT a global h-10/h-11 replacement; desktop sizes restored at `sm:`. Auto-upgrades dialog/sheet close buttons, calendar arrows, NotificationCenter Read/Dismiss to >=36px on mobile. Explicit page-level overrides (e.g. history Reset `h-7`) are 12B scope — documented residual.
+- `shell/ShellDialog.tsx` — DialogContent `max-h-[90dvh] overflow-y-auto` (EventFormDialog pattern); fixes all 6 shell modals (Profile/Appearance/Settings/Feedback/Install App) on short screens; desktop appearance preserved.
+- `NotificationCenter.tsx` — list `max-h-[50dvh] md:max-h-[26rem]` (avoids nested scroll inside the dialog).
+- `NotificationBell.tsx` — `-m-2.5 p-2.5 sm:-m-1.5 sm:p-1.5` -> ~40px mobile hit area.
+- Intentionally NOT touched (documented): `TopNav.tsx`/`UserMenu.tsx` (avatar hit area already adequate; brand+bell+avatar fits 320px), `ui/dialog.tsx`/`ui/sheet.tsx` (close buttons auto-fixed via button.tsx), `app/layout.tsx` (Next.js default viewport correct; viewport-fit=cover deferred), page components (12B-12F scope), all backend/DB/migration/API/PWA.
+
+Verification: `tsc --noEmit` PASS; ESLint (6 changed files) PASS; `npm run build` PASS (15 routes prerendered); `git diff --check` PASS; working tree: 5 modified frontend files + 1 new component + docs/phase_12/ — zero backend changes, no migrations, no DB mutation, no generated artifacts. Browser/manual testing NOT performed (user's responsibility; checklist in the 12A report).
+
+**HARD STOP after 12A** — no commit made; Phase 12: 12.0 + 12A COMPLETE; 12B (Track/Dashboard/Calendar) NEXT; desktop behavior unchanged; frozen systems untouched.

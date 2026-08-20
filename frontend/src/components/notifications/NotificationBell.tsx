@@ -35,7 +35,7 @@ export function NotificationBell({ onOpenModal }: NotificationBellProps) {
       type="button"
       aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"}
       onClick={handleOpen}
-      className="relative -m-1.5 flex items-center rounded-md p-1.5 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="relative -m-2.5 flex items-center rounded-md p-2.5 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 sm:-m-1.5 sm:p-1.5"
     >
       <Bell className="size-5" aria-hidden="true" />
       {unreadCount > 0 && (

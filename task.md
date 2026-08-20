@@ -25,7 +25,7 @@ Reproduce the desktop reference interface (compact top navigation, profile dropd
 
 - Home / Track / Quiz Eligibility / Attendance / History / Events page content redesigns (dedicated phases)
 - Events functionality (list/calendar, Upcoming/Today/Past, Add Event, persistence) — dedicated Events phase
-- Mobile navigation — dedicated later phase (nav hidden below `md`)
+- Mobile navigation — **resolved by Phase 12A** (bottom nav below `md` per S4 spec, 2026-08-21); page-level mobile responsiveness is Phase 12B-12F
 - Program field, feedback persistence, settings persistence — **resolved by Phase 10** (see implementation_plan.md "RESOLVED BY PHASE 10"); Light/System themes, PWA infra, reminders/auto-mark consumption — still future-phase work (see implementation_plan.md "BLOCKED / BACKEND REQUIRED")
 
 ## Validation
@@ -1117,3 +1117,22 @@ Status: **COMPLETE & FROZEN** — 11.0 audit ✅ · 11A backend notification rea
 
 - **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented; may be omitted from Phase 11 entirely). Whole-tree ESLint debt in non-Phase-11 files (login/signup/history pages, `GlassCard`, `AuthContext`, `lib/api`) — recorded as backlog, untouched. `auto_mark_present` semantics — owner product decision.
 - Browser/manual testing — the user's responsibility. **HARD STOP after 11F — no commit; Phase 11 COMPLETE & FROZEN (11A ✅ · 11B ✅ · 11D ✅ · 11E ✅ · 11F ✅); 11C remains decision-gated/deferred and NOT implemented.**
+
+## Phase 12A — Responsive Foundation + Mobile Navigation (COMPLETE, 2026-08-21)
+
+- [x] 12.0 architecture & implementation-readiness audit — `docs/phase_12/phase_12_architecture_audit.md`; verdict READY FOR ONLY A PHASE 12 SUB-PHASE (12A); NO BACKEND CHANGE REQUIRED.
+- [x] NEW `MobileBottomNav.tsx` — fixed bottom nav `md:hidden`, exactly 4 tabs (Home/Attendance/History/Profile), Profile = S4-compatible anchor opening More bottom sheet (Track/Laboratory/Quiz Eligibility/Calendar/Events) via existing `ui/sheet.tsx`; min-h-14 tabs / h-12 sheet rows; usePathname active state; no new routes; desktop nav untouched.
+- [x] AppShell — renders bottom nav; `p-4 pb-28 md:p-6 lg:p-8` (mobile clearance; desktop padding identical to before).
+- [x] Touch-target foundation `ui/button.tsx` — mobile base sizes + `sm:` desktop restores (default h-10 sm:h-8, xs h-9 sm:h-6, sm h-10 sm:h-7, lg h-11 sm:h-9, icon size-10 sm:size-8, icon-xs size-9 sm:size-6, icon-sm size-10 sm:size-7, icon-lg size-11 sm:size-9). NOT a global replacement; auto-fixes dialog/sheet close buttons + NotificationCenter actions on mobile.
+- [x] ShellDialog `max-h-[90dvh] overflow-y-auto` (EventFormDialog pattern) — all 6 shell modals scroll on short screens.
+- [x] NotificationCenter list `max-h-[50dvh] md:max-h-[26rem]` (no nested scroll); NotificationBell `-m-2.5 p-2.5 sm:-m-1.5 sm:p-1.5` (~40px mobile hit area).
+- [x] NOT touched (documented): TopNav/UserMenu/dialog.tsx/sheet.tsx/app layout.tsx/page components/backend/DB/migrations/API/PWA.
+- [x] Gates: `tsc --noEmit` PASS; ESLint (6 changed files) PASS; `npm run build` PASS; `git diff --check` PASS; diff scope = 5 modified frontend files + 1 new component + docs/phase_12/ only.
+- [x] Report: `docs/phase_12/phase_12a_implementation_report.md`. Browser/manual testing NOT run (user's responsibility; checklist in report).
+
+## Phase 12 — Deferred to later sub-phases (NOT done in 12A)
+
+- **12B** — Track / Dashboard / Calendar page responsiveness (mobile date navigation incl. the fixed `w-36` calendar label + `w-40` track date input, lab row layout, touch targets, analytics cards; page-level h-7 overrides like history Reset).
+- **12C** — Laboratory / Subjects / Quiz Eligibility / Events page responsiveness (incl. Laboratory tab bar nowrap ~380px overflow fix).
+- **12D** — Dialogs / Profile / Settings / Notifications page-level mobile polish.
+- **12E** — Mobile polish + Phase 12 verification; **12F** — freeze. (Phase 13 = PWA/Installability.)

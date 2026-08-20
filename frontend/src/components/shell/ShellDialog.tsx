@@ -34,6 +34,12 @@ interface ShellDialogProps {
  * Provides the consistent backdrop, focus management, Escape handling,
  * body scroll lock (Base UI Dialog modal mode), responsive width,
  * accessible dialog semantics, header and close button.
+ *
+ * Phase 12A: the dialog is capped at 90dvh and scrolls vertically so its
+ * content stays reachable on short mobile screens (same pattern as
+ * EventFormDialog). On desktop viewports the cap only engages for content
+ * taller than 90% of the viewport, so existing dialog appearance is
+ * preserved.
  */
 export function ShellDialog({
   open,
@@ -45,7 +51,7 @@ export function ShellDialog({
 }: ShellDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("gap-0 p-0", WIDTH_CLASSES[width])}>
+      <DialogContent className={cn("max-h-[90dvh] gap-0 overflow-y-auto p-0", WIDTH_CLASSES[width])}>
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{title}</DialogTitle>
           {description && (

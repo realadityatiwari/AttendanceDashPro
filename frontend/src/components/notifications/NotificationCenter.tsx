@@ -192,7 +192,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           </p>
         </div>
       ) : (
-        <div className="flex max-h-[26rem] flex-col gap-2 overflow-y-auto py-1 pr-1">
+        <div className="flex max-h-[50dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
           {actionError && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
