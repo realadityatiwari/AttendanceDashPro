@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu, ShellModalId } from "@/components/layout/UserMenu";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { ProfileModal } from "@/components/shell/ProfileModal";
 import { AppearanceModal } from "@/components/shell/AppearanceModal";
 import { SettingsModal } from "@/components/shell/SettingsModal";
@@ -88,7 +90,8 @@ export function TopNav() {
         })}
       </nav>
 
-      <div className="ml-auto flex items-center">
+      <div className="ml-auto flex items-center gap-1">
+        <NotificationBell onOpenModal={setActiveModal} />
         <UserMenu onOpenModal={setActiveModal} />
       </div>
 
@@ -113,6 +116,10 @@ export function TopNav() {
         onOpenChange={closeModal}
         deferredPrompt={deferredPrompt}
         isStandalone={isStandalone}
+      />
+      <NotificationCenter
+        open={activeModal === "notifications"}
+        onOpenChange={closeModal}
       />
     </header>
   );

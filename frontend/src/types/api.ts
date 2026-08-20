@@ -631,3 +631,48 @@ export interface DashboardSummaryResponse {
   attention_required: AttentionItem[];
   upcoming_events: UpcomingEventItem[];
 }
+
+// --- Phase 11B/11D notifications (GET /api/v1/notifications, PATCH
+// /api/v1/notifications/{id}) ---
+// The backend persists the Phase 11A projection idempotently and owns all
+// identity (JWT-derived user_id; client never sends user_id). The frontend
+// renders the backend contract as-is and never computes notification logic.
+export enum NotificationKind {
+  CLASS_REMINDER = "CLASS_REMINDER",
+  QUIZ_APPROACHING = "QUIZ_APPROACHING",
+  ATTENDANCE_THRESHOLD = "ATTENDANCE_THRESHOLD",
+  MUST_ATTEND = "MUST_ATTEND",
+  SAFE_SKIP = "SAFE_SKIP",
+  ACADEMIC_EVENT = "ACADEMIC_EVENT",
+}
+
+export interface NotificationItem {
+  // Deterministic natural key (KIND:<occurrence_key>) — stable client key.
+  id: string;
+  kind: NotificationKind;
+  // Occurrence date (YYYY-MM-DD; institution-local, server-generated).
+  date: string;
+  subject_code: string | null;
+  subject_name: string | null;
+  message: string;
+  // Canonical source references (null when the kind has none).
+  session_id: string | null; // CLASS_REMINDER
+  quiz_cycle: number | null; // QUIZ_APPROACHING
+  event_id: string | null; // ACADEMIC_EVENT
+  // Persisted row id — the PATCH mutation target (null only pre-11B).
+  notification_id: string | null;
+  is_read: boolean;
+}
+
+export interface NotificationsResponse {
+  items: NotificationItem[];
+  as_of: string; // YYYY-MM-DD, institution-local server date
+  unread_count: number;
+}
+
+// PATCH payload — read/dismiss state transitions. At least one field is
+// required by the backend (empty body -> 422).
+export interface NotificationUpdate {
+  is_read?: boolean;
+  is_dismissed?: boolean;
+}

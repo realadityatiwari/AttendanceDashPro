@@ -1070,7 +1070,7 @@ new phase; no Phase 9.3).
 
 ## PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11C–11F NOT STARTED (11C decision-gated).
+Status: **IN PROGRESS** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11C decision-gated/deferred · 11E/11F NOT STARTED.
 
 ### 11.0 — Architecture & Discovery Audit (COMPLETE)
 
@@ -1102,11 +1102,22 @@ Smallest safe slice, fully additive; one new migration; no frozen system touched
 - Verifier: `backend/scripts/verify_phase_11b.py` **23/23**; Phase 11A verifier re-run **19/19** (re-scoped checks 13/14/18/19 to prove the table exists as the 11B surface and that the verifier restores it to its pre-run state — projection semantics untouched); `compileall` PASS; alembic single head `d1e2f3a4b5c6` before/after; DB baseline restored (31 users · notifications 0; snapshot byte-identical incl. notifications); no commit.
 - Report: `docs/phase_11/phase_11b_implementation_report.md`.
 
-### 11C–11F (NOT STARTED)
+### 11D — Frontend Notification Center UX (COMPLETE)
 
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented during 11B.
-- **11D** — frontend notification center UX (bell + unread badge, read/dismiss actions).
+Frontend-only slice consuming the live 11A/11B backend contract; no backend change:
+
+- `frontend/src/types/api.ts` — additive notification types mirroring the backend contract: `NotificationKind` enum (the six 11A kinds), `NotificationItem` (natural-key `id`, kind, date, subject context, message, source references, `notification_id`, `is_read`), `NotificationsResponse` (`items`, `as_of`, `unread_count`), `NotificationUpdate` (PATCH payload).
+- `frontend/src/hooks/useApi.ts` — `useNotifications(enabled)` (SWR on `GET /api/v1/notifications`, key gated on `enabled`, `STANDARD_CACHE` — focus revalidation only, no polling) + `useNotificationMutation()` (`PATCH /api/v1/notifications/{id}`, returns the server's updated item).
+- `frontend/src/components/notifications/NotificationBell.tsx` — bell entry in the authenticated `TopNav`; unread badge from the backend `unread_count`, hidden at zero, capped at "99+"; opening the center revalidates once.
+- `frontend/src/components/notifications/NotificationCenter.tsx` — shell `ShellDialog` ("Notifications", unread count in the description): loading skeletons, error + retry, honest empty state, newest-first persisted inbox; each row shows the kind badge/icon, message, subject + occurrence date, unread emphasis (dot + emphasis + "Read" action); dismiss removes the row. SWR cache is updated only from genuine PATCH responses (no faked success); failures surface in an inline banner and leave the list unchanged. Bell and center share the same SWR key, so read/dismiss keeps the badge in sync with no extra requests.
+- `frontend/src/components/layout/TopNav.tsx` / `UserMenu.tsx` — bell mounted in the right cluster; `notifications` added to `ShellModalId`; `NotificationCenter` rendered like the other shell modals. No shell component rebuilt.
+- Authorization: the client never sends `user_id` — the backend derives ownership from the JWT. No client-side notification logic, no push/email/SMS/scheduling/cron/worker/PWA behavior (11C remains decision-gated).
+- Verification: `npx tsc --noEmit` PASS · ESLint on changed files PASS · `npm run build` PASS. No backend file changed; no migration. No commit.
+
+### 11C / 11E–11F (NOT STARTED)
+
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep) — **deferred**, not invented.
 - **11E** — remaining reminder-preferences wiring.
 - **11F** — phase completion (consolidated verifier, governance reconciliation, COMPLETE & FROZEN).
 
-**HARD STOP after 11B** — no commit made; 11C NOT STARTED.
+**HARD STOP after 11D** — no commit made; 11C remains decision-gated/deferred; 11E NOT STARTED.

@@ -1049,7 +1049,7 @@ frozen verifiers (6.7/7.1 drift pending owner authorization).
 
 # PHASE 11 — NOTIFICATIONS & REMINDERS (IN PROGRESS — 2026-08-20)
 
-Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11C–11F **NOT STARTED** (11C decision-gated).
+Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11C decision-gated/deferred · 11E/11F **NOT STARTED**.
 
 ## Phase 11.0 — Architecture & Discovery Audit (COMPLETE, read-only)
 
@@ -1083,7 +1083,18 @@ Status: **IN PROGRESS** — 11.0 audit ✅ · 11A backend notification read mode
 - [x] Phase 11A verifier re-run **19/19** — checks 13/14/18/19 re-scoped for the 11B surface (table exists; verifier restores notifications to pre-run state); projection semantics untouched.
 - [x] Static gates: `compileall` PASS. DB: baseline restored (31 users; notifications 0). No frontend files changed. No commit.
 
+## Phase 11D — Frontend Notification Center UX (COMPLETE)
+
+- [x] `frontend/src/types/api.ts` — additive types mirroring the backend contract: `NotificationKind` (six 11A kinds), `NotificationItem` (natural-key `id`, kind, date, subject context, message, source references, `notification_id`, `is_read`), `NotificationsResponse` (items, `as_of`, `unread_count`), `NotificationUpdate`.
+- [x] `frontend/src/hooks/useApi.ts` — `useNotifications(enabled)` (SWR `GET /api/v1/notifications`, key gated on `enabled`; `STANDARD_CACHE`: focus revalidation only, no polling, no global unauthenticated fetch) + `useNotificationMutation()` (`PATCH /api/v1/notifications/{id}`, returns the updated item).
+- [x] `frontend/src/components/notifications/NotificationBell.tsx` — bell in the authenticated `TopNav`; unread badge from backend `unread_count` (hidden at 0, capped "99+"); opening the center revalidates once.
+- [x] `frontend/src/components/notifications/NotificationCenter.tsx` — `ShellDialog` "Notifications" (unread count in the description); loading skeletons, error + Retry, honest empty state, newest-first inbox; per-row kind badge/icon, message, subject + occurrence date, unread dot/emphasis; actions: Mark as read (unread rows) + dismiss (row leaves the inbox, stays dismissed server-side). Cache updated only from genuine PATCH responses; failures surface in an inline banner, list unchanged.
+- [x] `frontend/src/components/layout/TopNav.tsx` + `UserMenu.tsx` — bell in the right cluster; `notifications` added to `ShellModalId`; `NotificationCenter` rendered like the other shell modals. TopNav/UserMenu/ShellDialog/AppShell reused, not rebuilt.
+- [x] SWR correctness — bell + center share one key (dedup, single logical request); mutations update the shared cache so the badge stays in sync with no N+1 requests; repeated PATCH is idempotent on the backend.
+- [x] Authorization — client never sends `user_id`; ownership is JWT-derived server-side. No client-side notification logic, no push/email/SMS/scheduling/cron/worker/PWA (11C decision-gated, not invented).
+- [x] Static gates: `npx tsc --noEmit` PASS · ESLint (changed files) PASS · `npm run build` PASS. No backend file changed; no migration; no frontend behavior beyond the notification surface. No commit.
+
 ## Deferred (intentionally NOT done here)
 
-- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11D** frontend UX (bell + unread badge, center, read/dismiss actions). **11E** remaining preference wiring. **11F** phase completion. `auto_mark_present` semantics — owner product decision.
-- Browser/manual testing — the user's responsibility. **HARD STOP after 11B — no commit; 11C NOT STARTED.**
+- **11C** — delivery model (decision-gated: in-app only vs scheduled sweep; deferred, not invented). **11E** remaining preference wiring. **11F** phase completion. `auto_mark_present` semantics — owner product decision.
+- Browser/manual testing — the user's responsibility. **HARD STOP after 11D — no commit; 11C remains decision-gated/deferred; 11E NOT STARTED.**

@@ -969,7 +969,7 @@ byte-identical to the documented 9.2.1 baseline. Report:
 
 # AttendanceDash Pro — Phase 11 Walkthrough (Notifications & Reminders)
 
-> **PHASE 11 IN PROGRESS (2026-08-20).** Audit: `docs/phase_11/phase_11_architecture_audit.md`; 11A: `docs/phase_11/phase_11a_implementation_report.md`; 11B: `docs/phase_11/phase_11b_implementation_report.md`. 11.0 + 11A + 11B complete; 11C–11F NOT STARTED (11C decision-gated). No commit made.
+> **PHASE 11 IN PROGRESS (2026-08-20).** Audit: `docs/phase_11/phase_11_architecture_audit.md`; 11A: `docs/phase_11/phase_11a_implementation_report.md`; 11B: `docs/phase_11/phase_11b_implementation_report.md`; 11D: `docs/phase_11/phase_11d_implementation_report.md`. 11.0 + 11A + 11B + 11D complete; 11C decision-gated/deferred; 11E/11F NOT STARTED. No commit made.
 
 ## What Phase 11 Did So Far
 
@@ -1031,3 +1031,40 @@ byte-identical to the documented 9.2.1 baseline. Report:
 - Remaining Phase 11: 11C delivery model (decision-gated: in-app only vs scheduled sweep), 11E remaining preference wiring, 11F phase completion (consolidated verifier + governance reconciliation + COMPLETE & FROZEN).
 - Open product decisions: delivery model, multi-day reminder horizon, quiz horizon, `auto_mark_present` semantics (recommendation: remains storage-only).
 - **HARD STOP after 11B** — no commit made; 11C NOT STARTED; 11D NOT STARTED; browser/manual testing remains the user's responsibility.
+
+---
+
+# AttendanceDash Pro — Phase 11D Walkthrough (Notification Center UX)
+
+> **PHASE 11D COMPLETE (2026-08-20).** Frontend notification center consuming the live 11A/11B backend contract. Report: `docs/phase_11/phase_11d_implementation_report.md`. 11C remains decision-gated/deferred; 11E/11F NOT STARTED. No commit made.
+
+## What Phase 11D Delivered
+
+1. **Notification bell (authenticated shell).** A bell button in the `TopNav` right cluster (next to the user menu) showing the backend `unread_count` as a badge — hidden when zero, capped at "99+" to avoid absurd rendering. Opening the bell revalidates the inbox once (no polling, no aggressive refresh). The shell's existing modal state machine (`ShellModalId` + `activeModal`) drives it; `TopNav`, `UserMenu`, `ShellDialog` and `AppShell` were reused, not rebuilt.
+2. **Notification center (shell dialog).** "Notifications" `ShellDialog` with the unread count in the description. States: loading (skeleton rows), API error (explicit banner + Retry), honest empty state ("No notifications yet"), and the populated inbox — backend ordering (newest first). Each row renders the kind badge/icon (six `NotificationKind` values), the readable message, subject context and the occurrence date (`formatLongDate`), with unread rows visually emphasized (dot + emphasis + "Read" action).
+3. **Read / dismiss actions.** Unread rows expose "Mark as read"; every row exposes dismiss. Both PATCH the row via the existing 11B endpoint. The SWR cache is updated only from the genuine PATCH response — success is never faked; a failed mutation surfaces the actual backend error in an inline banner and leaves the list unchanged (state stays consistent). Dismissed rows leave the inbox; the backend keeps them dismissed across regeneration. Repeating an action is harmless (backend idempotency).
+4. **SWR / API integration.** `useNotifications(enabled)` fetches `GET /api/v1/notifications` with the key gated on `enabled` (the bell always; the center on open) — never fetched when unauthenticated. `useNotificationMutation()` wraps `PATCH /api/v1/notifications/{id}`. The bell and the center share the same SWR key, so they dedupe into one logical request and read/dismiss updates keep the badge in sync with no extra round-trips. `STANDARD_CACHE` (focus revalidation, 1-minute dedup) — no polling loops, no N+1 item requests.
+5. **Types.** `types/api.ts` mirrors the backend contract exactly: `NotificationKind`, `NotificationItem` (natural-key `id`, kind, date, subject context, message, source references, `notification_id`, `is_read`), `NotificationsResponse` (`items`, `as_of`, `unread_count`), `NotificationUpdate`.
+6. **Scope discipline.** The client never sends `user_id` (ownership is JWT-derived server-side); no client-side notification logic; no push/email/SMS/scheduling/cron/worker/PWA behavior — 11C remains decision-gated and deferred. No backend file changed; no migration.
+
+## Files Changed
+
+- `frontend/src/types/api.ts` — additive notification contract types.
+- `frontend/src/hooks/useApi.ts` — `useNotifications()` + `useNotificationMutation()`.
+- `frontend/src/components/notifications/NotificationCenter.tsx` — new; the dialog surface.
+- `frontend/src/components/notifications/NotificationBell.tsx` — new; bell + unread badge.
+- `frontend/src/components/layout/TopNav.tsx`, `frontend/src/components/layout/UserMenu.tsx` — bell mount + `notifications` modal id.
+
+## Verification
+
+- `npx tsc --noEmit` — PASS.
+- `npx eslint` (changed files only) — PASS.
+- `npm run build` — PASS (all routes prerendered).
+- Backend contract untouched (11B `GET`/`PATCH` semantics preserved); no browser/manual tests run (user's responsibility).
+
+## What's Next
+
+- **11E** remaining preference wiring (the `class_reminders` gate already lives inside 11A), then **11F** phase completion (consolidated verifier + governance reconciliation + COMPLETE & FROZEN).
+- **11C** delivery model remains decision-gated (in-app only vs scheduled sweep) and may be omitted from Phase 11 entirely.
+- Open product decisions: delivery model, multi-day reminder horizon, quiz horizon, `auto_mark_present` semantics (recommendation: remains storage-only).
+- **HARD STOP after 11D** — no commit made; 11C remains decision-gated/deferred; 11E NOT STARTED; 11F NOT STARTED; browser/manual testing remains the user's responsibility.

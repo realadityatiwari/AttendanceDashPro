@@ -26,7 +26,8 @@ export type ShellModalId =
   | "appearance"
   | "settings"
   | "feedback"
-  | "install";
+  | "install"
+  | "notifications";
 
 interface UserMenuProps {
   onOpenModal: (modal: ShellModalId) => void;

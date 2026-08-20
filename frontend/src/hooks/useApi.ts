@@ -27,7 +27,10 @@ import {
   AttendanceMutationRequest,
   AnalyticsOverviewResponse,
   UserPreferences,
-  UserPreferencesUpdate
+  UserPreferencesUpdate,
+  NotificationsResponse,
+  NotificationItem,
+  NotificationUpdate
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -400,4 +403,42 @@ export function usePreferenceMutation() {
   };
 
   return { savePreferences };
+}
+
+// Phase 11D notification inbox (GET /api/v1/notifications). The SWR key is
+// gated on `enabled` so the inbox is fetched only when the bell (always) or
+// the notification center (on open) needs it — never unconditionally. One
+// logical request per revalidation; the bell and the center share the same
+// key, so SWR dedupes them.
+export function useNotifications(enabled = true) {
+  const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>(
+    enabled ? '/api/v1/notifications' : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    notifications: data,
+    isLoading,
+    isError: error,
+    mutate
+  };
+}
+
+// Phase 11D notification state mutation (PATCH /api/v1/notifications/{id}).
+// Returns the server's updated NotificationItem; callers update the SWR cache
+// with it (mutate(updated, false)) so the bell badge and the center stay in
+// sync without extra round-trips. Repeating the same transition is a no-op
+// success on the backend (idempotent).
+export function useNotificationMutation() {
+  const updateNotification = async (
+    notificationId: string,
+    payload: NotificationUpdate
+  ): Promise<NotificationItem> => {
+    return apiFetch(`/api/v1/notifications/${notificationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  return { updateNotification };
 }
