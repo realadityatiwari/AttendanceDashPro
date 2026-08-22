@@ -166,8 +166,8 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 Criterion I window counts · Average = (Lecture % + Tutorial %) / 2
               </p>
               <div>
-                <div className="flex items-baseline justify-between text-sm mb-1.5">
-                  <span className="font-medium text-foreground">
+                <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
+                  <span className="font-medium text-foreground min-w-0">
                     Lecture <span className="text-muted-foreground font-normal">· {eligibility.lecture.attended}/{eligibility.lecture.total} attended</span>
                     {eligibility.lecture.pending > 0 && (
                       <span className="text-muted-foreground font-normal"> · {eligibility.lecture.pending} pending</span>
@@ -179,8 +179,8 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
               </div>
               {hasTutorials && (
                 <div>
-                  <div className="flex items-baseline justify-between text-sm mb-1.5">
-                    <span className="font-medium text-foreground">
+                  <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
+                    <span className="font-medium text-foreground min-w-0">
                       Tutorial <span className="text-muted-foreground font-normal">· {eligibility.tutorial.attended}/{eligibility.tutorial.total} attended</span>
                       {eligibility.tutorial.pending > 0 && (
                         <span className="text-muted-foreground font-normal"> · {eligibility.tutorial.pending} pending</span>
@@ -192,8 +192,8 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 </div>
               )}
               <div>
-                <div className="flex items-baseline justify-between text-sm mb-1.5">
-                  <span className="font-medium text-foreground">
+                <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
+                  <span className="font-medium text-foreground min-w-0">
                     Average <span className="text-muted-foreground font-normal">· required {required.toFixed(0)}%</span>
                   </span>
                   <span className={cn("tabular-nums font-medium", eligibility.average_pct !== null && eligibility.average_pct >= required ? "text-success" : "text-warning")}>

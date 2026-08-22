@@ -113,7 +113,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex flex-wrap shrink-0 items-center gap-1.5 self-start sm:self-auto">
         {isAdmin && (
           <>
             {onEdit && (

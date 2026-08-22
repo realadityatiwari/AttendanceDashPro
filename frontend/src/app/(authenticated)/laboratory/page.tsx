@@ -90,14 +90,14 @@ export default function LaboratoryPage() {
           </select>
         </div>
 
-        <nav aria-label="Laboratory sections" className="flex gap-1 rounded-md border border-border bg-surface p-1">
+        <nav aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-surface p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               aria-current={tab === id ? "page" : undefined}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors shrink-0 whitespace-nowrap",
                 tab === id
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -164,7 +164,7 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
           <h3 className="text-sm font-bold text-foreground">Practical Attendance</h3>
           <Badge variant="primary">{pa.total} sessions</Badge>
         </div>
-        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-2 text-center">
           <Stat label="Attended" value={pa.attended} tone="text-emerald-400" />
           <Stat label="Missed" value={pa.missed} tone="text-red-400" />
           <Stat label="Pending" value={pa.pending} tone="text-amber-400" />
@@ -411,7 +411,7 @@ function ExperimentRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 p-4 hover:bg-surface2/30 transition-colors">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-surface2/30 transition-colors">
       <div className="flex items-center gap-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded bg-surface2 border border-border/50 text-sm font-bold text-muted-foreground">
           {exp.experiment_number}
@@ -430,7 +430,7 @@ function ExperimentRow({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex flex-wrap shrink-0 items-center gap-2 self-start sm:self-auto">
         <span className={cn("flex items-center gap-1.5 text-sm font-medium", statusTone)}>
           {statusIcon}
           <span className="hidden sm:inline">{statusText}</span>

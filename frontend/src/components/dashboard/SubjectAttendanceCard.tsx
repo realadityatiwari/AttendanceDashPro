@@ -131,7 +131,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
         {!isLabOnly ? (
           <>
             {/* Breakdown: two balanced blocks, Lecture / Tutorial */}
-            <div className="grid grid-cols-2 gap-3 mt-0.5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-0.5">
               <Block
                 label="Lecture"
                 pct={summary?.current_lecture_pct ?? null}
@@ -245,7 +245,7 @@ function DetailRow({
   pct: number | null;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-start sm:items-center justify-between gap-3">
       <span className="text-foreground">
         {label}
         {counts && (
