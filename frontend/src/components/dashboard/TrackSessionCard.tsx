@@ -65,7 +65,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+              className="text-xs px-2 text-muted-foreground hover:text-foreground"
               onClick={() => handleMutate(AttendanceStatus.MISSED)}
               disabled={isMutating}
             >
@@ -88,7 +88,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+              className="text-xs px-2 text-muted-foreground hover:text-foreground"
               onClick={() => handleMutate(AttendanceStatus.ATTENDED)}
               disabled={isMutating}
             >
@@ -147,9 +147,12 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
   return (
     <Card className={cn("p-4", session.is_cancelled && "opacity-50 grayscale")}>
       <div className="flex flex-col gap-3">
-        {/* Header: Time, Subject Code, Class Type */}
-        <div className="flex justify-between items-start">
-          <div className="flex flex-col">
+        {/* Header: Time, Subject Code, Class Type — Phase 12B: the left
+            column is fluid and the badges wrap so long type labels
+            (e.g. MID-SEM PRACTICAL) never collide with the time on narrow
+            screens. */}
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-sm font-semibold text-foreground">
               {isQuizDaySession
                 ? "Quiz Day"
@@ -158,7 +161,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             </span>
             <span className="text-xs text-muted-foreground font-mono mt-0.5">{session.subject_code}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {/* Option A: the backend flags only the actual quiz-day
                 ClassSession (shape: LECTURE, is_extra=false, no timetable
                 time). Normal lectures on the same date stay unflagged. */}
@@ -178,8 +181,11 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
           {session.subject_name}
         </div>
 
-        {/* Actions / Status */}
-        <div className="mt-1 flex items-center h-9">
+        {/* Actions / Status — Phase 12B: the fixed h-9 box is dropped (the
+            12A foundation buttons are h-10 on mobile and would exceed it);
+            Change buttons inherit the foundation's mobile 40px height by
+            dropping their explicit h-7 override (desktop stays h-7). */}
+        <div className="mt-1 flex items-center">
           {getStatusDisplay()}
         </div>
       </div>

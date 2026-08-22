@@ -58,7 +58,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
 
   return (
     <div aria-label={`${monthLabel} academic calendar`}>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
         {WEEKDAY_LABELS.map(label => (
           <div
             key={label}
@@ -68,7 +68,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
           </div>
         ))}
       </div>
-      <div className="mt-1.5 grid grid-cols-7 gap-1.5">{cells}</div>
+      <div className="mt-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">{cells}</div>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-accent" aria-hidden />

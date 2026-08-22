@@ -97,8 +97,11 @@ export default function CalendarPage() {
 
   const monthLabel = MONTH_LABEL_FORMATTER.format(new Date(year, month - 1, 1));
 
+  // Phase 12B: the row wraps (never clips) and the month label shrinks
+  // responsively so Previous / Next / Today all fit at 320px; desktop keeps
+  // the fixed w-36 label.
   const navControls = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Button
         variant="outline"
         size="icon-sm"
@@ -108,7 +111,7 @@ export default function CalendarPage() {
       >
         <ChevronLeft aria-hidden />
       </Button>
-      <span className="w-36 text-center text-sm font-semibold text-foreground">{monthLabel}</span>
+      <span className="min-w-0 w-28 text-center text-sm font-semibold text-foreground sm:w-36">{monthLabel}</span>
       <Button
         variant="outline"
         size="icon-sm"
@@ -178,7 +181,7 @@ export default function CalendarPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <GlassCard className={cn("p-4", switching && "pointer-events-none opacity-70")}>
+          <GlassCard className={cn("p-2 sm:p-4", switching && "pointer-events-none opacity-70")}>
             {switching && (
               <div className="mb-2 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -209,13 +212,13 @@ export default function CalendarPage() {
 function GridSkeleton() {
   return (
     <>
-      <GlassCard className="p-4">
-        <div className="mb-1.5 grid grid-cols-7 gap-1.5">
+      <GlassCard className="p-2 sm:p-4">
+        <div className="mb-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">
           {Array.from({ length: 7 }).map((_, i) => (
             <Skeleton key={i} className="h-3" />
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {Array.from({ length: 35 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}

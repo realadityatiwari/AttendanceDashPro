@@ -138,12 +138,15 @@ export default function TrackAttendancePage() {
         </p>
       </div>
 
-      {/* Date Navigation */}
+      {/* Date Navigation — Phase 12B: the center column becomes fluid so the
+          date input stretches between the arrows on narrow screens (input and
+          Today are 40px tall on mobile via the 12A button foundation; the
+          `sm:h-8` restore keeps the desktop size byte-identical). */}
       <div className="flex items-center justify-between w-full gap-2">
         <Button variant="outline" size="icon" onClick={handlePreviousDay} disabled={atSemesterStart} aria-label="Previous day">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <div className="flex flex-col sm:flex-row items-center gap-2">
+        <div className="flex flex-1 min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
           <Input
             type="date"
             aria-label="Jump to date"
@@ -151,12 +154,12 @@ export default function TrackAttendancePage() {
             min={semesterStart ?? undefined}
             max={semesterEnd ?? undefined}
             onChange={e => handleDatePick(e.target.value)}
-            className="h-8 w-40 [color-scheme:dark] text-xs"
+            className="h-10 w-full [color-scheme:dark] text-xs sm:h-8 sm:w-40"
           />
           <Button
             variant={isToday(selectedDate) ? "secondary" : "outline"}
             size="sm"
-            className="text-xs uppercase tracking-wider h-8"
+            className="text-xs uppercase tracking-wider sm:h-8"
             onClick={handleToday}
           >
             Today

@@ -30,7 +30,7 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
       </CardHeader>
 
       <CardContent>
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
               {formatPct(pct)}

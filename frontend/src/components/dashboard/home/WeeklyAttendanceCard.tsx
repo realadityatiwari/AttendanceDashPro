@@ -69,7 +69,7 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
               return (
                 <li
                   key={week.week_start}
-                  className={`flex items-center gap-3 rounded-md px-2 py-1.5 ${
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 sm:gap-3 ${
                     isCurrentWeek ? "bg-muted/60 ring-1 ring-border" : ""
                   }`}
                 >

@@ -1136,3 +1136,19 @@ Status: **COMPLETE & FROZEN** — 11.0 audit ✅ · 11A backend notification rea
 - **12C** — Laboratory / Subjects / Quiz Eligibility / Events page responsiveness (incl. Laboratory tab bar nowrap ~380px overflow fix).
 - **12D** — Dialogs / Profile / Settings / Notifications page-level mobile polish.
 - **12E** — Mobile polish + Phase 12 verification; **12F** — freeze. (Phase 13 = PWA/Installability.)
+
+## Phase 12B — Track / Dashboard / Calendar Responsive Experience (COMPLETE, 2026-08-21)
+
+- [x] Assessment: nav rows measured at 320px; real Calendar nav overflow (≈310px vs 288px) + 31px grid cells identified; Track 32px controls + h-7 Change overrides + h-9 actions clip + badge/time collision identified; Dashboard minimal (3 wrap/gap fixes); shared primitives verified fine.
+- [x] Calendar: nav `flex flex-wrap` + label `min-w-0 w-28 sm:w-36`; grid card `p-2 sm:p-4`; grids `gap-1 sm:gap-1.5` (cells 31→35px at 320). Month-calendar model preserved.
+- [x] Track: fluid date-nav column (`flex-1 min-w-0`, input stretches); input `h-10 sm:h-8 w-full sm:w-40`; Today `sm:h-8` (mobile 40px); TrackSessionCard: fluid left column + wrapping badges, auto-height actions row, Change buttons lose `h-7` override (mobile 40px, desktop 28px identical).
+- [x] Dashboard: Today badge row `flex-wrap`; Overall delta row `flex-wrap`; Weekly rows `gap-2 sm:gap-3`.
+- [x] NOT changed: backend/DB/migrations/API/engines; 12A files; PageHeader/Badge/Card/GlassCard/lib/date/hooks/types; DayDetail; css/responsive.css; no new breakpoints.
+- [x] Gates: `tsc --noEmit` PASS; ESLint (7 files) PASS; `npm run build` PASS; `git diff --check` PASS; diff = 7 frontend files +35/-23 only.
+- [x] Report: `docs/phase_12/phase_12b_implementation_report.md` (12 sections incl. owner manual-testing checklist). Browser/manual testing NOT run (owner).
+
+## Phase 12 — Deferred to later sub-phases (NOT done in 12B)
+
+- **12C** — Laboratory / Subjects / Quiz Eligibility / Events page responsiveness (incl. Laboratory tab bar nowrap ~380px overflow fix).
+- **12D** — Dialogs / Profile / Settings / Notifications page-level mobile polish.
+- **12E** — Mobile polish + Phase 12 verification; **12F** — freeze. (Phase 13 = PWA/Installability.)

@@ -1167,3 +1167,17 @@ Scope (foundation only; page-level work is 12B-12F):
 Verification: `tsc --noEmit` PASS; ESLint (6 changed files) PASS; `npm run build` PASS (15 routes prerendered); `git diff --check` PASS; working tree: 5 modified frontend files + 1 new component + docs/phase_12/ — zero backend changes, no migrations, no DB mutation, no generated artifacts. Browser/manual testing NOT performed (user's responsibility; checklist in the 12A report).
 
 **HARD STOP after 12A** — no commit made; Phase 12: 12.0 + 12A COMPLETE; 12B (Track/Dashboard/Calendar) NEXT; desktop behavior unchanged; frozen systems untouched.
+
+### 12B Track / Dashboard / Calendar responsiveness (COMPLETE, 2026-08-21)
+
+Scope (responsive experience only; no logic/contract/backend change):
+
+- `calendar/page.tsx` + `CalendarGrid.tsx` — month-nav row now `flex flex-wrap` with label `min-w-0 w-28 sm:w-36` (was fixed `w-36` ≈310px vs 288px content at 320 = real overflow, now ≈276px single row, wraps gracefully); grid card `p-2 sm:p-4` + grids `gap-1 sm:gap-1.5` (cells 31→35px at 320). Month-calendar interaction model untouched (no date-picker substitution); DayDetail/legend/error/empty states verified already responsive (unchanged).
+- `tools/laboratory/page.tsx` (Track) — center date-nav column now `flex-1 min-w-0` (input stretches between the arrows on mobile); input `h-10 w-full sm:h-8 sm:w-40`; Today `sm:h-8` (mobile 40px via the 12A foundation; desktop 32px byte-identical).
+- `TrackSessionCard.tsx` — header left column `min-w-0 flex-1` + badge container `flex-wrap justify-end` (long labels e.g. MID-SEM PRACTICAL no longer collide with time at 320); actions row auto-height (fixed `h-9` dropped — it clipped the 12A h-10 buttons); Change buttons dropped their explicit `h-7` override (mobile 40px, desktop `sm:h-7` identical — the 12A-documented page-level residual, now resolved).
+- Dashboard — `TodayAttendanceCard` badge row `flex-wrap`; `OverallAttendanceCard` delta row `flex-wrap`; `WeeklyAttendanceCard` rows `gap-2 sm:gap-3` (progress bar kept visible at 320). All other dashboard cards verified fine at 320 (unchanged).
+- Intentionally NOT changed: all backend/DB/migrations/API/engines; all 12A files (MobileBottomNav/AppShell/ShellDialog/NotificationCenter/Bell/button.tsx foundation); PageHeader/Badge/Card/GlassCard/lib/date/hooks/types; DayDetail; css/responsive.css remains unimported; no new breakpoints.
+
+Verification: `tsc --noEmit` PASS; ESLint (7 changed files) PASS; `npm run build` PASS; `git diff --check` PASS; diff = 7 frontend files (+35/-23), zero backend/12A/artifact changes. Browser/manual testing NOT performed (owner's responsibility; checklist in the 12B report).
+
+**HARD STOP after 12B** — no commit made; Phase 12: 12.0 + 12A + 12B COMPLETE; 12C (Laboratory/Subjects/Quiz/Events) NEXT; desktop behavior unchanged; frozen systems untouched.

@@ -51,7 +51,7 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
             {classes.map((cls) => (
               <li key={cls.session_id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-foreground">
                       {cls.subject_code}
                     </span>
