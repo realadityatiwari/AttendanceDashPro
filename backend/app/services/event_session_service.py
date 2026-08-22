@@ -28,9 +28,16 @@ Design rules:
 - Reconciliation is state-based, so it is inherently idempotent: running it
   twice converges on the same state with no duplicates.
 - Attendance safety: sessions that already have attendance records are never
-  cancelled, un-cancelled, or deleted. Cancelled sessions never receive
-  attendance (record_attendance already rejects them with 409), so the
-  "cancelled != absent" rule is preserved end to end.
+  deleted, and they are never cancelled by day-wide schedule mutations
+  (closures, working-Saturday replays) or by LAB_CANCELLED (Phase 9.1). The
+  ONE exception is an explicit CLASS_CANCELLED occurrence: the class-reality
+  event must propagate to its matching session even when a stale mark exists
+  (e.g. Absent recorded before the cancellation was known). Consumers treat
+  such a session as Cancelled (never absent) and exclude it from every
+  attendance count; deactivating the event restores the session exactly.
+  Cancelled sessions never receive new attendance (record_attendance already
+  rejects them with 409), so the "cancelled != absent" rule is preserved end
+  to end.
 - Quiz-day attendance (product decision — Option A): QUIZ_DAY is NOT
   calendar-only — an active QUIZ_DAY event materializes exactly one
   attendance-bearing quiz-day session for its subject/date (bucket in
@@ -183,9 +190,11 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, desired_extras, mid_sem_active, desired_quiz_days = self._desired_schedule(
-                current, all_active_events, entries_by_dow,
-                by_date.get(current, []), attended_ids,
+            desired_scheduled, desired_extras, mid_sem_active, desired_quiz_days, cancellation_removed = (
+                self._desired_schedule(
+                    current, all_active_events, entries_by_dow,
+                    by_date.get(current, []), attended_ids,
+                )
             )
             await self._reconcile_date(
                 current,
@@ -193,6 +202,7 @@ class EventSessionSynchronizer:
                 desired_extras,
                 mid_sem_active,
                 desired_quiz_days,
+                cancellation_removed,
                 manage_mid_sem,
                 mid_sem_subject,
                 by_date.get(current, []),
@@ -212,12 +222,9 @@ class EventSessionSynchronizer:
     ) -> object:
         """
         The timetable occurrence a CLASS_CANCELLED / LAB_CANCELLED event
-        removes. Attendance-safe by preference: when the date already holds an
-        attended session for one matching occurrence, the cancellation falls
-        through to the unattended occurrence instead — historical sessions are
-        never cancelled, but the event's intent (one occurrence cancelled on
-        this date) still holds. Falls back to the first matching entry when
-        every occurrence is attended (or none is marked yet).
+        removes. Unattended occurrences are preferred when several matching
+        entries exist on one date; when every matching occurrence is attended
+        (or none is marked yet) the first matching entry is returned.
         """
         candidates = [
             entry
@@ -244,7 +251,7 @@ class EventSessionSynchronizer:
         entries_by_dow: Dict[int, list],
         existing: List[ClassSession],
         attended_ids: set,
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set, set]:
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set, set, set]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
@@ -259,10 +266,24 @@ class EventSessionSynchronizer:
           desired_quiz_days: subject_ids with an active QUIZ_DAY event on this
                              date — each is one attendance-bearing quiz-day
                              occurrence (see _reconcile_date).
+          cancellation_removed: timetable_entry_ids explicitly removed from
+                             the desired schedule by an active CLASS_CANCELLED
+                             event on this date. This is the canonical marker
+                             that a specific scheduled occurrence is cancelled
+                             by class-reality (not by a day-wide closure), and
+                             the only case in which reconciliation cancels a
+                             session that already holds an attendance record
+                             (bugfix: an active cancellation must propagate to
+                             the matching session even when a stale mark —
+                             e.g. Absent entered before the cancellation was
+                             recorded — exists; consumers treat the session as
+                             cancelled and exclude it from attendance math).
+                             LAB_CANCELLED is deliberately excluded: Phase 9.1
+                             froze "attended lab sessions are never cancelled".
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}, set(), set()
+            return {}, {}, set(), set(), set()
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
@@ -283,6 +304,7 @@ class EventSessionSynchronizer:
 
         extras: Dict[Tuple[object, object], int] = {}
         cancelled_practical_subjects: set = set()
+        cancellation_removed: set = set()
         for event in ordered:
             if event.event_type in CLOSURE_TYPES:
                 # Unreachable on a working day (closure => non-working), kept
@@ -297,6 +319,8 @@ class EventSessionSynchronizer:
                 )
                 if match is not None:
                     del scheduled[match.id]
+                    if event.event_type == EventType.CLASS_CANCELLED:
+                        cancellation_removed.add(match.id)
             elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                 key = (event.subject_id, event.class_type)
                 extras[key] = extras.get(key, 0) + 1
@@ -336,7 +360,7 @@ class EventSessionSynchronizer:
             and event.subject_id is not None
         }
 
-        return scheduled, extras, mid_sem_active, quiz_day_subjects
+        return scheduled, extras, mid_sem_active, quiz_day_subjects, cancellation_removed
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -357,6 +381,7 @@ class EventSessionSynchronizer:
         desired_extras: Dict[Tuple[object, object], int],
         mid_sem_active: set,
         desired_quiz_days: set,
+        cancellation_removed: set,
         manage_mid_sem: bool,
         mid_sem_subject: object,
         existing: List[ClassSession],
@@ -374,11 +399,21 @@ class EventSessionSynchronizer:
         removed_ids: set = set()
 
         # Scheduled (non-extra) sessions: cancel those no longer desired,
-        # restore those desired again, create missing ones. Never touch
-        # sessions with attendance records.
+        # restore those desired again, create missing ones.
+        #
+        # Attendance safety (frozen contracts): sessions with attendance
+        # records are never deleted and are never cancelled by day-wide
+        # schedule mutations (closures / working-Saturday replays — Phase 6.6
+        # checks 5/31; LAB_CANCELLED — Phase 9.1 check 18). The ONE exception
+        # is an explicit CLASS_CANCELLED occurrence: the canonical class-
+        # reality event must propagate to its matching session even when a
+        # stale mark exists (e.g. Absent recorded before the cancellation was
+        # known) — Track then presents the session as Cancelled and every
+        # consumer excludes it from attendance math (cancelled != absent).
+        # Restoration is always allowed: un-cancelling returns a session to
+        # its pre-event state (deactivation reversal), which is safe for
+        # attended sessions too — their records simply count again.
         for session in scheduled:
-            if session.id in attended_ids:
-                continue
             if session.timetable_entry_id is None:
                 # Quiz-day session (attendance-spec alignment): authoritative
                 # from the quiz schedule, not from any timetable/event. Event
@@ -388,18 +423,31 @@ class EventSessionSynchronizer:
             if session.timetable_entry_id in desired_scheduled_ids:
                 if session.is_cancelled:
                     session.is_cancelled = False
-            elif not session.is_cancelled:
-                if self._is_weekend_artifact(target, session):
+                continue
+            if session.is_cancelled:
+                continue
+            if self._is_weekend_artifact(target, session):
+                if session.id in attended_ids:
                     # Baseline expansion never created sessions on default
-                    # weekends (expand_baseline skips non-teaching days), so
-                    # any scheduled session there was materialized by a
-                    # working-Saturday/substitution event. It is a reversible
-                    # projection: remove it when the event no longer implies
-                    # it, instead of leaving an unbounded cancelled residue.
-                    await self.session_repo.delete_session(session)
-                    removed_ids.add(session.id)
-                else:
-                    session.is_cancelled = True
+                    # weekends; attended projections are historical truth and
+                    # are never deleted.
+                    continue
+                # Baseline expansion never created sessions on default
+                # weekends (expand_baseline skips non-teaching days), so any
+                # scheduled session there was materialized by a
+                # working-Saturday/substitution event. It is a reversible
+                # projection: remove it when the event no longer implies it,
+                # instead of leaving an unbounded cancelled residue.
+                await self.session_repo.delete_session(session)
+                removed_ids.add(session.id)
+                continue
+            override = (
+                session.id in attended_ids
+                and session.timetable_entry_id not in cancellation_removed
+            )
+            if override:
+                continue
+            session.is_cancelled = True
 
         existing_scheduled_ids = {
             s.timetable_entry_id for s in scheduled if s.timetable_entry_id is not None

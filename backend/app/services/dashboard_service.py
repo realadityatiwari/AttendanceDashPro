@@ -15,6 +15,7 @@ from app.engines.attendance_engine import (
     SAFE_BAND_PCT,
     classify_attendance_status,
 )
+from app.engines.practical_occurrence import occurrence_is_cancelled
 from app.schemas.dashboard import (
     DashboardSummaryResponse,
     TodaySection,
@@ -195,12 +196,18 @@ class DashboardService:
     def _aggregate_range(rows: List[dict], start: date, end: date) -> Optional[float]:
         """
         ERP-style weekly percentage (attended / conducted) over a date range.
-        Returns None when nothing has been recorded in the range.
+        Returns None when nothing has been recorded in the range. Cancelled
+        occurrences are never conducted classes: the canonical
+        occurrence_is_cancelled rule excludes them (a cancelled theory class
+        is never an absence even with a stale mark; a recorded lab block keeps
+        its frozen record-wins rule).
         """
         attended = 0
         recorded = 0
         for r in rows:
             if not (start <= r["date"] <= end):
+                continue
+            if occurrence_is_cancelled(r):
                 continue
             if r["status"] == AttendanceStatus.ATTENDED:
                 attended += 1

@@ -57,6 +57,28 @@ def _subject_key(row: Dict[str, Any]):
     return row.get("subject_id") or row.get("subject_code")
 
 
+def occurrence_is_cancelled(occ: Dict[str, Any]) -> bool:
+    """
+    Canonical "this occurrence counts as Cancelled (never pending/absent/
+    attended)" rule — the single definition shared by every counting/filtering
+    consumer (collapse_count_rows, history summary/filters, dashboard).
+
+    - A non-cancelled occurrence is never counted as cancelled.
+    - A cancelled PRACTICAL block keeps its frozen Phase 8/9 lab contract: a
+      recorded block is historical truth and is counted by its record status;
+      only a record-less cancelled block presents as Cancelled.
+    - A cancelled LECTURE/TUTORIAL occurrence always presents as Cancelled:
+      CLASS_CANCELLED class-reality propagates over stale marks (a mark
+      entered before the cancellation was known), so a cancelled theory class
+      never counts as an absence anywhere.
+    """
+    if not occ.get("is_cancelled"):
+        return False
+    if occ.get("class_type") == ClassType.PRACTICAL:
+        return occ.get("status") is None
+    return True
+
+
 def group_practical_occurrences(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Collapse contiguous same-subject/same-date PRACTICAL rows into ONE logical
@@ -164,11 +186,13 @@ def collapse_count_rows(
     (`is_cancelled.is_(False)`): a cancelled non-P row is dropped; a cancelled
     P occurrence with no records is dropped (the whole lab was cancelled and
     never counts as Pending/Absent). A recorded occurrence is counted once
-    with its block status (None status = PENDING).
+    with its block status (None status = PENDING). A cancelled LECTURE/
+    TUTORIAL occurrence is always dropped — CLASS_CANCELLED propagates over
+    stale marks (occurrence_is_cancelled).
     """
     out: List[Tuple[Any, ...]] = []
     for occ in group_practical_occurrences(rows):
-        if occ.get("is_cancelled") and occ.get("status") is None:
+        if occurrence_is_cancelled(occ):
             continue
         if include_subject:
             out.append((occ["subject_id"], occ["class_type"], occ.get("status")))

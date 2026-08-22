@@ -1152,3 +1152,26 @@ Status: **COMPLETE & FROZEN** — 11.0 audit ✅ · 11A backend notification rea
 - **12C** — Laboratory / Subjects / Quiz Eligibility / Events page responsiveness (incl. Laboratory tab bar nowrap ~380px overflow fix).
 - **12D** — Dialogs / Profile / Settings / Notifications page-level mobile polish.
 - **12E** — Mobile polish + Phase 12 verification; **12F** — freeze. (Phase 13 = PWA/Installability.)
+
+---
+
+## BUGFIX — CLASS_CANCELLED Event Not Propagating to Track (COMPLETE, 2026-08-22)
+
+Authorized root-cause bugfix (real correctness/data-integrity defect; frozen systems reopened only where proven necessary). Full detail: `docs/bugfix/event_cancellation_propagation_report.md`.
+
+- [x] Repository audit (git state, governance docs, Phase 6/9/11/12 reports; HEAD moved mid-session by owner commit `ede3da2` — noted, no loss)
+- [x] Pipeline traced end-to-end (events API → EventService → EventSessionSynchronizer → class_sessions → Track/API/frontend/SWR consumers)
+- [x] Exact case reproduced from the live DB (session `19bdc85a…` + MISSED record vs active event `9e5a7f98…`; explicit sync run proved the no-op)
+- [x] Root cause proven: `_reconcile_date` skipped ANY session holding an attendance record → CLASS_CANCELLED silent no-op for recorded (historical) classes
+- [x] Canonical invariant established from existing code/spec (is_cancelled = canonical state; cancelled ≠ absent everywhere)
+- [x] Fix implemented in the canonical synchronizer (`cancellation_removed` propagation + always-safe restoration) with LAB_CANCELLED/closure/quiz-day frozen contracts preserved
+- [x] Consumer alignment via single predicate `occurrence_is_cancelled()` (subject counts, history filters+summary, dashboard weekly range) — no record deletion, no second source of truth
+- [x] Regression verifier created: `backend/scripts/verify_event_cancellation_propagation.py` — 26/26
+- [x] Existing verifiers re-run: green or stash-A/B-proven pre-existing drift (documented per verifier)
+- [x] Security verified: JWT/user scoping untouched; enrollment boundaries + 403/409 paths asserted in the new verifier
+- [x] DB baseline captured pre-work and restored: all 18 table counts byte-equal, alembic head `d1e2f3a4b5c6` unchanged, zero temp artifacts (crashed-run leaks cleaned by captured IDs)
+- [x] Reported live case healed via the canonical synchronizer (both active BCS-058 cancellations now effective; records preserved)
+- [x] Bug-fix report written (`docs/bugfix/event_cancellation_propagation_report.md`)
+- [x] Governance synchronized (this file, MASTER_ROADMAP, implementation_plan, walkthrough)
+- [x] Final scope audit: git status/diff limited to 4 backend files + 1 new verifier + 5 docs; no commit made
+- HARD STOP — Phase 12C NOT started; no unrelated work.

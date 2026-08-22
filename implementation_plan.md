@@ -1181,3 +1181,18 @@ Scope (responsive experience only; no logic/contract/backend change):
 Verification: `tsc --noEmit` PASS; ESLint (7 changed files) PASS; `npm run build` PASS; `git diff --check` PASS; diff = 7 frontend files (+35/-23), zero backend/12A/artifact changes. Browser/manual testing NOT performed (owner's responsibility; checklist in the 12B report).
 
 **HARD STOP after 12B** — no commit made; Phase 12: 12.0 + 12A + 12B COMPLETE; 12C (Laboratory/Subjects/Quiz/Events) NEXT; desktop behavior unchanged; frozen systems untouched.
+
+---
+
+## BUGFIX — CLASS_CANCELLED Not Propagating to Track (COMPLETE, 2026-08-22)
+
+Authorized real-correctness fix (frozen-phase narrowly reopened where proven necessary); plan executed exactly as investigated:
+
+1. **Reproduction:** live DB — session `19bdc85a…` (BCS-058 LECTURE 2026-07-30, holds MISSED record `faa0ce5e…`) vs active event `9e5a7f98…` (CLASS_CANCELLED, exact subject/date/class-type match). Explicit `sync_event` run left `is_cancelled=false` → defect mechanically isolated to the synchronizer.
+2. **Root cause:** `_reconcile_date`'s blanket guard (`if session.id in attended_ids: continue`) made any recorded session untouchable, so explicit cancellations were silent no-ops for historical classes — the common case.
+3. **Fix (synchronizer-first):** `_desired_schedule` emits `cancellation_removed` (entries explicitly removed by an active CLASS_CANCELLED only); `_reconcile_date` cancels unattended sessions as before AND explicitly-targeted recorded ones; restoration always allowed (full reversal on deactivate/edit). LAB_CANCELLED (Phase 9.1 check 18), closures/WS (6.6 checks 5/31), quiz-day protection: untouched frozen contracts.
+4. **Consumer alignment via one predicate** `occurrence_is_cancelled()` (`practical_occurrence.py`): cancelled theory occurrences never count as attended/missed/pending anywhere (subject counts via `collapse_count_rows`, History filters+summary in `attendance_repo.py`, dashboard `_aggregate_range`); practical record-wins rule preserved. No records deleted anywhere.
+5. **Verifier:** NEW `backend/scripts/verify_event_cancellation_propagation.py` — **26/26** (propagation over stale marks, Track Cancelled render data, mutation 409, summary/history exclusion + filters, isolation both ways, idempotent double-sync, no duplicates, move/edit reconciliation, exact reversal, closure + LAB_CANCELLED frozen-boundary probes, owner-record fingerprints, exact count baseline).
+6. **Regression:** compileall PASS · 6_6 **36/36** · attendance-spec **15/15** · events_correction **42/42** · working_saturday **24/24** · 6_5 **27/27** · quiz_day_materialization **14/14** · 11A **19/19** · 11B **23/23** · phase_3 **26/26** · phase_1 **18/18** · 7_1 **26/26** · 7_2 **25/26**\* · phase_2 **14/15**\* — \* stash-A/B-proven pre-existing drift. Known-drift verifiers (history_filters 7/20, phase_9_1 21/28, track_lab_fix date-aged fixtures + pre-existing cleanup crash, 8_1 18/22, 8_2 StopIteration): identical failures reproduced on ORIGINAL code via git-stash runs — not regressions from this fix.
+7. **DB safety:** full pre-work snapshot; post-work all 18 table counts byte-equal, alembic head `d1e2f3a4b5c6` unchanged, zero temp artifacts (incl. cleaning crashed-run leaks by captured IDs). Intentional canonical repair applied to the reported case: events re-synced ⇒ sessions `ea065985…` / `19bdc85a…` now cancelled with records preserved.
+8. Report: `docs/bugfix/event_cancellation_propagation_report.md`. Frontend unchanged (Track already renders `is_cancelled` first). **No commit made; 12C still NEXT.**

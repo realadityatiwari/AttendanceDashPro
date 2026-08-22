@@ -7,7 +7,11 @@ from datetime import date
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
 from app.models.enums import AttendanceStatus, ClassType
-from app.engines.practical_occurrence import collapse_count_rows, group_practical_occurrences
+from app.engines.practical_occurrence import (
+    collapse_count_rows,
+    group_practical_occurrences,
+    occurrence_is_cancelled,
+)
 
 class AttendanceRepository:
     def __init__(self, db: AsyncSession):
@@ -388,14 +392,19 @@ class AttendanceRepository:
     @staticmethod
     def _history_status_match(occ: dict, status: Optional[str]) -> bool:
         """Occurrence-level status matching for history filters (a lab block
-        is one row: any member record resolves the block status)."""
+        is one row: any member record resolves the block status). A cancelled
+        theory occurrence is Cancelled — never Attended/Missed/Pending, even
+        when a stale mark predates the cancellation (occurrence_is_cancelled);
+        a recorded lab block stays counted by its record (frozen lab rule)."""
         if status == "Cancelled":
             return bool(occ.get("is_cancelled"))
         if status is None:
             return True
+        if occurrence_is_cancelled(occ):
+            return False
         resolved = AttendanceStatus(status)
         if resolved == AttendanceStatus.PENDING:
-            return occ.get("status") is None and not occ.get("is_cancelled")
+            return occ.get("status") is None
         return occ.get("status") == resolved
 
     async def get_history(
@@ -448,7 +457,10 @@ class AttendanceRepository:
         Aggregate counts over the full filtered history result set (not the
         current page), at OCCURRENCE level: a two-hour lab counts once.
         Cancelled is its own state; attended/missed/pending exclude cancelled
-        occurrences, mirroring the Track daily counts.
+        occurrences, mirroring the Track daily counts. A cancelled theory
+        occurrence never counts as attended/missed even when a stale mark
+        predates the cancellation (occurrence_is_cancelled); a recorded lab
+        block keeps its frozen record-wins rule.
         """
         conditions = self._history_base_conditions(
             subject_code, date_from, date_to, search
@@ -458,8 +470,16 @@ class AttendanceRepository:
             o for o in occurrences if self._history_status_match(o, status)
         ]
         cancelled = sum(1 for o in filtered if o.get("is_cancelled"))
-        attended = sum(1 for o in filtered if o.get("status") == AttendanceStatus.ATTENDED)
-        missed = sum(1 for o in filtered if o.get("status") == AttendanceStatus.MISSED)
+        attended = sum(
+            1 for o in filtered
+            if o.get("status") == AttendanceStatus.ATTENDED
+            and not occurrence_is_cancelled(o)
+        )
+        missed = sum(
+            1 for o in filtered
+            if o.get("status") == AttendanceStatus.MISSED
+            and not occurrence_is_cancelled(o)
+        )
         pending = sum(
             1 for o in filtered
             if o.get("status") is None and not o.get("is_cancelled")
