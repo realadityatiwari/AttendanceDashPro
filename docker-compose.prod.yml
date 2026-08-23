@@ -8,6 +8,7 @@ name: attendancedash-prod
 #   backend    — FastAPI + Uvicorn (app.main:app, PYTHON 3.13)
 #   frontend   — Next.js 16 SSR + PWA (standalone output)
 #   caddy      — Reverse proxy (HTTP routing, proxy headers, TLS later)
+#   backup     — Scheduled PostgreSQL backup + retention + off-host copy (Phase 18C)
 #
 # Networks:
 #   proxy-net  — public-facing: proxy ↔ frontend, proxy ↔ backend
@@ -29,6 +30,8 @@ name: attendancedash-prod
 #   FORWARDED_ALLOW_IPS — trusted proxy CIDR (default: 172.28.0.0/24 matches proxy-net below)
 #   DATABASE_URI — direct DB URI override (default: built from POSTGRES_USER/PASSWORD/DB)
 #   DOMAIN, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, etc.
+#   Backup (Phase 18C): BACKUP_INTERVAL (default 86400s), BACKUP_RETENTION_COUNT
+#     (default 14), OFFHOST_TYPE/OFFHOST_DEST/OFFHOST_CMD (default none)
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d
@@ -130,6 +133,41 @@ services:
       retries: 3
       start_period: 10s
 
+  backup:
+    build:
+      context: ./deploy/backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:-attendancedash}
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}          # seconds (default daily)
+      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-14}
+      # Off-host protection contract (Phase 18C). OFFHOST_TYPE=none until
+      # production infrastructure exists; see deploy/backup/offhost.sh for
+      # the supported destination types and required variables.
+      OFFHOST_TYPE: ${OFFHOST_TYPE:-none}
+      OFFHOST_DEST: ${OFFHOST_DEST:-}
+      OFFHOST_CMD: ${OFFHOST_CMD:-}
+      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY may be supplied here when
+      # OFFHOST_TYPE=s3 (secret; never commit).
+    volumes:
+      - backup_data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'run.sh' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 networks:
   proxy-net:
     driver: bridge
@@ -144,3 +182,4 @@ networks:
 
 volumes:
   postgres_data:
+  backup_data:

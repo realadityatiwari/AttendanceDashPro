@@ -2241,6 +2241,70 @@ Date: 2026-08-23 · Scope: production-safe env/secret contract for 18A container
 
 ---
 
+# AttendanceDash Pro — Phase 18C Walkthrough (Backup Automation + Retention + Off-Host Protection)
+
+Date: 2026-08-23 · Scope: automated PostgreSQL backup, retention, off-host contract · Zero working-DB mutations
+
+> **PHASE 18C COMPLETE.** A production-grade scheduled PostgreSQL backup system
+> is implemented and verified in isolation. The backup container (postgres:16)
+> performs pg_dump -Fc with integrity verification, off-host copy (placeholder
+> contract), and retention pruning. An isolated restore smoke test passed. No
+> real secrets, no deployment, no cloud resources, no working-DB mutations.
+
+## Changes
+
+| File | Change |
+|---|---|
+| `deploy/backup/Dockerfile` | NEW — postgres:16-based backup scheduler container |
+| `deploy/backup/run.sh` | NEW — entrypoint: fail-fast config, locking, pg_isready wait, ordered backup→off-host→retention loop |
+| `deploy/backup/backup.sh` | NEW — pg_dump -Fc + verification (exists, ≥1KB, `pg_restore --list`); PGPASSWORD env (never argv) |
+| `deploy/backup/offhost.sh` | NEW — off-host copy contract: none/mount/sftp/s3/custom; fails loudly |
+| `deploy/backup/retention.sh` | NEW — keep latest N (default 14); only matching files; after successful backup+off-host |
+| `docker-compose.prod.yml` | Added `backup` service (data-net, backup_data volume, healthy-depends, healthcheck, env) |
+| `deploy/.env.prod.example` | Added backup variables (BACKUP_INTERVAL, BACKUP_RETENTION_COUNT, OFFHOST_*) |
+| `docs/phase_18/phase_18c_backup.md` | NEW — full backup architecture, config contract, retention policy, restore runbook, failure handling, production deployment requirements |
+
+## Backup Architecture
+
+```text
+PostgreSQL (data-net, private)
+    ↓  pg_dump -Fc
+Backup container (data-net, scheduled)
+    ↓  /backups (persistent backup_data volume)
+    ↓  verification (exists + ≥1KB + pg_restore --list)
+    ↓  off-host copy (OFFHOST_TYPE; none by default)
+    ↓  retention pruning (BACKUP_RETENTION_COUNT; default 14)
+```
+
+## Verification
+
+| Check | Result |
+|---|---|
+| Bash syntax (all 4 scripts) | ✅ PASS |
+| Backup image build | ✅ PASS |
+| `docker compose config` (with backup service) | ✅ valid |
+| Isolated backup smoke test: disposable postgres → backup.sh → dump verified | ✅ PASS |
+| Retention test: 4 files → keep 2 → pruned correctly | ✅ PASS |
+| Isolated restore test: 2nd disposable postgres → pg_restore → data verified | ✅ PASS |
+| Disposable resources cleaned | ✅ (0 remaining) |
+| Working DB mutations | ZERO (INSERT/UPDATE/DELETE = 0) |
+| Real secrets added | ZERO |
+| `git diff --check` | ✅ PASS |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 18C COMPLETE; 18D identified as next; status table + header synchronized
+- `implementation_plan.md`: 18C section added — COMPLETE; 18D pending
+- `task.md`: 18C checklist complete; 18D unchecked
+- `walkthrough.md`: this entry
+
+**PHASE 18C — COMPLETE / FROZEN.**
+**Phase 18D — Deployment & Verification (NOT STARTED — next authorized slice).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+**Database mutations: ZERO.** Production deployment: NO. Cloud resources created: ZERO. Real production secrets added: ZERO.
+
+---
+
 ---
 
 ---

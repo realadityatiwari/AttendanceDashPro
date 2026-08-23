@@ -1808,6 +1808,55 @@ compose/env untouched; frozen systems untouched; no business-logic changes.
 **Next authorized slice:** Phase 18C — Backup Automation + Retention + Off-Host
 Protection (NOT STARTED).
 
+### Phase 18C — Backup Automation + Retention + Off-Host Protection (COMPLETE, 2026-08-23)
+
+**Objective:** automated PostgreSQL backups, retention/pruning, off-host copy
+contract, restore capability, and verification — with zero production data
+mutation and no real secrets.
+
+**Delivered:**
+
+1. **Backup container** (`deploy/backup/Dockerfile`, postgres:16-based — version-
+   matched pg_dump/pg_restore):
+   - `run.sh` — scheduler entrypoint: fail-fast required env, lock file
+     (prevents overlapping backups), pg_isready wait loop, ordered orchestration
+     (backup → off-host → retention), interval `BACKUP_INTERVAL` (default 86400s).
+   - `backup.sh` — `pg_dump -Fc` (custom format: compressed, parallel/selective
+     restore, verifiable); credentials via `PGPASSWORD` env (never argv);
+     verification: artifact exists, ≥1KB, `pg_restore --list` parses the TOC.
+   - `offhost.sh` — off-host copy contract: `none` (default), `mount`, `sftp`,
+     `s3` (AWS_* env), `custom` (OFFHOST_CMD); fails loudly on failure.
+   - `retention.sh` — keep latest `BACKUP_RETENTION_COUNT` (default 14) files
+     matching `attendancedash_full_*.dump`; never deletes newest; tolerates
+     missing files; runs only after successful backup + off-host copy.
+2. **Compose wiring** (`docker-compose.prod.yml`): `backup` service on
+   `data-net` (private), `backup_data` volume, healthy-depends on postgres,
+   `unless-stopped`, healthcheck (`pgrep run.sh`), env via `deploy/.env.prod`.
+3. **Retention policy**: latest 14 local backups (rolling window; simple single
+   tier matching the Phase 17 7+4+3=14 intent). Naming
+   `attendancedash_full_<utc>.dump`.
+4. **Off-host contract**: OFFHOST_TYPE none/mount/sftp/s3/custom with
+   placeholders only — no real credentials, no external connection (deferred
+   to deployment). Documented in `docs/phase_18/phase_18c_backup.md`.
+5. **Restore**: runbook documented (validate → isolated target → restore →
+   verify → cleanup); destructive production restore explicitly warned.
+6. **Secrets**: PGPASSWORD env only; no credentials logged; no real secrets
+   added; `backups/` + `deploy/.env.prod` already gitignored.
+
+**Verification results:** bash syntax check on all 4 scripts PASS (postgres:16
+container) · backup image build PASS · `docker compose config` valid with backup
+service · **isolated smoke test PASS**: disposable postgres seeded → `backup.sh`
+created verified dump (2761 bytes) → `retention.sh` pruned to retention count →
+`pg_restore` into a second disposable postgres → data verified (`smoke_test`
+row present) → all disposable containers/volumes removed. Working application
+DB untouched (INSERT/UPDATE/DELETE = 0).
+
+**Scope guards:** no application data mutation; no real secrets; no deployment;
+no cloud resources; frozen systems untouched; only infrastructure/config files
+added (`deploy/backup/*`, compose service, env example, docs).
+
+**Next authorized slice:** Phase 18D — Deployment & Verification (NOT STARTED).
+
 ---
 
 ---

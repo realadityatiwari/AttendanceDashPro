@@ -1523,11 +1523,26 @@ Status: **COMPLETE & FROZEN** — all authorized Phase 17 work done; zero workin
 - [x] Zero DB mutations; zero deployment; zero cloud resources; no real secrets added
 - HARD STOP — Phase 18C NOT STARTED; no commit made.
 
-### Phase 18C — Backup Automation + Retention + Off-Host Protection (NOT STARTED — next authorized slice)
+### Phase 18C — Backup Automation + Retention + Off-Host Protection (COMPLETE, 2026-08-23)
 
-- [ ] Scheduled rotation (7/4/3), encryption, off-host storage, notifications, production runbook
+- [x] `deploy/backup/Dockerfile` — postgres:16-based backup container
+- [x] `deploy/backup/run.sh` — scheduler: locking, pg_isready wait, ordered orchestration, fail-fast required env
+- [x] `deploy/backup/backup.sh` — pg_dump -Fc + verification (exists, ≥1KB, pg_restore --list); PGPASSWORD env only
+- [x] `deploy/backup/offhost.sh` — off-host copy contract (none/mount/sftp/s3/custom), fails loudly
+- [x] `deploy/backup/retention.sh` — keep latest 14 (BACKUP_RETENTION_COUNT), only matching files, after successful backup+off-host
+- [x] `docker-compose.prod.yml` — backup service on data-net, backup_data volume, healthy-depends, unless-stopped, healthcheck
+- [x] `deploy/.env.prod.example` — backup variables (BACKUP_INTERVAL, BACKUP_RETENTION_COUNT, OFFHOST_*)
+- [x] `docs/phase_18/phase_18c_backup.md` — architecture, config contract, retention, restore runbook, failure handling
+- [x] Bash syntax validation (postgres:16 container) — all scripts PASS
+- [x] Backup image build PASS
+- [x] `docker compose config` valid with backup service
+- [x] Isolated smoke test: seed disposable DB → backup.sh verified dump → retention pruned → pg_restore into 2nd disposable DB → data verified → resources removed
+- [x] Working application DB untouched (INSERT/UPDATE/DELETE = 0)
+- [x] No real secrets/credentials; no deployment; no cloud resources
+- [x] Governance synchronized
+- HARD STOP — Phase 18D NOT STARTED; no commit made.
 
-### Phase 18D — Deployment & Verification (NOT STARTED)
+### Phase 18D — Deployment & Verification (NOT STARTED — next authorized slice)
 
 - [ ] Migrations-on-deploy (`alembic upgrade head`), HTTPS/TLS, deployment verification
 

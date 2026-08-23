@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 18C — Backup Automation + Retention + Off-Host Protection **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅ (production guard extended, compose `:?` required syntax, proxy trust pinned, no real secrets added). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 18D — Deployment Verification **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅, 18C backup automation ✅ (scheduled PostgreSQL backup container, retention/pruning, off-host contract, isolated restore verified; no real secrets/credentials; nothing deployed). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -65,7 +65,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
 | 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
 | 17 | Data Integrity & Migration Hardening | ✅ **COMPLETE & FROZEN** — JWT production-secret guard ✅ (APP_ENV; `verify_phase_17_jwt_guard.py` 6/6) · integrity audit ✅ (zero orphans/duplicates/FK violations) · **NO MIGRATION REQUIRED** (single linear Alembic head `e1f2a3b4c5d6`) · backup/restore ✅ verified (isolated container) · retention policy ✅ documented (7 daily / 4 weekly / 3 monthly) · seed audit ✅ · semester-transition analysis ✅ · cleanup: NONE REQUIRED · working-DB mutations ZERO |
-| 18 | Production Infrastructure | 🟡 **IN PROGRESS** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** (production guard extended: DATABASE_URI/CORS validated in production; compose `:?` required syntax; proxy-net subnet pinned; `FORWARDED_ALLOW_IPS` trust boundary; `verify_phase_17_jwt_guard.py` 8/8 PASS; no real secrets added) · 18C backup automation ⚪ NOT STARTED · 18D deployment verification ⚪ NOT STARTED |
+| 18 | Production Infrastructure | 🟡 **IN PROGRESS** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** (automated backup container, retention pruning, off-host contract, pg_dump -Fc + pg_restore --list verification, isolated restore smoke test PASS, no real secrets/credentials) · 18D deployment verification ⚪ NOT STARTED |
 | 19 | CI/CD | 🔴 Later |
 | 20 | Production QA | 🔴 Later |
 | 21 | Production Launch | 🔴 Later |
@@ -1169,7 +1169,7 @@ This is essential for a real multi-semester product.
 
 # 🟡 Phase 18 — Production Infrastructure
 
-**Status: IN PROGRESS — 18.0 audit ✅ COMPLETE · 18A containerization ✅ COMPLETE · 18B env & secrets ✅ COMPLETE · 18C–18D NOT STARTED.**
+**Status: IN PROGRESS — 18.0 audit ✅ COMPLETE · 18A containerization ✅ COMPLETE · 18B env & secrets ✅ COMPLETE · 18C backup automation ✅ COMPLETE · 18D NOT STARTED.**
 
 ## 18.0 — Production Infrastructure Audit (COMPLETE, read-only)
 
@@ -1243,11 +1243,32 @@ the 18A container architecture:
   PASS · `tsc` PASS · `git diff --check` PASS. No real secrets added; no
   deployment; zero DB mutations.
 
-## 18C — Backup Automation + Retention + Off-Host Protection (NOT STARTED — next authorized slice)
+## 18C — Backup Automation + Retention + Off-Host Protection (COMPLETE, 2026-08-23)
 
-Scheduled rotation (7/4/3), encryption, off-host storage, notifications, production runbook.
+Production-grade scheduled PostgreSQL backup implemented and verified in
+isolation:
 
-## 18D — Deployment & Verification (NOT STARTED)
+- **Backup container** (`deploy/backup/`, postgres:16-based): `run.sh`
+  (scheduler with locking + pg_isready wait), `backup.sh` (pg_dump -Fc +
+  verification: exists, ≥1KB, `pg_restore --list`), `offhost.sh` (copy
+  contract: none/mount/sftp/s3/custom), `retention.sh` (keep latest
+  `BACKUP_RETENTION_COUNT`, default 14; only files matching the naming
+  convention; runs only after successful backup+off-host).
+- **Compose wiring**: `backup` service on `data-net` (private), persistent
+  `backup_data` volume, healthy-depends on postgres, `unless-stopped`,
+  healthcheck, env via `deploy/.env.prod` (`${VAR:?}` for required).
+- **Retention policy**: latest 14 local backups, rolling window, timestamped
+  naming `attendancedash_full_<utc>.dump`.
+- **Off-host contract**: OFFHOST_TYPE none/mount/sftp/s3/custom with
+  placeholders only — no real credentials, nothing connected (deferred to
+  deployment).
+- **Restore**: documented runbook; isolated restore smoke test PASS (backup →
+  disposable postgres → `pg_restore` → data verified → resources removed).
+- **Secrets**: no real credentials; PGPASSWORD env (never argv); nothing
+  logged; `.gitignore` already covers `backups/` + `deploy/.env.prod`.
+- Docs: `docs/phase_18/phase_18c_backup.md`.
+
+## 18D — Deployment & Verification (NOT STARTED — next authorized slice)
 
 Migrations-on-deploy (`alembic upgrade head`), HTTPS/TLS provisioning, deployment verification.
 
