@@ -1353,9 +1353,44 @@ NOT touched. No commit made.
 (`backend/app/core/firebase.py` + `main.py` import + `firebase-admin` from
 `backend/requirements.txt`).
 
-### Phase 14B–14F — NOT STARTED
+### Phase 14B — Backend Firebase Removal (COMPLETE, 2026-08-23)
 
-- **14B** Backend Firebase removal — NOT STARTED.
+**Objective:** eliminate the Firebase Admin SDK/runtime initialization from the FastAPI
+backend while preserving the PostgreSQL-native JWT authentication architecture exactly.
+
+**Delivered:**
+
+1. `backend/app/core/firebase.py` — deleted (31 lines; obsolete Admin SDK initialization).
+2. `backend/app/main.py` — removed only the `from app.core.firebase import
+   initialize_firebase` import and the `initialize_firebase()` call; no other
+   restructuring.
+3. `backend/requirements.txt` — removed `firebase-admin>=6.5.0`.
+4. Backend venv — uninstalled `firebase-admin` 7.5.0 plus its 13 Firebase-specific
+   transitive packages (`google-cloud-firestore`, `google-cloud-storage`,
+   `google-cloud-core`, `google-api-core`, `google-auth`, `google-crc32c`,
+   `google-resumable-media`, `googleapis-common-protos`, `grpcio`, `grpcio-status`,
+   `proto-plus`, `protobuf`, `CacheControl`). `pip check` → "No broken requirements found";
+   zero Firebase/google/grpc remnants.
+
+**Verification results:** `python -m compileall backend/app backend/alembic` PASS ·
+`app.main` imports clean without Firebase (APP IMPORT OK, 32 API paths) · OpenAPI confirms
+`POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `/student/me`, `/student/sync`
+all PRESENT · `get_current_user`/`require_admin`/`HTTPBearer` (deps.py) intact ·
+`create_access_token`/`verify_password`/`hash_password` (security.py) intact ·
+`git diff --check` PASS · diff limited to 3 backend files (36 deletions).
+
+**Scope guards:** zero database changes; zero Alembic commands; `firebase_uid` column,
+model, schema, API fields, and legacy values intentionally preserved (Phase 14D scope);
+legacy migration scripts (`migrate_extract.py`, `migrate_execute.py`,
+`diagnose_failures.py`) keep their historical `firebase_admin` imports with graceful
+blocked-exit paths (out of scope); no frontend change; no commit made.
+
+**Next authorized slice:** Phase 14C — deployment/configuration cleanup
+(`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`,
+`.gitignore` Firebase entries, Firebase prompts).
+
+### Phase 14C–14F — NOT STARTED
+
 - **14C** Deployment/configuration cleanup (`firebase.json`, `.firebaserc`, `firestore.rules`, `.gitignore`, prompts) — NOT STARTED.
 - **14D** `firebase_uid`/data cleanup (legacy script updates + Alembic drop) — NOT STARTED.
 - **14E** Full authentication/data-path regression verification — NOT STARTED.

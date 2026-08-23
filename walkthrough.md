@@ -1273,3 +1273,70 @@ Date: 2026-08-23 · Scope: remove Firebase SDK from the Next.js frontend · Auth
 **HARD STOP:** No commit made. No push performed. Phase 14B NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 14B Walkthrough (Backend Firebase Removal)
+
+Date: 2026-08-23 · Scope: remove Firebase Admin SDK from the FastAPI backend · Auth unchanged
+
+> **PHASE 14B COMPLETE.** The backend no longer imports or initializes the Firebase Admin
+> SDK. The FastAPI application imports cleanly without it, and the JWT + PostgreSQL
+> authentication architecture is byte-identical in behavior. Zero database mutations,
+> zero migration changes, zero commits.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `backend/app/core/firebase.py` | Deleted (31 lines — obsolete Firebase Admin SDK initialization module) |
+| `backend/app/main.py` | Removed `from app.core.firebase import initialize_firebase` + the `initialize_firebase()` call (4 lines); nothing else touched |
+| `backend/requirements.txt` | Removed `firebase-admin>=6.5.0` |
+
+## Firebase Admin Runtime References Removed
+
+- `backend/app/core/firebase.py` — `import firebase_admin`, `from firebase_admin import credentials`, `initialize_app`, `get_app`, `_apps`.
+- `backend/app/main.py` — `initialize_firebase` import and call.
+- venv — `firebase-admin` 7.5.0 + 13 Firebase-specific transitive packages
+  (`google-cloud-firestore`, `google-cloud-storage`, `google-cloud-core`,
+  `google-api-core`, `google-auth`, `google-crc32c`, `google-resumable-media`,
+  `googleapis-common-protos`, `grpcio`, `grpcio-status`, `proto-plus`, `protobuf`,
+  `CacheControl`).
+
+## Dependency Changes
+
+- `backend/requirements.txt`: 1 line removed (`firebase-admin>=6.5.0`).
+- Backend venv: 14 packages uninstalled; `pip check` → "No broken requirements found";
+  `pip list` shows zero firebase/google/grpc/protobuf remnants.
+
+## Verification Results
+
+| Check | Result |
+|---|---|
+| `python -m compileall backend/app backend/alembic` | ✅ PASS |
+| `app.main` import without Firebase | ✅ APP IMPORT OK, 32 API paths |
+| OpenAPI auth endpoints | ✅ `/api/v1/auth/login` [post], `/api/v1/auth/register` [post] |
+| OpenAPI student endpoints | ✅ `/api/v1/student/me`, `/api/v1/student/sync` PRESENT |
+| JWT dependency chain | ✅ `get_current_user`/`require_admin` (coroutine), `HTTPBearer` scheme, `create_access_token`/`verify_password`/`hash_password` intact |
+| `git diff --check` | ✅ PASS (exit 0; LF/CRLF warnings only, pre-existing) |
+| Git diff scope | ✅ 3 backend files only: `firebase.py` (deleted), `main.py`, `requirements.txt` — 36 deletions, 0 insertions |
+| Backend Firebase Admin search | ✅ no active `firebase_admin`/`initialize_firebase`/`verify_id_token` runtime refs in `backend/app` |
+| `firebase_uid` references | ✅ intentionally preserved (model, schema, endpoints, repo, legacy scripts) — Phase 14D scope |
+
+## Scope Guards Confirmed
+
+- **Database**: zero mutations; no Alembic commands; no INSERT/UPDATE/DELETE/ALTER/DROP/CREATE; `firebase_uid` column + legacy values untouched.
+- **Frozen systems**: auth endpoints, JWT implementation, password hashing/verifier, all authorization dependencies, ADMIN role resolution, engines (attendance/eligibility/event/calendar/quiz/lab), analytics, dashboard, history, notifications, PWA — all untouched.
+- **Frontend**: untouched (no frontend files in diff; Phase 14A state preserved).
+- **Legacy migration scripts** (`migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`): left as historical tools with their graceful blocked-exit paths — out of 14B scope.
+- **Historical docs** (`backend/API_DESIGN.md`, `backend/MIGRATION_AUDIT.md`): stale Firebase claims left for Phase 14F reconciliation.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 14 status table + header + section updated — 14.0 ✅, 14A ✅, 14B ✅, 14C identified as next authorized slice, 14C–14F NOT STARTED.
+- `implementation_plan.md`: Phase 14B section added — COMPLETE; 14C–14F pending.
+- `task.md`: Phase 14B checklist complete; 14C–14F unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized slice: Phase 14C — deployment/configuration cleanup.**
+**HARD STOP:** No commit made. No push performed. Phase 14C NOT STARTED.
+
+---

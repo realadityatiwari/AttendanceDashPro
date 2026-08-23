@@ -1278,14 +1278,28 @@ Status: **COMPLETE** — implementation verified; zero backend/DB changes; no co
 - [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 - HARD STOP — Phase 14B NOT STARTED; no commit made.
 
-## Phase 14B — Backend Firebase Removal (NOT STARTED)
+## Phase 14B — Backend Firebase Removal (COMPLETE, 2026-08-23)
 
-- [ ] Remove `backend/app/core/firebase.py`
-- [ ] Remove `initialize_firebase()` import/call from `backend/app/main.py`
-- [ ] Remove `firebase-admin` from `backend/requirements.txt` and uninstall from venv
-- [ ] Verify backend starts and auth works without firebase-admin
+Status: **COMPLETE** — implementation verified; zero DB/migration changes; no commit.
 
-## Phase 14C — Deployment / Configuration Cleanup (NOT STARTED)
+- [x] Deleted `backend/app/core/firebase.py`
+- [x] Removed `initialize_firebase()` import/call from `backend/app/main.py` (nothing else touched)
+- [x] Removed `firebase-admin>=6.5.0` from `backend/requirements.txt`
+- [x] Uninstalled `firebase-admin` 7.5.0 + 13 Firebase transitive packages from venv; `pip check` clean; zero remnants
+- [x] `python -m compileall backend/app backend/alembic` PASS
+- [x] `app.main` imports clean without Firebase (32 API paths)
+- [x] Auth endpoints verified in OpenAPI: `/api/v1/auth/login`, `/api/v1/auth/register`, `/student/me`, `/student/sync` PRESENT
+- [x] JWT path structurally intact: `get_current_user`/`require_admin`/`HTTPBearer` (deps.py), `create_access_token`/`verify_password`/`hash_password` (security.py)
+- [x] `git diff --check` PASS; diff limited to 3 backend files (36 deletions)
+- [x] `firebase_uid` column/model/schema/API references intentionally preserved (Phase 14D scope)
+- [x] Legacy migration scripts' `firebase_admin` imports left intact (historical tools, graceful blocked-exit)
+- [x] Zero database mutations; zero Alembic commands
+- [x] Frontend untouched (no frontend files in diff)
+- [x] Frozen systems untouched (auth, JWT, engines, PWA, Phase 12)
+- [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+- HARD STOP — Phase 14C NOT STARTED; no commit made.
+
+## Phase 14C — Deployment / Configuration Cleanup (NOT STARTED — next authorized slice)
 
 - [ ] Remove `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`
 - [ ] Remove Firebase entries from `.gitignore`

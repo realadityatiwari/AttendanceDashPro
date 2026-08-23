@@ -7,4 +7,3 @@ uvicorn>=0.30.0
 asyncpg>=0.30.0
 greenlet>=3.1.0
 tzdata
-firebase-admin>=6.5.0
