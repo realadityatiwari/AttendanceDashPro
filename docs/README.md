@@ -1,5 +1,22 @@
 # AttendanceDash Pro — Project Bible & AI Developer Handoff
 
+> ## ⚠️ DOCUMENTATION BOUNDARY (2026-08-23)
+>
+> The documents in this directory (docs/00–22 and the S3.x series) describe the
+> **legacy single-page web application** and its Firebase-era architecture. That
+> legacy application has been **retired** (Phase 15 — Legacy Web App + Legacy PWA
+> Retirement). Its root-level files (`index.html`, `js/`, `css/`, `assets/`, root
+> `manifest.json`, root `service-worker.js`, `offline.html`) have been removed from
+> the repository. This documentation is preserved for historical provenance.
+>
+> **The active application is:** Next.js frontend (`frontend/`) + FastAPI backend
+> (`backend/`) + PostgreSQL + JWT authentication. Firebase is fully retired
+> (Phases 14A–14E). The current Next.js PWA (Phase 13, `frontend/public/`) is the
+> active PWA.
+>
+> For current project status, see `MASTER_ROADMAP.md`, `implementation_plan.md`,
+> `task.md`, and `walkthrough.md` at the repository root.
+
 This directory contains the permanent technical reference for AttendanceDash Pro.
 
 It is written for **AI agents and human developers** who need to continue work on this project with minimal context loss.

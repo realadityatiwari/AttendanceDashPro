@@ -1,5 +1,14 @@
 # Database Design (Phase 2)
 
+> ## ⚠️ HISTORICAL DOCUMENT (superseded in part 2026-08-23)
+>
+> This document is the original Phase 2 relational design. The `User` entity no
+> longer "links Firebase UID to application data": the `users.firebase_uid` column
+> was removed by migration `e1f2a3b4c5d6` (Phase 14D). Firebase is retired; identity
+> is `users.id` (UUID) with `users.roll_number` as the canonical login credential.
+> The remainder of the entity/relationship design remains accurate. Preserved for
+> historical provenance.
+
 This document formalizes the relational database architecture for AttendanceDash Pro. It translates the observed existing domain (from Phase 1 schemas and JS behavior) into a normalized PostgreSQL schema using SQLAlchemy.
 
 ## 1. Entity List & Purpose

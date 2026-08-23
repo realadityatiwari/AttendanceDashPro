@@ -1582,3 +1582,229 @@ Phase 14F documentation reconciliation.
 **HARD STOP:** No commit made. No push performed. Phase 14F NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 14F Walkthrough (Freeze & Governance Reconciliation)
+
+Date: 2026-08-23 · Scope: final repository-wide reconciliation of Firebase retirement · Read-only of application code
+
+> **PHASE 14F COMPLETE.** Firebase retirement is fully reconciled and FROZEN. All
+> current documentation, governance, README, roadmap, plan, task, and walkthrough
+> state now accurately describe the post-Firebase architecture (PostgreSQL + FastAPI
+> + JWT + Next.js). Historical provenance preserved. Zero application code changes,
+> zero database mutations, zero commits.
+
+## Objective
+
+Ensure all CURRENT documentation accurately describes the post-Firebase architecture,
+distinguishing: (1) the active application (PostgreSQL + FastAPI + JWT + Next.js),
+(2) historical artifacts (old migrations, migration tooling, historical reports),
+and (3) the future legacy-app/PWA retirement (a SEPARATE phase).
+
+## Repository Audit
+
+Every Firebase reference classified:
+
+| Class | Result |
+|---|---|
+| A. Active runtime dependency | **NONE** (zero in `frontend/src`, `backend/app`, manifests, config) |
+| B. Current documentation that was wrong | README.md (rewritten), backend design/migration docs (banners), docs/README.md (boundary banner) |
+| C. Historical documentation / provenance | Preserved (phase reports, audit reports, S3.x docs) |
+| D. Migration history | Preserved (Alembic migrations, migration reports) |
+| E. Future legacy-app / PWA artifact | Preserved (root `index.html`, `js/`, legacy PWA files, legacy-app docs) |
+| F. False positive / irrelevant | Ignored (node_modules, lockfiles, repomix-output.xml) |
+
+## Active Firebase Runtime Result
+
+- `frontend/src`: zero Firebase imports/SDK/Auth/Firestore/`firebase_uid` references.
+- `backend/app`: zero `firebase-admin`, Firebase imports, or `firebase_uid` fields.
+- `frontend/package.json` / `package-lock.json`: `firebase` and `@firebase/*` absent.
+- `backend/requirements.txt`: `firebase-admin` absent.
+- Configuration: no active Firebase runtime configuration.
+
+## Documentation Reconciled
+
+| File | Correction |
+|---|---|
+| `README.md` | Rewritten: current architecture (PostgreSQL → FastAPI → JWT → Next.js), Firebase RETIRED, legacy app noted as preserved/pending separate retirement; canonical dev workflow preserved |
+| `backend/API_DESIGN.md` | Historical banner — describes pre-JWT Firebase design, superseded (content untouched) |
+| `backend/DATABASE_DESIGN.md` | Historical banner — `firebase_uid` removed by migration `e1f2a3b4c5d6`; superseded in part (content untouched) |
+| `backend/MIGRATION_NOTES.md` | Historical banner — §9 Firebase-Auth plan never executed; JWT-native adopted; Firebase retired |
+| `backend/MIGRATION_AUDIT.md` | Historical banner — Phase 5.0 pre-migration audit; migration since executed; Firebase retired |
+| `docs/README.md` | Boundary banner — docs/ series describes the legacy app (still present, not active) |
+| `MASTER_ROADMAP.md` | Phase 14 COMPLETE & FROZEN (14.0–14F ✅); Phase 15 = Legacy Web App + Legacy PWA Retirement inserted; phases renumbered 15→16 … 21→22; current-position + phase-11/14 headers synchronized |
+| `implementation_plan.md` | Phase 14F section COMPLETE; Phase 15 section added (NOT STARTED) |
+| `task.md` | Phase 14F checklist COMPLETE; Phase 15 checklist added (unchecked) |
+| `walkthrough.md` | This entry |
+
+## Historical Artifacts Preserved
+
+- Alembic migrations `7117a007a0da` (initial, `firebase_uid`), `c3d4e5f6a7b8`
+  (nullable), `e1f2a3b4c5d6` (drop) — migration history.
+- `backend/scripts/migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`
+  — confirmed **historical one-shot migration/diagnostic tooling**, not active
+  runtime code; preserved with provenance.
+- `backend/migration_reports/` — historical migration reports.
+- `docs/phase_14/phase_14_architecture_audit.md`, phase audit reports, S3.x series,
+  walkthrough historical entries — all preserved.
+
+## Legacy App + PWA Boundary
+
+The legacy web application (`index.html`, `js/`, `css/`, `assets/`, `offline.html`,
+`timetable.json`) and legacy PWA (root `manifest.json`, root `service-worker.js`,
+icons) were **NOT retired in Phase 14F**. They remain preserved for historical
+reference and are the subject of the **separate future Phase 15 — Legacy Web App +
+Legacy PWA Retirement**. The current Next.js PWA (Phase 13) is part of the active
+frozen application and was NOT marked retired.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| Active-runtime Firebase search (frontend/src, backend/app, manifests, config) | ✅ zero |
+| `git diff --check` | ✅ PASS (exit 0) |
+| `npx tsc --noEmit` | ✅ PASS |
+| `npm run build` | ✅ PASS (15/15 routes) |
+| `python -m compileall backend/app` | ✅ PASS |
+| Alembic single head `e1f2a3b4c5d6` | ✅ unchanged |
+| Phase renumbering consistency (15→16 … 21→22) | ✅ headers, dependency path, status block |
+| DB mutations | **ZERO** |
+| Application code / engine / schema / migration changes | **ZERO** |
+
+## Files Changed
+
+`README.md` · `MASTER_ROADMAP.md` · `implementation_plan.md` · `task.md` ·
+`walkthrough.md` · `backend/API_DESIGN.md` · `backend/DATABASE_DESIGN.md` ·
+`backend/MIGRATION_NOTES.md` · `backend/MIGRATION_AUDIT.md` · `docs/README.md`
+(plus the pre-existing uncommitted Phase 14E verifier fix `verify_phase_11b.py`).
+
+## Files Intentionally NOT Changed
+
+Legacy root app (`index.html`, `js/`, `css/`, `assets/`, `offline.html`,
+`timetable.json`) · legacy PWA (root `manifest.json`, `service-worker.js`, icons) ·
+historical migrations · migration tooling · legacy-app docs (docs/00–22, S3.x
+series) · all frozen application systems · database.
+
+## Database Mutation Status
+
+**ZERO.** No INSERT/UPDATE/DELETE/ALTER/DROP/CREATE. No migration created.
+Alembic head remains `e1f2a3b4c5d6`.
+
+## Frozen Systems Protected
+
+Authentication architecture, JWT, password hashing, all engines, analytics,
+dashboard, Track, History, Calendar, Events, Laboratory, Notifications,
+Preferences, current Next.js PWA (Phase 13), Phase 12, Phases 14A–14E — untouched.
+
+## Final Phase Status
+
+- 14A ✅ COMPLETE · 14B ✅ COMPLETE · 14C ✅ COMPLETE · 14D ✅ COMPLETE ·
+  14E ✅ COMPLETE · **14F ✅ COMPLETE**
+- **Firebase retirement: COMPLETE & FROZEN**
+- **Current application:** PostgreSQL + FastAPI + JWT + Next.js
+- **Legacy web app:** STILL PRESENT / HISTORICAL / PENDING SEPARATE RETIREMENT
+- **Legacy PWA:** STILL PRESENT / HISTORICAL / PENDING SEPARATE RETIREMENT
+- **Next authorized phase:** Phase 15 — Legacy Web App + Legacy PWA Retirement
+
+**HARD STOP:** No commit made. No push performed. Phase 15 NOT STARTED.
+
+---
+
+# AttendanceDash Pro — Phase 15 Walkthrough (Legacy Web App + Legacy PWA Retirement)
+
+Date: 2026-08-23 · Scope: retire the entire root-level legacy web/PWA runtime · No feature work
+
+> **PHASE 15 COMPLETE.** The legacy Firebase-era web application and its legacy PWA
+> (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`,
+> root `service-worker.js`) have been retired. The active application is `frontend/`
+> (Next.js, including the Phase 13 PWA) + `backend/` (FastAPI + PostgreSQL + JWT).
+> Historical provenance preserved. Zero database mutations, zero commits.
+
+## Repository Audit (dependency classification)
+
+Every legacy file was classified before deletion:
+
+| Class | Outcome |
+|---|---|
+| A. Active runtime dependency | `timetable.json` — **PRESERVED** (read by `seed_academic_baseline.py`, `expand_baseline.py`, `seed_academic_events.py`, `verify_phase_7_1.py`, `verify_quiz_day_materialization.py`) |
+| B. Historical artifact | docs/ series, walkthroughs, migration tooling, Alembic history, root reports — **PRESERVED** |
+| C. Documentation-only reference | legacy docs reference retired files — **PRESERVED** (banners added: README.md, docs/README.md, prompts/README.md) |
+| D. Dead/obsolete legacy runtime | root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, `screenshot.png`, `test-e2e.js`, `scratch_pwa_*`, root `package.json`/`package-lock.json`/`node_modules` — **REMOVED** |
+| E. Ambiguous | none — all ambiguous items investigated and resolved (e.g., `timetable.json` → active; root reports → archival) |
+
+## Files Removed (39 tracked)
+
+- Legacy HTML/PWA surface: `index.html`, `offline.html`, `manifest.json`, `service-worker.js`, `screenshot.png`
+- Legacy JS (21): `js/app.js`, `auth.js`, `firebase.js`, `attendance-engine.js`, `calendar-engine.js`, `quiz-engine.js`, `laboratory-engine.js`, `storage.js`, `ui.js`, `utils.js`, `validation.js`, `events-controller.js`, `feedback.js`, `daily-attendance.js`, `dateContext.js`, `pwa.js`, `test-attendance-engine.js`, `test-calendar-engine.js`, `test-calendar-window.js`, `test-events-controller.js`, `test-persistence-sync.js`
+- Legacy CSS (3): `css/styles.css`, `responsive.css`, `daily-attendance.css`
+- Legacy assets (3): `assets/icons/icon-192.png`, `icon-512.png`, `maskable-512.png`
+- Legacy tests/tooling (5): `test-e2e.js`, `scratch_pwa_mock_test.js`, `scratch_pwa_mock_test2.js`, `scratch_pwa_test.js`, `scratch_pwa_test2.js`
+- Legacy-only root package files (3): `package.json`, `package-lock.json`, `node_modules/` (express/jsdom/puppeteer — legacy-only)
+
+## Files Preserved
+
+| Item | Reason |
+|---|---|
+| `timetable.json` | **Active backend data dependency** (seed + verify scripts) |
+| `docker-compose.yml`, `start-dev.ps1`, `stop-dev.ps1` | Canonical active dev workflow |
+| `frontend/` (incl. `frontend/public/manifest.json` + `service-worker.js`) | Active application + Phase 13 PWA |
+| `backend/` (app, alembic, scripts incl. migration tooling) | Active backend + historical one-shot tools |
+| `docs/` (00–22, S3.x, phase reports) | Historical provenance |
+| `prompts/` | Historical legacy-app tooling (banner added) |
+| `regression_report.md`, `verification_report.md`, `repomix-output.xml` | Archival/generated provenance |
+
+## Dependencies Found & Handled
+
+- **`timetable.json`** — active dependency; preserved (not removed).
+- **Root `package.json` deps (express/jsdom/puppeteer)** — legacy-only (legacy serving/tests); removed with the legacy runtime; frontend deps in `frontend/package.json` untouched.
+- **Next.js multi-lockfile warning** — caused by the root `package-lock.json`; resolved by removing it (build now cleanly selects `frontend/`).
+- **`frontend/src` `/manifest.json` + `/service-worker.js`** — resolve to `frontend/public/` (active PWA); unchanged.
+- No active imports/serves/builds/deploys of retired files remain.
+
+## Documentation Reconciliation
+
+- `README.md` — repository layout now states active surface = `frontend/` + `backend/`; legacy runtime retired; `timetable.json` noted as canonical data; current PWA boundary explicit.
+- `docs/README.md` — boundary banner updated: legacy app RETIRED (was "preserved/pending retirement"); active app + PWA stated.
+- `prompts/README.md` — banner added: prompts reference the retired legacy app; do not apply to active codebase without adaptation.
+- `MASTER_ROADMAP.md` — Phase 15 COMPLETE & FROZEN; next authorized phase = Phase 16 (Production Security Hardening); status blocks synchronized.
+- `implementation_plan.md`, `task.md`, `walkthrough.md` — Phase 15 sections updated.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | ✅ PASS |
+| `npm run build` | ✅ PASS (15/15 routes; multi-lockfile warning resolved) |
+| `python -m compileall backend/app` | ✅ PASS |
+| `git diff --check` | ✅ PASS |
+| Legacy-file reference search (frontend/src + backend/app) | ✅ zero active references |
+| Active Firebase runtime search | ✅ zero (unchanged from Phase 14F) |
+| Alembic single head `e1f2a3b4c5d6` | ✅ unchanged |
+| Database mutations | ZERO |
+
+## Files Intentionally NOT Changed
+
+Active Next.js app (src, public, package files) · backend app/alembic/scripts ·
+`timetable.json` · docker/dev scripts · governance/historical docs content (banners
+only) · current PWA · database.
+
+## Database Mutation Status
+
+**ZERO.** No INSERT/UPDATE/DELETE/ALTER/DROP/CREATE. No migration created. Alembic
+head unchanged (`e1f2a3b4c5d6`).
+
+## Frozen Systems Protected
+
+PostgreSQL schema/data, JWT auth, password hashing, UserRole, all engines, analytics,
+dashboard, Track, History, Calendar, Events, Laboratory, Notifications, Preferences,
+current Next.js PWA, Phase 12, Phase 13, Phases 14A–14F — untouched.
+
+## Final Phase Status
+
+- **Phase 15 (Legacy Web App + Legacy PWA Retirement): COMPLETE & FROZEN**
+- **Active application:** `frontend/` (Next.js + Phase 13 PWA) + `backend/` (FastAPI + PostgreSQL + JWT)
+- **Legacy web app / legacy PWA:** RETIRED (root-level runtime removed; historical provenance preserved)
+- **Next authorized phase:** Phase 16 — Production Security Hardening
+
+**HARD STOP:** No commit made. No push performed. Phase 16 NOT STARTED.
+
+---

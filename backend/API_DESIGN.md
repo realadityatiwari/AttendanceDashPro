@@ -1,5 +1,21 @@
 # API Design Document (Phase 3)
 
+> ## ⚠️ HISTORICAL DOCUMENT (superseded 2026-08-23)
+>
+> This document describes the **original Phase 3 design intent**, written before the
+> JWT-native authentication architecture existed. The Firebase Authentication design
+> it describes was **never completed as written** and has been fully superseded:
+> - The runtime backend today uses **JWT + PostgreSQL-native credentials**
+>   (login/register issue a signed JWT; `get_current_user` resolves the user from
+>   PostgreSQL). See `backend/app/api/v1/endpoints/auth.py` and
+>   `backend/app/api/dependencies/deps.py`.
+> - **Firebase is retired** (Phases 14A–14E): no Firebase Auth, no firebase-admin,
+>   no `firebase_uid` (column removed by migration `e1f2a3b4c5d6`).
+> - The "501 Not Implemented" Firebase scaffolding described below no longer exists.
+>
+> This document is preserved for historical provenance and must not be treated as a
+> description of the current API.
+
 This document maps out the FastAPI REST API surface for the AttendanceDash Pro domain engines. The API is strictly designed to serve existing frontend capabilities and application-level requirements without exposing internal database implementation details.
 
 ## Authentication Strategy

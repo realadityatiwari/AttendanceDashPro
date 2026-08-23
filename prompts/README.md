@@ -1,5 +1,15 @@
 # AttendanceDash Pro — AI Prompt Templates
 
+> ## ⚠️ BOUNDARY NOTE (2026-08-23)
+>
+> These prompt templates were written for the **legacy single-page web application**
+> (root `index.html`, `js/`, `css/`, `assets/`, legacy PWA) and reference its files.
+> The legacy application has been **retired** (Phase 15 — Legacy Web App + Legacy
+> PWA Retirement); its root-level runtime files no longer exist. The prompts are
+> preserved for historical provenance. The **active application** is the Next.js
+> frontend (`frontend/`) + FastAPI backend (`backend/`) + PostgreSQL + JWT — do not
+> apply these legacy-app prompts to the active codebase without adaptation.
+
 This directory contains production-grade prompt templates designed to standardize development for any AI coding agent (Claude, Codex, Gemini, Cursor, Windsurf, etc.). 
 
 These prompts enforce the project's strict architectural rules, unidirectional data flow, and cross-platform parity. 

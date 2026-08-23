@@ -4,9 +4,9 @@
 >
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
-> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
+> **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** — column dropped, model/schema/API/frontend cleaned, scripts updated, migration `e1f2a3b4c5d6`; all counts unchanged, `tsc`/`compileall` PASS · **14E regression verification ✅** — JWT/auth/endpoint regression PASS, 5 frozen-phase verifiers green (6.5 27/27, 6.6 36/36, 7.1 26/26, 10C 23/23, 10D 18/18, 11A 19/19, 11B 23/23, 12E 5/5), one verifier head-assertion compatibility fix; DB baseline byte-identical · **14F NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN**.
+> **Next phase:** Phase 16 — Production Security Hardening **NOT STARTED**. Phase 15 (Legacy Web App + Legacy PWA Retirement) is **COMPLETE & FROZEN** — the legacy root application and its legacy PWA have been retired; the active application is `frontend/` (Next.js, incl. the Phase 13 PWA) + `backend/` (FastAPI + PostgreSQL + JWT). Firebase retirement (Phases 14.0–14F) **COMPLETE & FROZEN**.
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -61,7 +61,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | **11** | **Notifications & Reminders** | ✅ **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented) |
 | 12 | Mobile / Responsive Experience | 🟡 **IN PROGRESS** — 12.0 architecture & implementation-readiness audit ✅ · **12A responsive foundation + mobile navigation ✅** (S4 4-tab bottom nav + More sheet, shell/dialog scroll safety, touch-target foundation; desktop unchanged) · **12B Track/Dashboard/Calendar responsiveness ✅** (month-nav overflow fixed, grid cells enlarged at 320, Track date nav fluid + ≥40px controls, session-card collisions fixed, dashboard wrap fixes; desktop byte-identical) · **12C ✅ COMPLETE (2026-08-22)** — page responsiveness across Laboratory / Subjects / Quiz / Events (`docs/phase_12/phase_12c_implementation_report.md`, commit `31f75ca`) + the authorized cancellation-lifecycle & counting-consistency correctness fix (`docs/bugfix/cancellation_state_and_counting_consistency_report.md`) |
 | 13 | PWA / Installability | ✅ **COMPLETE & FROZEN** — manifest, service worker, SVG icons, install prompt, standalone detection, online/offline state; zero backend/DB/migration changes; `tsc`/`build`/`diff --check` PASS |
-| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`; model/schema/API/frontend cleaned; legacy scripts updated; 31 users/1 admin/30 students intact; `tsc`/`compileall` PASS) · **14E regression verification ✅** (JWT/auth/endpoint regression PASS, 5 frozen-phase verifiers green, 1 verifier head-assertion fix; DB baseline byte-identical; zero persistent test artifacts) · 14F freeze/governance ⚪ NOT STARTED |
+| 14 | Firebase Retirement | ✅ **COMPLETE & FROZEN** — 14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`) · **14E regression verification ✅** · **14F freeze & governance reconciliation ✅**. Firebase is fully retired from the active application (PostgreSQL + FastAPI + JWT + Next.js). |
+| 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
 | 15 | Production Security Hardening | 🔴 Later |
 | 16 | Data Integrity & Migration Hardening | 🔴 Later |
 | 17 | Production Infrastructure | 🔴 Later |
@@ -680,7 +681,7 @@ Complete:
 
 ---
 
-# 🟡 Phase 11 — Notifications & Reminders (IN PROGRESS)
+# ✅ Phase 11 — Notifications & Reminders (COMPLETE & FROZEN)
 
 Only after the academic/event architecture is stable.
 
@@ -782,9 +783,9 @@ Include:
 
 ---
 
-# 🟡 Phase 14 — Firebase Retirement
+# 🟡 Phase 14 — Firebase Retirement (COMPLETE & FROZEN)
 
-**Status: IN PROGRESS — 14.0 audit ✅ · 14A complete ✅ · 14B complete ✅ · 14C complete ✅ · 14D complete ✅ · 14E–14F NOT STARTED.**
+**Status: COMPLETE & FROZEN — 14.0 audit ✅ · 14A ✅ · 14B ✅ · 14C ✅ · 14D ✅ · 14E ✅ · 14F ✅.**
 
 ## 14.0 — Firebase Retirement Audit (COMPLETE, read-only, 2026-08-23)
 
@@ -905,16 +906,66 @@ regressing the PostgreSQL + JWT application:
 - Backend: `python -m compileall backend/app backend/scripts backend/alembic` PASS.
 - Browser/manual testing NOT performed (owner responsibility).
 
-## 14F — Freeze & Governance Reconciliation (NOT STARTED — next authorized slice)
+## 14F — Freeze & Governance Reconciliation (COMPLETE, 2026-08-23)
 
-Reconcile docs, README, and archive stale Firebase documentation.
+Final reconciliation of the Firebase retirement:
+- **README.md** rewritten — describes the active architecture (PostgreSQL → FastAPI →
+  JWT API → Next.js → React UI), marks Firebase as **RETIRED**, and documents the
+  legacy root application as preserved/pending separate retirement.
+- **Historical banners** added to `backend/API_DESIGN.md`, `backend/DATABASE_DESIGN.md`,
+  `backend/MIGRATION_NOTES.md`, `backend/MIGRATION_AUDIT.md` — each now explicitly
+  states it describes the pre-JWT/pre-retirement design and is superseded, without
+  rewriting their content.
+- **docs/README.md** boundary banner — the docs/ series is documented as describing
+  the legacy application (still present, not the active app).
+- Governance synchronized: Phase 14 marked **COMPLETE & FROZEN**; Phase 15 designated
+  as the separate **Legacy Web App + Legacy PWA Retirement** phase (subsequent
+  planned phases renumbered 15→16 … 21→22).
+- Verification: active-runtime Firebase search clean (frontend/src + backend/app +
+  manifests + config) · `git diff --check` PASS · `tsc`/`build` PASS ·
+  `compileall` PASS · alembic head `e1f2a3b4c5d6` unchanged · zero DB mutations ·
+  zero commits.
 
 **Original late-stage guidance (historical):** Firebase must not be removed prematurely —
 the audit above proved the retirement conditions before any removal.
 
 ---
 
-# 🔴 Phase 15 — Production Security Hardening
+# ✅ Phase 15 — Legacy Web App + Legacy PWA Retirement
+
+**Status: COMPLETE & FROZEN (2026-08-23).**
+
+Retired the entire legacy web application and legacy PWA (as a whole, NOT as
+Firebase cleanup — Firebase retirement was Phase 14, COMPLETE & FROZEN):
+
+- Removed legacy runtime surface: root `index.html`, `js/` (21 files), `css/`
+  (3 files), `assets/icons/` (3 files), `offline.html`, root `manifest.json`,
+  root `service-worker.js`, `screenshot.png`.
+- Removed legacy test/tooling artifacts: `test-e2e.js`, `scratch_pwa_mock_test.js`,
+  `scratch_pwa_mock_test2.js`, `scratch_pwa_test.js`, `scratch_pwa_test2.js`.
+- Removed legacy-only root package files: `package.json`, `package-lock.json`,
+  `node_modules/` (express/jsdom/puppeteer — legacy-only; frontend deps live in
+  `frontend/` and were unaffected).
+- **Preserved `timetable.json`** — active data dependency of backend seed/verify
+  scripts (`seed_academic_baseline.py`, `expand_baseline.py`,
+  `seed_academic_events.py`, `verify_phase_7_1.py`, `verify_quiz_day_materialization.py`).
+- Preserved historical provenance: docs/ series, historical walkthroughs, migration
+  tooling, Alembic history, `regression_report.md`, `verification_report.md`,
+  `repomix-output.xml`, prompts/ (all marked as historical via banners/notes).
+- Documentation reconciled: README.md, docs/README.md, prompts/README.md updated to
+  state the legacy runtime is retired and the active application is `frontend/` +
+  `backend/`.
+- Verification: `tsc` PASS · `npm run build` PASS (15/15; workspace-root lockfile
+  warning now resolved) · `compileall` PASS · `git diff --check` PASS · zero active
+  references to retired files · alembic head `e1f2a3b4c5d6` unchanged · zero DB
+  mutations · zero commits.
+
+The **current Next.js PWA** (Phase 13) is part of the active frozen application and
+was NOT affected.
+
+---
+
+# 🔴 Phase 16 — Production Security Hardening
 
 ## Authentication
 
@@ -964,7 +1015,7 @@ Especially:
 
 ---
 
-# 🔴 Phase 16 — Data Integrity & Migration Hardening
+# 🔴 Phase 17 — Data Integrity & Migration Hardening
 
 Before production:
 
@@ -1012,7 +1063,7 @@ This is essential for a real multi-semester product.
 
 ---
 
-# 🔴 Phase 17 — Production Infrastructure
+# 🔴 Phase 18 — Production Infrastructure
 
 Move from:
 
@@ -1051,7 +1102,7 @@ Exact hosting choices will be made later based on cost, reliability and requirem
 
 ---
 
-# 🔴 Phase 18 — CI/CD
+# 🔴 Phase 19 — CI/CD
 
 Establish a production quality gate:
 
@@ -1073,7 +1124,7 @@ Development workflows should remain quota-efficient, while production receives a
 
 ---
 
-# 🔴 Phase 19 — Production QA
+# 🔴 Phase 20 — Production QA
 
 Perform a complete real-user journey.
 
@@ -1149,7 +1200,7 @@ Perform a complete real-user journey.
 
 ---
 
-# 🔴 Phase 20 — Production Launch
+# 🔴 Phase 21 — Production Launch
 
 Only after QA passes.
 
@@ -1189,7 +1240,7 @@ Monitoring:
 
 ---
 
-# 🔵 Phase 21 — Post-Launch
+# 🔵 Phase 22 — Post-Launch
 
 After real users begin using the system:
 
@@ -1254,6 +1305,8 @@ PHASE 19
 PHASE 20
    ↓
 PHASE 21
+   ↓
+PHASE 22
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -1487,9 +1540,10 @@ PHASE 9  ████████████████████  COMPLETE 
 PHASE 10 ████████████████████  COMPLETE 🔒 (10.0 audit · 10A settings · 10B program/profile · 10C feedback · 10D preferences · 10E freeze)
 ...
 PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
-PHASE 21 ░░░░░░░░░░░░░░░░░░░░  ONGOING
+PHASE 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+PHASE 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
-> **Next phase:** Phase 11 — Notifications & Reminders (pending roadmap reconciliation/review).
+> **Next phase:** Phase 16 — Production Security Hardening (Phase 15 legacy-app retirement COMPLETE & FROZEN).
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

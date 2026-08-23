@@ -16,7 +16,7 @@ async def sync_student_profile(
 ):
     """
     Local authentication sync endpoint.
-    Maintains compatibility with legacy frontend sync call without relying on Firebase.
+    Maintains compatibility with the legacy frontend sync call (JWT-authenticated).
     """
     user = current_user
     

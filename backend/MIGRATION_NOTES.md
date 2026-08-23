@@ -1,5 +1,14 @@
 # MIGRATION NOTES (Phase 1)
 
+> ## ⚠️ HISTORICAL DOCUMENT (superseded 2026-08-23)
+>
+> This document records Phase 1 migration strategy decisions. Section 9's "Future
+> Firebase Authentication Integration" plan was **never executed as written**: the
+> backend adopted **PostgreSQL-native JWT authentication** instead (login/register
+> + signed JWT + `get_current_user`), and **Firebase is now fully retired**
+> (Phases 14A–14E; `firebase_uid` column removed by migration `e1f2a3b4c5d6`).
+> Preserved for historical provenance.
+
 This document tracks the strategic decisions, conflicts, and resolutions made during the migration of AttendanceDash Pro from its legacy JS architecture to the Python/FastAPI backend.
 
 ## 1. JS → Python Mapping

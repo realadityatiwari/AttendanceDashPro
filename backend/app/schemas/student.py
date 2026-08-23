@@ -13,8 +13,8 @@ class StudentProfile(BaseModel):
     # authoritative for authorization; this is read-only profile information
     # used only to decide whether admin controls are shown.
     role: str = "STUDENT"
-    # NOTE: email is not stored in PostgreSQL. It is owned by Firebase Auth.
-    # The backend does not persist or return email from the DB.
+    # NOTE: email is not stored in PostgreSQL. The backend does not persist or
+    # return email from the DB.
     display_name: str
     roll_number: Optional[str] = None
     section_name: Optional[str] = None

@@ -5,7 +5,7 @@ interface FetchOptions extends RequestInit {
 }
 
 /**
- * Custom fetch wrapper that automatically attaches the Firebase ID token
+ * Custom fetch wrapper that automatically attaches the JWT access token
  * to requests when requireAuth is true (which is the default).
  */
 export async function apiFetch(endpoint: string, options: FetchOptions = {}) {

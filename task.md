@@ -1376,9 +1376,58 @@ Status: **COMPLETE** — all regression checks pass; zero feature work; no commi
 - [x] Governance synchronized
 - HARD STOP — Phase 14F NOT STARTED; no commit made.
 
-## Phase 14F — Freeze & Governance Reconciliation (NOT STARTED — next authorized slice)
+## Phase 14F — Freeze & Governance Reconciliation (COMPLETE, 2026-08-23)
 
-- [ ] Reconcile stale docs, README, tech-stack claims
+Status: **COMPLETE** — reconciliation finished; zero code/DB changes; no commit.
+
+- [x] Repository audit: every Firebase reference classified (active/current-doc/historical/migration/legacy-artifact/false-positive)
+- [x] Active-runtime Firebase check: zero in `frontend/src`, `backend/app`, manifests, config
+- [x] `README.md` rewritten — current architecture (PostgreSQL → FastAPI → JWT → Next.js), Firebase RETIRED, legacy app noted as preserved/pending separate retirement
+- [x] Historical banners added: `backend/API_DESIGN.md`, `backend/DATABASE_DESIGN.md`, `backend/MIGRATION_NOTES.md`, `backend/MIGRATION_AUDIT.md`
+- [x] `docs/README.md` boundary banner — docs/ series documented as legacy-app documentation
+- [x] `MASTER_ROADMAP.md` — Phase 14 COMPLETE & FROZEN; Phase 15 (Legacy Web App + Legacy PWA Retirement) inserted; phases renumbered 15→16 … 21→22; status blocks synchronized
+- [x] `migrate_extract.py`/`migrate_execute.py`/`diagnose_failures.py` confirmed historical one-shot tooling, preserved
+- [x] Historical migrations + migration reports preserved
+- [x] Legacy root app + legacy PWA preserved in full (NOT retired in 14F)
+- [x] `git diff --check` PASS
+- [x] `npx tsc --noEmit` PASS; `npm run build` PASS
+- [x] `python -m compileall backend/app` PASS
+- [x] Alembic single head `e1f2a3b4c5d6` unchanged
+- [x] Zero DB mutations; zero schema/migration changes; zero application code changes
+- [x] Frozen systems untouched
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- HARD STOP — Phase 15 NOT STARTED; no commit made.
+
+## Phase 15 — Legacy Web App + Legacy PWA Retirement (COMPLETE, 2026-08-23)
+
+Status: **COMPLETE** — retirement finished; zero DB changes; no commit.
+
+- [x] Repository audit — every legacy file classified; no ambiguous file deleted
+- [x] Removed legacy runtime: root `index.html`, `js/` (21), `css/` (3), `assets/icons/` (3), `offline.html`, root `manifest.json`, root `service-worker.js`, `screenshot.png`
+- [x] Removed legacy test/tooling: `test-e2e.js`, `scratch_pwa_*` (4)
+- [x] Removed legacy-only root package files: `package.json`, `package-lock.json`, `node_modules/` (frontend deps untouched)
+- [x] Preserved `timetable.json` (active backend data dependency — verified via 5 scripts)
+- [x] Preserved historical provenance: docs/, walkthroughs, migration tooling, Alembic history, root reports, prompts/
+- [x] No feature porting; no compatibility wrappers; no legacy route recreation
+- [x] Documentation reconciled: README.md, docs/README.md, prompts/README.md (retired boundary notes)
+- [x] `npx tsc --noEmit` PASS
+- [x] `npm run build` PASS (15/15; multi-lockfile warning resolved)
+- [x] `python -m compileall backend/app` PASS
+- [x] `git diff --check` PASS
+- [x] Zero active references to retired files; frontend `/manifest.json` + `/service-worker.js` = active Phase 13 PWA
+- [x] Alembic single head `e1f2a3b4c5d6` unchanged; zero DB mutations
+- [x] Frozen systems untouched (incl. current Next.js PWA)
+- [x] Governance synchronized
+- HARD STOP — Phase 16 NOT STARTED; no commit made.
+
+## Phase 16 — Production Security Hardening (NOT STARTED — next authorized phase)
+
+- [ ] Password policy
+- [ ] JWT expiry / refresh / invalidation strategy
+- [ ] Brute-force protection / login rate limiting
+- [ ] Cross-user access verification on every sensitive endpoint
+- [ ] Database backup / restore / migration test / rollback strategy
+- [ ] Security headers, CORS, production logging
 
 ---
 

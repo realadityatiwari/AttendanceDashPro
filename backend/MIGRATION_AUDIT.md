@@ -1,5 +1,20 @@
 # MIGRATION AUDIT (Phase 5.0)
 
+> ## ⚠️ HISTORICAL DOCUMENT (superseded 2026-08-23)
+>
+> This document is the Phase 5.0 pre-migration readiness audit, written when the
+> migration from Firebase/Firestore to PostgreSQL had not yet been executed and
+> the backend auth boundary was still scaffolded. Since then:
+> - The Firebase → PostgreSQL data migration **was executed** (Phase 4.5) and the
+>   results independently verified (`backend/migration_reports/`).
+> - The backend adopted **PostgreSQL-native JWT authentication** — the "Firebase
+>   Admin SDK *must* be integrated" requirement (section 13) was superseded by
+>   native JWT, and **Firebase is now fully retired** (Phases 14A–14E;
+>   `firebase_uid` removed by migration `e1f2a3b4c5d6`).
+>
+> Preserved for historical provenance. Do not treat as a description of current
+> state.
+
 ## 1. Executive Summary
 This document provides a comprehensive readiness analysis for migrating the AttendanceDash Pro legacy application (Firebase/localStorage) to the new PostgreSQL/FastAPI architecture. The analysis identifies source structures, defines authority hierarchies, maps data shapes, and highlights critical migration blockers. **No data has been migrated yet.**
 
