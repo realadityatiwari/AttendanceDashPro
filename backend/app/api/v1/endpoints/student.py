@@ -33,7 +33,6 @@ async def sync_student_profile(
     section_name = user.section.name if user.section else None
     return StudentProfile(
         id=user.id,
-        firebase_uid=user.firebase_uid,
         role=user.role.value if hasattr(user.role, "value") else str(user.role),
         display_name=user.name,
         roll_number=user.roll_number,
@@ -55,7 +54,6 @@ async def get_student_profile(
     section_name = current_user.section.name if current_user.section else None
     return StudentProfile(
         id=current_user.id,
-        firebase_uid=current_user.firebase_uid,
         role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
         display_name=current_user.name,
         roll_number=current_user.roll_number,

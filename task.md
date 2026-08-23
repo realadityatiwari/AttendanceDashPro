@@ -1321,12 +1321,36 @@ Status: **COMPLETE** — implementation verified; zero DB/migration changes; no 
 - [x] Governance synchronized
 - HARD STOP — Phase 14D NOT STARTED; no commit made.
 
-## Phase 14D — firebase_uid / Data Cleanup (NOT STARTED — next authorized slice)
+## Phase 14D — firebase_uid / Data Cleanup (COMPLETE, 2026-08-23)
 
-- [ ] Update `scripts/set_initial_password.py` and `scripts/setup_single_user.py` to query by `roll_number`
-- [ ] Alembic migration to drop `users.firebase_uid`; remove from model/schema/API/frontend types
+Status: **COMPLETE** — implementation verified; migration applied; no commit.
 
-## Phase 14E — Regression Verification (NOT STARTED)
+- [x] Repository audit — every `firebase_uid` occurrence classified (runtime vs historical vs docs)
+- [x] `backend/scripts/set_initial_password.py` — lookup switched to canonical `roll_number` (`2401220100027`)
+- [x] `backend/scripts/setup_single_user.py` — lookup switched to canonical `roll_number` (`2401220100027`)
+- [x] `backend/app/models/user.py` — `firebase_uid` column mapping removed
+- [x] `backend/app/schemas/student.py` — `firebase_uid` removed from `StudentProfile`
+- [x] `backend/app/api/v1/endpoints/student.py` — `/me` + `/sync` no longer serialize `firebase_uid`
+- [x] `backend/app/api/v1/endpoints/auth.py` — register no longer writes `firebase_uid=None`
+- [x] `backend/app/repositories/user_repo.py` — dead `get_by_firebase_uid()` + unused `selectinload` import removed
+- [x] `frontend/src/types/api.ts` — `firebase_uid` removed from `StudentProfile` type
+- [x] `frontend/src/contexts/AuthContext.tsx` — `firebase_uid` removed from `User` type
+- [x] `frontend/src/app/(authenticated)/profile/page.tsx` — displays `user.id`; stale Firebase error message replaced
+- [x] Migration `e1f2a3b4c5d6_drop_firebase_uid.py` created (down_revision `d1e2f3a4b5c6`; drop index + column; reversible)
+- [x] Migration applied via `alembic upgrade head` → alembic head `e1f2a3b4c5d6`
+- [x] DB before/after verified: users 31=31, admin 1=1, students 30=30, enrollments 27=27, attendance 159=159, sessions 720=720, events 60=60, all other counts identical; column + index gone; Aditya's row untouched
+- [x] `python -m compileall backend/app backend/scripts backend/alembic` PASS
+- [x] `npx tsc --noEmit` PASS
+- [x] `git diff --check` PASS
+- [x] App imports clean; 32 paths; `/auth/login`, `/auth/register`, `/student/me`, `/student/sync` present
+- [x] JWT chain intact (`get_current_user`, `require_admin`, `HTTPBearer`, `create_access_token`)
+- [x] Zero `firebase_uid` references in `backend/app` + `frontend/src`; only historical docs/migrations remain (Phase 14F)
+- [x] Historical migration files + completed `migrate_execute.py` preserved
+- [x] Frozen systems untouched (auth, JWT, engines, PWA, Phase 12, 14A/14B/14C)
+- [x] Governance synchronized
+- HARD STOP — Phase 14E NOT STARTED; no commit made.
+
+## Phase 14E — Regression Verification (NOT STARTED — next authorized slice)
 
 - [ ] Full auth/data-path regression (login, signup, get_current_user, verifiers, build)
 

@@ -7,7 +7,6 @@ import { apiFetch } from "@/lib/api";
 // Assuming User type from backend schema (StudentProfile)
 export interface User {
   id: string;
-  firebase_uid: string | null;
   display_name: string;
   roll_number: string;
   section_name: string | null;

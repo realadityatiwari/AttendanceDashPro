@@ -1431,9 +1431,63 @@ commit made.
 updates to `roll_number` lookups, then an Alembic migration to drop
 `users.firebase_uid`, followed by model/schema/API/frontend type removal).
 
-### Phase 14D–14F — NOT STARTED
+### Phase 14D — firebase_uid / Data Cleanup (COMPLETE, 2026-08-23)
 
-- **14D** `firebase_uid`/data cleanup (legacy script updates + Alembic drop) — NOT STARTED.
+**Objective:** remove the obsolete `users.firebase_uid` application field while
+preserving all PostgreSQL/JWT authentication behavior and all existing user/account
+data.
+
+**Delivered:**
+
+1. **Legacy scripts**: `backend/scripts/set_initial_password.py` and
+   `backend/scripts/setup_single_user.py` — user lookup switched from hardcoded
+   `firebase_uid` (`HCRbV7Kld3Wo9IHLJHRGlBau4Mq2`) to the canonical
+   `roll_number` (`2401220100027`). No identity mechanism introduced; password
+   hashing/authentication architecture untouched.
+2. **Model**: `backend/app/models/user.py` — `firebase_uid` column mapping + its
+   comments removed. No other User fields modified.
+3. **Schema/API**: `StudentProfile` (`backend/app/schemas/student.py`) — field
+   removed; `/student/me` + `/student/sync` (`backend/app/api/v1/endpoints/student.py`)
+   — no longer serialize it; register (`backend/app/api/v1/endpoints/auth.py`) — no
+   longer writes it; `get_by_firebase_uid()` dead method + now-unused `selectinload`
+   import removed (`backend/app/repositories/user_repo.py`).
+4. **Frontend**: `frontend/src/types/api.ts` + `frontend/src/contexts/AuthContext.tsx`
+   — `firebase_uid` field removed from `StudentProfile`/`User` types; profile page
+   (`frontend/src/app/(authenticated)/profile/page.tsx`) displays `user.id` and the
+   stale "Firebase identity is active (501)" error message was replaced with truthful
+   copy. No visual/behavior change beyond that.
+5. **Migration**: NEW `backend/alembic/versions/e1f2a3b4c5d6_drop_firebase_uid.py`
+   (down_revision `d1e2f3a4b5c6`, single head `e1f2a3b4c5d6`) —
+   `DROP INDEX ix_users_firebase_uid` + `DROP COLUMN users.firebase_uid`.
+   Downgrade re-creates the nullable column + unique index following the
+   `c3d4e5f6a7b8` convention; no historical Firebase values invented. APPLIED via
+   `alembic upgrade head`.
+
+**Verification results:** `python -m compileall backend/app backend/scripts
+backend/alembic` PASS · `npx tsc --noEmit` PASS · `git diff --check` PASS ·
+`app.main` imports clean (32 paths; `/auth/login`, `/auth/register`, `/student/me`,
+`/student/sync` present) · OpenAPI `StudentProfile` free of `firebase_uid` ·
+`get_current_user`/`require_admin`/`HTTPBearer`/`create_access_token` intact ·
+repository search: zero `firebase_uid` references in `backend/app` and `frontend/src`.
+
+**Database before/after (SELECT-verified):** users 31 = 31 (admin 1 = 1, students
+30 = 30) · student_enrollments 27 = 27 · attendance_records 159 = 159 ·
+class_sessions 720 = 720 · academic_events 60 = 60 · quiz_schedules 18 = 18 ·
+notifications 11 = 11 · all other table counts identical · Aditya's row untouched ·
+`users.firebase_uid` column + `ix_users_firebase_uid` index gone ·
+`alembic_version` = `e1f2a3b4c5d6`.
+
+**Scope guards:** no user rows modified; no Firebase UID values copied/transformed/
+repurposed; no password/roll_number/role/enrollment/attendance/academic changes;
+historical migration files (`7117a007a0da`, `c3d4e5f6a7b8`) and the completed
+one-shot `migrate_execute.py` preserved; historical docs preserved for Phase 14F;
+no commit made.
+
+**Next authorized slice:** Phase 14E — full authentication/data-path regression
+verification (login, signup, `get_current_user`, all verifiers, frontend build).
+
+### Phase 14E–14F — NOT STARTED
+
 - **14E** Full authentication/data-path regression verification — NOT STARTED.
 - **14F** Phase freeze & governance reconciliation — NOT STARTED.
 

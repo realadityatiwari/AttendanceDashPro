@@ -39,12 +39,12 @@ async def setup_single_user():
                 print("  Setting program = 'CSE' on existing section")
 
         # 3. Update User
-        uid = "HCRbV7Kld3Wo9IHLJHRGlBau4Mq2"
-        result = await session.execute(select(User).where(User.firebase_uid == uid))
+        roll_number = "2401220100027"
+        result = await session.execute(select(User).where(User.roll_number == roll_number))
         user = result.scalars().first()
         
         if not user:
-            print(f"ERROR: User with firebase_uid '{uid}' not found.")
+            print(f"ERROR: User with roll_number '{roll_number}' not found.")
             return
             
         print(f"Restoring identity for User {user.id}...")

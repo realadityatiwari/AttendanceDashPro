@@ -30,14 +30,14 @@ async def main():
         print("ERROR: INITIAL_PASSWORD environment variable not set.")
         sys.exit(1)
         
-    uid = "HCRbV7Kld3Wo9IHLJHRGlBau4Mq2"
+    roll_number = "2401220100027"
     
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.firebase_uid == uid))
+        result = await session.execute(select(User).where(User.roll_number == roll_number))
         user = result.scalars().first()
         
         if not user:
-            print(f"ERROR: User with firebase_uid '{uid}' not found.")
+            print(f"ERROR: User with roll_number '{roll_number}' not found.")
             sys.exit(1)
             
         print(f"User found: {user.name} ({user.roll_number})")

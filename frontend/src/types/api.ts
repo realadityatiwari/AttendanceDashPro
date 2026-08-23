@@ -1,6 +1,5 @@
 export interface StudentProfile {
   id: string;
-  firebase_uid: string | null;
   // Authorization role (Phase 6.5): "STUDENT" or "ADMIN". Backend is
   // authoritative; this drives admin-control visibility only.
   role: string;

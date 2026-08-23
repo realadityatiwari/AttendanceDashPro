@@ -38,7 +38,7 @@ export default function ProfilePage() {
     return (
       <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
         <PageHeader title="Profile Settings" />
-        <ErrorState message="Could not load your student profile. Firebase identity is active, but the PostgreSQL profile linkage endpoint may not be fully implemented yet (501)." />
+        <ErrorState message="Could not load your student profile. Please check your connection and try again." />
         <div className="mt-8 flex justify-center">
           <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
@@ -126,7 +126,7 @@ export default function ProfilePage() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Account Identifier</label>
-                <p className="text-sm font-mono text-muted-foreground mt-1 break-all">{user?.firebase_uid || user?.id}</p>
+                <p className="text-sm font-mono text-muted-foreground mt-1 break-all">{user?.id}</p>
               </div>
               
               <div className="pt-4">

@@ -9,9 +9,6 @@ class StudentSyncRequest(BaseModel):
 
 class StudentProfile(BaseModel):
     id: UUID
-    # Firebase identity is retired (Phase 4.5.3): null for PostgreSQL-native
-    # registrations, preserved for legacy accounts.
-    firebase_uid: Optional[str] = None
     # Authorization role (Phase 6.5): "STUDENT" or "ADMIN". The backend is
     # authoritative for authorization; this is read-only profile information
     # used only to decide whether admin controls are shown.

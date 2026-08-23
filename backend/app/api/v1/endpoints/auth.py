@@ -108,7 +108,6 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
     # --- Create user + enrollments transactionally ---
     user = User(
-        firebase_uid=None,
         roll_number=roll_number,
         name=name,
         hashed_password=hash_password(request.password),

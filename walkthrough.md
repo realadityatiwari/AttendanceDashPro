@@ -1413,3 +1413,97 @@ Date: 2026-08-23 · Scope: remove retired Firebase deployment/configuration arti
 **HARD STOP:** No commit made. No push performed. Phase 14D NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 14D Walkthrough (firebase_uid / Data Cleanup)
+
+Date: 2026-08-23 · Scope: remove `users.firebase_uid` application field · JWT auth unchanged
+
+> **PHASE 14D COMPLETE.** `users.firebase_uid` — the final application-level Firebase
+> identity residue — is removed from the database, model, schema, API, frontend types,
+> and legacy scripts. PostgreSQL + JWT authentication is byte-identical in behavior.
+> All user/account data preserved; migration `e1f2a3b4c5d6` applied; zero commits.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `backend/app/models/user.py` | Removed `firebase_uid` column mapping + comments |
+| `backend/app/schemas/student.py` | Removed `firebase_uid` from `StudentProfile` |
+| `backend/app/api/v1/endpoints/student.py` | `/me` + `/sync` no longer serialize `firebase_uid` |
+| `backend/app/api/v1/endpoints/auth.py` | Register no longer writes `firebase_uid=None` |
+| `backend/app/repositories/user_repo.py` | Removed dead `get_by_firebase_uid()` + unused `selectinload` import |
+| `backend/scripts/set_initial_password.py` | Lookup by canonical `roll_number` (`2401220100027`) instead of hardcoded UID |
+| `backend/scripts/setup_single_user.py` | Lookup by canonical `roll_number` (`2401220100027`) instead of hardcoded UID |
+| `frontend/src/types/api.ts` | Removed `firebase_uid` from `StudentProfile` type |
+| `frontend/src/contexts/AuthContext.tsx` | Removed `firebase_uid` from `User` type |
+| `frontend/src/app/(authenticated)/profile/page.tsx` | Displays `user.id`; replaced stale "Firebase identity is active (501)" error message |
+
+## Files Created
+
+| File | Change |
+|---|---|
+| `backend/alembic/versions/e1f2a3b4c5d6_drop_firebase_uid.py` | NEW migration: `DROP INDEX ix_users_firebase_uid` + `DROP COLUMN users.firebase_uid`; downgrade re-creates nullable column + unique index (no invented values); down_revision `d1e2f3a4b5c6` |
+
+## firebase_uid References Removed
+
+- Backend runtime: model, `StudentProfile` schema, `/student/me`, `/student/sync`,
+  register endpoint, `get_by_firebase_uid()` repository method.
+- Frontend runtime: `types/api.ts`, `AuthContext.tsx`, profile page.
+- Legacy scripts: `set_initial_password.py`, `setup_single_user.py`.
+- Database: column + `ix_users_firebase_uid` unique index.
+
+## Database Before/After (SELECT-verified)
+
+| Metric | Before | After |
+|---|---|---|
+| `users.firebase_uid` column | exists (29 non-null) | **gone** |
+| `ix_users_firebase_uid` index | exists | **gone** |
+| users | 31 | 31 |
+| ADMIN / STUDENT | 1 / 30 | 1 / 30 |
+| student_enrollments | 27 | 27 |
+| attendance_records | 159 | 159 |
+| class_sessions | 720 | 720 |
+| academic_events | 60 | 60 |
+| quiz_schedules / quiz_cycles | 18 / 3 | 18 / 3 |
+| notifications | 11 | 11 |
+| userpreferences | 1 | 1 |
+| Aditya (2401220100027) | name/roll/password intact | unchanged |
+| alembic_version | d1e2f3a4b5c6 | **e1f2a3b4c5d6** |
+
+## Verification Results
+
+| Check | Result |
+|---|---|
+| `python -m compileall backend/app backend/scripts backend/alembic` | ✅ PASS |
+| `npx tsc --noEmit` | ✅ PASS |
+| `git diff --check` | ✅ PASS (exit 0) |
+| Alembic heads | ✅ single head `e1f2a3b4c5d6` |
+| `app.main` import + 32 paths | ✅ PASS; `/auth/login`, `/auth/register`, `/student/me`, `/student/sync` present |
+| OpenAPI `StudentProfile` | ✅ no `firebase_uid` property |
+| JWT chain | ✅ `get_current_user`/`require_admin`/`HTTPBearer`/`create_access_token` intact |
+| Repo search `firebase_uid` | ✅ zero in `backend/app` + `frontend/src`; only historical docs/migrations (Phase 14F) and completed `migrate_execute.py` remain |
+
+## Scope Guards Confirmed
+
+- **Database**: the ONLY mutation was the authorized `e1f2a3b4c5d6` migration (drop
+  column + index). No user rows modified; no Firebase UID values copied/transformed/
+  repurposed; no password/roll_number/role/enrollment/attendance/academic changes.
+- **Frozen systems**: auth architecture, JWT, engines, analytics, dashboard, Track,
+  History, Calendar, Events, Laboratory, Notifications, PWA, Phase 12, Phases
+  14A/14B/14C state — untouched.
+- **Historical artifacts preserved**: migrations `7117a007a0da` + `c3d4e5f6a7b8`,
+  completed one-shot `migrate_execute.py`, all historical docs (14F reconciliation).
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 14 status table + header + section updated — 14.0 ✅,
+  14A ✅, 14B ✅, 14C ✅, **14D ✅**, 14E identified as next authorized slice,
+  14E–14F NOT STARTED.
+- `implementation_plan.md`: Phase 14D section added — COMPLETE; 14E–14F pending.
+- `task.md`: Phase 14D checklist complete; 14E–14F unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized slice: Phase 14E — regression verification.**
+**HARD STOP:** No commit made. No push performed. Phase 14E NOT STARTED.
+
+---
