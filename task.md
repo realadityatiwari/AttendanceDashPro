@@ -1237,3 +1237,72 @@ Report: `docs/bugfix/cancellation_state_and_counting_consistency_report.md`.
 
 ---
 
+# PHASE 14 — FIREBASE RETIREMENT
+
+## Phase 14.0 — Firebase Retirement Audit (COMPLETE, read-only, 2026-08-23)
+
+Status: **COMPLETE** — read-only audit; zero code, zero DB change, zero commits.
+Report: `docs/phase_14/phase_14_architecture_audit.md`.
+
+- [x] Repository-wide Firebase reference sweep (source, config, manifests, scripts, docs, tests, deployment files)
+- [x] Every reference classified (live/dead/legacy/docs/test/config/false-positive)
+- [x] Runtime dependency tracing: frontend (package.json, imports, auth providers, env) and backend (requirements, imports, startup)
+- [x] `firebase_uid` audit: schema, model, Alembic history, schemas, repos, services, API responses, scripts — verdict: nullable legacy, safe to remove in 14D after script updates
+- [x] Authentication flow proven: JWT → `get_current_user()` → PostgreSQL User; no Firebase path reachable
+- [x] Firestore/data dependency audit: PostgreSQL-only proven for all domains
+- [x] Deployment audit: `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json` all obsolete
+- [x] Dependency manifest audit: `firebase` (frontend) + `firebase-admin` (backend) — neither used for runtime functionality
+- [x] Test/verifier audit: zero verifiers reference Firebase; legacy/scratch test files only
+- [x] Documentation audit: stale Firebase claims catalogued for Phase 14F reconciliation
+- [x] Governance updated for audit-only phase
+- HARD STOP — audit only; no implementation begun.
+
+## Phase 14A — Frontend Firebase Removal (COMPLETE, 2026-08-23)
+
+Status: **COMPLETE** — implementation verified; zero backend/DB changes; no commit.
+
+- [x] Verified audit findings against current working tree (frontend/src Firebase search)
+- [x] Removed dead `import { auth } from "./firebase"` from `frontend/src/lib/api.ts` (no other api.ts change)
+- [x] Deleted `frontend/src/lib/firebase.ts`
+- [x] Removed `firebase` from `frontend/package.json`
+- [x] Reconciled `frontend/package-lock.json` via `npm install` (77 packages pruned; `firebase`/`@firebase/*` absent)
+- [x] Removed `NEXT_PUBLIC_FIREBASE_*` from `frontend/.env.example`
+- [x] Removed `NEXT_PUBLIC_FIREBASE_*` from `frontend/.env.local` (no values exposed)
+- [x] `npx tsc --noEmit` PASS
+- [x] `npm run build` PASS (15/15 routes)
+- [x] `git diff --check` PASS
+- [x] Frontend Firebase search clean — only `firebase_uid` data-field strings (Phase 14D scope) and stale message/comment strings remain
+- [x] `npm ls firebase` empty; lockfile consistent
+- [x] Zero backend/database/migration changes confirmed via git diff
+- [x] Frozen systems untouched (auth, JWT, engines, PWA, Phase 12, legacy root app)
+- [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+- HARD STOP — Phase 14B NOT STARTED; no commit made.
+
+## Phase 14B — Backend Firebase Removal (NOT STARTED)
+
+- [ ] Remove `backend/app/core/firebase.py`
+- [ ] Remove `initialize_firebase()` import/call from `backend/app/main.py`
+- [ ] Remove `firebase-admin` from `backend/requirements.txt` and uninstall from venv
+- [ ] Verify backend starts and auth works without firebase-admin
+
+## Phase 14C — Deployment / Configuration Cleanup (NOT STARTED)
+
+- [ ] Remove `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`
+- [ ] Remove Firebase entries from `.gitignore`
+- [ ] Archive/remove Firebase prompts
+
+## Phase 14D — firebase_uid / Data Cleanup (NOT STARTED)
+
+- [ ] Update `scripts/set_initial_password.py` and `scripts/setup_single_user.py` to query by `roll_number`
+- [ ] Alembic migration to drop `users.firebase_uid`; remove from model/schema/API/frontend types
+
+## Phase 14E — Regression Verification (NOT STARTED)
+
+- [ ] Full auth/data-path regression (login, signup, get_current_user, verifiers, build)
+
+## Phase 14F — Freeze & Governance Reconciliation (NOT STARTED)
+
+- [ ] Reconcile stale docs, README, tech-stack claims
+
+---
+

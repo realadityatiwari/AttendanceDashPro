@@ -1311,3 +1311,55 @@ Targeted mobile touch-target improvements on previously incomplete responsive su
 
 ---
 
+## PHASE 14 — FIREBASE RETIREMENT
+
+### Phase 14.0 — Firebase Retirement Audit (COMPLETE, read-only, 2026-08-23)
+
+Repository-wide read-only audit; report: `docs/phase_14/phase_14_architecture_audit.md`.
+Verdict: **ready to proceed** — runtime auth is JWT + PostgreSQL only; no Firebase Auth
+path reachable; no Firestore reads/writes from the Next.js app; frontend SDK init is
+inert; backend Admin SDK init is inert; `firebase_uid` is nullable legacy data (no
+runtime reads); deployment/config files and docs are stale. Zero code changed, zero DB
+mutations, zero commits.
+
+### Phase 14A — Frontend Firebase Removal (COMPLETE, 2026-08-23)
+
+**Objective:** eliminate the Firebase SDK from the Next.js frontend without any runtime
+behavior change (auth is JWT + localStorage only).
+
+**Delivered:**
+
+1. `frontend/src/lib/api.ts` — removed the dead `import { auth } from "./firebase"` (the
+   `auth` binding was never referenced; `apiFetch` reads `access_token` from
+   `localStorage` and attaches `Bearer` — unchanged).
+2. `frontend/src/lib/firebase.ts` — deleted the obsolete Firebase initialization module
+   (`initializeApp`/`getAuth` side-effect; only consumer was the dead import above).
+3. `frontend/package.json` — removed `"firebase": "^12.17.1"`.
+4. `frontend/package-lock.json` — reconciled via `npm install` (77 packages pruned;
+   `firebase` and all `@firebase/*` absent from lockfile and `node_modules`).
+5. `frontend/.env.example` / `frontend/.env.local` — removed the six
+   `NEXT_PUBLIC_FIREBASE_*` variables (both files are gitignored; no values exposed).
+
+**Verification results:** `npx tsc --noEmit` PASS (0 errors) · `npm run build` PASS
+(15/15 routes) · `git diff --check` PASS · `npm ls firebase` empty · frontend/src
+search clean — remaining matches are only `firebase_uid` data-field strings
+(Phase 14D scope) and two stale message/comment strings (no active SDK reference).
+
+**Scope guards:** zero backend changes; zero database changes; zero migration changes;
+zero changes to auth endpoints, JWT, engines, PWA, or the legacy root app. `firebase_uid`
+NOT touched. No commit made.
+
+**Next authorized slice:** Phase 14B — backend Firebase removal
+(`backend/app/core/firebase.py` + `main.py` import + `firebase-admin` from
+`backend/requirements.txt`).
+
+### Phase 14B–14F — NOT STARTED
+
+- **14B** Backend Firebase removal — NOT STARTED.
+- **14C** Deployment/configuration cleanup (`firebase.json`, `.firebaserc`, `firestore.rules`, `.gitignore`, prompts) — NOT STARTED.
+- **14D** `firebase_uid`/data cleanup (legacy script updates + Alembic drop) — NOT STARTED.
+- **14E** Full authentication/data-path regression verification — NOT STARTED.
+- **14F** Phase freeze & governance reconciliation — NOT STARTED.
+
+---
+

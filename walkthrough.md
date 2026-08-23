@@ -1171,7 +1171,105 @@ byte-identical to the documented 9.2.1 baseline. Report:
 
 ---
 
-## HARD STOP
-No commit made.
-No push performed.
-Do not begin Phase 14.
+# AttendanceDash Pro — Phase 14.0 Walkthrough (Firebase Retirement Audit)
+
+Date: 2026-08-23 · Scope: READ-ONLY Firebase retirement audit · Report: `docs/phase_14/phase_14_architecture_audit.md`
+
+> **PHASE 14.0 COMPLETE — READ-ONLY.** No code changed. No database mutation. No
+> migration. No commit. The audit proved the Phase 14 target architecture is already
+> satisfied at runtime: JWT + PostgreSQL are authoritative; no Firebase Auth path is
+> reachable; no Firestore reads/writes occur from the Next.js application.
+
+## What the Audit Established
+
+1. **Authentication**: `POST /api/v1/auth/login` and `/register` are the only auth
+   entry points; PyJWT (`get_current_user()` in `deps.py`) resolves users from
+   PostgreSQL by `sub` (UUID). Firebase Admin verification is never invoked.
+2. **Frontend Firebase**: `frontend/src/lib/firebase.ts` was inert module-level
+   initialization; `frontend/src/lib/api.ts` carried a dead `auth` import; `firebase`
+   npm package was bundled but never used functionally.
+3. **Backend Firebase**: `backend/app/core/firebase.py` initializes the Admin SDK only
+   if service-account env vars exist (no-op otherwise); no verification/Firestore calls.
+4. **firebase_uid**: nullable column, unique index, no FK references, no runtime reads
+   (only two legacy scripts query by it). Verdict: SAFE TO REMOVE in 14D after script
+   updates — NOT part of 14A.
+5. **Deployment/config**: `firebase.json`, `.firebaserc`, `firestore.rules`,
+   `firestore.indexes.json`, Firebase `.gitignore` entries, and Firebase prompts are all
+   obsolete (14C scope).
+6. **Documentation**: pervasive stale Firebase claims catalogued (14F scope).
+7. **Readiness verdict**: Phase 14 ready to proceed; smallest safe slice = 14A.
+
+## Verification (audit, read-only)
+
+| Check | Result |
+|---|---|
+| Working tree clean at start | ✅ |
+| Firebase reference sweep (repo-wide) | ✅ classified |
+| Runtime dependency trace (frontend + backend) | ✅ |
+| `firebase_uid` trace (schema → API → scripts) | ✅ |
+| DB mutations | NONE |
+| Code changes | NONE |
+| Commits | NONE |
+
+**HARD STOP** — audit complete; no implementation begun.
+
+---
+
+# AttendanceDash Pro — Phase 14A Walkthrough (Frontend Firebase Removal)
+
+Date: 2026-08-23 · Scope: remove Firebase SDK from the Next.js frontend · Auth unchanged
+
+> **PHASE 14A COMPLETE.** The frontend no longer initializes or bundles the Firebase SDK.
+> Authentication (JWT + localStorage `access_token`) is byte-identical in behavior.
+> Zero backend changes, zero database mutations, zero migration changes, zero commits.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `frontend/src/lib/api.ts` | Removed dead `import { auth } from "./firebase"` (2 lines) |
+| `frontend/src/lib/firebase.ts` | Deleted (26 lines — obsolete Firebase initialization module) |
+| `frontend/package.json` | Removed `"firebase": "^12.17.1"` dependency |
+| `frontend/package-lock.json` | Reconciled via `npm install` — 77 packages pruned (`firebase` + `@firebase/*`) |
+| `frontend/.env.example` | Removed 6 `NEXT_PUBLIC_FIREBASE_*` placeholders (gitignored file) |
+| `frontend/.env.local` | Removed 6 `NEXT_PUBLIC_FIREBASE_*` real values (gitignored file; values never exposed) |
+
+## Firebase Runtime References Removed
+
+- `frontend/src/lib/firebase.ts` — `firebase/app` + `firebase/auth` imports, `initializeApp`, `getAuth`.
+- `frontend/src/lib/api.ts` — `import { auth } from "./firebase"`.
+- `frontend/package.json` / `package-lock.json` / `node_modules` — `firebase` + 76 transitive `@firebase/*` packages.
+- `frontend/.env.example` / `frontend/.env.local` — `NEXT_PUBLIC_FIREBASE_*` environment variables.
+
+## Verification Results
+
+| Check | Result |
+|---|---|
+| Pre-edit audit verification (frontend/src Firebase search) | ✅ only the two known files |
+| `npx tsc --noEmit` | ✅ PASS (0 errors) |
+| `npm run build` | ✅ PASS (15/15 routes, compiled 1164ms) |
+| `git diff --check` | ✅ PASS (exit 0; LF/CRLF warnings only, pre-existing) |
+| Frontend/src Firebase search after | ✅ no active references — only `firebase_uid` data-field strings (14D scope) and two stale message/comment strings |
+| `npm ls firebase` | ✅ empty |
+| Lockfile | ✅ `firebase`/`@firebase` absent (0 matches) |
+| Git diff scope | ✅ 4 tracked files only: `api.ts`, `firebase.ts` (deleted), `package.json`, `package-lock.json` |
+
+## Scope Guards Confirmed
+
+- **Backend**: zero files changed (`git diff --stat -- backend/` empty).
+- **Database**: zero mutations; no Alembic commands; no INSERT/UPDATE/DELETE/ALTER/DROP/CREATE.
+- **Frozen systems**: auth endpoints, JWT implementation, engines (attendance/eligibility/event/calendar/quiz/lab), analytics, dashboard, history, notifications, PWA/service worker, Phase 12 responsive implementation, legacy root app (`index.html`, `js/`, root `service-worker.js`) — all untouched.
+- **firebase_uid**: not modified (Phase 14D scope).
+- **.env.local values**: never printed, copied, or committed.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 14 status table + header updated — 14.0 ✅, 14A ✅, 14B–14F NOT STARTED.
+- `implementation_plan.md`: Phase 14 section added — 14A COMPLETE, 14B identified as next authorized slice.
+- `task.md`: Phase 14.0 + 14A checklists complete; 14B–14F unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized slice: Phase 14B — backend Firebase removal.**
+**HARD STOP:** No commit made. No push performed. Phase 14B NOT STARTED.
+
+---

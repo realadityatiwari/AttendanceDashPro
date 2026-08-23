@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** Phase 12 — Mobile / Responsive Experience **IN PROGRESS** (12.0 audit ✅ · **12A responsive foundation + mobile navigation ✅** · **12B Track / Dashboard / Calendar responsiveness ✅** · **12C COMPLETE ✅** — Laboratory / Subjects / Quiz / Events page responsiveness (commit `31f75ca`) PLUS the authorized cancellation-lifecycle & counting-consistency correctness fix (Bugfix 2 below) — **12D NOT STARTED**). Phase 11 — Notifications & Reminders **COMPLETE & FROZEN**.
+> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** — dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS · **14B NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN** (12A–12E + authorized cancellation-lifecycle bugfixes).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -60,8 +60,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 10 | Settings, Feedback & Account Management | ✅ **COMPLETE & FROZEN** — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. |
 | **11** | **Notifications & Reminders** | ✅ **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented) |
 | 12 | Mobile / Responsive Experience | 🟡 **IN PROGRESS** — 12.0 architecture & implementation-readiness audit ✅ · **12A responsive foundation + mobile navigation ✅** (S4 4-tab bottom nav + More sheet, shell/dialog scroll safety, touch-target foundation; desktop unchanged) · **12B Track/Dashboard/Calendar responsiveness ✅** (month-nav overflow fixed, grid cells enlarged at 320, Track date nav fluid + ≥40px controls, session-card collisions fixed, dashboard wrap fixes; desktop byte-identical) · **12C ✅ COMPLETE (2026-08-22)** — page responsiveness across Laboratory / Subjects / Quiz / Events (`docs/phase_12/phase_12c_implementation_report.md`, commit `31f75ca`) + the authorized cancellation-lifecycle & counting-consistency correctness fix (`docs/bugfix/cancellation_state_and_counting_consistency_report.md`) |
-| 13 | PWA / Installability | ⚪ Planned |
-| 14 | Firebase Retirement | 🔴 Later |
+| 13 | PWA / Installability | ✅ **COMPLETE & FROZEN** — manifest, service worker, SVG icons, install prompt, standalone detection, online/offline state; zero backend/DB/migration changes; `tsc`/`build`/`diff --check` PASS |
+| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ (read-only, `docs/phase_14/phase_14_architecture_audit.md`) · **14A frontend Firebase removal ✅** (dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS) · 14B backend Firebase removal ⚪ NOT STARTED · 14C deployment/config cleanup ⚪ NOT STARTED · 14D firebase_uid cleanup ⚪ NOT STARTED · 14E regression verification ⚪ NOT STARTED · 14F freeze/governance ⚪ NOT STARTED |
 | 15 | Production Security Hardening | 🔴 Later |
 | 16 | Data Integrity & Migration Hardening | 🔴 Later |
 | 17 | Production Infrastructure | 🔴 Later |
@@ -782,38 +782,56 @@ Include:
 
 ---
 
-# 🔴 Phase 14 — Firebase Retirement
+# 🟡 Phase 14 — Firebase Retirement
 
-**Late-stage phase.**
+**Status: IN PROGRESS — 14.0 audit ✅ · 14A complete ✅ · 14B–14F NOT STARTED.**
 
-Do not remove Firebase prematurely.
+## 14.0 — Firebase Retirement Audit (COMPLETE, read-only, 2026-08-23)
 
-Before retirement, prove:
+Read-only repository-wide audit; report: `docs/phase_14/phase_14_architecture_audit.md`.
+Verdict: **Phase 14 ready to proceed** — runtime authentication is fully JWT + PostgreSQL;
+no Firebase Auth path reachable; no Firestore reads/writes from the Next.js app; Firebase
+exists only as inert frontend SDK initialization, inert backend Admin-SDK initialization,
+legacy deployment/config files, legacy root app, stale docs, migration scripts, and the
+nullable `users.firebase_uid` legacy column. Zero code changed, zero DB mutations, zero
+commits during the audit.
 
-```text
-Frontend
- ├── No Firebase Auth
- ├── No Firebase SDK dependency
- ├── No Firestore reads
- ├── No Firestore writes
- └── No Firebase-specific state
+## 14A — Frontend Firebase Removal (COMPLETE, 2026-08-23)
 
-Backend
- ├── No firebase-admin
- └── No Firebase authentication dependency
+Removed the frontend Firebase dependency entirely (JWT auth unaffected):
+- `frontend/src/lib/api.ts` — dead `import { auth } from "./firebase"` removed.
+- `frontend/src/lib/firebase.ts` — obsolete Firebase initialization module deleted.
+- `frontend/package.json` / `package-lock.json` — `firebase` dependency removed (77 packages pruned).
+- `frontend/.env.example` / `.env.local` — `NEXT_PUBLIC_FIREBASE_*` variables removed.
+- Verification: `npx tsc --noEmit` PASS · `npm run build` PASS (15/15 routes) · `git diff --check` PASS · frontend/src Firebase search clean (only `firebase_uid` data-field strings remain, Phase 14D scope).
+- Zero backend/DB/migration changes. Zero commits.
 
-Data
- └── PostgreSQL is authoritative
-```
+## 14B — Backend Firebase Removal (NOT STARTED — next authorized slice)
 
-Then:
+Remove `backend/app/core/firebase.py`, its import/call in `backend/app/main.py`, and
+`firebase-admin` from `backend/requirements.txt` (then uninstall from the venv).
 
-1. Remove frontend Firebase dependencies.
-2. Remove Firebase configuration.
-3. Remove legacy code.
-4. Archive required legacy data if necessary.
-5. Update deployment/configuration.
-6. Remove Firebase dependencies.
+## 14C — Deployment / Configuration Cleanup (NOT STARTED)
+
+Remove `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`,
+Firebase entries in `.gitignore`, and Firebase prompts.
+
+## 14D — firebase_uid / Data Cleanup (NOT STARTED)
+
+Only after 14A–14C and only if proven safe: update legacy scripts (`set_initial_password.py`,
+`setup_single_user.py`) to query by `roll_number`, then drop `users.firebase_uid` via a
+new Alembic migration and remove the field from model/schema/API/frontend types.
+
+## 14E — Regression Verification (NOT STARTED)
+
+Full auth/data-path regression: login, signup, `get_current_user`, all verifiers, frontend build.
+
+## 14F — Freeze & Governance Reconciliation (NOT STARTED)
+
+Reconcile docs, README, and archive stale Firebase documentation.
+
+**Original late-stage guidance (historical):** Firebase must not be removed prematurely —
+the audit above proved the retirement conditions before any removal.
 
 ---
 
