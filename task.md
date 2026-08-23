@@ -1218,8 +1218,10 @@ Report: `docs/bugfix/cancellation_state_and_counting_consistency_report.md`.
 - [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 - [x] Frozen phases untouched (0–11, 12A/12B/12C)
 - [x] Desktop behavior preserved via `sm:` restores
-- [x] Manual testing checklist provided (NOT performed by agent)
-- HARD STOP — Phase 12E NOT STARTED; no commit made.
+- [x] Phase 12E mobile polish: EventFormDialog grid fix + verifier
+- [x] Static invariant verifier created (`backend/scripts/verify_phase_12e.py`)
+- [x] All 5 Phase 12E invariants verified PASS
+- HARD STOP — Phase 12 COMPLETE; no commit made.
 
 ---
 

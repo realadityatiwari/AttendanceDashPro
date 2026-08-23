@@ -1241,7 +1241,28 @@ Targeted mobile touch-target improvements on previously incomplete responsive su
 
 **Manual testing:** NOT performed by agent. Owner checklist in the 12D report.
 
-**HARD STOP after 12D** — no commit made; Phase 12: 12.0 + 12A + 12B + 12C + 12D COMPLETE; 12E (verification/polish) NEXT; desktop behavior unchanged; frozen systems untouched.
+**HARD STOP after 12E** — no commit made; Phase 12: 12.0 + 12A + 12B + 12C + 12D + 12E COMPLETE; Phase 13 = PWA / Installability (next); desktop behavior unchanged; frozen systems untouched.
 
 ---
+
+## 12E — Mobile polish + verification (COMPLETED, 2026-08-23)
+
+**Scope:** type/density sweep (10px-text minimums), touch-target sweep, overflow audit, and static invariant verifier.
+
+**Deliverables:**
+
+1. **`backend/scripts/verify_phase_12e.py`** — static invariant verifier asserting Phase 12 invariants checkable without a browser:
+   -viewport export present in `app/layout.tsx` (Next.js default accepted per audit §3)
+   -bottom nav component gated `md:hidden` in `MobileBottomNav.tsx`
+   -no new fixed grid column counts (`grid-cols-[234]` without `sm:` responsive prefix) in Phase 12-changed files
+   -no bare `h-6`/`h-7` interactive heights (not part of `sm:` responsive variants) in Phase 12-changed files
+   -`text-xs`/`text-sm` absent from `type="date"` inputs in Phase 12-changed files
+
+2. **`frontend/src/components/events/EventFormDialog.tsx`** (line 504): Fixed working-day/substitution grid from `grid-cols-2` to `grid-cols-1 sm:grid-cols-2` for mobile stacking, two-column restored at `sm+`. Touch-target sizing already addressed by 12D (`h-10 sm:h-8` on all form controls).
+
+3. **Verification results:** all static invariants PASS; `npx tsc --noEmit` clean; `npm run build` green; `git diff --check` clean. Zero backend/DB/migration/API changes. Desktop byte-identical at ≥768px.
+
+**Dependencies:** 12A–12D. **Untouched:** all backend contracts; frozen engines; notification API contracts.
+
+**HARD STOP:** No commit made. Phase 12 fully complete. Next phase: Phase 13 — PWA / Installability.
 

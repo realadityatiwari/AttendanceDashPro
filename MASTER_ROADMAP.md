@@ -742,7 +742,7 @@ Include:
 - Responsive quiz cards
 - Responsive analytics
 
-## Status: 12.0 + 12A + 12B + 12C + 12D COMPLETE (2026-08-23)
+## Status: 12.0 + 12A + 12B + 12C + 12D + 12E COMPLETE (2026-08-23)
 
 - **12.0 architecture & implementation-readiness audit ✅** — `docs/phase_12/phase_12_architecture_audit.md`. Verdict: READY FOR ONLY A PHASE 12 SUB-PHASE (12A). Key findings: mobile navigation ABSENT (TopNav nav `hidden md:flex`); touch targets all below 40px; ShellDialog dialogs cannot scroll; Laboratory tab bar ≈380px nowrap clipped by the shell; NO BACKEND CHANGE REQUIRED; S4 prior art (`17_AI_HANDOFF.md:41-43`) = exactly 4 bottom tabs (Dashboard/Subjects/History/Profile) + Academic Tools from Profile, never a 5th tab; legacy `css/responsive.css` (not imported) documents 5 breakpoints + 44px touch minimums + FAB.
 - **12A responsive foundation + mobile navigation ✅** — `docs/phase_12/phase_12a_implementation_report.md`. Bottom nav below `md` (Home `/dashboard` · Attendance `/subjects` · History `/history` · Profile `/profile`), Profile as the S4-compatible anchor opening the More sheet (Track `/tools/laboratory` · Laboratory `/laboratory` · Quiz Eligibility `/tools/quiz-schedule` · Calendar `/calendar` · Events `/tools/events`) via the existing `ui/sheet.tsx`; AppShell bottom clearance + safe-area; ShellDialog capped at 90dvh with scroll; NotificationCenter list viewport-capped; touch-target foundation in `ui/button.tsx` (mobile base sizes, `sm:` desktop restores — dialogs/sheets/bell/notification actions inherit ≥40px on mobile); NotificationBell mobile hit area ≥40px. Desktop ≥768px behavior unchanged (verified by diff scope + static gates; browser/manual testing is the user's responsibility — checklist in the 12A report). Zero backend/DB/migration/API/PWA changes.
@@ -755,6 +755,7 @@ Include:
     - **Grid responsiveness**: EventFormDialog date range and working/substitution controls changed from grid-cols-2 to grid-cols-1 sm:grid-cols-2 (single column on mobile, two-column restored on desktop).
     - **NotificationCenter**: Analyzed but NOT modified — current layout acceptable at 320px.
     - Zero backend/DB/migration/API changes. All static gates PASS. Desktop byte-identical.
+- **12E Mobile polish + verification ✅** — `backend/scripts/verify_phase_12e.py`. Static invariant verifier asserting Phase 12 invariants (viewport export, bottom nav gated `md:hidden`, no fixed grid counts, no sub-36px interactive sizes on date inputs). All 5 invariants verified PASS. Zero backend/DB/migration/API changes. Desktop byte-identical.
 
 ---
 

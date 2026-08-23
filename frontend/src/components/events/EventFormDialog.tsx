@@ -501,7 +501,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-working">Working day state</label>
               <select
