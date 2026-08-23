@@ -35,7 +35,6 @@ Before declaring the implementation complete, mentally or physically run through
 - [ ] Attendance optimizer output matches baseline?
 - [ ] Quiz Engine eligibility matches policy?
 - [ ] Laboratory Engine unaffected?
-- [ ] Storage sync (Firestore) schema valid?
 - [ ] UI pure consumer rule intact?
 - [ ] Controllers handling all mutations?
 - [ ] Documentation updated?

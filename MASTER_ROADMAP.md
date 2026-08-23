@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** — dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS · **14B backend Firebase removal ✅** — `firebase.py` deleted, `main.py` import removed, `firebase-admin` uninstalled; app imports clean · **14C NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN** (12A–12E + authorized cancellation-lifecycle bugfixes).
+> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** — dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS · **14B backend Firebase removal ✅** — `firebase.py` deleted, `main.py` import removed, `firebase-admin` uninstalled; app imports clean · **14C deployment/config cleanup ✅** — Firebase config files, `.gitignore` entries, and prompts removed · **14D NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN** (12A–12E + authorized cancellation-lifecycle bugfixes).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -61,7 +61,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | **11** | **Notifications & Reminders** | ✅ **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented) |
 | 12 | Mobile / Responsive Experience | 🟡 **IN PROGRESS** — 12.0 architecture & implementation-readiness audit ✅ · **12A responsive foundation + mobile navigation ✅** (S4 4-tab bottom nav + More sheet, shell/dialog scroll safety, touch-target foundation; desktop unchanged) · **12B Track/Dashboard/Calendar responsiveness ✅** (month-nav overflow fixed, grid cells enlarged at 320, Track date nav fluid + ≥40px controls, session-card collisions fixed, dashboard wrap fixes; desktop byte-identical) · **12C ✅ COMPLETE (2026-08-22)** — page responsiveness across Laboratory / Subjects / Quiz / Events (`docs/phase_12/phase_12c_implementation_report.md`, commit `31f75ca`) + the authorized cancellation-lifecycle & counting-consistency correctness fix (`docs/bugfix/cancellation_state_and_counting_consistency_report.md`) |
 | 13 | PWA / Installability | ✅ **COMPLETE & FROZEN** — manifest, service worker, SVG icons, install prompt, standalone detection, online/offline state; zero backend/DB/migration changes; `tsc`/`build`/`diff --check` PASS |
-| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ (read-only, `docs/phase_14/phase_14_architecture_audit.md`) · **14A frontend Firebase removal ✅** (dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS) · **14B backend Firebase removal ✅** (`firebase.py` deleted, `main.py` import removed, `firebase-admin` uninstalled; app imports clean, auth endpoints verified) · 14C deployment/config cleanup ⚪ NOT STARTED · 14D firebase_uid cleanup ⚪ NOT STARTED · 14E regression verification ⚪ NOT STARTED · 14F freeze/governance ⚪ NOT STARTED |
+| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ (read-only, `docs/phase_14/phase_14_architecture_audit.md`) · **14A frontend Firebase removal ✅** (dead import + `firebase.ts` + npm dep + env vars removed; `tsc`/`build` PASS) · **14B backend Firebase removal ✅** (`firebase.py` deleted, `main.py` import removed, `firebase-admin` uninstalled; app imports clean, auth endpoints verified) · **14C deployment/config cleanup ✅** (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `.gitignore` entries, Firebase prompts removed; README deploy/init instructions retired) · 14D firebase_uid cleanup ⚪ NOT STARTED · 14E regression verification ⚪ NOT STARTED · 14F freeze/governance ⚪ NOT STARTED |
 | 15 | Production Security Hardening | 🔴 Later |
 | 16 | Data Integrity & Migration Hardening | 🔴 Later |
 | 17 | Production Infrastructure | 🔴 Later |
@@ -784,7 +784,7 @@ Include:
 
 # 🟡 Phase 14 — Firebase Retirement
 
-**Status: IN PROGRESS — 14.0 audit ✅ · 14A complete ✅ · 14B complete ✅ · 14C–14F NOT STARTED.**
+**Status: IN PROGRESS — 14.0 audit ✅ · 14A complete ✅ · 14B complete ✅ · 14C complete ✅ · 14D–14F NOT STARTED.**
 
 ## 14.0 — Firebase Retirement Audit (COMPLETE, read-only, 2026-08-23)
 
@@ -818,12 +818,19 @@ Removed the backend Firebase Admin SDK dependency entirely (JWT + PostgreSQL aut
 - Legacy migration scripts (`migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`) retain their `firebase_admin` imports — they are historical tools with their own graceful blocked-exit path, out of scope for 14B.
 - Zero DB/migration changes. Zero commits.
 
-## 14C — Deployment / Configuration Cleanup (NOT STARTED — next authorized slice)
+## 14C — Deployment / Configuration Cleanup (COMPLETE, 2026-08-23)
 
-Remove `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`,
-Firebase entries in `.gitignore`, and Firebase prompts.
+Removed all Firebase deployment/configuration artifacts (auth, identity, and runtime
+behavior untouched):
+- Deleted `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`.
+- Removed Firebase-specific `.gitignore` entries (firebase-debug logs, `.firebase/` cache, `.firebaserc` config block).
+- Deleted entirely-Firebase prompts (`14_FIREBASE_BACKEND_PROMPT.md`, `19_DEPLOYMENT_PROMPT.md`); removed Firestore/Firebase-Hosting sections and references from prompts `01/03/04/11/16` and `prompts/README.md` (index rows + release workflow).
+- README: removed Firebase init/configuration instructions (`## Configure Firebase`, `## Deploy Firestore Rules`), Firebase Project/CLI requirements, and structure entries for the deleted config files. Legacy-app feature/tech-stack claims remain for Phase 14F doc reconciliation.
+- Verification: all 6 files absent · `git diff --check` PASS · prompts/ Firebase search clean · diff limited to 13 files (8 deletions, 5 edits) · zero backend/frontend source changes.
+- Preserved: `firebase_uid` model/schema/API/scripts (Phase 14D scope), legacy migration scripts (`migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`), legacy root app, historical `docs/` (Phase 14F reconciliation).
+- Zero DB/migration changes. Zero commits.
 
-## 14D — firebase_uid / Data Cleanup (NOT STARTED)
+## 14D — firebase_uid / Data Cleanup (NOT STARTED — next authorized slice)
 
 Only after 14A–14C and only if proven safe: update legacy scripts (`set_initial_password.py`,
 `setup_single_user.py`) to query by `roll_number`, then drop `users.firebase_uid` via a

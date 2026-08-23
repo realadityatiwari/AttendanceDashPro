@@ -1299,13 +1299,29 @@ Status: **COMPLETE** — implementation verified; zero DB/migration changes; no 
 - [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 - HARD STOP — Phase 14C NOT STARTED; no commit made.
 
-## Phase 14C — Deployment / Configuration Cleanup (NOT STARTED — next authorized slice)
+## Phase 14C — Deployment / Configuration Cleanup (COMPLETE, 2026-08-23)
 
-- [ ] Remove `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`
-- [ ] Remove Firebase entries from `.gitignore`
-- [ ] Archive/remove Firebase prompts
+Status: **COMPLETE** — implementation verified; zero DB/migration changes; no commit.
 
-## Phase 14D — firebase_uid / Data Cleanup (NOT STARTED)
+- [x] Deleted `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json` (all 4 confirmed absent)
+- [x] Removed Firebase-specific entries from `.gitignore` (firebase-debug logs, .firebase/ cache, .firebaserc config block)
+- [x] Deleted entirely-Firebase prompts: `14_FIREBASE_BACKEND_PROMPT.md`, `19_DEPLOYMENT_PROMPT.md`
+- [x] Removed Firestore/Firebase-Hosting sections from `prompts/11_RELEASE_CHECKLIST.md` (sections 5 + 8)
+- [x] Removed Firestore-rules references from `prompts/01`, `prompts/03`, `prompts/04`, `prompts/16`
+- [x] Updated `prompts/README.md` — removed index rows for deleted prompts, updated 11/16 descriptions, removed 19 from Release Workflow
+- [x] Removed Firebase deploy/init instructions from `README.md` (Configure Firebase, Deploy Firestore Rules, Firebase Project/CLI, structure entries for deleted files)
+- [x] `git diff --check` PASS
+- [x] Diff limited to 13 files (8 deletions, 5 edits); zero backend/frontend source code changes
+- [x] `firebase_uid` model/schema/API/scripts intentionally preserved (Phase 14D scope)
+- [x] Legacy migration scripts (`migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`) preserved
+- [x] Legacy root app preserved
+- [x] Historical `docs/` preserved (Phase 14F reconciliation)
+- [x] Zero database mutations; zero Alembic commands
+- [x] Frozen systems untouched
+- [x] Governance synchronized
+- HARD STOP — Phase 14D NOT STARTED; no commit made.
+
+## Phase 14D — firebase_uid / Data Cleanup (NOT STARTED — next authorized slice)
 
 - [ ] Update `scripts/set_initial_password.py` and `scripts/setup_single_user.py` to query by `roll_number`
 - [ ] Alembic migration to drop `users.firebase_uid`; remove from model/schema/API/frontend types

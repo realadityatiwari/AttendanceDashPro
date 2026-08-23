@@ -30,7 +30,7 @@ List out which files will be modified. Enforce module ownership:
 Ensure your proposed changes do not introduce circular dependencies. Engines must remain strictly layered.
 
 ### 5. Detect Architectural Impact
-Explain the architectural impact before modifying core modules. Does this require a new data structure? Does it affect the cloud schema in `firestore.rules`?
+Explain the architectural impact before modifying core modules. Does this require a new data structure?
 
 ### 6. Produce an Implementation Plan
 Write an `implementation_plan.md` artifact detailing your approach.

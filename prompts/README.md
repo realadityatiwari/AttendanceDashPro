@@ -22,15 +22,13 @@ By using these templates, you ensure that every future AI agent acts with the sa
 | `08_REGRESSION_TEST_PROMPT` | Used to manually or automatically verify baseline functionality. |
 | `09_DOCUMENTATION_UPDATE_PROMPT` | Used to update the Project Bible and ADRs. |
 | `10_AI_HANDOFF_UPDATE_PROMPT` | Used to conclude a development phase and update handoff docs. |
-| `11_RELEASE_CHECKLIST` | Used immediately before deploying to Firebase Hosting. |
+| `11_RELEASE_CHECKLIST` | Used immediately before a release. |
 | `12_NEW_MODULE_PROMPT` | Used when creating a new `.js` file to ensure proper dependency layering. |
 | `13_UI_UX_IMPLEMENTATION_PROMPT` | Used for purely visual or UX changes in `ui.js`. |
-| `14_FIREBASE_BACKEND_PROMPT` | Used for modifying Firestore rules or cloud sync logic. |
 | `15_PERFORMANCE_OPTIMIZATION_PROMPT` | Used when the app drops frames or rendering is slow. |
-| `16_SECURITY_REVIEW_PROMPT` | Used to audit Firestore rules and XSS vulnerabilities. |
+| `16_SECURITY_REVIEW_PROMPT` | Used to audit security and XSS vulnerabilities. |
 | `17_TEST_GENERATION_PROMPT` | Used to write Node.js unit tests for the pure engines. |
 | `18_DEBUGGING_PROMPT` | Used to trace state mutations during a crash or bad calculation. |
-| `19_DEPLOYMENT_PROMPT` | Used to execute the Firebase CLI deployment steps. |
 | `20_PROJECT_AUDIT_PROMPT` | Used for holistic, repository-wide health checks. |
 
 ---
@@ -72,5 +70,4 @@ For most day-to-day development.
 ### 6. Release Workflow
 1. Inject `11_RELEASE_CHECKLIST`
 2. *(Verify all boxes are checked)*
-3. Inject `19_DEPLOYMENT_PROMPT`
-4. Inject `10_AI_HANDOFF_UPDATE_PROMPT`
+3. Inject `10_AI_HANDOFF_UPDATE_PROMPT`

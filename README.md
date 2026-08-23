@@ -208,11 +208,8 @@ AttendanceDashPro/
 │   └── pwa.js
 │
 ├── timetable.json
-├── firestore.rules
 ├── manifest.json
 ├── service-worker.js
-├── firebase.json
-├── .firebaserc
 ├── index.html
 └── README.md
 ```
@@ -313,9 +310,7 @@ Responsible only for:
 # 📋 Requirements
 
 - Modern Web Browser
-- Firebase Project
 - Node.js *(optional for development)*
-- Firebase CLI *(for deployment)*
 
 ---
 
@@ -329,31 +324,6 @@ git clone https://github.com/realadityatiwari/AttendanceTrackerPro.git
 
 ```bash
 cd AttendanceTrackerPro
-```
-
----
-
-## Configure Firebase
-
-Create a Firebase project and enable:
-
-- Authentication (Email/Password)
-- Cloud Firestore
-
-Update:
-
-```text
-js/firebase.js
-```
-
-with your Firebase configuration.
-
----
-
-## Deploy Firestore Rules
-
-```bash
-firebase deploy --only firestore:rules
 ```
 
 ---

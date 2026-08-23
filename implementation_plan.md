@@ -1389,9 +1389,50 @@ blocked-exit paths (out of scope); no frontend change; no commit made.
 (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`,
 `.gitignore` Firebase entries, Firebase prompts).
 
-### Phase 14C–14F — NOT STARTED
+### Phase 14C — Deployment / Configuration Cleanup (COMPLETE, 2026-08-23)
 
-- **14C** Deployment/configuration cleanup (`firebase.json`, `.firebaserc`, `firestore.rules`, `.gitignore`, prompts) — NOT STARTED.
+**Objective:** remove the remaining Firebase deployment/configuration artifacts from
+the repository without touching authentication, identity, business logic, or frozen
+systems.
+
+**Delivered:**
+
+1. Deleted `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`
+   (all confirmed absent after removal).
+2. `.gitignore` — removed the Firebase-specific block (firebase-debug log patterns,
+   `.firebase/` cache entry, `.firebaserc` comment/config block).
+3. Deleted entirely-Firebase prompts: `prompts/14_FIREBASE_BACKEND_PROMPT.md`,
+   `prompts/19_DEPLOYMENT_PROMPT.md`.
+4. `prompts/11_RELEASE_CHECKLIST.md` — removed the Firebase Backend Verification and
+   Firebase Hosting Deployment sections (renumbered).
+5. `prompts/01_MASTER_IMPLEMENTATION_PROMPT.md`, `prompts/03_FEATURE_PLANNING_PROMPT.md`,
+   `prompts/04_FEATURE_IMPLEMENTATION_PROMPT.md`, `prompts/16_SECURITY_REVIEW_PROMPT.md` —
+   removed Firestore-rules/Firestore-schema references.
+6. `prompts/README.md` — removed the index rows for the deleted prompts (14, 19),
+   updated the release-checklist description, removed `19_DEPLOYMENT_PROMPT` from the
+   Release Workflow.
+7. `README.md` — removed Firebase init/configuration instructions (`## Configure
+   Firebase`), Firestore-rule deployment instructions (`## Deploy Firestore Rules`),
+   the Firebase Project/Firebase CLI requirement lines, and the project-structure
+   entries for the deleted config files. Legacy-app feature/tech-stack claims remain
+   for Phase 14F documentation reconciliation.
+
+**Verification results:** all 6 deleted files confirmed absent · prompts/ Firebase
+search clean · `git diff --check` PASS · diff limited to 13 files (8 deletions, 5
+edits, 247 deletions / 8 insertions) · zero backend/frontend source changes.
+
+**Scope guards:** zero database changes; zero Alembic commands; `firebase_uid`
+references intentionally preserved (Phase 14D scope); legacy migration scripts
+(`migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`) preserved; legacy
+root app preserved; historical `docs/` preserved for Phase 14F reconciliation; no
+commit made.
+
+**Next authorized slice:** Phase 14D — `firebase_uid`/data cleanup (legacy script
+updates to `roll_number` lookups, then an Alembic migration to drop
+`users.firebase_uid`, followed by model/schema/API/frontend type removal).
+
+### Phase 14D–14F — NOT STARTED
+
 - **14D** `firebase_uid`/data cleanup (legacy script updates + Alembic drop) — NOT STARTED.
 - **14E** Full authentication/data-path regression verification — NOT STARTED.
 - **14F** Phase freeze & governance reconciliation — NOT STARTED.

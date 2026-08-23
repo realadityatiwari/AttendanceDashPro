@@ -29,17 +29,10 @@ Generate and complete the following release checklist artifact. Do not deploy un
 - [ ] All new JavaScript, CSS, and asset files added to `STATIC_ASSETS` array in `service-worker.js`.
 - [ ] Offline hydration from `localStorage` verified.
 
-#### 5. Firebase Backend Verification
-- [ ] Firestore security rules (`firestore.rules`) allow new schema fields.
-- [ ] Trigger Cloud Sync logic does not cause infinite loops.
-
-#### 6. Documentation Verification
+#### 5. Documentation Verification
 - [ ] Project Bible (`/docs`) fully updated.
 - [ ] Data Dictionary (`20_DATA_DICTIONARY.md`) reflects latest schema.
 - [ ] Changelog (`21_CHANGELOG.md`) populated with release notes.
 
-#### 7. Known Bug Review
+#### 6. Known Bug Review
 - [ ] Review `15_KNOWN_BUGS_AND_TECHNICAL_DEBT.md`. Any critical blockages?
-
-#### 8. Deployment
-- [ ] Deploy to Firebase Hosting (`firebase deploy --only hosting`).

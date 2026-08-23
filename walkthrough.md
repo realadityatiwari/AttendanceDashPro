@@ -1340,3 +1340,76 @@ Date: 2026-08-23 · Scope: remove Firebase Admin SDK from the FastAPI backend ·
 **HARD STOP:** No commit made. No push performed. Phase 14C NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 14C Walkthrough (Deployment / Configuration Cleanup)
+
+Date: 2026-08-23 · Scope: remove retired Firebase deployment/configuration artifacts · Auth unchanged
+
+> **PHASE 14C COMPLETE.** All Firebase deployment/configuration artifacts are removed
+> from the repository. Authentication, identity (`firebase_uid`), business logic, and
+> frozen systems are untouched. Zero database mutations, zero commits.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `firebase.json` | Deleted (Firestore rules/indexes config) |
+| `.firebaserc` | Deleted (Firebase project mapping) |
+| `firestore.rules` | Deleted (Firestore security rules) |
+| `firestore.indexes.json` | Deleted (Firestore index declarations) |
+| `.gitignore` | Removed Firebase block: firebase-debug log patterns, `.firebase/` cache, `.firebaserc` config comments |
+| `prompts/14_FIREBASE_BACKEND_PROMPT.md` | Deleted (entirely Firebase: Firestore rules, cloud sync) |
+| `prompts/19_DEPLOYMENT_PROMPT.md` | Deleted (entirely Firebase Hosting deployment) |
+| `prompts/11_RELEASE_CHECKLIST.md` | Removed Firebase Backend Verification + Firebase Hosting Deployment sections |
+| `prompts/01_MASTER_IMPLEMENTATION_PROMPT.md` | Removed `firestore.rules` cloud-schema clause |
+| `prompts/03_FEATURE_PLANNING_PROMPT.md` | Removed `Update firestore.rules` step |
+| `prompts/04_FEATURE_IMPLEMENTATION_PROMPT.md` | Removed Firestore-schema checklist item |
+| `prompts/16_SECURITY_REVIEW_PROMPT.md` | Removed Firestore Security Rules section |
+| `prompts/README.md` | Removed index rows for deleted prompts (14, 19); updated 11/16 descriptions; removed 19 from Release Workflow |
+| `README.md` | Removed `## Configure Firebase`, `## Deploy Firestore Rules`, Firebase Project/CLI requirements, structure entries for deleted config files |
+
+## Firebase Deployment/Configuration References Removed
+
+- Firebase Hosting: `.firebaserc`, `19_DEPLOYMENT_PROMPT.md`, release-checklist deployment section, README structure entries.
+- Firestore deployment config: `firebase.json`, `firestore.rules`, `firestore.indexes.json`, `14_FIREBASE_BACKEND_PROMPT.md`, Firestore rules/schema references in prompts 01/03/04/16/11.
+- Firebase CLI/init instructions: README `## Configure Firebase` + `## Deploy Firestore Rules` + requirements lines.
+- `.gitignore` Firebase entries: all removed.
+
+## Intentionally Retained Firebase References
+
+- **`firebase_uid`** (model `backend/app/models/user.py`, schema `backend/app/schemas/student.py`, endpoints `student.py`/`auth.py`, repo `user_repo.py`, scripts `set_initial_password.py`/`setup_single_user.py`) — **Phase 14D scope**: application identity/schema residue; column, values, and API fields must remain until 14D's script updates + Alembic migration.
+- **Legacy migration scripts** (`backend/scripts/migrate_extract.py`, `migrate_execute.py`, `diagnose_failures.py`) — historical data-migration tools with graceful blocked-exit paths; not deployment/config.
+- **Legacy root app** (`index.html`, `js/`, root `service-worker.js`, scratch tests) — separate pre-migration codebase; out of scope.
+- **Historical `docs/`** (02/03/09/10/12/15/16/17/21/22 + backend design/migration docs) — stale Firebase claims deferred to Phase 14F documentation reconciliation.
+
+## Verification Results
+
+| Check | Result |
+|---|---|
+| `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json` absent | ✅ (4/4 False) |
+| `prompts/14_FIREBASE_BACKEND_PROMPT.md`, `19_DEPLOYMENT_PROMPT.md` absent | ✅ (2/2 False) |
+| `.gitignore` Firebase search | ✅ no matches |
+| `prompts/` Firebase search | ✅ no matches |
+| `git diff --check` | ✅ PASS (exit 0) |
+| Diff scope | ✅ 13 files: 8 deletions, 5 edits; 247 deletions / 8 insertions |
+| Backend/frontend source code | ✅ zero changes (no .py/.ts/.tsx in diff) |
+
+## Scope Guards Confirmed
+
+- **Database**: zero mutations; no Alembic commands; `firebase_uid` column + legacy values untouched.
+- **Frozen systems**: auth endpoints, JWT, engines, analytics, dashboard, history, notifications, PWA, Phase 12 responsive work — untouched.
+- **Frontend**: zero changes.
+- **Backend runtime**: zero changes (Phase 14B state preserved).
+- **Documentation**: only the four governance files + README deploy/init instruction sections touched; historical docs deferred to 14F.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 14 status table + header + section updated — 14.0 ✅, 14A ✅, 14B ✅, 14C ✅, 14D identified as next authorized slice, 14D–14F NOT STARTED.
+- `implementation_plan.md`: Phase 14C section added — COMPLETE; 14D–14F pending.
+- `task.md`: Phase 14C checklist complete; 14D–14F unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized slice: Phase 14D — `firebase_uid`/data cleanup.**
+**HARD STOP:** No commit made. No push performed. Phase 14D NOT STARTED.
+
+---

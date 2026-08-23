@@ -24,7 +24,6 @@ Determine exactly which engines this feature will touch.
 ### 3. Data Design
 Does this feature require persisting new data? If so:
 - Add it to `AppState` in `storage.js`.
-- Update `firestore.rules`.
 - Update `docs/20_DATA_DICTIONARY.md`.
 
 ### 4. Cross-Platform Considerations
