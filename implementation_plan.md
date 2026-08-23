@@ -1209,3 +1209,39 @@ Authorized correctness fix executed alongside it (this bugfix round):
 4. **Regression:** NEW `verify_cancellation_lifecycle_consistency.py` **35/35** (unmarked/MISSED/ATTENDED lifecycles, multi-session range, deactivation incl. ALREADY-INACTIVE self-heal, reactivation cycle, PATCH-move between recorded sessions, idempotency, records byte-preserved, Track/History/Subjects/Dashboard deltas both directions, eligibility-core unit checks, isolation, exact baseline); `verify_event_cancellation_propagation.py` **26/26**; phase_6_6 **36/36**; attendance_spec **15/15**; events_correction **42/42**; working_saturday **24/24**; phase_11a **19/19**; compileall PASS. Parallel-draft verifiers `verify_bugfix_12C*.py` use absolute live-data fixtures (17→19 drift between consecutive runs) — not gates; superseded by the delta-based lifecycle verifier.
 5. **Live result (BCS-058):** events removed → reconciliation restores originals (07-29 Attended / 07-30 Missed); applicable lectures back to N=79 (was stuck at N−2=77 while stale). Records byte-preserved throughout.
 6. ⚠ Backend restart required (no --reload) before manual testing. **12D NOT STARTED. No commit made.**
+
+---
+
+### 12D — COMPLETE (2026-08-23): remaining responsive surfaces
+
+Targeted mobile touch-target improvements on previously incomplete responsive surfaces (`docs/phase_12/phase_12d_implementation_report.md`).
+
+**Audit:** `docs/phase_12/phase_12d_architecture_audit.md` identified SettingsModal select (h-7 = 28px), EventFormDialog controls (h-8 = 32px), and EventFormDialog two-column grids as below baseline or cramped at 320px. NotificationCenter analyzed but determined acceptable as-is.
+
+**Implementation (frontend-only):**
+
+1. **SettingsModal.tsx:** Week-start select upgraded from `h-7` to `h-9 sm:h-7` (36px mobile, 28px desktop restored).
+2. **EventFormDialog.tsx:** `selectClass` constant upgraded from `h-8` to `h-10 sm:h-8` (40px mobile, 32px desktop restored). Applies to all select elements, date inputs, and note input.
+3. **EventFormDialog.tsx:** Two `grid-cols-2` patterns upgraded to `grid-cols-1 sm:grid-cols-2`:
+   - Date range start/end controls (line 404)
+   - Working day / substitution controls (line 504)
+   - Effect: single-column stack on mobile (<640px), two-column restored on desktop.
+4. **NotificationCenter:** NOT MODIFIED — current row layout analyzed at 320px (268px content width after padding; ~92px for actions; ~128px remaining for text with `min-w-0 flex-1` preventing overflow). Layout is tight but functional; no hard overflow; buttons already inherit 12A sizes (40px mobile).
+
+**Verification:**
+- `tsc --noEmit` PASS
+- ESLint (2 changed files) PASS
+- `npm run build` PASS (15 routes prerendered)
+- `git diff --check` PASS (LF/CRLF warnings only, pre-existing)
+- Diff scope: 2 frontend files (+3/-3), zero backend/DB/migration/API changes
+
+**Desktop preservation:** All changes use `sm:` restore pattern. Desktop (≥640px) receives exactly the original class values. No visual change on desktop.
+
+**Governance:** MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md synchronized. Frozen phases (0–11, 12A/12B/12C) untouched. No cancellation/attendance/analytics logic changed.
+
+**Manual testing:** NOT performed by agent. Owner checklist in the 12D report.
+
+**HARD STOP after 12D** — no commit made; Phase 12: 12.0 + 12A + 12B + 12C + 12D COMPLETE; 12E (verification/polish) NEXT; desktop behavior unchanged; frozen systems untouched.
+
+---
+

@@ -94,7 +94,7 @@ function initialState(event: AcademicEventResponse | null, isAdmin: boolean): Fo
 }
 
 const selectClass =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
+  "h-10 sm:h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
 const fieldClass = "flex flex-col gap-1";
 const labelClass = "text-[10px] uppercase tracking-wider text-muted-foreground";
 
@@ -401,7 +401,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                 onChange={e => handleStartDateChange(e.target.value)}
               />
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={fieldClass}>
                   <label className={labelClass} htmlFor="event-form-start">Start date</label>
                   <Input

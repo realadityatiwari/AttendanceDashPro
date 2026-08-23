@@ -198,7 +198,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   }
                   disabled={controlsDisabled}
                   aria-label="Week starts on"
-                  className="h-7 rounded-md border border-border bg-background px-2 text-sm text-foreground disabled:opacity-50"
+                  className="h-9 sm:h-7 rounded-md border border-border bg-background px-2 text-sm text-foreground disabled:opacity-50"
                 >
                   {WEEK_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>

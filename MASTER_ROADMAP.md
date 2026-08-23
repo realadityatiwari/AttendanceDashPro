@@ -742,7 +742,7 @@ Include:
 - Responsive quiz cards
 - Responsive analytics
 
-## Status: 12.0 + 12A + 12B + 12C COMPLETE (2026-08-22)
+## Status: 12.0 + 12A + 12B + 12C + 12D COMPLETE (2026-08-23)
 
 - **12.0 architecture & implementation-readiness audit ✅** — `docs/phase_12/phase_12_architecture_audit.md`. Verdict: READY FOR ONLY A PHASE 12 SUB-PHASE (12A). Key findings: mobile navigation ABSENT (TopNav nav `hidden md:flex`); touch targets all below 40px; ShellDialog dialogs cannot scroll; Laboratory tab bar ≈380px nowrap clipped by the shell; NO BACKEND CHANGE REQUIRED; S4 prior art (`17_AI_HANDOFF.md:41-43`) = exactly 4 bottom tabs (Dashboard/Subjects/History/Profile) + Academic Tools from Profile, never a 5th tab; legacy `css/responsive.css` (not imported) documents 5 breakpoints + 44px touch minimums + FAB.
 - **12A responsive foundation + mobile navigation ✅** — `docs/phase_12/phase_12a_implementation_report.md`. Bottom nav below `md` (Home `/dashboard` · Attendance `/subjects` · History `/history` · Profile `/profile`), Profile as the S4-compatible anchor opening the More sheet (Track `/tools/laboratory` · Laboratory `/laboratory` · Quiz Eligibility `/tools/quiz-schedule` · Calendar `/calendar` · Events `/tools/events`) via the existing `ui/sheet.tsx`; AppShell bottom clearance + safe-area; ShellDialog capped at 90dvh with scroll; NotificationCenter list viewport-capped; touch-target foundation in `ui/button.tsx` (mobile base sizes, `sm:` desktop restores — dialogs/sheets/bell/notification actions inherit ≥40px on mobile); NotificationBell mobile hit area ≥40px. Desktop ≥768px behavior unchanged (verified by diff scope + static gates; browser/manual testing is the user's responsibility — checklist in the 12A report). Zero backend/DB/migration/API/PWA changes.
@@ -750,6 +750,11 @@ Include:
 - **12C Laboratory / Subjects / Quiz Eligibility / Events responsiveness ✅** — `docs/phase_12/phase_12c_implementation_report.md`. Phase 12C is **COMPLETE**.
     - **Frontend fixes**: Fixed non-responsive tab bars in Laboratory page, hardcoded wrapping issues in SubjectAttendanceCard and EventRow, and minimum widths on QuizEligibilityCard to ensure grid components wrap and respond gracefully down to mobile viewports.
     - **Urgent Correctness Bugfix**: Fixed an issue in the analytics aggregation pipeline where explicitly `CLASS_CANCELLED` sessions (which were properly mapped in the database) were not dropped from the applicable attendance denominators. Updated `AnalyticsService`, `DashboardService`, and `NotificationService` to strictly enforce the canonical `occurrence_is_cancelled` predicate from `practical_occurrence.py`. Verified all Phase 6-9 regression tests pass and that the backend math is pristine and sound.
+- **12D Remaining responsive surfaces ✅** — `docs/phase_12/phase_12d_implementation_report.md`. Phase 12D is **COMPLETE**.
+    - **Frontend-only touch-target refinements**: SettingsModal select upgraded from h-7 (28px) to h-9 sm:h-7 (36px mobile). EventFormDialog controls upgraded from h-8 (32px) to h-10 sm:h-8 (40px mobile).
+    - **Grid responsiveness**: EventFormDialog date range and working/substitution controls changed from grid-cols-2 to grid-cols-1 sm:grid-cols-2 (single column on mobile, two-column restored on desktop).
+    - **NotificationCenter**: Analyzed but NOT modified — current layout acceptable at 320px.
+    - Zero backend/DB/migration/API changes. All static gates PASS. Desktop byte-identical.
 
 ---
 

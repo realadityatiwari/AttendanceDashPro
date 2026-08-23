@@ -1194,3 +1194,32 @@ Report: `docs/bugfix/cancellation_state_and_counting_consistency_report.md`.
 - [x] Governance synchronized (roadmap/plan/task/walkthrough); parallel-session artifacts reconciled (their predicate completion + my reversal fix are complementary; their absolute-fixture verifiers documented as non-gates)
 - [x] ⚠ OWNER ACTION: restart dev backend before manual testing
 - HARD STOP — Phase 12D NOT STARTED; no commit made.
+
+---
+
+## Phase 12D — Remaining Responsive Surfaces (COMPLETE, 2026-08-23)
+
+**Objective:** Targeted mobile touch-target improvements on previously incomplete responsive surfaces.
+
+**Checklist:**
+
+- [x] Read Phase 12D architecture audit (`docs/phase_12/phase_12d_architecture_audit.md`)
+- [x] SettingsModal.tsx: Week-start select `h-7` → `h-9 sm:h-7` (36px mobile, 28px desktop)
+- [x] EventFormDialog.tsx: selectClass `h-8` → `h-10 sm:h-8` (40px mobile, 32px desktop)
+- [x] EventFormDialog.tsx: Date range grid `grid-cols-2` → `grid-cols-1 sm:grid-cols-2`
+- [x] EventFormDialog.tsx: Working/substitution grid `grid-cols-2` → `grid-cols-1 sm:grid-cols-2`
+- [x] NotificationCenter: Analyzed, decision NOT to modify (layout acceptable at 320px)
+- [x] `npx tsc --noEmit` PASS
+- [x] ESLint (2 changed files) PASS
+- [x] `npm run build` PASS (15 routes prerendered)
+- [x] `git diff --check` PASS (LF/CRLF warnings only)
+- [x] Scope verification: 2 frontend files (+3/-3), zero backend/DB/API changes
+- [x] Implementation report created (`docs/phase_12/phase_12d_implementation_report.md`)
+- [x] Governance synchronized (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+- [x] Frozen phases untouched (0–11, 12A/12B/12C)
+- [x] Desktop behavior preserved via `sm:` restores
+- [x] Manual testing checklist provided (NOT performed by agent)
+- HARD STOP — Phase 12E NOT STARTED; no commit made.
+
+---
+
