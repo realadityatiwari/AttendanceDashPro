@@ -1857,6 +1857,45 @@ added (`deploy/backup/*`, compose service, env example, docs).
 
 **Next authorized slice:** Phase 18D — Deployment & Verification (NOT STARTED).
 
+### Phase 18D — Deployment & Verification (PARTIAL, 2026-08-23)
+
+**Objective:** deploy and verify the production infrastructure built in 18A–18C.
+
+**⚠️ Production deployment BLOCKED on missing infrastructure** — no VPS/cloud
+host, no domain/DNS/TLS, no production credentials, no off-host destination
+exist. The deployment mechanism was proven via a **local rehearsal deployment**
+(disposable, torn down).
+
+**What was delivered / verified in the rehearsal:**
+
+1. **Deployment defects fixed:**
+   - `backend/requirements.txt` — added `pyjwt>=2.10.0` (missing dependency;
+     backend crashed at import without it; genuine deployment defect, minimal
+     fix).
+   - `deploy/caddy/Caddyfile` — added `handle /health { reverse_proxy
+     backend:8000 }` (the backend health endpoint was not routable through the
+     proxy; external health checks would hit the frontend).
+2. **Full production stack deployed locally (5 services):** postgres, backend,
+   frontend, backup, caddy — all healthy. Health checks, API routing, and
+   proxy path verification PASS.
+3. **Backup executed via real `backup.sh`:** artifact 2972 bytes, pg_restore
+   --list verified (11 TOC entries, gzip custom format), persistent
+   `backup_data` volume. Retention + off-host (none) + locking verified.
+4. **Isolated restore PASS:** backup restored into a disposable postgres:16
+   container; data verified; container removed.
+5. **Security:** no secrets in logs/argv; PostgreSQL private (no host port);
+   only proxy port 80 exposed; FORWARDED_ALLOW_IPS trust boundary verified.
+6. **Application DB untouched** (dev `attendancedashpro_db` unchanged;
+   INSERT/UPDATE/DELETE = 0). All rehearsal/restore containers and volumes
+   cleaned.
+
+**Verification results:** see `docs/phase_18/phase_18d_deployment.md` (full
+report, blocker list, deployment runbook).
+
+**Phase status: PARTIAL** — production deployment blocked on infrastructure;
+rehearsal + all verification PASS. Next phase (CI/CD) subject to operator
+providing production infrastructure.
+
 ---
 
 ---

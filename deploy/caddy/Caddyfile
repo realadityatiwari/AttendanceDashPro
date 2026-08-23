@@ -20,6 +20,11 @@
 http://{$DOMAIN:app.example.com} {
     encode gzip
 
+    # Health check endpoint → FastAPI backend (not proxied via frontend)
+    handle /health {
+        reverse_proxy backend:8000
+    }
+
     # API requests → FastAPI backend
     handle /api/* {
         reverse_proxy backend:8000

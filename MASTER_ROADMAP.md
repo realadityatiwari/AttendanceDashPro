@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 18D — Deployment Verification **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅, 18C backup automation ✅ (scheduled PostgreSQL backup container, retention/pruning, off-host contract, isolated restore verified; no real secrets/credentials; nothing deployed). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 19 — CI/CD **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS / PARTIAL** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅, 18C backup automation ✅, **18D deployment & verification ⚠️ PARTIAL** (production deployment BLOCKED on missing infrastructure: no VPS/cloud host, domain, credentials, or off-host destination; rehearsal deployment verified end-to-end — all 5 services healthy, real backup executed, isolated restore PASS, 2 deployment defects fixed: PyJWT dep + Caddy /health route). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -65,7 +65,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
 | 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
 | 17 | Data Integrity & Migration Hardening | ✅ **COMPLETE & FROZEN** — JWT production-secret guard ✅ (APP_ENV; `verify_phase_17_jwt_guard.py` 6/6) · integrity audit ✅ (zero orphans/duplicates/FK violations) · **NO MIGRATION REQUIRED** (single linear Alembic head `e1f2a3b4c5d6`) · backup/restore ✅ verified (isolated container) · retention policy ✅ documented (7 daily / 4 weekly / 3 monthly) · seed audit ✅ · semester-transition analysis ✅ · cleanup: NONE REQUIRED · working-DB mutations ZERO |
-| 18 | Production Infrastructure | 🟡 **IN PROGRESS** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** (automated backup container, retention pruning, off-host contract, pg_dump -Fc + pg_restore --list verification, isolated restore smoke test PASS, no real secrets/credentials) · 18D deployment verification ⚪ NOT STARTED |
+| 18 | Production Infrastructure | 🟡 **IN PROGRESS / PARTIAL** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** · **18D deployment & verification ⚠️ PARTIAL** — rehearsal deployment verified end-to-end (5 services healthy, real backup executed + verified, isolated restore PASS, scheduler + retention + locking verified, no secrets); **production deployment BLOCKED** on missing infrastructure (no host/domain/credentials/off-host destination); 2 deployment defects fixed (PyJWT dep, Caddy /health route); `docs/phase_18/phase_18d_deployment.md` |
 | 19 | CI/CD | 🔴 Later |
 | 20 | Production QA | 🔴 Later |
 | 21 | Production Launch | 🔴 Later |
@@ -1169,7 +1169,7 @@ This is essential for a real multi-semester product.
 
 # 🟡 Phase 18 — Production Infrastructure
 
-**Status: IN PROGRESS — 18.0 audit ✅ COMPLETE · 18A containerization ✅ COMPLETE · 18B env & secrets ✅ COMPLETE · 18C backup automation ✅ COMPLETE · 18D NOT STARTED.**
+**Status: IN PROGRESS / PARTIAL — 18.0 ✅ · 18A ✅ · 18B ✅ · 18C ✅ · 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure).**
 
 ## 18.0 — Production Infrastructure Audit (COMPLETE, read-only)
 
@@ -1268,13 +1268,49 @@ isolation:
   logged; `.gitignore` already covers `backups/` + `deploy/.env.prod`.
 - Docs: `docs/phase_18/phase_18c_backup.md`.
 
-## 18D — Deployment & Verification (NOT STARTED — next authorized slice)
+## 18D — Deployment & Verification (PARTIAL, 2026-08-23)
 
-Migrations-on-deploy (`alembic upgrade head`), HTTPS/TLS provisioning, deployment verification.
+Local rehearsal deployment proved the full production mechanism works, but
+**actual production deployment is BLOCKED on missing infrastructure**:
 
-Exact hosting choices will be made later based on cost, reliability and requirements.
+- **No production host/VPS** — no cloud compute target provisioned.
+- **No production credentials** — no real `JWT_SECRET_KEY`, `POSTGRES_PASSWORD`,
+  or `BACKEND_CORS_ORIGINS` for a real domain exist.
+- **No domain/DNS/TLS** — no real hostname; Caddy config ready (placeholders).
+- **No off-host backup destination** — no external storage (OFFHOST_TYPE=none).
 
----
+### What was delivered / verified (rehearsal, disposable, torn down):
+
+1. **Deployment defects fixed**:
+   - `backend/requirements.txt` — added `pyjwt>=2.10.0` (missing from deps;
+     backend crashed at import without it). Genuine deployment defect, minimal
+     fix.
+   - `deploy/caddy/Caddyfile` — added `handle /health` route (backend health
+     endpoint was not proxied; external health checks would fail).
+2. **Rehearsal deployment**: full production stack (5 services) deployed locally
+   with placeholder env values (temp file, never committed, disposable volumes).
+   All services healthy: postgres → backend → backup → frontend → caddy.
+3. **Backup verification**: `backup.sh` executed on the real backup container
+   after seeding the disposable rehearsal DB; artifact 2972 bytes, pg_restore
+   --list passed (11 TOC entries). Retention and off-host contract verified.
+4. **Isolated restore**: backup restored into a separate disposable postgres:16
+   container; data verified; container removed.
+5. **Security**: no secrets in logs/argv; PostgreSQL private; only proxy port 80
+   exposed; FORWARDED_ALLOW_IPS trust boundary verified.
+6. **Docs**: `docs/phase_18/phase_18d_deployment.md` (full deployment report,
+   blockers, and runbook).
+7. **Application DB untouched**: working dev database `attendancedashpro_db`
+   unchanged (INSERT/UPDATE/DELETE = 0). All rehearsal/restore containers and
+   volumes cleaned (0 remaining).
+
+### Blockers (production deployment cannot proceed without these):
+
+- Production VPS/host → operator must provision.
+- Production credentials → operator must generate and supply.
+- Domain/DNS/TLS → operator must register and configure.
+- Off-host backup destination → operator must provision (or accept none).
+
+## 19 — CI/CD (NOT STARTED — next authorized slice, subject to 18D resolution)
 
 # 🔴 Phase 19 — CI/CD
 
@@ -1717,7 +1753,7 @@ Phase 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
-> **Next phase:** Phase 18C — Backup Automation + Retention + Off-Host Protection (Phase 18 IN PROGRESS — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅; Phase 17 COMPLETE & FROZEN).
+> **Next phase:** Phase 18D — Deployment & Verification **IN PROGRESS (2026-08-23)** — production deployment BLOCKED on missing infrastructure (no VPS/cloud host, no domain/DNS/TLS, no production credentials, no off-host destination exist); local rehearsal deployment + full backup/restore verification being performed to prove the deployment mechanism.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

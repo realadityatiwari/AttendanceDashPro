@@ -1542,9 +1542,33 @@ Status: **COMPLETE & FROZEN** — all authorized Phase 17 work done; zero workin
 - [x] Governance synchronized
 - HARD STOP — Phase 18D NOT STARTED; no commit made.
 
-### Phase 18D — Deployment & Verification (NOT STARTED — next authorized slice)
+### Phase 18D — Deployment & Verification (PARTIAL, 2026-08-23)
 
-- [ ] Migrations-on-deploy (`alembic upgrade head`), HTTPS/TLS, deployment verification
+Status: **PARTIAL** — rehearsal deployment + full verification PASS; production deployment BLOCKED on missing infrastructure (no host/credentials/domain/off-host destination).
+
+- [x] Repository + governance review before implementation
+- [x] Deployment boundary assessment — production infra unavailable, documented
+- [x] Compose config + env resolution validated (full env set, `${VAR:?}` fail-fast)
+- [x] Production images built (backend, frontend, backup)
+- [x] **Defect fixed**: `pyjwt>=2.10.0` added to `backend/requirements.txt` (missing dep, backend crashed at import)
+- [x] **Defect fixed**: Caddy `handle /health` route added (`deploy/caddy/Caddyfile`)
+- [x] Rehearsal deployment (disposable): 5 services up, all healthy
+- [x] Health checks: postgres/backend/frontend/backup/caddy + proxy routing PASS
+- [x] Backup executed (real `backup.sh`): 2972 bytes, pg_restore --list verified
+- [x] Retention + scheduler lock + off-host contract (none) verified
+- [x] Isolated restore PASS (disposable container, data verified, removed)
+- [x] Security: no secrets in logs/argv; PostgreSQL private; only port 80 exposed
+- [x] Application DB untouched (INSERT/UPDATE/DELETE = 0)
+- [x] Rehearsal/restore containers + volumes cleaned (0 remaining)
+- [x] `docs/phase_18/phase_18d_deployment.md` created (report + runbook + blockers)
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [ ] **BLOCKED**: production deployment requires operator to provision VPS/host + credentials + domain + optional off-host destination
+- HARD STOP — no commit made.
+
+### Phase 19 — CI/CD (NOT STARTED — next authorized slice, subject to 18D resolution)
+
+- [ ] Production quality gate (TypeScript, Python checks, frontend build, migration checks)
+- [ ] Deployment pipeline
 
 ---
 

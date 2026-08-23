@@ -2305,6 +2305,103 @@ Backup container (data-net, scheduled)
 
 ---
 
+# AttendanceDash Pro — Phase 18D Walkthrough (Deployment & Verification)
+
+Date: 2026-08-23 · Scope: deploy + verify the production stack · **PARTIAL — production deployment BLOCKED on missing infrastructure**
+
+> **PHASE 18D PARTIAL.** The production deployment mechanism was verified
+> end-to-end via a **local rehearsal deployment** (5 services, all healthy;
+> real backup executed; isolated restore PASS; 2 deployment defects fixed).
+> **Actual production deployment is BLOCKED**: no VPS/cloud host, no domain/
+> DNS/TLS, no production credentials, no off-host destination exist. The
+> working application database was never touched.
+
+## Deployment Boundary Assessment
+
+| Required resource | Available? |
+|---|---|
+| Production host (VPS/cloud) | ❌ NO |
+| Production credentials (JWT/DB/CORS) | ❌ NO |
+| Domain / DNS / TLS | ❌ NO |
+| Off-host backup destination | ❌ NO |
+| Local Docker (rehearsal) | ✅ YES |
+
+Per the phase's hard-stop conditions, production deployment stops at this
+boundary; the deployment mechanism itself was still verified via rehearsal.
+
+## Deployment Defects Found & Fixed
+
+1. **`backend/requirements.txt` — missing `pyjwt`**: the backend container
+   crashed at import (`ModuleNotFoundError: No module named 'jwt'`) because
+   PyJWT was only in the dev venv, not in requirements.txt. Added
+   `pyjwt>=2.10.0` (installed version 2.13.0). Minimal deployment fix.
+2. **`deploy/caddy/Caddyfile` — no `/health` route**: the backend health
+   endpoint (root `/health`) was not routed by the proxy, so external health
+   checks would hit the frontend. Added `handle /health { reverse_proxy
+   backend:8000 }`. Caddy requires restart to reload.
+
+## Rehearsal Deployment (disposable, torn down)
+
+- Deployed the full production stack locally: postgres, backend, frontend,
+  backup, caddy — all **healthy** (postgres → backend → backup → frontend →
+  caddy dependency order respected).
+- Verified through the Caddy proxy: `/health` → backend JSON · `/` → frontend
+  HTML (29KB) · `/api/v1/student/me` without token → 401 JSON.
+- Verified network isolation: proxy-net (frontend/backend/caddy) + data-net
+  internal (postgres/backend/backup); PostgreSQL has no host port.
+- Verified backend argv contains no password (PGPASSWORD env only);
+  FORWARDED_ALLOW_IPS=172.28.0.0/24.
+
+## Backup Verification
+
+- Executed the **real `backup.sh`** inside the running backup container:
+  first attempt on the empty rehearsal DB **failed loudly** (903 bytes < 1024
+  minimum — correct fail-loudly behavior).
+- After seeding the disposable rehearsal DB with a marker table: backup
+  **2972 bytes**, `pg_restore --list` verified (11 TOC entries, gzip custom
+  format), artifact on the persistent `backup_data` volume.
+- `retention.sh`: no prune needed (2 ≤ 14) — correct.
+- `offhost.sh`: `OFFHOST_TYPE=none — local staging only` — correct.
+- Scheduler lock: verified (lock file prevents overlapping cycles).
+- Scheduler logs: DB identity logged, **no credentials** (verified).
+
+## Restore Verification (isolated)
+
+- Backup restored into a **disposable** postgres:16 container; the
+  `rehearsal_marker` table + data confirmed present; container removed.
+- The application DB and rehearsal DB were never restored into destructively.
+
+## Cleanup
+
+- Rehearsal stack torn down: `docker compose down -v` (networks + disposable
+  volumes removed).
+- Restore-test container removed. Temp env/dump files removed.
+- **0 rehearsal/restore containers remain.** Dev DB (`attendancedashpro_db`)
+  untouched and still running.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 18D PARTIAL (rehearsal verified; production
+  blocked); 18D section rewritten with blockers + runbook.
+- `implementation_plan.md`: 18D section — PARTIAL; blockers listed.
+- `task.md`: 18D checklist — completed items checked; BLOCKED item open.
+- `walkthrough.md`: this entry.
+- `docs/phase_18/phase_18d_deployment.md`: full deployment report.
+
+## Final State
+
+- **Production deployment**: NOT DEPLOYED (blocked on infrastructure).
+- **Rehearsal**: verified end-to-end, torn down, no residue.
+- **Application DB**: INSERT 0 · UPDATE 0 · DELETE 0.
+- **Git**: no commit, no push. **Browser testing**: not performed.
+
+**PHASE 18D — PARTIAL / HARD STOP**
+**Next authorized slice:** Phase 19 — CI/CD (NOT STARTED, subject to 18D resolution).
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+**Database mutations: ZERO (application DB).** Production deployment: NO. Cloud resources: ZERO. Real production secrets: ZERO.
+
+---
+
 ---
 
 ---
