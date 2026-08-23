@@ -1486,9 +1486,51 @@ no commit made.
 **Next authorized slice:** Phase 14E — full authentication/data-path regression
 verification (login, signup, `get_current_user`, all verifiers, frontend build).
 
-### Phase 14E–14F — NOT STARTED
+### Phase 14E — Regression Verification (COMPLETE, 2026-08-23)
 
-- **14E** Full authentication/data-path regression verification — NOT STARTED.
+**Objective:** prove Phase 14D's `firebase_uid` removal caused no regression to the
+PostgreSQL + JWT application. Verification-only phase; zero feature work.
+
+**Delivered:**
+
+1. **In-process regression suite** (real DB, guaranteed-rollback, temp user in an
+   isolated session): 66/67 PASS — alembic single head `e1f2a3b4c5d6`; `firebase_uid`
+   column + `ix_users_firebase_uid` index gone; users 31 / admin 1 / students 30 /
+   distinct rolls 31; password round-trip (format, correct, wrong, empty, salted);
+   login valid / wrong-password 401 / nonexistent-roll 401; JWT mint + valid
+   `get_current_user` + invalid 401; `require_admin` ADMIN ok / STUDENT 403;
+   `/student/me` full contract incl. NO `firebase_uid`; 16 core read paths; mutation
+   contract (statuses accepted; cancelled 409; future 400; non-enrolled 403);
+   admin-mutation `require_admin` wiring; feedback POST + preferences PUT;
+   `/student/sync` no `firebase_uid`. The single FAIL was a harness artifact (the
+   sampled session's subject happened to be one the student is enrolled in — 403
+   correctly not raised), not a regression.
+2. **Frozen-phase verifiers (self-cleanup, real DB)**: 6.5 27/27 · 6.6 36/36 ·
+   6.7 30/31 (check 7 FAIL: live DB has 4 pre-existing user-created inactive
+   QUIZ_DAY events from 2026-08-16 — pre-dates Phase 14D; not a regression; check
+   27 exact baseline restore PASS) · 7.1 26/26 · 10C 23/23 · 10D 18/18 ·
+   11A 19/19 · 11B 23/23 · 12E 5/5.
+3. **One verifier compatibility fix**: `verify_phase_11b.py` hardcoded the
+   Phase 11B-era alembic head (`d1e2f3a4b5c6`); updated to current head
+   `e1f2a3b4c5d6` (assertion + docstring, 4 lines) — required because the Phase 14D
+   migration legitimately advanced the head.
+4. **Persistent-mutation audit**: a leaked temp user (from a crashed harness run
+   before rollback) and a leaked lab-experiment row (from an early flawed direct-call
+   test) were detected via baseline re-reads and removed. Final DB state
+   byte-identical to baseline.
+5. **Static checks**: `compileall` PASS · `npx tsc --noEmit` PASS · `npm run build`
+   PASS (15/15) · Firebase search clean (`frontend/src` + `backend/app` have zero
+   `firebase`/`firestore`/`firebase_uid`; only 3 stale comments remain — Phase 14F).
+
+**Scope guards:** zero feature work; zero auth/JWT/engine changes; zero DB mutations
+(verifier artifacts self-cleaned; final counts byte-identical); browser/manual testing
+deferred to the owner; no commit made.
+
+**Next authorized slice:** Phase 14F — freeze & governance reconciliation
+(docs/README/tech-stack reconciliation, archive stale Firebase documentation).
+
+### Phase 14F — NOT STARTED
+
 - **14F** Phase freeze & governance reconciliation — NOT STARTED.
 
 ---

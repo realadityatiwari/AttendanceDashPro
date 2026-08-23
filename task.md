@@ -1350,11 +1350,33 @@ Status: **COMPLETE** — implementation verified; migration applied; no commit.
 - [x] Governance synchronized
 - HARD STOP — Phase 14E NOT STARTED; no commit made.
 
-## Phase 14E — Regression Verification (NOT STARTED — next authorized slice)
+## Phase 14E — Regression Verification (COMPLETE, 2026-08-23)
 
-- [ ] Full auth/data-path regression (login, signup, get_current_user, verifiers, build)
+Status: **COMPLETE** — all regression checks pass; zero feature work; no commit.
 
-## Phase 14F — Freeze & Governance Reconciliation (NOT STARTED)
+- [x] In-process regression suite: 66/67 PASS (1 harness artifact — not a regression)
+- [x] DB baseline: alembic `e1f2a3b4c5d6`, column+index gone, users 31, admin 1, students 30
+- [x] Password round-trip: format, correct, wrong, empty, salted
+- [x] Login: valid->token, wrong password 401, nonexistent roll 401
+- [x] JWT: `create_access_token`, `get_current_user` valid/invalid, `require_admin` ADMIN/STUDENT
+- [x] `/student/me`: full contract; NO `firebase_uid`
+- [x] `/student/sync`: returns correctly; NO `firebase_uid`
+- [x] 16 core read paths: dashboard, attendance (history/daily/summary), calendar (month/today/date), events, quiz (cycle/eligibility), subjects, timetable, analytics, preferences, notifications, lab summary
+- [x] Mutation contract: Attended/Missed/Pending accepted; cancelled 409; future 400; non-enrolled 403
+- [x] Admin mutation wired to `require_admin` (signature verification)
+- [x] Frozen-phase verifiers: 6.5 27/27, 6.6 36/36, 6.7 30/31 (check 7 pre-existing data), 7.1 26/26, 10C 23/23, 10D 18/18, 11A 19/19, 11B 23/23, 12E 5/5
+- [x] Verifier compatibility fix: `verify_phase_11b.py` head assertion updated to `e1f2a3b4c5d6`
+- [x] Persistent-mutation audit: 2 leaked test artifacts detected and removed; final DB byte-identical
+- [x] `python -m compileall backend/app backend/scripts backend/alembic` PASS
+- [x] `npx tsc --noEmit` PASS
+- [x] `npm run build` PASS (15/15 routes)
+- [x] Firebase search: zero `firebase`/`firestore`/`firebase_uid` in `backend/app` + `frontend/src`; only 3 stale comments remain (14F)
+- [x] `git diff --check` PASS
+- [x] Zero feature work; zero auth/JWT/engine changes; browser/manual testing deferred
+- [x] Governance synchronized
+- HARD STOP — Phase 14F NOT STARTED; no commit made.
+
+## Phase 14F — Freeze & Governance Reconciliation (NOT STARTED — next authorized slice)
 
 - [ ] Reconcile stale docs, README, tech-stack claims
 

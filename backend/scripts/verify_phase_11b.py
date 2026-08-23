@@ -4,8 +4,8 @@ Phase 11B verification — Notification Persistence / Read State (backend).
 Verifies the Phase 11B contract end-to-end against the real database
 (httpx ASGITransport + real DB + minted JWTs, the established pattern):
 
-  - Migration d1e2f3a4b5c6 is applied and is the single alembic head; the
-    notifications table and the notificationkind enum exist.
+  - The notifications migration is applied and is part of the single alembic
+    head chain; the notifications table and the notificationkind enum exist.
   - GET /api/v1/notifications persists each generated projection into a
     notification row (snapshot-on-read) — idempotent via
     UNIQUE(user_id, kind, occurrence_key): repeated generation of the same
@@ -209,8 +209,8 @@ async def main() -> int:
             # --- 1. Migration applied; single head --------------------------------
             heads = subprocess.check_output(
                 [sys.executable, "-m", "alembic", "heads"], cwd=str(BACKEND_DIR), text=True).strip()
-            check("1. alembic has a single head (d1e2f3a4b5c6, the 11B migration)",
-                  "d1e2f3a4b5c6" in heads and len(heads.splitlines()) == 1,
+            check("1. alembic has a single head (e1f2a3b4c5d6, Phase 14D head)",
+                  "e1f2a3b4c5d6" in heads and len(heads.splitlines()) == 1,
                   f"heads={heads!r}")
 
             async with AsyncSessionLocal() as db:

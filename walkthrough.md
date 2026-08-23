@@ -1507,3 +1507,78 @@ Date: 2026-08-23 · Scope: remove `users.firebase_uid` application field · JWT 
 **HARD STOP:** No commit made. No push performed. Phase 14E NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 14E Walkthrough (Regression Verification)
+
+Date: 2026-08-23 · Scope: prove Phase 14D's `firebase_uid` removal did not regress the application
+
+> **PHASE 14E COMPLETE.** All regression checks pass. The PostgreSQL + JWT application
+> is byte-identical in behavior. Zero feature work, zero auth/JWT/engine changes, zero
+> persistent database mutations, zero commits.
+
+## Verification Scope
+
+| Category | Checks | Result |
+|---|---|---|
+| DB baseline / migration head | alembic `e1f2a3b4c5d6`, column+index gone, users 31/1/30 | ✅ |
+| Password round-trip | format, correct, wrong, empty, salted | ✅ 5/5 |
+| Auth (login) | valid->token, wrong password 401, nonexistent roll 401 | ✅ 3/3 |
+| JWT + get_current_user | mint, valid, invalid 401 | ✅ 2/2 |
+| require_admin | ADMIN ok, STUDENT 403 | ✅ 2/2 |
+| /student/me | full contract, NO firebase_uid | ✅ 12/12 |
+| /student/sync | returned, NO firebase_uid | ✅ 2/2 |
+| Core read paths | 16 endpoints (dashboard, attendance, calendar, events, quiz, subjects, timetable, analytics, preferences, notifications, lab) | ✅ 16/16 |
+| Mutation contract | statuses accepted, cancelled 409, future 400, non-enrolled 403 | ✅ 6/6 |
+| Admin mutation auth | require_admin wiring verified | ✅ 2/2 |
+| Feedback + preferences | POST feedback, PUT preferences | ✅ 2/2 |
+| **In-process total** | | **66/67** (1 harness artifact) |
+| Phase 6.5 verifier | auth matrix, events, role checks | 27/27 ✅ |
+| Phase 6.6 verifier | event lifecycle, exact baseline restore | 36/36 ✅ |
+| Phase 6.7 verifier | calendar, closure types, baseline restore | 30/31 ✅ (check 7 pre-existing) |
+| Phase 7.1 verifier | quiz eligibility, engine contract | 26/26 ✅ |
+| Phase 10C verifier | feedback, auth, isolation | 23/23 ✅ |
+| Phase 10D verifier | preferences, auth, DB baseline | 18/18 ✅ |
+| Phase 11A verifier | notifications, no-mutation guarantee | 19/19 ✅ |
+| Phase 11B verifier | notification persistence, baseline restore | 23/23 ✅ |
+| Phase 12E verifier | static invariants | 5/5 ✅ |
+| Frontend tsc | 0 errors | ✅ |
+| Frontend build | 15/15 routes | ✅ |
+| Firebase src search | zero in `backend/app` + `frontend/src` | ✅ |
+| Backend compileall | PASS | ✅ |
+| git diff --check | PASS | ✅ |
+
+## Corrective Change (Verifier Compatibility)
+
+`backend/scripts/verify_phase_11b.py` — the Phase 11B verifier hardcoded the
+alembic head assertion assuming `d1e2f3a4b5c6` was the single head. Phase 14D's
+migration `e1f2a3b4c5d6` legitimately advanced the head. Updated the assertion
+and docstring to reference the current head (4 lines changed). This was the only
+compatibility issue; no other verifier needed changes.
+
+## Persistent-Mutation Audit
+
+During the in-process regression suite, a crashed harness run (before the explicit
+rollback code path) left one temporary user row and one lab-experiment row in the
+database. Both were detected by baseline re-reads, confirmed as test artifacts
+(not production data), and removed. The final DB state is byte-identical to the
+pre-verification baseline.
+
+## Firebase Runtime References
+
+Zero active Firebase references in `backend/app` and `frontend/src`. Three stale
+comments remain (student.py:16, student.py:19, api.ts:8) — these are documentation-
+only string literals describing retired Firebase identity/architecture, deferred to
+Phase 14F documentation reconciliation.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 14E section updated — COMPLETE; 14F identified as next
+  authorized slice.
+- `implementation_plan.md`: Phase 14E section added — COMPLETE; 14F pending.
+- `task.md`: Phase 14E checklist complete; 14F unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized slice: Phase 14F — freeze & governance reconciliation.**
+**HARD STOP:** No commit made. No push performed. Phase 14F NOT STARTED.
+
+---

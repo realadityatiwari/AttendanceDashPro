@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅.
 > 
-> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** — column dropped, model/schema/API/frontend cleaned, scripts updated, migration `e1f2a3b4c5d6`; all counts unchanged, `tsc`/`compileall` PASS · **14E NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN**.
+> **Next phase:** Phase 14 — Firebase Retirement **IN PROGRESS** (14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** — column dropped, model/schema/API/frontend cleaned, scripts updated, migration `e1f2a3b4c5d6`; all counts unchanged, `tsc`/`compileall` PASS · **14E regression verification ✅** — JWT/auth/endpoint regression PASS, 5 frozen-phase verifiers green (6.5 27/27, 6.6 36/36, 7.1 26/26, 10C 23/23, 10D 18/18, 11A 19/19, 11B 23/23, 12E 5/5), one verifier head-assertion compatibility fix; DB baseline byte-identical · **14F NOT STARTED**). Phase 13 — PWA/Installability **COMPLETE & FROZEN**. Phase 12 — Mobile/Responsive **COMPLETE & FROZEN**.
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -61,7 +61,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | **11** | **Notifications & Reminders** | ✅ **COMPLETE & FROZEN** — 11.0 architecture audit ✅ · 11A backend notification read model & contracts ✅ · 11B notification persistence + read-state ✅ · 11D notification center UX ✅ · 11E preference wiring verified (no additional implementation required) ✅ · 11F final verification & freeze ✅ · 11C delivery model decision-gated/deferred (not implemented) |
 | 12 | Mobile / Responsive Experience | 🟡 **IN PROGRESS** — 12.0 architecture & implementation-readiness audit ✅ · **12A responsive foundation + mobile navigation ✅** (S4 4-tab bottom nav + More sheet, shell/dialog scroll safety, touch-target foundation; desktop unchanged) · **12B Track/Dashboard/Calendar responsiveness ✅** (month-nav overflow fixed, grid cells enlarged at 320, Track date nav fluid + ≥40px controls, session-card collisions fixed, dashboard wrap fixes; desktop byte-identical) · **12C ✅ COMPLETE (2026-08-22)** — page responsiveness across Laboratory / Subjects / Quiz / Events (`docs/phase_12/phase_12c_implementation_report.md`, commit `31f75ca`) + the authorized cancellation-lifecycle & counting-consistency correctness fix (`docs/bugfix/cancellation_state_and_counting_consistency_report.md`) |
 | 13 | PWA / Installability | ✅ **COMPLETE & FROZEN** — manifest, service worker, SVG icons, install prompt, standalone detection, online/offline state; zero backend/DB/migration changes; `tsc`/`build`/`diff --check` PASS |
-| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`; model/schema/API/frontend cleaned; legacy scripts updated; 31 users/1 admin/30 students intact; `tsc`/`compileall` PASS) · 14E regression verification ⚪ NOT STARTED · 14F freeze/governance ⚪ NOT STARTED |
+| 14 | Firebase Retirement | 🟡 **IN PROGRESS** — 14.0 architecture audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`; model/schema/API/frontend cleaned; legacy scripts updated; 31 users/1 admin/30 students intact; `tsc`/`compileall` PASS) · **14E regression verification ✅** (JWT/auth/endpoint regression PASS, 5 frozen-phase verifiers green, 1 verifier head-assertion fix; DB baseline byte-identical; zero persistent test artifacts) · 14F freeze/governance ⚪ NOT STARTED |
 | 15 | Production Security Hardening | 🔴 Later |
 | 16 | Data Integrity & Migration Hardening | 🔴 Later |
 | 17 | Production Infrastructure | 🔴 Later |
@@ -862,11 +862,50 @@ Removed the final application-level Firebase identity residue (`users.firebase_u
   `migrate_execute.py` (completed one-shot historical tool), historical docs
   (Phase 14F reconciliation). Zero commits.
 
-## 14E — Regression Verification (NOT STARTED — next authorized slice)
+## 14E — Regression Verification (COMPLETE, 2026-08-23)
 
-Full auth/data-path regression: login, signup, `get_current_user`, all verifiers, frontend build.
+Full auth/data-path regression proving Phase 14D removed `firebase_uid` without
+regressing the PostgreSQL + JWT application:
+- **In-process regression suite (real DB, guaranteed-rollback)**: 66/67 PASS —
+  alembic head `e1f2a3b4c5d6` single; column + index gone; users 31 / admin 1 /
+  students 30 / distinct rolls 31; password round-trip (pbkdf2_sha256, salted,
+  wrong/empty rejected); login valid → token, wrong password → 401, nonexistent
+  roll → 401; JWT mint + `get_current_user` valid + invalid → 401; `require_admin`
+  ADMIN ok / STUDENT → 403; `/student/me` full contract (id, name, roll, role,
+  section, semester, session, dates, quiz date) with NO `firebase_uid`; 16 core
+  read paths (dashboard, attendance history/daily/summary, calendar month/today/
+  date, events, quiz cycle/eligibility, subjects, timetable, analytics,
+  preferences, notifications, lab summary); mutation contract (Attended/Missed/
+  Pending accepted, cancelled → 409, future → 400, non-enrolled → 403); admin
+  mutation wired to `require_admin`; feedback POST + preferences PUT; `/student/sync`
+  no `firebase_uid`. The single harness FAIL was a harness artifact (the chosen
+  session's subject was one the student is enrolled in — 403 correctly not
+  raised), not a regression.
+- **Frozen-phase verifiers (real DB, self-cleanup)**: 6.5 security/auth matrix
+  27/27 · 6.6 event/session lifecycle 36/36 (incl. exact baseline restore) ·
+  6.7 calendar 30/31 (check 7 expects pristine 18/0 seed counts; the live DB has
+  4 user-created inactive QUIZ_DAY events from 2026-08-16 — pre-existing live
+  data, NOT a 14D regression; all other checks + exact baseline restore PASS) ·
+  7.1 quiz eligibility 26/26 · 10C feedback 23/23 · 10D preferences 18/18 ·
+  11A notifications 19/19 · 11B notifications persistence 23/23 (after a
+  compatibility fix) · 12E static invariants 5/5.
+- **Corrective change (verifier compatibility, minimal)**: `verify_phase_11b.py`
+  hardcoded the Phase 11B-era alembic head (`d1e2f3a4b5c6`); the Phase 14D
+  migration legitimately advanced the head to `e1f2a3b4c5d6`. Updated the
+  assertion + docstring to the current head (4 lines). No other verifier needed
+  changes.
+- **Persistent-mutation check**: one leaked temp user from a crashed harness run
+  was detected via the baseline re-read and removed (test artifact); the leaked
+  lab-experiment row from an early flawed direct-call test was likewise detected
+  and removed. Final DB state byte-identical to the pre-verification baseline
+  (users 31, all counts unchanged, alembic `e1f2a3b4c5d6`).
+- Frontend: `npx tsc --noEmit` PASS · `npm run build` PASS (15/15 routes) ·
+  Firebase search clean (`firebase_uid`/`firebase`/`firestore` absent from
+  `frontend/src` and `backend/app`; only 3 stale comments remain — Phase 14F).
+- Backend: `python -m compileall backend/app backend/scripts backend/alembic` PASS.
+- Browser/manual testing NOT performed (owner responsibility).
 
-## 14F — Freeze & Governance Reconciliation (NOT STARTED)
+## 14F — Freeze & Governance Reconciliation (NOT STARTED — next authorized slice)
 
 Reconcile docs, README, and archive stale Firebase documentation.
 
