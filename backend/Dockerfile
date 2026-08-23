@@ -11,12 +11,16 @@
 # - Healthcheck uses the existing GET /health endpoint (no auth required).
 #
 # Startup (override workers via UVICORN_WORKERS env, default 1):
-#   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers N --proxy-headers
+#   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers N --proxy-headers \
+#     --forwarded-allow-ips ${FORWARDED_ALLOW_IPS}
 #
-# NOTE: `--proxy-headers` makes Uvicorn trust X-Forwarded-* from the reverse
-# proxy. The trust boundary is the private Docker network: the backend binds
-# only inside the compose network and the reverse proxy is the only client
-# that can reach it. Do not expose the backend port to the host.
+# NOTE: `--proxy-headers` makes Uvicorn trust X-Forwarded-* headers, but ONLY
+# from the IPs/CIDRs in `--forwarded-allow-ips` (default 127.0.0.1). In the
+# production compose stack this is set to the pinned proxy-net subnet
+# (172.28.0.0/24), so Caddy is the ONLY trusted proxy. Arbitrary client-
+# supplied X-Forwarded-For headers from outside that subnet are ignored —
+# the Phase 16 rate limiter sees the real client IP, not a spoofed one.
+# Do not expose the backend port to the host.
 # ────────────────────────────────────────────────────────────────────────
 
 FROM python:3.13-slim
@@ -46,4 +50,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"
 
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}"]

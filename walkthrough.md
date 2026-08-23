@@ -2191,6 +2191,56 @@ external route, and is reachable only from the backend container.
 
 ---
 
+# AttendanceDash Pro — Phase 18B Walkthrough (Environment & Secret Management)
+
+Date: 2026-08-23 · Scope: production-safe env/secret contract for 18A container architecture
+
+> **PHASE 18B COMPLETE.** The environment and secret-management contract is
+> established. Production guard extended (DATABASE_URI/CORS validated in production).
+> Compose fails fast on missing secrets (`:?`). Proxy trust boundary pinned with
+> explicit `FORWARDED_ALLOW_IPS` + subnet. No real secrets added. Zero DB mutations,
+> zero deployment, no cloud resources, no commit.
+
+## Changes
+
+| File | Change |
+|---|---|
+| `backend/app/core/config.py` | Production validator extended: reject localhost DATABASE_URI and CORS origins in production (renamed to `_validate_production_config`); errors never print secrets |
+| `backend/scripts/verify_phase_17_jwt_guard.py` | Updated to supply production DATABASE_URI/CORS in success case; added tests for DB/CORS production rejection (8/8 PASS) |
+| `docker-compose.prod.yml` | `${VAR:?}` for POSTGRES_USER/PASSWORD, JWT_SECRET_KEY, BACKEND_CORS_ORIGINS, NEXT_PUBLIC_API_URL; `DATABASE_URI` built from POSTGRES_* at runtime (overridable); `proxy-net` subnet pinned (default 172.28.0.0/24); backend `FORWARDED_ALLOW_IPS` env |
+| `backend/Dockerfile` | CMD adds `--forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}`; comment documents trust boundary |
+| `deploy/caddy/Caddyfile` | Comment documents proxy trust boundary (Caddy = only trusted proxy; XFF from outside subnet ignored) |
+| `deploy/.env.prod.example` | Required/optional split, public/secret markers, FORWARDED_ALLOW_IPS, DATABASE_URI override note, placeholders only |
+| `backend/.env.example` | DEVELOPMENT ONLY header + dev credentials warning |
+| `frontend/.env.example` | Public-var note (NEXT_PUBLIC_ is inlined at build time) |
+| `docs/phase_18/phase_18b_secrets.md` | NEW: full env contract, public vs secret, runtime injection, dev/prod separation, proxy trust, not-implemented |
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `verify_phase_17_jwt_guard.py` | ✅ 8/8 PASS (JWT guard + DB/CORS rejection + no-secret-leak) |
+| `docker compose config` (missing vars) | ✅ fails fast with `:?` error |
+| `docker compose config` (all vars) | ✅ renders correctly; secrets at runtime; FORWARDED_ALLOW_IPS + pinned subnet present |
+| `python -m compileall backend/app` | ✅ PASS |
+| `npx tsc --noEmit` | ✅ PASS |
+| `git diff --check` | ✅ PASS (exit 0) |
+| Secret-leak audit | ✅ only example env files tracked; no real secrets in committed files |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 18B COMPLETE; 18C identified as next authorized slice
+- `implementation_plan.md`: 18B section added — COMPLETE; 18C pending
+- `task.md`: 18B checklist complete; 18C–18D unchecked
+- `walkthrough.md`: this entry
+
+**PHASE 18B — COMPLETE / FROZEN.**
+**Phase 18C — Backup Automation + Retention + Off-Host Protection (NOT STARTED — next authorized slice).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+**Database mutations: ZERO.** Production deployment: NO. Cloud resources created: ZERO. Real production secrets added: ZERO.
+
+---
+
 ---
 
 ---

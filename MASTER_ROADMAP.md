@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 18B — Environment & Secret Management **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS** — 18.0 audit ✅, 18A containerization ✅ (Dockerfiles, production compose, Caddy proxy, private networks). Phase 17 (Data Integrity & Migration Hardening) **COMPLETE & FROZEN**; Phase 16 (Production Security Hardening) **COMPLETE & FROZEN**; Phase 15 (Legacy Web App + Legacy PWA Retirement) **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 18C — Backup Automation + Retention + Off-Host Protection **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅ (production guard extended, compose `:?` required syntax, proxy trust pinned, no real secrets added). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -65,7 +65,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
 | 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
 | 17 | Data Integrity & Migration Hardening | ✅ **COMPLETE & FROZEN** — JWT production-secret guard ✅ (APP_ENV; `verify_phase_17_jwt_guard.py` 6/6) · integrity audit ✅ (zero orphans/duplicates/FK violations) · **NO MIGRATION REQUIRED** (single linear Alembic head `e1f2a3b4c5d6`) · backup/restore ✅ verified (isolated container) · retention policy ✅ documented (7 daily / 4 weekly / 3 monthly) · seed audit ✅ · semester-transition analysis ✅ · cleanup: NONE REQUIRED · working-DB mutations ZERO |
-| 18 | Production Infrastructure | 🟡 **IN PROGRESS** — **18.0 audit ✅ COMPLETE** (read-only; `docs/phase_18/phase_18_0_infrastructure_audit.md`) · **18A containerization ✅ COMPLETE** (frontend/backend Dockerfiles, `docker-compose.prod.yml`, Caddy proxy, private networks, no public DB port; both images build PASS; `npm ci`/`build`/`compileall` PASS) · 18B env & secrets ⚪ NOT STARTED · 18C backup automation ⚪ NOT STARTED · 18D deployment verification ⚪ NOT STARTED |
+| 18 | Production Infrastructure | 🟡 **IN PROGRESS** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** (production guard extended: DATABASE_URI/CORS validated in production; compose `:?` required syntax; proxy-net subnet pinned; `FORWARDED_ALLOW_IPS` trust boundary; `verify_phase_17_jwt_guard.py` 8/8 PASS; no real secrets added) · 18C backup automation ⚪ NOT STARTED · 18D deployment verification ⚪ NOT STARTED |
 | 19 | CI/CD | 🔴 Later |
 | 20 | Production QA | 🔴 Later |
 | 21 | Production Launch | 🔴 Later |
@@ -1169,7 +1169,7 @@ This is essential for a real multi-semester product.
 
 # 🟡 Phase 18 — Production Infrastructure
 
-**Status: IN PROGRESS — 18.0 audit ✅ COMPLETE · 18A containerization ✅ COMPLETE · 18B–18D NOT STARTED.**
+**Status: IN PROGRESS — 18.0 audit ✅ COMPLETE · 18A containerization ✅ COMPLETE · 18B env & secrets ✅ COMPLETE · 18C–18D NOT STARTED.**
 
 ## 18.0 — Production Infrastructure Audit (COMPLETE, read-only)
 
@@ -1212,12 +1212,38 @@ frontend image build PASS · `npm ci` + `npm run build` PASS (15/15) ·
 `compileall` PASS · `git diff --check` PASS. No containers started, no DB
 touched, no cloud resources.
 
-## 18B — Environment & Secret Management (NOT STARTED — next authorized slice)
+## 18B — Environment & Secret Management (COMPLETE, 2026-08-23)
 
-Production secrets (JWT, DATABASE_URI, CORS origins), extended `.env` contracts,
-secret-manager integration where appropriate.
+Established a clean, explicit, production-safe environment/secret contract for
+the 18A container architecture:
 
-## 18C — Backup Automation (NOT STARTED)
+- **Production guard extended** (`backend/app/core/config.py`): when
+  `APP_ENV=production`, startup also rejects a `DATABASE_URI` referencing
+  localhost/127.0.0.1/host.docker.internal and any localhost CORS origin
+  (in addition to the Phase 17 JWT-secret guard). Errors never print secrets.
+- **Compose fail-fast** (`docker-compose.prod.yml`): required secrets use
+  `${VAR:?}` — `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`,
+  `BACKEND_CORS_ORIGINS`, `NEXT_PUBLIC_API_URL` fail compose startup when
+  missing instead of silently interpolating empty values. `DATABASE_URI` is
+  built from `POSTGRES_*` at runtime (overridable via `DATABASE_URI`).
+- **Proxy trust boundary** (`FORWARDED_ALLOW_IPS` + pinned `proxy-net` subnet
+  `172.28.0.0/24`): Uvicorn `--forwarded-allow-ips` trusts `X-Forwarded-For`
+  ONLY from the proxy network CIDR; Caddy is the only trusted proxy; the
+  Phase 16 rate limiter sees the real client IP; spoofing outside the subnet
+  is ignored.
+- **Env examples synchronized**: `deploy/.env.prod.example` (placeholders,
+  required/optional split, secret/public markers), `backend/.env.example`
+  (marked DEVELOPMENT ONLY), `frontend/.env.example` (public-var note).
+- **Secret audit**: only example env files are tracked; dev credentials exist
+  only in the dev example/defaults; no secrets in Dockerfiles, compose, or
+  docs; `deploy/.env.prod` and `backend/.env` gitignored.
+- Verification: `verify_phase_17_jwt_guard.py` **8/8 PASS** (JWT guard + new
+  DB/CORS production rejections + no-secret-leak) · compose `config` fails
+  fast without required vars and renders correctly with them · `compileall`
+  PASS · `tsc` PASS · `git diff --check` PASS. No real secrets added; no
+  deployment; zero DB mutations.
+
+## 18C — Backup Automation + Retention + Off-Host Protection (NOT STARTED — next authorized slice)
 
 Scheduled rotation (7/4/3), encryption, off-host storage, notifications, production runbook.
 
@@ -1670,7 +1696,7 @@ Phase 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
-> **Next phase:** Phase 18B — Environment & Secret Management (Phase 18 IN PROGRESS — 18.0 audit ✅, 18A containerization ✅; Phase 17 COMPLETE & FROZEN).
+> **Next phase:** Phase 18C — Backup Automation + Retention + Off-Host Protection (Phase 18 IN PROGRESS — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅; Phase 17 COMPLETE & FROZEN).
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

@@ -1763,6 +1763,53 @@ frozen systems untouched.
 **Next authorized slice:** Phase 18B — Environment & Secret Management
 (NOT STARTED).
 
+### Phase 18B — Environment & Secret Management (COMPLETE, 2026-08-23)
+
+**Objective:** establish a clean, explicit, production-safe environment and
+secret-management contract for the Phase 18A container architecture.
+
+**Delivered:**
+
+1. **Production guard extended** (`backend/app/core/config.py`): the Phase 17
+   validator now also rejects `DATABASE_URI` containing
+   localhost/127.0.0.1/host.docker.internal and any localhost CORS origin when
+   `APP_ENV=production` (renamed `_validate_production_config`). Error messages
+   never print secret values.
+2. **Compose fail-fast** (`docker-compose.prod.yml`): `${VAR:?}` required syntax
+   for `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`,
+   `BACKEND_CORS_ORIGINS`, `NEXT_PUBLIC_API_URL`; `DATABASE_URI` built at
+   runtime from `POSTGRES_*` (overridable via `DATABASE_URI`); `proxy-net`
+   subnet pinned (`PROXY_NET_SUBNET`, default 172.28.0.0/24); backend
+   `FORWARDED_ALLOW_IPS` (default 172.28.0.0/24).
+3. **Proxy trust boundary**: backend Dockerfile CMD now passes
+   `--forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}`; Caddyfile +
+   Dockerfile comments document that Caddy is the ONLY trusted proxy and
+   client-supplied X-Forwarded-For outside the pinned subnet is ignored
+   (Phase 16 rate limiter sees the real client IP).
+4. **Env examples**: `deploy/.env.prod.example` (placeholders only, required/
+   optional split, public/secret markers), `backend/.env.example` (DEVELOPMENT
+   ONLY header), `frontend/.env.example` (public-var note).
+5. **Secret audit**: only example env files tracked; dev credentials exist only
+   in the dev example/defaults; no secrets in Dockerfiles/compose/docs;
+   `deploy/.env.prod` + `backend/.env` gitignored. No real secrets added.
+6. Docs: `docs/phase_18/phase_18b_secrets.md` (env contract, public vs secret,
+   runtime injection, dev/prod separation, secret rules, proxy trust boundary,
+   not-implemented, 18C/18D prerequisites).
+
+**Verification results:** `verify_phase_17_jwt_guard.py` **8/8 PASS** (JWT guard
++ production DB/CORS rejections + no-secret-leak) · `docker compose config`
+fails fast with missing required vars, renders correctly with them (secrets via
+runtime interpolation only, FORWARDED_ALLOW_IPS + pinned subnet present) ·
+`compileall` PASS · `tsc` PASS · `git diff --check` PASS.
+
+**Scope guards:** no real secrets added; no deployment; no DB mutations; dev
+compose/env untouched; frozen systems untouched; no business-logic changes.
+
+**Next authorized slice:** Phase 18C — Backup Automation + Retention + Off-Host
+Protection (NOT STARTED).
+
+---
+
 ---
 
 ---

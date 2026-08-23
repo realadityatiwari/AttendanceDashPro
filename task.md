@@ -1504,13 +1504,26 @@ Status: **COMPLETE & FROZEN** — all authorized Phase 17 work done; zero workin
 - [x] Zero DB mutations; zero cloud resources; dev compose untouched
 - HARD STOP — Phase 18B NOT STARTED; no commit made.
 
-### Phase 18B — Environment & Secret Management (NOT STARTED — next authorized slice)
+### Phase 18B — Environment & Secret Management (COMPLETE, 2026-08-23)
 
-- [ ] Production secret management (JWT, DATABASE_URI, CORS origins)
-- [ ] Extended `.env` production contracts
-- [ ] Secret-manager integration where appropriate
+- [x] Production guard extended: `_validate_production_config` rejects dev DATABASE_URI (localhost/127.0.0.1/host.docker.internal) and localhost CORS in production — errors never print secrets
+- [x] Compose `${VAR:?}` required syntax for POSTGRES_USER, POSTGRES_PASSWORD, JWT_SECRET_KEY, BACKEND_CORS_ORIGINS, NEXT_PUBLIC_API_URL
+- [x] DATABASE_URI built at runtime from POSTGRES_* (overridable via DATABASE_URI env)
+- [x] Proxy-net subnet pinned (172.28.0.0/24) + FORWARDED_ALLOW_IPS env on backend
+- [x] Backend Dockerfile CMD — `--forwarded-allow-ips` for explicit proxy trust (Caddy only)
+- [x] Caddyfile + Dockerfile comments document trust boundary (XFF spoofing outside subnet ignored)
+- [x] `deploy/.env.prod.example` — required/optional split, public/secret markers, placeholders only
+- [x] `backend/.env.example` — DEVELOPMENT ONLY header + dev credentials warning
+- [x] `frontend/.env.example` — public-var note
+- [x] `docs/phase_18/phase_18b_secrets.md` — full env contract documentation
+- [x] `verify_phase_17_jwt_guard.py` — 8/8 PASS (JWT guard + DB/CORS production rejections)
+- [x] `docker compose config` fails fast without required vars; renders correctly with them
+- [x] `compileall` PASS; `tsc` PASS; `git diff --check` PASS
+- [x] Secret audit: only example env files tracked; no real secrets in any committed file
+- [x] Zero DB mutations; zero deployment; zero cloud resources; no real secrets added
+- HARD STOP — Phase 18C NOT STARTED; no commit made.
 
-### Phase 18C — Backup Automation (NOT STARTED)
+### Phase 18C — Backup Automation + Retention + Off-Host Protection (NOT STARTED — next authorized slice)
 
 - [ ] Scheduled rotation (7/4/3), encryption, off-host storage, notifications, production runbook
 

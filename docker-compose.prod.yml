@@ -19,9 +19,16 @@ name: attendancedash-prod
 # Only the reverse proxy port 80 is exposed.
 #
 # Required environment variables (set via .env file or shell):
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (or defaults)
-#   JWT_SECRET_KEY, BACKEND_CORS_ORIGINS, NEXT_PUBLIC_API_URL
-#   DOMAIN (hostname for the reverse proxy)
+#   POSTGRES_USER, POSTGRES_PASSWORD — PostgreSQL credentials
+#   JWT_SECRET_KEY — signing secret for the production guard
+#   BACKEND_CORS_ORIGINS — frontend origin(s) for CORS (e.g. ["https://app.example.com"])
+#   NEXT_PUBLIC_API_URL — public API base URL (inlined into frontend client bundle)
+#
+# Optional:
+#   POSTGRES_DB (default: attendancedash)
+#   FORWARDED_ALLOW_IPS — trusted proxy CIDR (default: 172.28.0.0/24 matches proxy-net below)
+#   DATABASE_URI — direct DB URI override (default: built from POSTGRES_USER/PASSWORD/DB)
+#   DOMAIN, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, etc.
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d
@@ -37,8 +44,8 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_DB: ${POSTGRES_DB:-attendancedash}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -58,13 +65,14 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
-      DATABASE_URI: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-attendancedash}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DATABASE_URI: ${DATABASE_URI:-postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-attendancedash}}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
-      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:?}
       SECURITY_HSTS_ENABLED: ${SECURITY_HSTS_ENABLED:-false}
       UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.28.0.0/24}
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-10}
       LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
       REGISTER_MAX_ATTEMPTS: ${REGISTER_MAX_ATTEMPTS:-5}
@@ -86,7 +94,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -125,6 +133,11 @@ services:
 networks:
   proxy-net:
     driver: bridge
+    ipam:
+      config:
+        # Pinned subnet: FORWARDED_ALLOW_IPS (backend) must match this CIDR so
+        # Uvicorn trusts X-Forwarded-For only from the proxy network.
+        - subnet: ${PROXY_NET_SUBNET:-172.28.0.0/24}
   data-net:
     driver: bridge
     internal: true   # No external route — only backend (on both nets) can reach it.

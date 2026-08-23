@@ -7,15 +7,20 @@
 # Routing:
 #   /api/*  → backend:8000  (FastAPI, with X-Forwarded-For preserved)
 #   *       → frontend:3000  (Next.js SSR + PWA)
+#
+# Proxy trust boundary (Phase 18B):
+#   Caddy is the ONLY trusted external proxy. It automatically sets
+#   X-Forwarded-For to the original client IP for every proxied request.
+#   The backend trusts X-Forwarded-For ONLY from the pinned proxy-net CIDR
+#   (FORWARDED_ALLOW_IPS, default 172.28.0.0/24 — see docker-compose.prod.yml).
+#   Client-supplied X-Forwarded-For headers from outside that subnet are
+#   ignored by Uvicorn, so the Phase 16 rate limiter sees the real client IP.
 # ────────────────────────────────────────────────────────────────────────
 
 http://{$DOMAIN:app.example.com} {
     encode gzip
 
     # API requests → FastAPI backend
-    # Caddy automatically sets X-Forwarded-For to the original client IP.
-    # The backend uses `--proxy-headers` to trust these headers (trust
-    # boundary: the backend is reachable only from the proxy network).
     handle /api/* {
         reverse_proxy backend:8000
     }

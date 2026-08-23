@@ -32,21 +32,39 @@ class Settings(BaseSettings):
     REGISTER_WINDOW_SECONDS: int = 3600   # 1 hour
 
     @model_validator(mode="after")
-    def _validate_production_jwt_secret(self) -> "Settings":
-        """Production guard: reject the known development default or an
-        obviously unsafe JWT secret. The error message never prints the
-        secret itself."""
-        if self.APP_ENV == "production":
-            if self.JWT_SECRET_KEY == DEV_JWT_SECRET:
+    def _validate_production_config(self) -> "Settings":
+        """Production guard (Phase 17 + 18B):
+        - Reject the known development default or an obviously unsafe JWT secret.
+        - Reject development database hosts (localhost/127.0.0.1/host.docker.internal).
+        - Reject localhost CORS origins.
+        The error messages never print secret values.
+        """
+        if self.APP_ENV != "production":
+            return self
+        if self.JWT_SECRET_KEY == DEV_JWT_SECRET:
+            raise ValueError(
+                "JWT_SECRET_KEY cannot be the development default when "
+                "APP_ENV=production. Set a strong random secret via the "
+                "JWT_SECRET_KEY environment variable."
+            )
+        if len(self.JWT_SECRET_KEY) < 20:
+            raise ValueError(
+                "JWT_SECRET_KEY must be at least 20 characters when "
+                "APP_ENV=production."
+            )
+        for dev_host in ("localhost", "127.0.0.1", "host.docker.internal"):
+            if dev_host in self.DATABASE_URI:
                 raise ValueError(
-                    "JWT_SECRET_KEY cannot be the development default when "
-                    "APP_ENV=production. Set a strong random secret via the "
-                    "JWT_SECRET_KEY environment variable."
+                    "DATABASE_URI must not reference a development host "
+                    f"({dev_host}) when APP_ENV=production. Use the production "
+                    "database service hostname (e.g. postgres) or a managed "
+                    "database endpoint."
                 )
-            if len(self.JWT_SECRET_KEY) < 20:
+        for origin in self.BACKEND_CORS_ORIGINS:
+            if "localhost" in origin or "127.0.0.1" in origin:
                 raise ValueError(
-                    "JWT_SECRET_KEY must be at least 20 characters when "
-                    "APP_ENV=production."
+                    "BACKEND_CORS_ORIGINS must not contain localhost origins "
+                    "when APP_ENV=production."
                 )
         return self
 
