@@ -8,6 +8,7 @@ from app.repositories.preference_repo import PreferenceRepository
 from app.services.attendance_service import AttendanceService, institution_today
 from app.services.eligibility_service import EligibilityService
 from app.engines.attendance_engine import classify_attendance_status
+from app.engines.practical_occurrence import occurrence_is_cancelled
 from app.schemas.notification import NotificationItem, NotificationsResponse
 from app.models.enums import NotificationKind
 from app.repositories.notification_repo import NotificationRepository
@@ -150,7 +151,7 @@ class NotificationService:
 
         items: List[NotificationItem] = []
         for r in rows:
-            if r["is_cancelled"] or r["status"] is not None:
+            if occurrence_is_cancelled(r) or r["status"] is not None:
                 continue
             if r["date"] == as_of:
                 when = "today"

@@ -115,7 +115,7 @@ class DashboardService:
         for r in rows:
             if r["date"] != today:
                 continue
-            if r["is_cancelled"]:
+            if occurrence_is_cancelled(r):
                 status = "CANCELLED"
             elif r["status"] is not None:
                 status = r["status"].value.upper()
@@ -162,7 +162,7 @@ class DashboardService:
         for r in section_rows:
             # Cancelled sessions are their own state — never pending
             # (Phase 6.6 event->session integration).
-            if r["is_cancelled"]:
+            if occurrence_is_cancelled(r):
                 continue
             if r["status"] == AttendanceStatus.ATTENDED:
                 attended += 1
@@ -238,7 +238,7 @@ class DashboardService:
                 if r["date"] != d:
                     continue
                 # Cancelled sessions are not classes (matches Today's total).
-                if r["is_cancelled"]:
+                if occurrence_is_cancelled(r):
                     continue
                 day_classes += 1
                 if r["status"] == AttendanceStatus.ATTENDED:

@@ -1175,3 +1175,22 @@ Authorized root-cause bugfix (real correctness/data-integrity defect; frozen sys
 - [x] Governance synchronized (this file, MASTER_ROADMAP, implementation_plan, walkthrough)
 - [x] Final scope audit: git status/diff limited to 4 backend files + 1 new verifier + 5 docs; no commit made
 - HARD STOP — Phase 12C NOT started; no unrelated work.
+
+---
+
+## PHASE 12C BUGFIX — Cancellation State + Attendance Counting Consistency (COMPLETE, 2026-08-22)
+
+Report: `docs/bugfix/cancellation_state_and_counting_consistency_report.md`.
+
+- [x] Full lifecycle audit (create/edit/deactivate/reactivate/re-delete → synchronizer → is_cancelled → Track/History/Subjects/Dashboard/Eligibility/Notifications/Analytics)
+- [x] Stale state reproduced & attributed: running backend executes pre-fix code (started 09:07 UTC, no --reload) + genuine `deactivate_event` early-return gap (already-inactive events never reconciled)
+- [x] Architectural fix: deactivation ALWAYS reconciles — desired cancellation re-derived from the complete active event set (no ownership column needed; no schema change)
+- [x] One canonical applicability rule (`occurrence_is_cancelled`) enforced across ALL counting consumers incl. dashboard/analytics/notification gates
+- [x] Lifecycle regression verifier `verify_cancellation_lifecycle_consistency.py`: **35/35**
+- [x] Prior propagation verifier **26/26**; phase_6_6 **36/36**; attendance_spec **15/15**; events_correction **42/42**; working_saturday **24/24**; phase_11a **19/19**; compileall PASS
+- [x] Live BCS-058 healed through the application path: removal → originals restored (07-29 Attended / 07-30 Missed); applicable lectures 77 → 79; records byte-preserved
+- [x] DB integrity: alembic head `d1e2f3a4b5c6` unchanged; zero temp artifacts (FK-crash leaks cleaned by captured IDs); residual count deltas = owner's own concurrent app activity (documented)
+- [x] Security: no auth/scoping changes; 403 boundaries asserted in verifier
+- [x] Governance synchronized (roadmap/plan/task/walkthrough); parallel-session artifacts reconciled (their predicate completion + my reversal fix are complementary; their absolute-fixture verifiers documented as non-gates)
+- [x] ⚠ OWNER ACTION: restart dev backend before manual testing
+- HARD STOP — Phase 12D NOT STARTED; no commit made.

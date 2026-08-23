@@ -273,6 +273,13 @@ class EventService:
         (legacy ADR 004 soft-delete semantics; the schema has no hard-delete
         requirement). The row is preserved; the engine and read APIs stop
         considering it. The event can be re-enabled via PATCH.
+
+        Reconciliation ALWAYS runs — including when the event is already
+        inactive. Cancellation state is materialized from the complete active
+        event set, so re-deriving it is idempotent and self-healing: "event
+        removed" is never treated as "nothing to do", and a session left
+        cancelled by an earlier missed synchronization is restored by removing
+        its source event again.
         """
         event = await self.repo.get_by_id(event_id)
         if event is None:
@@ -282,8 +289,6 @@ class EventService:
         await self.assert_mutation_allowed(
             user, event_type=event.event_type, subject_id=event.subject_id
         )
-        if not event.active:
-            return event
         event.active = False
         try:
             # Phase 6.6: reconcile the event's dates back to what the remaining

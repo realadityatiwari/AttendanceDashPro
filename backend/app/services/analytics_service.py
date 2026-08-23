@@ -13,6 +13,7 @@ from app.schemas.analytics import (
 from app.models.user import User
 from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import classify_attendance_status
+from app.engines.practical_occurrence import occurrence_is_cancelled
 
 # Monday-start week bucketing for the weekly read model. A structure, not a
 # product "trend" definition (Phase 8.0 contract §I/§J/§15).
@@ -89,7 +90,7 @@ class AnalyticsService:
         pending = 0
         cancelled = 0
         for r in rows:
-            if r["is_cancelled"]:
+            if occurrence_is_cancelled(r):
                 cancelled += 1
                 continue
             if r["status"] == AttendanceStatus.ATTENDED:
@@ -132,7 +133,7 @@ class AnalyticsService:
             for r in rows:
                 if not (week_start <= r["date"] <= week_end):
                     continue
-                if r["is_cancelled"]:
+                if occurrence_is_cancelled(r):
                     continue
                 if r["status"] == AttendanceStatus.ATTENDED:
                     attended += 1
