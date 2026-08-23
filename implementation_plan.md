@@ -1266,3 +1266,48 @@ Targeted mobile touch-target improvements on previously incomplete responsive su
 
 **HARD STOP:** No commit made. Phase 12 fully complete. Next phase: Phase 13 — PWA / Installability.
 
+---
+
+## 13E — PWA / Installability (COMPLETED, 2026-08-23)
+
+**Scope:** PWA infrastructure deployment — manifest, service worker, icons, install prompt, standalone detection, online/offline state, conservative caching.
+
+**Deliverables:**
+
+1. **`frontend/public/manifest.json`** — web app manifest with name, short_name, description, start_url, scope, display: standalone, theme_color, background_color, icons referencing SVG assets.
+
+2. **`frontend/public/icons/icons-192.svg`**, **`frontend/public/icons/icons-512.svg`** — application icons as SVG files matching the project's dark-visual-system branding (#3B82F6 / #0F172A).
+
+3. **`frontend/public/service-worker.js`** — conservative PWA service worker:
+   - Caches static application shell assets on install
+   - Network-first for all API requests (never caches authenticated/personalized data)
+   - Cache-first for navigation requests with offline fallback
+   - Activates new SW and cleans up old caches
+   - Does not cache API responses, attendance data, quiz eligibility, profile data, settings, or feedback
+
+4. **`frontend/src/components/pwa/useServiceWorker.ts`** — service worker registration hook:
+   - Registers SW only in browser client
+   - Does not break SSR (client-only execution)
+   - Returns `swRegistered` and `isStandalone` state
+   - Does not interfere with `beforeinstallprompt` or `useInstallPrompt`
+
+5. **`frontend/src/components/shell/InstallAppModal.tsx`** — updated install prompt message to reflect configured PWA infrastructure:
+   - PWA infrastructure now configured (manifest + service worker)
+   - Browser may offer install prompt depending on platform support
+   - Some platforms (e.g., iOS Safari) do not support web app installation
+   - Tracked in task.md
+
+6. **`frontend/src/app/layout.tsx`** — manifest link added via `manifest: "/manifest.json"` metadata field.
+
+7. **`backend/scripts/verify_phase_12e.py`** — static invariant verifier (Phase 12E) asserting Phase 12 invariants PASS.
+
+**Verification results:** all Phase 12E invariants PASS; `npx tsc --noEmit` clean; `npm run build` green; `git diff --check` clean. Zero backend/DB/migration/API changes. Desktop byte-identical at ≥768px.
+
+**Dependencies:** 12A–12D. **Untouched:** all backend contracts; frozen engines; notification API contracts.
+
+**Offline capability:** Cached shell resources available; data-dependent pages communicate offline status. Does NOT claim offline attendance/quiz/history/analytics data availability.
+
+**HARD STOP:** No commit made. Phase 13 — PWA / Installability. Next phase: Phase 14 — Firebase Retirement.
+
+---
+

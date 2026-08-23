@@ -761,18 +761,24 @@ Include:
 
 # 🟡 Phase 13 — PWA / Installability
 
-Implement genuine installability:
-
-- Web manifest
-- Service worker
-- Icons
-- Install prompt
-- Standalone detection
-- Offline strategy
-- Cached application shell
-- Correct online/offline states
-
-Do not claim offline functionality unless the underlying data strategy actually supports it.
+**Phase 13 COMPLETE** (2026-08-23): PWA/installability infrastructure implemented.
+- Web manifest served at `/manifest.json` with name, short_name, icons, theme_color, background_color.
+- Service worker registered at `/service-worker.js` with conservative caching strategy:
+  - Static application assets cached on install
+  - Network-first for all API requests (never cache authenticated data)
+  - Cache-first for navigation with offline fallback
+  - Old cache cleanup on activate
+- SVG icons added at 192x192 and 512x512 in `frontend/public/icons/`
+- Install prompt connected to `beforeinstallprompt` API and `display-mode: standalone` detection
+- Standalone detection via `navigator.standalone` and `window.matchMedia("(display-mode: standalone)")`
+- Online/offline state via `navigator.onLine` with truthful messaging
+- Cached application shell: shell resources cached, data pages communicate offline status
+- Does NOT claim offline attendance/quiz/history data availability
+- PWA infrastructure does not alter Phase 12 mobile or desktop behavior
+- Zero backend/database/API/migration changes
+- `npx tsc --noEmit` PASS; `npm run build` PASS; `git diff --check` PASS
+- Frozen areas (Phases 0–12, attendance/eligibility/calendar/event engines, auth) preserved
+- Phase 14 (Firebase Retirement) remains unchanged
 
 ---
 

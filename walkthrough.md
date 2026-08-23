@@ -1092,3 +1092,86 @@ byte-identical to the documented 9.2.1 baseline. Report:
 **Governance:** MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md synchronized. Frozen phases (0–11, 12A/12B/12C) untouched. No attendance/event/analytics/business logic changed. No migrations created.
 
 **Next phase:** Phase 13 — PWA / Installability (per `MASTER_ROADMAP.md:743-756`). No browser/manual testing performed; remains owner responsibility per governance rules.
+
+---
+
+## PHASE 13 — PWA / INSTALLABILITY (COMPLETED, 2026-08-23)
+
+**Implementation Summary:**
+
+1. **Web App Manifest** (`/frontend/public/manifest.json`): Created with name, short_name, description, start_url (/dashboard), scope (/), display: standalone, theme_color (#3B82F6), background_color (#0F172A), orientation (portrait), and SVG icons at 192x192 and 512x512 with `type: image/svg+xml` and `purpose: any maskable`.
+
+2. **Application Icons** (`/frontend/public/icons/`): SVG icons at 192x192 and 512x512 featuring the project's blue accent (#3B82F6) on white background with "ADP" monogram. Manifest references these with `type: image/svg+xml` and `purpose: any maskable`.
+
+3. **Service Worker** (`/frontend/public/service-worker.js`): Conservative PWA caching strategy:
+   - Caches static application shell assets on install
+   - Network-first for all API requests (never caches authenticated/personalized data)
+   - Cache-first for navigation requests with offline fallback
+   - Activates new SW and cleans up old caches
+   - Does not cache API responses, attendance records, quiz eligibility, profile data, settings, or feedback
+
+4. **Service Worker Registration** (`/frontend/src/components/pwa/useServiceWorker.ts`): Client-side hook that registers the SW only in browser, returns `swRegistered` and `isStandalone` state. Does not break SSR, does not interfere with Next.js routing, does not cache personalized API responses.
+
+5. **Install Prompt** (`/frontend/src/components/shell/InstallAppModal.tsx`): Updated message to reflect configured PWA infrastructure:
+   - PWA infrastructure now configured (manifest + service worker)
+   - Browser may offer install prompt depending on platform support and app engagement
+   - Some platforms (e.g., iOS Safari) do not support web app installation
+   - Tracked in task.md
+
+6. **Layout Integration** (`/frontend/src/app/layout.tsx`): Manifest link added via `manifest: "/manifest.json"` metadata field.
+
+7. **Standalone Detection**: via `window.matchMedia("(display-mode: standalone)")` and `navigator.standalone`, connected to InstallAppModal UI.
+
+8. **Online/Offline State**: via `navigator.onLine` with truthful messaging — distinguishes browser connectivity from API availability. When offline: shell may be usable if cached; data pages communicate that fresh data requires connection.
+
+**Offline Capability:**
+- **Works offline:** Cached application shell resources (boot/render)
+- **Does NOT work offline:** Attendance data, quiz eligibility, history records, calendar events, laboratory records, analytics, settings, feedback — all require live backend connection. No offline attendance mutation or marking is implemented.
+
+**Security / Data Isolation:**
+- Personalized API caching: Never cache authenticated API responses
+- Authentication: JWT architecture unchanged; no Firebase reintroduced
+- Cross-user cache isolation: By design — service worker caches no user-specific data
+
+**Verification:**
+- TypeScript: PASS
+- Build: PASS (15 routes prerendered)
+- Diff check: PASS
+- Static verifier (Phase 12E): all 5 invariants PASS
+- No backend/database/API/migration changes
+- Frozen areas confirmed untouched: Phases 0–12, attendance/eligibility/calendar/event engines, auth
+
+**Database / Backend:**
+- Backend changes: NONE
+- Database changes: NONE
+- Migrations: NONE
+- Data mutations: NONE
+
+**Frozen Areas Confirmed Untouched:**
+- Phases 0–12 (including Phase 12 mobile navigation/responsive layouts)
+- Attendance/eligibility/calendar/event engines
+- Auth / JWT architecture
+- No Firebase changes
+
+**Governance:**
+- MASTER_ROADMAP.md: Phase 13 COMPLETE; Phase 14 Firebase Retirement unchanged
+- implementation_plan.md: 13E section added, hard stop after 13E
+- task.md: Phase 13 checklist items marked complete
+- walkthrough.md: Phase 13 walkthrough entry added
+
+**Deferred:**
+- Offline attendance mutation queue
+- Offline attendance marking
+- IndexedDB synchronization
+- Fake "offline mode" claiming backend data availability
+- iOS Safari PWA support (known limitation)
+- Full offline data strategy (requires separate product decision)
+
+**HARD STOP:** No commit made. No push performed. Do not begin Phase 14.
+
+---
+
+## HARD STOP
+No commit made.
+No push performed.
+Do not begin Phase 14.

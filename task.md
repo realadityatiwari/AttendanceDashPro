@@ -1221,7 +1221,19 @@ Report: `docs/bugfix/cancellation_state_and_counting_consistency_report.md`.
 - [x] Phase 12E mobile polish: EventFormDialog grid fix + verifier
 - [x] Static invariant verifier created (`backend/scripts/verify_phase_12e.py`)
 - [x] All 5 Phase 12E invariants verified PASS
-- HARD STOP — Phase 12 COMPLETE; no commit made.
+- [x] Phase 13 PWA / Installability infrastructure implemented
+- [x] Web manifest served (`/manifest.json`) with required fields
+- [x] Application icons created (SVG, 192x192 and 512x512)
+- [x] Service worker registered with conservative caching strategy
+- [x] Install prompt connected to `beforeinstallprompt` API
+- [x] Standalone detection via `display-mode: standalone`
+- [x] Online/offline state handling via `navigator.onLine`
+- [x] Cached application shell defined; data pages communicate offline status
+- [x] No backend/database/API/migration changes
+- [x] `npx tsc --noEmit` PASS
+- [x] `npm run build` PASS
+- [x] `git diff --check` PASS
+- HARD STOP — Phase 12 COMPLETE; Phase 13 PWA/Installability complete; no commit made.
 
 ---
 
