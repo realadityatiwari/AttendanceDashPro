@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 17 — Data Integrity & Migration Hardening **NOT STARTED**. Phase 16 (Production Security Hardening) is **COMPLETE & FROZEN** — JWT expiry bounded (8h), password policy hardened, brute-force protection, security headers, error handling, login timing equalization; `verify_phase_16.py` 34/34 PASS; zero DB mutations. Phase 15 (Legacy Web App + Legacy PWA Retirement) **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 18 — Production Infrastructure **NOT STARTED**. Phase 17 (Data Integrity & Migration Hardening) **COMPLETE & FROZEN** — JWT production-secret guard, integrity audit clean, backup/restore verified, retention policy documented, **NO MIGRATION REQUIRED**. Phase 16 (Production Security Hardening) **COMPLETE & FROZEN**; Phase 15 (Legacy Web App + Legacy PWA Retirement) **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -64,7 +64,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 14 | Firebase Retirement | ✅ **COMPLETE & FROZEN** — 14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`) · **14E regression verification ✅** · **14F freeze & governance reconciliation ✅**. Firebase is fully retired from the active application (PostgreSQL + FastAPI + JWT + Next.js). |
 | 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
 | 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
-| 17 | Data Integrity & Migration Hardening | 🔴 Later |
+| 17 | Data Integrity & Migration Hardening | ✅ **COMPLETE & FROZEN** — JWT production-secret guard ✅ (APP_ENV; `verify_phase_17_jwt_guard.py` 6/6) · integrity audit ✅ (zero orphans/duplicates/FK violations) · **NO MIGRATION REQUIRED** (single linear Alembic head `e1f2a3b4c5d6`) · backup/restore ✅ verified (isolated container) · retention policy ✅ documented (7 daily / 4 weekly / 3 monthly) · seed audit ✅ · semester-transition analysis ✅ · cleanup: NONE REQUIRED · working-DB mutations ZERO |
 | 18 | Production Infrastructure | 🔴 Later |
 | 19 | CI/CD | 🔴 Later |
 | 20 | Production QA | 🔴 Later |
@@ -1027,19 +1027,111 @@ migrations; alembic head unchanged (`e1f2a3b4c5d6`).
 
 ---
 
-# 🔴 Phase 17 — Data Integrity & Migration Hardening
+# ✅ Phase 17 — Data Integrity & Migration Hardening
 
-Before production:
+**Status: COMPLETE & FROZEN (2026-08-23)** — JWT production-secret guard ✅ ·
+integrity audit ✅ · backup/restore ✅ (verified) · retention policy ✅ · seed
+idempotency ✅ · semester-transition analysis ✅ · **NO MIGRATION REQUIRED** ·
+cleanup: NONE REQUIRED.
 
-- Database backup
-- Restore test
-- Migration test
-- Rollback strategy
-- Seed strategy
-- Semester transition strategy
-- Duplicate prevention
-- Orphan detection
-- Data cleanup procedures
+## 17.0 — JWT Production-Secret Guard (COMPLETE)
+
+`backend/app/core/config.py`: `APP_ENV` ("development" | "production", default
+development). When `APP_ENV=production`, startup fails if `JWT_SECRET_KEY` is the
+known development default or shorter than 20 characters — the error explains what
+is required without printing the secret. Development behavior unchanged.
+`backend/.env.example` documents `APP_ENV`. Verification:
+`backend/scripts/verify_phase_17_jwt_guard.py` — 6/6 PASS (dev loads; production +
+default rejected; production + short rejected; production + valid loads; no secret
+leak; empty APP_ENV = development).
+
+## 17.1 — Read-only integrity audit (COMPLETE)
+
+- **Alembic**: single head `e1f2a3b4c5d6`; 14 migrations, linear chain, no gaps.
+- **Duplicates**: zero duplicate users (roll_number), enrollments, quiz_schedules,
+  attendance records (user+session), laboratory records (user+experiment),
+  preferences, feedback, notifications. The 85 class_sessions groups that share a
+  (date, subject, type) signature are **legitimate** — they are 2-hour lab blocks
+  materialized from two distinct timetable entries (BCS-551/552/553). Two extra
+  sessions share a NULL-timetable-entry signature; they are event-created
+  (quiz-day/extras), carry no attendance, and are consistent with the synchronizer.
+- **Orphans**: zero orphan rows in every FK relationship audited (enrollments,
+  sessions, attendance, quiz schedules, events, lab records, notifications,
+  preferences, feedback).
+- **Out-of-bounds**: zero attendance records or class_sessions outside the
+  semester span (2026-07-15 → 2026-12-31).
+- **Known legacy state (documented, not defects)**: 28 users have NULL
+  `hashed_password` and NULL `section_id` — these are Firebase-era accounts whose
+  passwords lived in Firebase Auth (retired in Phase 14); they cannot log in and
+  are preserved for history. Exactly one active academic session is configured.
+- **Conclusion**: **NO MIGRATION REQUIRED** — no schema defect, no orphan data,
+  no duplicate data requiring cleanup.
+
+## 17.2 — Backup / restore (COMPLETE, verified)
+
+- `backend/scripts/backup_database.ps1` — full backup via `pg_dump -Fc` through
+  Docker exec; writes `backups/attendancedash_full_<timestamp>.dump` (host dir,
+  gitignored). Verified working.
+- `backend/scripts/restore_database.ps1` — `-TestSwitch` restores into an isolated
+  temporary container (never the working DB); without the switch it restores the
+  live dev DB with confirmation prompt.
+- **Restore test executed**: backup → isolated `postgres:16` container on port
+  55433 → restore → counts verified (users 31, attendance 159, sessions 721,
+  enrollments 27, events 60, quiz_schedules 18, alembic `e1f2a3b4c5d6`); container
+  removed afterward. The working DB was never touched.
+- Strategy: development = local dumps; production = same pg_dump with production
+  credentials + off-host storage + periodic restore tests; schema-only via
+  `pg_dump --schema-only`; data-only via `--data-only`.
+- **Retention policy (documented in `backup_database.ps1` header):**
+  - Location: `backups/` directory (gitignored); local/server filesystem.
+  - Format: PostgreSQL custom format (`-Fc`), compressed, single file.
+  - Daily: latest 7 · Weekly: latest 4 · Monthly: latest 3 — older backups may be
+    removed once the window is satisfied.
+  - Restore safety: isolated restore (`-TestSwitch`) for verification; live
+    restore requires explicit confirmation; never overwrite the working DB casually.
+  - Security: backups contain the full database — never committed to Git;
+    production backups in protected/encrypted storage (infrastructure layer).
+  - Verification cadence: periodic isolated restore tests.
+  - Automated rotation: NOT built in Phase 17 (future infrastructure phase may
+    add scheduled rotation).
+
+## 17.3 — Seed strategy (COMPLETE, audit only)
+
+- `seed_academic_events.py` — idempotent (skips existing semantic identities),
+  authoritative source (quiz_schedules), no resurrection. ✅
+- `seed_academic_baseline.py` / `expand_baseline.py` — deterministic from
+  `timetable.json`, skip existing rows. ✅
+- `provision_admin.py`, `set_initial_password.py`, `setup_single_user.py` —
+  targeted operational tools, not bulk seeds.
+- No seed overwrites user data or resurrects deactivated records.
+
+## 17.4 — Semester transition (COMPLETE, analysis only — no change)
+
+- Session-scoped: `academic_sessions`, `semesters`, `sections`, `subjects`,
+  `student_enrollments`, `timetable_entries`, `class_sessions` (materialized span),
+  `quiz_schedules`, `academic_events`.
+- Global: `users`, `attendance_records` (referenced via sessions), `feedback`,
+  `notifications`, `userpreferences`.
+- Hardcoded current-semester assumptions (acceptable for the current semester,
+  documented as future architectural work, NOT production blockers):
+  - `2026-07-15`/`2026-12-31` semester span (calendar engine clamping, verifiers).
+  - `timetable.json` weekday 0=Monday convention.
+  - Registration auto-assigns the single active semester/section.
+  - Quiz cycles 1–3 fixed policy thresholds.
+- Transition to a new semester = new `academic_sessions` row + `is_active` switch;
+  no schema change required for Phase 17.
+
+## 17.5 — Duplicate / orphan / cleanup (COMPLETE)
+
+- Dedicated read-only audit script executed; findings above. No cleanup performed
+  — nothing invalid was found. The two NULL-timetable-entry extra sessions are
+  event-created artifacts with no attendance and no impact; left untouched
+  (consistent with frozen synchronizer semantics).
+
+## Remaining Phase 17 work
+
+None — Phase 17 is COMPLETE & FROZEN. Scheduled backup rotation and production
+backup runbook are deferred to Phase 18 (Production Infrastructure).
 
 ## Long-term academic model
 
@@ -1555,7 +1647,7 @@ Phase 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
-> **Next phase:** Phase 17 — Data Integrity & Migration Hardening (Phase 16 security hardening COMPLETE & FROZEN).
+> **Next phase:** Phase 18 — Production Infrastructure (Phase 17 data integrity IN PROGRESS — JWT guard complete, integrity audit clean, backup/restore verified, NO MIGRATION REQUIRED).
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

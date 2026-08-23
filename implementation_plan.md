@@ -1659,5 +1659,59 @@ is the chosen strategy).
 **Next authorized phase:** Phase 17 — Data Integrity & Migration Hardening
 (NOT STARTED).
 
+### Phase 17 — Data Integrity & Migration Hardening (COMPLETE, 2026-08-23)
+
+**Objective:** production-readiness for data integrity — JWT production-secret
+guard, integrity audit, backup/restore, migration safety, seed audit, semester
+transition analysis, duplicate/orphan detection, cleanup decisions. Zero data
+mutations.
+
+**Delivered:**
+
+1. **P0 — JWT production-secret guard** (`backend/app/core/config.py`):
+   `APP_ENV` (development|production, default development). Production startup
+   fails when `JWT_SECRET_KEY` is the dev default or < 20 chars; error never
+   prints the secret. Dev behavior unchanged. `.env.example` documents `APP_ENV`.
+   Verifier: `backend/scripts/verify_phase_17_jwt_guard.py` — 6/6 PASS.
+2. **Integrity audit (read-only)**: single linear Alembic head `e1f2a3b4c5d6`
+   (14 migrations, no gaps); zero orphan rows across all FK relationships; zero
+   duplicate keys (users, enrollments, quiz schedules, attendance, lab records,
+   preferences, notifications); zero out-of-bounds records; 85 session groups with
+   shared signatures proven legitimate (2-hour lab blocks = distinct timetable
+   entries); 2 event-created extra sessions with NULL timetable_entry (no
+   attendance, benign); 28 legacy users with NULL password/section = documented
+   Firebase-era state. **NO MIGRATION REQUIRED.**
+3. **Backup/restore**: `backend/scripts/backup_database.ps1` (pg_dump -Fc through
+   Docker; gitignored `backups/`); `backend/scripts/restore_database.ps1`
+   (`-TestSwitch` = isolated container). Restore test executed against an isolated
+   `postgres:16` container: counts verified (users 31, attendance 159, sessions
+   721, enrollments 27, events 60, quiz_schedules 18, alembic head intact);
+   container removed; working DB untouched.
+4. **Seed audit**: `seed_academic_events.py` idempotent (semantic-identity skip,
+   no resurrection); baseline/expand deterministic from `timetable.json`; no
+   overwrite of user data.
+5. **Semester transition analysis**: session-scoped vs global entities mapped;
+   hardcoded semester span (2026-07-15 → 2026-12-31) and registration
+   single-section assumption documented as acceptable current-semester
+   configuration (future architectural work, not Phase 17 blockers); no schema
+   change needed.
+6. **Cleanup**: none required — no invalid rows found. The 2 extra NULL-entry
+   sessions and 28 legacy unpassworded users are preserved (historical/consistent
+   with frozen systems).
+7. **Retention policy**: documented in the `backup_database.ps1` header — daily
+   latest 7, weekly latest 4, monthly latest 3; older dumps may be removed once
+   the window is satisfied; backups are gitignored, full-DB artifacts, never
+   committed; isolated restore (`-TestSwitch`) for verification; periodic restore
+   tests recommended; automated rotation deferred to Phase 18 infrastructure.
+
+**Verification results:** `verify_phase_17_jwt_guard.py` 6/6 PASS · integrity
+audit clean · backup script verified end-to-end · isolated restore verified ·
+`git diff --check` PASS · working-DB mutations ZERO.
+
+**Phase status: COMPLETE & FROZEN.** Remaining items deferred to Phase 18:
+scheduled backup rotation, production backup runbook.
+
+**Next authorized phase:** Phase 18 — Production Infrastructure (NOT STARTED).
+
 ---
 

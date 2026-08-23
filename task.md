@@ -1446,12 +1446,29 @@ Status: **COMPLETE** — security audit + hardening; zero DB mutations; no commi
 - [x] Governance synchronized
 - HARD STOP — Phase 17 NOT STARTED; no commit made.
 
-## Phase 17 — Data Integrity & Migration Hardening (NOT STARTED — next authorized phase)
+## Phase 17 — Data Integrity & Migration Hardening (COMPLETE & FROZEN, 2026-08-23)
 
-- [ ] Database backup / restore / migration test / rollback strategy
-- [ ] Seed strategy / semester transition strategy
-- [ ] Duplicate prevention / orphan detection / data cleanup procedures
-- [ ] Long-term academic model (multi-semester support)
+Status: **COMPLETE & FROZEN** — all authorized Phase 17 work done; zero working-DB mutations; no commit.
+
+- [x] P0 — JWT production-secret guard: `APP_ENV` config; production rejects dev/short secrets at startup; no secret in errors; dev behavior preserved
+- [x] `verify_phase_17_jwt_guard.py` — 6/6 PASS (dev loads; prod+default rejected; prod+short rejected; prod+valid loads; no leak; empty APP_ENV=dev)
+- [x] Alembic audit — single head `e1f2a3b4c5d6`, 14 migrations, linear chain, no gaps
+- [x] Integrity audit — zero orphans (all FK relationships), zero duplicate keys, zero out-of-bounds records
+- [x] Session "duplicates" — 85 groups proven legitimate (2-hour lab blocks); 2 NULL-entry extra sessions benign (no attendance)
+- [x] Legacy state — 28 users without password/section documented (Firebase-era; not defects)
+- [x] **NO MIGRATION REQUIRED** — documented with evidence
+- [x] `backup_database.ps1` created + verified (pg_dump -Fc, gitignored backups/)
+- [x] `restore_database.ps1` created (`-TestSwitch` = isolated container)
+- [x] Restore test executed — isolated postgres:16 container, counts verified, container removed, working DB untouched
+- [x] Seed audit — event seed idempotent (semantic skip, no resurrection); baseline deterministic from timetable.json
+- [x] Semester-transition analysis — session-scoped vs global mapped; hardcoded span documented as current-semester config; no schema change needed
+- [x] Cleanup — none required (no invalid rows); preserved 2 extra sessions + legacy accounts
+- [x] `.gitignore` — `backups/` added
+- [x] `backend/.env.example` — `APP_ENV` documented
+- [x] Retention policy documented — daily 7 / weekly 4 / monthly 3; backups gitignored; isolated restore for verification; rotation deferred to Phase 18
+- [x] Zero database mutations during audit (read-only SQL + isolated-container restore only)
+- [x] Long-term academic model (multi-semester support) — future architectural work (documented, not Phase 17 blocker)
+- HARD STOP — Phase 17 COMPLETE & FROZEN; Phase 18 NOT STARTED; no commit made.
 
 ---
 

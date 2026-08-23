@@ -62,3 +62,6 @@ backend/migration_reports/
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Database backups (Phase 17)
+backups/

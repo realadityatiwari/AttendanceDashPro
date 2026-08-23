@@ -1907,4 +1907,179 @@ all untouched. Only auth-endpoint hardening, middleware, and validation were add
 
 ---
 
+# AttendanceDash Pro — Phase 17 Walkthrough (Data Integrity & Migration Hardening)
+
+Date: 2026-08-23 · Scope: JWT production-secret guard + integrity audit + backup/restore · Zero working-DB mutations
+
+> **PHASE 17 IN PROGRESS.** The JWT production-secret guard is complete, the
+> read-only integrity audit found **no defects requiring a migration or cleanup**,
+> backup/restore procedures were created and a restore was verified in an isolated
+> container. **NO MIGRATION REQUIRED.** Remaining work: backup retention policy.
+> The working database was never mutated.
+
+## 17.0 — JWT Production-Secret Guard
+
+- `backend/app/core/config.py`: added `APP_ENV` (development default; production
+  supported). Pydantic model validator rejects the known development default or a
+  <20-char secret when `APP_ENV=production`, failing at startup/import — the error
+  explains the requirement without printing the secret. HS256/JWT architecture,
+  expiry, and dev behavior unchanged.
+- `backend/.env.example`: `APP_ENV` documented.
+- `backend/scripts/verify_phase_17_jwt_guard.py`: **6/6 PASS** — development loads
+  with default; production + dev default rejected; production + short secret
+  rejected; production + valid secret loads; error does not leak the secret;
+  empty APP_ENV behaves as development.
+
+## Integrity Audit (read-only)
+
+| Area | Result |
+|---|---|
+| Alembic | ✅ single head `e1f2a3b4c5d6`, 14 migrations, linear, no gaps |
+| Duplicate users / enrollments / quiz schedules / attendance / lab records / preferences / notifications / feedback | ✅ zero |
+| Orphan rows (every FK relationship) | ✅ zero |
+| Out-of-bounds records (semester span) | ✅ zero |
+| class_sessions groups sharing (date, subject, type) | ✅ 85 groups — all legitimate (2-hour lab blocks, distinct timetable entries) |
+| NULL timetable_entry duplicate signature | ✅ 2 event-created extra sessions, no attendance, benign |
+| Legacy users (NULL password/section) | ✅ 28 — documented Firebase-era state, preserved |
+
+**Conclusion: NO MIGRATION REQUIRED.** No schema defect, no orphan/duplicate data
+requiring cleanup. Zero cleanup performed (nothing invalid found).
+
+## Backup / Restore
+
+- `backend/scripts/backup_database.ps1` — full `pg_dump -Fc` via Docker exec →
+  `backups/attendancedash_full_<ts>.dump` (gitignored). Verified working.
+- `backend/scripts/restore_database.ps1` — `-TestSwitch` → isolated temporary
+  container; default → live dev DB with confirmation prompt.
+- **Restore test executed**: backup → isolated `postgres:16` container → restore →
+  counts verified (users 31, attendance 159, sessions 721, enrollments 27, events
+  60, quiz_schedules 18, notifications 28, alembic `e1f2a3b4c5d6`) → container
+  removed. The working database was never touched.
+- Strategy documented: dev = local dumps; production = pg_dump + off-host storage
+  + periodic restore tests; schema-only / data-only variants documented.
+
+## Seed Strategy (audit)
+
+`seed_academic_events.py` is idempotent (semantic-identity skip, no resurrection,
+authoritative from quiz_schedules); `seed_academic_baseline.py` / `expand_baseline.py`
+are deterministic from `timetable.json` and skip existing rows; no seed overwrites
+user data.
+
+## Semester Transition (analysis only — no change)
+
+Session-scoped: academic_sessions, semesters, sections, subjects, enrollments,
+timetable_entries, class_sessions, quiz_schedules, academic_events. Global: users,
+attendance_records, feedback, notifications, preferences. Hardcoded semester span
+(2026-07-15 → 2026-12-31) and single-section registration assumption are
+acceptable current-semester configuration — future architectural work, not Phase
+17 blockers. No schema change needed.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `verify_phase_17_jwt_guard.py` | ✅ 6/6 PASS |
+| Dev startup (`app.core.config` import) | ✅ OK |
+| Integrity audit (read-only SQL) | ✅ all checks clean |
+| Backup script end-to-end | ✅ dump created |
+| Restore into isolated container | ✅ counts verified |
+| Working DB mutations | ZERO |
+
+## Files Changed
+
+`backend/app/core/config.py` · `backend/.env.example` · `.gitignore` ·
+`backend/scripts/verify_phase_17_jwt_guard.py` (new) ·
+`backend/scripts/backup_database.ps1` (new) ·
+`backend/scripts/restore_database.ps1` (new) · `MASTER_ROADMAP.md` ·
+`implementation_plan.md` · `task.md` · `walkthrough.md`
+
+## Database Mutation Status
+
+**ZERO** on the working database. The only database touched was an isolated
+temporary restore-test container, removed after verification.
+
+## Frozen Systems Protected
+
+Engines, analytics, dashboard, Track, History, Calendar, Events semantics,
+EventSessionSynchronizer, Laboratory, Notifications, Preferences, PWA, Phase 12/13,
+Phases 14A–14F/15/16 — untouched. No data deleted, no schema changed.
+
+## Phase Status
+
+- **Phase 17: COMPLETE & FROZEN** — guard ✅, audit ✅, backup/restore ✅,
+  retention policy ✅, NO MIGRATION REQUIRED.
+- **Next authorized phase:** Phase 18 — Production Infrastructure (NOT STARTED).
+
+**HARD STOP:** No commit made. No push performed. Phase 18 NOT STARTED.
+
+---
+
+# AttendanceDash Pro — Phase 17 Finalization (Retention Policy + Freeze)
+
+Date: 2026-08-23 · Scope: document backup retention policy; mark Phase 17 COMPLETE & FROZEN
+
+> **PHASE 17 COMPLETE & FROZEN.** All authorized Phase 17 work is finished.
+> The backup retention policy is documented; governance is synchronized; the
+> working database was never mutated; no commit, no push.
+
+## Retention Policy (documented)
+
+Added to the `backup_database.ps1` header (operational documentation, not a new
+subsystem — no automated rotation built):
+
+- **Location**: `backups/` directory, gitignored, local/server filesystem.
+- **Format**: PostgreSQL custom format (`-Fc`), compressed, single file.
+- **Retention**: latest 7 daily · latest 4 weekly · latest 3 monthly; older
+  backups may be removed once the window is satisfied.
+- **Restore safety**: isolated restore (`-TestSwitch`) for verification; live
+  restore requires explicit confirmation; never overwrite the working DB casually.
+- **Security**: backups contain the entire database — never committed to Git;
+  production backups in protected/encrypted storage (infrastructure layer).
+- **Verification cadence**: periodic isolated restore tests.
+- **Deferred to Phase 18**: scheduled rotation, production backup runbook.
+
+## Phase 17 Freeze Record
+
+| Item | Result |
+|---|---|
+| JWT guard (`verify_phase_17_jwt_guard.py`) | PASS 6/6 |
+| Integrity audit | CLEAN |
+| Migration audit | NO MIGRATION REQUIRED |
+| Backup (`backup_database.ps1`) | VERIFIED |
+| Isolated restore (`restore_database.ps1 -TestSwitch`) | VERIFIED |
+| Retention policy | DOCUMENTED |
+| Seed audit | COMPLETE |
+| Cleanup | NONE REQUIRED |
+| Working DB mutations | ZERO |
+| Browser testing | NOT PERFORMED |
+| Git commit | NONE |
+| Git push | NONE |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 17 → **COMPLETE & FROZEN**; retention policy added
+  to §17.2; "Remaining Phase 17 work" → none (rotation deferred to Phase 18);
+  status table + header synchronized.
+- `implementation_plan.md`: Phase 17 → COMPLETE; retention policy + verification
+  recorded; Phase 18 identified as next.
+- `task.md`: Phase 17 → COMPLETE & FROZEN; retention task checked; 17 final.
+- `walkthrough.md`: this entry.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `git diff --check` | ✅ PASS |
+| Backup scripts | ✅ unchanged except retention-policy header documentation |
+| `.gitignore` excludes `backups/` | ✅ confirmed |
+| Working DB mutations | ZERO |
+
+**PHASE 17 — COMPLETE / FROZEN.**
+**PHASE 18 — NOT STARTED.**
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+
+---
+
+---
+
 ---
