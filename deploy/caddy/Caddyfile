@@ -1,0 +1,27 @@
+# ────────────────────────────────────────────────────────────────────────
+# AttendanceDash Pro — Reverse Proxy (Caddy 2)
+#
+# Phase 18A: HTTP-only routing. TLS/HTTPS will be provisioned in a later
+# phase by replacing `http://` with the domain name on the site address.
+#
+# Routing:
+#   /api/*  → backend:8000  (FastAPI, with X-Forwarded-For preserved)
+#   *       → frontend:3000  (Next.js SSR + PWA)
+# ────────────────────────────────────────────────────────────────────────
+
+http://{$DOMAIN:app.example.com} {
+    encode gzip
+
+    # API requests → FastAPI backend
+    # Caddy automatically sets X-Forwarded-For to the original client IP.
+    # The backend uses `--proxy-headers` to trust these headers (trust
+    # boundary: the backend is reachable only from the proxy network).
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else → Next.js frontend (SSR + PWA)
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

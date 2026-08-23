@@ -2080,6 +2080,117 @@ subsystem — no automated rotation built):
 
 ---
 
+# AttendanceDash Pro — Phase 18.0 Walkthrough (Production Infrastructure Audit)
+
+Date: 2026-08-23 · Scope: read-only production infrastructure audit · Zero DB mutations
+
+> **PHASE 18.0 COMPLETE.** Read-only audit of the entire production infrastructure
+> surface. No files modified, no deployment, no cloud resources, no database
+> mutations, no commit. Report: `docs/phase_18/phase_18_0_infrastructure_audit.md`.
+
+## Audit Summary
+
+| Area | Key Finding |
+|---|---|
+| Frontend | Next.js 16.3 SSR — requires Node runtime (not static-hostable); PWA in `public/`; `NEXT_PUBLIC_API_URL` only public env var |
+| Backend | FastAPI/uvicorn — needs `--workers N` + `--proxy-headers` for production; `GET /health` ready; JWT production guard from Phase 17 |
+| PostgreSQL | Must stay private (no public port); Docker named volume persistent; alembic head `e1f2a3b4c5d6` |
+| Secrets | `JWT_SECRET_KEY`, `DATABASE_URI`, PostgreSQL creds are secret; CORS, APP_ENV, rate-limit vars are deployment-specific; dev defaults must be overridden |
+| Docker | No Dockerfiles existed; only dev `docker-compose.yml` for PostgreSQL |
+| Recommendation | Single VPS + Docker Compose (Next.js + FastAPI + PostgreSQL + Caddy reverse proxy) |
+
+## Phase 18 Slices
+
+- **18A** — Containerization (Dockerfiles + production compose + reverse proxy)
+- **18B** — Environment & secret management
+- **18C** — Backup automation (rotation, encryption, off-host)
+- **18D** — Deployment verification (migrations, HTTPS, CORS)
+
+---
+
+# AttendanceDash Pro — Phase 18A Walkthrough (Production Containerization)
+
+Date: 2026-08-23 · Scope: create Dockerfiles, production compose, reverse proxy · Zero DB mutations
+
+> **PHASE 18A COMPLETE.** The production container foundation exists: Dockerfiles
+> for frontend (Next.js 16 SSR standalone) and backend (FastAPI Python 3.13),
+> a production compose stack with Caddy reverse proxy, private networks, and
+> PostgreSQL isolated. Images build successfully. No containers started, no
+> database touched, no cloud resources created.
+
+## Files Created
+
+| File | Purpose |
+|---|---|
+| `frontend/Dockerfile` | Multi-stage Next.js 16 SSR image (node:20-alpine, standalone, non-root, PWA preserved) |
+| `backend/Dockerfile` | FastAPI Python 3.13-slim image (non-root, uvicorn workers, `--proxy-headers`, healthcheck) |
+| `docker-compose.prod.yml` | Production stack: caddy + frontend + backend + postgres; private networks; no public DB port |
+| `deploy/caddy/Caddyfile` | Caddy 2 HTTP routing (`/api/*` → backend, `*` → frontend); X-Forwarded-For |
+| `deploy/.env.prod.example` | Production env contract (no real secrets; `.env.prod` gitignored) |
+| `frontend/.dockerignore` | Build context exclusions |
+| `backend/.dockerignore` | Build context exclusions |
+| `docs/phase_18/phase_18_0_infrastructure_audit.md` | Phase 18.0 audit report |
+| `docs/phase_18/phase_18a_containerization.md` | Phase 18A container documentation |
+
+## Files Modified
+
+| File | Change |
+|---|---|
+| `frontend/next.config.ts` | Added `output: "standalone"` (smallest justified change; SSR + PWA preserved) |
+| `frontend/package-lock.json` | Regenerated on Linux with npm 11 for deterministic `@emnapi` resolution |
+| `.gitignore` | Added `deploy/.env.prod` |
+
+## Network Topology
+
+```text
+proxy-net (bridge):
+  caddy ←→ frontend (proxy routing)
+  caddy ←→ backend (proxy routing)
+
+data-net (internal: true):
+  backend ←→ postgres  (🔒 NO external route — PostgreSQL private)
+```
+
+Only port 80 (caddy) is published to the host. PostgreSQL has no host port, no
+external route, and is reachable only from the backend container.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `docker compose -f docker-compose.prod.yml config` | ✅ valid (only port 80 published) |
+| `docker build backend/Dockerfile` | ✅ PASS |
+| `docker build frontend/Dockerfile` | ✅ PASS (npm 11 aligned, standalone output) |
+| `npm ci` + `npm run build` (local) | ✅ PASS (15/15 routes) |
+| `python -m compileall backend/app` | ✅ PASS |
+| `git diff --check` | ✅ PASS (exit 0) |
+| PostgreSQL privacy | ✅ confirmed: no host port, internal network only |
+| Dev compose untouched | ✅ `docker-compose.yml` unchanged |
+
+## What 18A Does NOT Implement
+
+- No TLS certificates or real domain (Caddy config ready for HTTPS later)
+- No secret manager integration (18B)
+- No automated backup rotation / off-host storage / notifications (18C)
+- No deployment automation / CI/CD (18D)
+- No migrations-on-deploy (18D)
+- No changes to application behavior, schema, or data
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 18 → IN PROGRESS; 18.0 ✅ · 18A ✅ · 18B–18D NOT STARTED
+- `implementation_plan.md`: 18.0 + 18A sections added — COMPLETE; 18B next
+- `task.md`: 18.0 + 18A checklists complete; 18B–18D unchecked
+- `walkthrough.md`: this entry
+
+**PHASE 18.0 — COMPLETE / FROZEN.**
+**PHASE 18A — COMPLETE / FROZEN.**
+**Phase 18B — Environment & Secret Management (NOT STARTED — next authorized slice).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+**Database mutations: ZERO.** Production deployment: NO. Cloud resources created: ZERO.
+
+---
+
 ---
 
 ---

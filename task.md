@@ -1470,5 +1470,53 @@ Status: **COMPLETE & FROZEN** — all authorized Phase 17 work done; zero workin
 - [x] Long-term academic model (multi-semester support) — future architectural work (documented, not Phase 17 blocker)
 - HARD STOP — Phase 17 COMPLETE & FROZEN; Phase 18 NOT STARTED; no commit made.
 
+## Phase 18 — Production Infrastructure (IN PROGRESS)
+
+### Phase 18.0 — Infrastructure Audit (COMPLETE, read-only)
+
+- [x] Read-only production infrastructure audit (report: `docs/phase_18/phase_18_0_infrastructure_audit.md`)
+- [x] Frontend audit (Next.js 16 SSR — Node runtime required; PWA preserved)
+- [x] Backend audit (uvicorn workers, proxy headers, health endpoints)
+- [x] PostgreSQL privacy audit + Alembic head `e1f2a3b4c5d6` confirmed
+- [x] Backup/retention + security-sensitive env audit
+- [x] Docker/container audit (no Dockerfiles existed)
+- [x] Hosting options comparison (recommended: single VPS + Docker Compose)
+- [x] Environment contract + deployment topology documented
+- [x] Zero DB mutations; zero commits
+
+### Phase 18A — Production Containerization & Orchestration (COMPLETE)
+
+- [x] `frontend/Dockerfile` — multi-stage Next.js 16 SSR, standalone output, non-root, PWA preserved
+- [x] `backend/Dockerfile` — python:3.13-slim FastAPI, non-root, uvicorn workers, `--proxy-headers`, healthcheck
+- [x] `docker-compose.prod.yml` — caddy + frontend + backend + postgres:16
+- [x] PostgreSQL private (internal `data-net`, no host port)
+- [x] Private networks: `proxy-net` + `data-net` (internal)
+- [x] `deploy/caddy/Caddyfile` — HTTP routing `/api/*` → backend, `*` → frontend; X-Forwarded-For preserved
+- [x] `deploy/.env.prod.example` — env contract (no real secrets; `.env.prod` gitignored)
+- [x] `frontend/next.config.ts` — `output: "standalone"` (justified, build verified)
+- [x] `frontend/package-lock.json` — regenerated on Linux for deterministic `npm ci` (@emnapi resolution)
+- [x] Healthchecks (postgres pg_isready, backend /health, frontend wget /, caddy wget /)
+- [x] Restart policies (`unless-stopped`) + `depends_on` postgres healthy condition
+- [x] Docs: `docs/phase_18/phase_18a_containerization.md`
+- [x] `docker compose config` valid — only proxy port 80 exposed
+- [x] Backend image build PASS; frontend image build PASS
+- [x] `npm ci` + `npm run build` PASS (15/15); `compileall` PASS; `git diff --check` PASS
+- [x] Zero DB mutations; zero cloud resources; dev compose untouched
+- HARD STOP — Phase 18B NOT STARTED; no commit made.
+
+### Phase 18B — Environment & Secret Management (NOT STARTED — next authorized slice)
+
+- [ ] Production secret management (JWT, DATABASE_URI, CORS origins)
+- [ ] Extended `.env` production contracts
+- [ ] Secret-manager integration where appropriate
+
+### Phase 18C — Backup Automation (NOT STARTED)
+
+- [ ] Scheduled rotation (7/4/3), encryption, off-host storage, notifications, production runbook
+
+### Phase 18D — Deployment & Verification (NOT STARTED)
+
+- [ ] Migrations-on-deploy (`alembic upgrade head`), HTTPS/TLS, deployment verification
+
 ---
 

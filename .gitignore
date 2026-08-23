@@ -65,3 +65,6 @@ __pycache__/
 
 # Database backups (Phase 17)
 backups/
+
+# Production environment (Phase 18A)
+deploy/.env.prod

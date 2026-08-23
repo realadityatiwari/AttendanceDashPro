@@ -1713,5 +1713,57 @@ scheduled backup rotation, production backup runbook.
 
 **Next authorized phase:** Phase 18 — Production Infrastructure (NOT STARTED).
 
+### Phase 18 — Production Infrastructure (IN PROGRESS)
+
+#### 18.0 — Infrastructure Audit (COMPLETE, read-only, 2026-08-23)
+
+Audit report: `docs/phase_18/phase_18_0_infrastructure_audit.md`. Established
+topology (HTTPS/CDN → Next.js SSR → FastAPI → private PostgreSQL), frontend Node
+runtime requirement, backend proxy-header/worker needs, PostgreSQL privacy,
+env contract, hosting comparison (recommended single VPS + Docker Compose), and
+slice plan (18A–18D). Zero DB mutations, zero commits.
+
+#### 18A — Production Containerization & Orchestration (COMPLETE, 2026-08-23)
+
+**Objective:** create the production container foundation: Next.js frontend +
+FastAPI backend + PostgreSQL + reverse proxy, with PostgreSQL private.
+
+**Delivered:**
+
+1. `frontend/Dockerfile` — multi-stage (deps/builder/runner), node:20-alpine,
+   npm 11 aligned to the lockfile, Next.js standalone output, non-root
+   `nodejs` user, PWA + SSR preserved.
+2. `backend/Dockerfile` — python:3.13-slim, deterministic pip install, non-root
+   `appuser`, app + Alembic included, uvicorn `--workers ${UVICORN_WORKERS:-1}`
+   `--proxy-headers`, healthcheck on `GET /health`.
+3. `docker-compose.prod.yml` — services: caddy (HTTP proxy, port 80 only),
+   frontend, backend, postgres:16 (no host port). Networks: `proxy-net`
+   (bridge) + `data-net` (`internal: true`). Healthchecks + `unless-stopped`
+   on all services; `depends_on` postgres `service_healthy`.
+4. `deploy/caddy/Caddyfile` — `/api/*` → backend:8000, `*` → frontend:3000;
+   automatic `X-Forwarded-For`; TLS-ready placeholder `app.example.com`.
+5. `deploy/.env.prod.example` — production env contract (no real secrets;
+   `deploy/.env.prod` gitignored).
+6. `frontend/next.config.ts` — `output: "standalone"` (smallest justified change;
+   verified build 15/15).
+7. `frontend/package-lock.json` — regenerated on Linux (npm 11) so `npm ci`
+   resolves `@emnapi/*` optional deps deterministically in the container.
+8. Docs: `docs/phase_18/phase_18a_containerization.md`.
+
+**Verification results:** `docker compose -f docker-compose.prod.yml config`
+valid (only port 80 published) · backend image build PASS · frontend image
+build PASS · `npm ci` PASS · `npm run build` PASS (15/15) · `compileall` PASS ·
+`git diff --check` PASS. No containers started, no DB touched, no cloud
+resources created.
+
+**Scope guards:** PostgreSQL not exposed; no schema/migration/application
+changes; no real secrets committed; dev `docker-compose.yml` untouched;
+frozen systems untouched.
+
+**Next authorized slice:** Phase 18B — Environment & Secret Management
+(NOT STARTED).
+
+---
+
 ---
 

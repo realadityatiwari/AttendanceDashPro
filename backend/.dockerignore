@@ -1,0 +1,12 @@
+# Phase 18A: backend Docker build context exclusions
+.venv
+venv
+__pycache__
+*.pyc
+.env
+*.log
+.git
+Dockerfile
+.dockerignore
+backups
+migration_reports

@@ -1,0 +1,133 @@
+name: attendancedash-prod
+
+# ────────────────────────────────────────────────────────────────────────
+# AttendanceDash Pro — Production Docker Compose
+#
+# Services:
+#   postgres   — PostgreSQL 16 (private network only, no public port)
+#   backend    — FastAPI + Uvicorn (app.main:app, PYTHON 3.13)
+#   frontend   — Next.js 16 SSR + PWA (standalone output)
+#   caddy      — Reverse proxy (HTTP routing, proxy headers, TLS later)
+#
+# Networks:
+#   proxy-net  — public-facing: proxy ↔ frontend, proxy ↔ backend
+#   data-net   — private: backend ↔ postgres (internal: true — no external route)
+#
+# PostgreSQL is intentionally NOT exposed to the host.
+# Backend is NOT exposed to the host.
+# Frontend is NOT exposed to the host.
+# Only the reverse proxy port 80 is exposed.
+#
+# Required environment variables (set via .env file or shell):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (or defaults)
+#   JWT_SECRET_KEY, BACKEND_CORS_ORIGINS, NEXT_PUBLIC_API_URL
+#   DOMAIN (hostname for the reverse proxy)
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d
+#
+# Migration on deploy (Phase 18D):
+#   docker compose -f docker-compose.prod.yml exec backend \
+#     alembic upgrade head
+# ────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-attendancedash}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # No ports → private. Only accessible on the data-net.
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URI: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-attendancedash}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      SECURITY_HSTS_ENABLED: ${SECURITY_HSTS_ENABLED:-false}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-10}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
+      REGISTER_MAX_ATTEMPTS: ${REGISTER_MAX_ATTEMPTS:-5}
+      REGISTER_WINDOW_SECONDS: ${REGISTER_WINDOW_SECONDS:-3600}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - proxy-net
+      - data-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; import sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - backend  # Frontend can start independently; API calls will retry.
+    networks:
+      - proxy-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"   # HTTP only in Phase 18A; TLS provisioned in a later phase.
+    environment:
+      DOMAIN: ${DOMAIN:-app.example.com}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - proxy-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  proxy-net:
+    driver: bridge
+  data-net:
+    driver: bridge
+    internal: true   # No external route — only backend (on both nets) can reach it.
+
+volumes:
+  postgres_data:

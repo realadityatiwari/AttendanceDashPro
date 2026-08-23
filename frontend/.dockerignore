@@ -1,0 +1,9 @@
+# Phase 18A: frontend Docker build context exclusions
+node_modules
+.next
+.env*
+*.log
+.git
+Dockerfile
+.dockerignore
+README.md
