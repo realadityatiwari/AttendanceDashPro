@@ -160,11 +160,18 @@ docker stop attendancedashpro_db
 
 # 🔒 Security
 
-- JWT authentication (signed tokens, resolved against PostgreSQL per request)
-- PBKDF2-SHA256 password hashing with per-user salts
+- JWT authentication (signed HS256 tokens, 8-hour bounded expiry, resolved against PostgreSQL per request)
+- PBKDF2-SHA256 password hashing (100k iterations, per-user salt, constant-time comparison)
+- Password policy at registration: 8–128 characters, at least one letter and one digit
+- Brute-force protection: per-IP rate limiting on login (10/15 min) and registration (5/hour) with 429 responses
 - ADMIN role resolved from the database (backend-authoritative, no self-assignment)
 - Enrollment-scoped data access (no cross-user data leakage)
 - Engine-authoritative calculations (no client-side domain math)
+- Security headers (nosniff, frame denial, referrer policy, permissions policy)
+- Login timing equalization (no user enumeration through response time)
+
+Environment configuration (JWT secret/expiry, CORS origins, security headers, rate
+limits) is documented in `backend/.env.example`.
 
 ---
 

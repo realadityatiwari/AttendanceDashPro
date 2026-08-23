@@ -1613,5 +1613,51 @@ Next.js PWA untouched; Firebase retirement not reopened; historical docs not rew
 
 **Next authorized phase:** Phase 16 — Production Security Hardening (NOT STARTED).
 
+### Phase 16 — Production Security Hardening (COMPLETE, 2026-08-23)
+
+**Objective:** establish whether the application is safe enough to proceed toward
+production infrastructure — security audit + minimal backend-authoritative
+hardening. Zero database mutations; zero migrations.
+
+**Audit findings (before):** PBKDF2-SHA256 (100k, salted, constant-time) ✅ ·
+HS256 JWT with DB-resolved user ✅ · DB-authoritative ADMIN roles ✅ ·
+enrollment-scoped reads (attendance/quiz/lab/events) ✅ · owner-scoped
+preferences/notifications/feedback ✅ · no IDOR found ✅. Gaps: 30-day JWT
+expiry; no rate limiting; login user-existence timing side-channel; no security
+headers; no global 500 handler; attendance mutation echoed internal exceptions;
+password policy min-8 only; no logging.
+
+**Hardening delivered:**
+
+1. **JWT**: expiry default 43200 → **480 min (8h)** env-configurable; `iat` claim;
+   `type == "access"` enforced at decode.
+2. **Password policy** (register only; existing accounts unaffected): 8–128 chars,
+   ≥1 letter, ≥1 digit — Pydantic backend-authoritative + frontend signup synced.
+3. **Rate limiting** (`app/core/rate_limit.py`): in-process sliding window —
+   login 10/15min, register 5/hour, per-IP, 429 + `Retry-After`. Distributed
+   (Redis) limiter documented as Phase 17 dependency.
+4. **Login timing equalization**: dummy PBKDF2 hash on missing roll_number.
+5. **Security headers** (`app/main.py` middleware): nosniff, X-Frame-Options DENY,
+   Referrer-Policy no-referrer, Permissions-Policy; HSTS env-gated (off by default).
+6. **Global 500 handler**: server-side logging, generic client response.
+7. **Error-leak fix**: attendance mutation returns generic 400 (internals logged).
+8. **Logging** (`app/core/logging.py`): auth failures + unhandled errors; never
+   passwords/tokens/secrets.
+9. **Secrets/config**: `backend/.env.example` documents all security env vars.
+
+**Verification results:** `backend/scripts/verify_phase_16.py` — **34/34 PASS**
+(auth matrix, admin, cross-user isolation, rate limiting, password policy,
+headers, CORS, error non-leak) · frozen verifiers 6.5 27/27, 10C 23/23, 10D 18/18,
+11A 19/19 · `compileall` PASS · `tsc --noEmit` PASS · `npm run build` PASS (15/15) ·
+`git diff --check` PASS · alembic head `e1f2a3b4c5d6` unchanged · zero DB mutations.
+
+**Known limitations (Phase 17 dependencies):** in-process rate limiter (needs
+Redis for multi-process); JWT in localStorage (HttpOnly-cookie strategy would be
+a larger architectural change); no refresh tokens (short-lived token + re-login
+is the chosen strategy).
+
+**Next authorized phase:** Phase 17 — Data Integrity & Migration Hardening
+(NOT STARTED).
+
 ---
 

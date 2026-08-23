@@ -1808,3 +1808,103 @@ current Next.js PWA, Phase 12, Phase 13, Phases 14A–14F — untouched.
 **HARD STOP:** No commit made. No push performed. Phase 16 NOT STARTED.
 
 ---
+
+# AttendanceDash Pro — Phase 16 Walkthrough (Production Security Hardening)
+
+Date: 2026-08-23 · Scope: security audit + backend-authoritative hardening · Zero DB mutations
+
+> **PHASE 16 COMPLETE.** The active application (PostgreSQL + FastAPI + JWT +
+> Next.js) was audited and hardened. No critical authentication or authorization
+> vulnerability remains; STUDENT cannot access ADMIN mutations; cross-user access
+> is blocked. Zero database mutations, zero migrations, alembic head unchanged,
+> zero commits.
+
+## Security Audit Summary
+
+| Area | Finding | Classification |
+|---|---|---|
+| Password hashing | PBKDF2-SHA256, 100k iterations, random salt, `hmac.compare_digest` | ✅ Secure |
+| JWT signing/validation | HS256, algorithm-pinned, exp + sub + DB user resolution | ✅ Secure |
+| Token expiry | 30 days — excessively long | ⚠️ Production-risk → fixed |
+| Rate limiting | none on login/register | ⚠️ Production-risk → fixed |
+| Login enumeration | user-not-found returns faster than wrong-password | ⚠️ Weak → fixed |
+| Password policy | min 8 only; no max/complexity | ⚠️ Weak → fixed |
+| Security headers | none | ⚠️ Missing → fixed |
+| Error handling | attendance mutation echoed internal `str(e)`; no global 500 handler | ⚠️ Production-risk → fixed |
+| Logging | none | ⚠️ Missing → fixed |
+| Authorization | all endpoints JWT-scoped; enrollment-scoped; owner-scoped; DB-authoritative ADMIN | ✅ Secure |
+| IDOR | no object-substitution vector found (session/event/lab/notification IDs are owner/enrollment-checked) | ✅ Secure |
+| CORS | env-driven explicit origins; credentials without wildcard | ✅ Secure |
+| Secrets | dev JWT secret default; env-overridable; `.env` gitignored | ✅ Acceptable |
+| Frontend | no `dangerouslySetInnerHTML`; no open redirects; localStorage JWT (documented limitation) | ✅ Acceptable |
+
+## Changes
+
+| File | Change |
+|---|---|
+| `backend/app/core/config.py` | JWT expiry default 480 min; `SECURITY_HSTS_ENABLED`; rate-limit settings |
+| `backend/app/core/security.py` | `iat` claim; `DUMMY_PASSWORD_HASH` for timing equalization |
+| `backend/app/core/rate_limit.py` | NEW in-process sliding-window rate limiter + FastAPI dependency |
+| `backend/app/core/logging.py` | NEW minimal structured logging setup |
+| `backend/app/api/dependencies/deps.py` | Enforce `type == "access"` claim (defense in depth) |
+| `backend/app/api/v1/endpoints/auth.py` | Rate limits on login/register; timing equalization; password policy (8–128, letter+digit); auth-failure logging |
+| `backend/app/api/v1/endpoints/attendance.py` | Generic 400 instead of `str(e)` leak (internals logged) |
+| `backend/app/main.py` | Security-headers middleware; global 500 handler with logging |
+| `backend/.env.example` | Documented JWT/security/rate-limit env vars |
+| `frontend/src/app/(auth)/signup/page.tsx` | Password validation synced with backend policy |
+| `backend/scripts/verify_phase_16.py` | NEW security verifier (34 checks) |
+
+## Authentication (final state)
+
+- Login: roll_number + password → generic 401 on failure (no enumeration); dummy
+  PBKDF2 hash equalizes timing; rate-limited (10/15 min per IP, 429 + Retry-After).
+- Register: rate-limited (5/hour per IP); password policy 8–128 chars, letter+digit.
+- JWT: HS256, 8-hour expiry (env-configurable), `iat` + `exp` + `sub` +
+  `roll_number` + `type=access`; validation enforces algorithm, expiry, type,
+  UUID sub, and DB existence.
+- Invalidation strategy: short-lived access token + local removal on logout.
+  No refresh tokens or session table (not required by this architecture).
+
+## Verification Results
+
+| Check | Result |
+|---|---|
+| `verify_phase_16.py` (auth matrix, admin, isolation, rate limit, policy, headers, CORS, error leak) | ✅ 34/34 PASS |
+| Phase 6.5 verifier (security matrix) | ✅ 27/27 |
+| Phase 10C verifier (feedback auth) | ✅ 23/23 |
+| Phase 10D verifier (preferences auth) | ✅ 18/18 |
+| Phase 11A verifier (notifications auth) | ✅ 19/19 |
+| `python -m compileall backend/app backend/scripts backend/alembic` | ✅ PASS |
+| `npx tsc --noEmit` | ✅ PASS |
+| `npm run build` | ✅ PASS (15/15) |
+| `git diff --check` | ✅ PASS |
+| Alembic single head `e1f2a3b4c5d6` | ✅ unchanged |
+| Database mutations | ZERO |
+
+## Database Mutation Status
+
+**ZERO.** No INSERT/UPDATE/DELETE/ALTER/DROP/CREATE. No migration created. Alembic
+head unchanged (`e1f2a3b4c5d6`).
+
+## Frozen Systems Protected
+
+Attendance/eligibility/calendar/analytics engines, dashboard, Track, History,
+Calendar, Events semantics, EventSessionSynchronizer, Laboratory, Notifications,
+Preferences, current Next.js PWA, Phase 12, Phase 13, Phases 14A–14F, Phase 15 —
+all untouched. Only auth-endpoint hardening, middleware, and validation were added.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 16 COMPLETE & FROZEN; status table + header
+  synchronized; next authorized phase = Phase 17 (Data Integrity & Migration
+  Hardening); stale table numbering corrected (15→16 … 21→22).
+- `implementation_plan.md`: Phase 16 section added — COMPLETE; 17 pending.
+- `task.md`: Phase 16 checklist complete; 17 unchecked.
+- `walkthrough.md`: this entry.
+
+**Next authorized phase: Phase 17 — Data Integrity & Migration Hardening.**
+**HARD STOP:** No commit made. No push performed. Phase 17 NOT STARTED.
+
+---
+
+---

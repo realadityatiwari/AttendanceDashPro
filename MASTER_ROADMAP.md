@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 16 — Production Security Hardening **NOT STARTED**. Phase 15 (Legacy Web App + Legacy PWA Retirement) is **COMPLETE & FROZEN** — the legacy root application and its legacy PWA have been retired; the active application is `frontend/` (Next.js, incl. the Phase 13 PWA) + `backend/` (FastAPI + PostgreSQL + JWT). Firebase retirement (Phases 14.0–14F) **COMPLETE & FROZEN**.
+> **Next phase:** Phase 17 — Data Integrity & Migration Hardening **NOT STARTED**. Phase 16 (Production Security Hardening) is **COMPLETE & FROZEN** — JWT expiry bounded (8h), password policy hardened, brute-force protection, security headers, error handling, login timing equalization; `verify_phase_16.py` 34/34 PASS; zero DB mutations. Phase 15 (Legacy Web App + Legacy PWA Retirement) **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -63,13 +63,13 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 13 | PWA / Installability | ✅ **COMPLETE & FROZEN** — manifest, service worker, SVG icons, install prompt, standalone detection, online/offline state; zero backend/DB/migration changes; `tsc`/`build`/`diff --check` PASS |
 | 14 | Firebase Retirement | ✅ **COMPLETE & FROZEN** — 14.0 audit ✅ · **14A frontend Firebase removal ✅** · **14B backend Firebase removal ✅** · **14C deployment/config cleanup ✅** · **14D firebase_uid cleanup ✅** (column dropped, migration `e1f2a3b4c5d6`) · **14E regression verification ✅** · **14F freeze & governance reconciliation ✅**. Firebase is fully retired from the active application (PostgreSQL + FastAPI + JWT + Next.js). |
 | 15 | Legacy Web App + Legacy PWA Retirement | ✅ **COMPLETE & FROZEN** — legacy runtime removed (root `index.html`, `js/`, `css/`, `assets/`, `offline.html`, root `manifest.json`, root `service-worker.js`, legacy test scripts, legacy-only root package files); `timetable.json` preserved (active backend data dependency); docs/prompts marked as historical; active application = `frontend/` + `backend/` |
-| 15 | Production Security Hardening | 🔴 Later |
-| 16 | Data Integrity & Migration Hardening | 🔴 Later |
-| 17 | Production Infrastructure | 🔴 Later |
-| 18 | CI/CD | 🔴 Later |
-| 19 | Production QA | 🔴 Later |
-| 20 | Production Launch | 🔴 Later |
-| 21 | Post-Launch | 🔵 Ongoing |
+| 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
+| 17 | Data Integrity & Migration Hardening | 🔴 Later |
+| 18 | Production Infrastructure | 🔴 Later |
+| 19 | CI/CD | 🔴 Later |
+| 20 | Production QA | 🔴 Later |
+| 21 | Production Launch | 🔴 Later |
+| 22 | Post-Launch | 🔵 Ongoing |
 
 ---
 
@@ -965,53 +965,65 @@ was NOT affected.
 
 ---
 
-# 🔴 Phase 16 — Production Security Hardening
+# ✅ Phase 16 — Production Security Hardening
 
-## Authentication
+**Status: COMPLETE & FROZEN (2026-08-23).**
 
-- Password policy
-- Secure password hashing
-- JWT expiry
-- Refresh strategy if required
-- Token invalidation strategy
-- Brute-force protection
-- Login rate limiting
+Security audit + hardening of the active PostgreSQL + FastAPI + JWT + Next.js
+application (backend-authoritative security). Zero database mutations; zero
+migrations; alembic head unchanged (`e1f2a3b4c5d6`).
 
-## Authorization
+## What was hardened
 
-Verify every sensitive endpoint against cross-user access:
+- **JWT expiry**: bounded to 8 hours (env `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`;
+  previously 30 days). `iat` claim added; `type == "access"` claim now enforced
+  at validation (defense in depth). HS256 + env-driven secret remain.
+- **Password policy** (registration; existing accounts unaffected):
+  8–128 characters, at least one letter and one digit — backend-authoritative
+  (Pydantic), frontend signup validation synced. PBKDF2-SHA256 (100k iterations,
+  salted, constant-time compare) unchanged.
+- **Brute-force protection**: in-process sliding-window rate limiter
+  (`app/core/rate_limit.py`) — login 10 attempts/15 min, register 5/hour,
+  per-IP, 429 + `Retry-After`. Distributed limiter (Redis) = Phase 17 dependency.
+- **Login timing**: dummy PBKDF2 hash when the roll_number does not exist —
+  eliminates user enumeration via response time.
+- **Security headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+  DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (restricted).
+  HSTS env-gated (`SECURITY_HSTS_ENABLED`, default off — localhost/dev safe).
+- **Error handling**: global 500 handler logs server-side, returns generic
+  "Internal server error" (no tracebacks/SQL/paths leaked); attendance mutation
+  no longer echoes internal exception text to clients.
+- **Logging**: `app/core/logging.py` — auth failures, unhandled 500s logged;
+  no passwords/tokens/secrets ever logged.
+- **CORS**: env-driven explicit origins (default localhost:3100), credentials
+  enabled, no wildcard — production origin configurable via
+  `BACKEND_CORS_ORIGINS`.
+- **Secrets**: `backend/.env.example` documents JWT/security/rate-limit env vars
+  (no real secrets); dev JWT secret default remains env-overridable.
+- **Authorization audit**: all sensitive endpoints verified — JWT-scoped user
+  resolution, enrollment-scoped reads/mutations (attendance, quiz, lab, events,
+  subjects, timetable), owner-scoped preferences/notifications/feedback,
+  DB-authoritative ADMIN (STUDENT → 403). No IDOR found.
 
-```text
-Can User A access User B's data?
-```
+## Verification
 
-Especially:
+- `verify_phase_16.py` (new): 34/34 PASS — auth matrix (no/malformed/tampered/
+  expired/wrong-alg/no-type tokens → 401), admin (ADMIN ok / STUDENT 403),
+  cross-user isolation (distinct identities, owner-scoped notifications 404,
+  enrollment-scoped subjects), rate limiting (429 + Retry-After), password
+  policy (4 invalid cases → 422), security headers, CORS (allowed origin OK /
+  disallowed rejected), error non-leak.
+- Frozen verifiers re-run: 6.5 27/27 · 10C 23/23 · 10D 18/18 · 11A 19/19 — all
+  PASS. `compileall` PASS · `tsc --noEmit` PASS · `npm run build` PASS (15/15) ·
+  `git diff --check` PASS.
 
-- Attendance
-- History
-- Quiz eligibility
-- Laboratory
-- Profile
-- Events
-- Feedback
-- Preferences
+## Known limitations / Phase 17 dependencies
 
-## Database
-
-- Constraints
-- Indexes
-- Foreign keys
-- Uniqueness
-- Cascading behavior
-- Transaction boundaries
-
-## API
-
-- Validation
-- Error handling
-- CORS
-- Security headers
-- Production logging
+- Rate limiter is in-process (per-process memory) — multi-process production
+  needs a distributed limiter (Redis).
+- JWT lives in localStorage (frontend) — documented limitation; HttpOnly-cookie
+  strategy would be a larger architectural change.
+- No refresh tokens: short-lived access token + re-login is the chosen strategy.
 
 ---
 
@@ -1539,11 +1551,11 @@ PHASE 8  ████████████████████  COMPLETE 
 PHASE 9  ████████████████████  COMPLETE 🔒 (9.0 audit · 9.1 events · 9.2.1 experiments · corrections)
 PHASE 10 ████████████████████  COMPLETE 🔒 (10.0 audit · 10A settings · 10B program/profile · 10C feedback · 10D preferences · 10E freeze)
 ...
-PHASE 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
-PHASE 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
-PHASE 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+Phase 20 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+Phase 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
-> **Next phase:** Phase 16 — Production Security Hardening (Phase 15 legacy-app retirement COMPLETE & FROZEN).
+> **Next phase:** Phase 17 — Data Integrity & Migration Hardening (Phase 16 security hardening COMPLETE & FROZEN).
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

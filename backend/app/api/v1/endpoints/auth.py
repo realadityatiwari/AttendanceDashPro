@@ -3,14 +3,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.user import User, Section
 from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment
-from app.core.security import verify_password, create_access_token, hash_password
+from app.core.security import verify_password, create_access_token, hash_password, DUMMY_PASSWORD_HASH
+from app.core.logging import get_logger
+from app.core.rate_limit import rate_limit
 from app.api.dependencies.deps import get_db
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 class LoginRequest(BaseModel):
     roll_number: str
@@ -21,28 +24,53 @@ class RegisterRequest(BaseModel):
     roll_number: str
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Backend-authoritative password policy:
+        - Minimum 8 characters
+        - Maximum 128 characters (PBKDF2 DoS protection)
+        - At least one letter and one digit
+        Existing accounts are NOT invalidated; this policy applies at registration.
+        """
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if len(v) > 128:
+            raise ValueError("Password must not exceed 128 characters")
+        if not re.search(r"[A-Za-z]", v):
+            raise ValueError("Password must contain at least one letter")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
 @router.post("/login", response_model=TokenResponse)
-async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    credentials: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(10, 900, "login")),
+):
     # 1. Find user by roll_number
     result = await db.execute(select(User).filter_by(roll_number=credentials.roll_number))
     user = result.scalars().first()
     
-    # 2. Verify password (constant time comparison prevents timing attacks)
-    # If user doesn't exist, we still want to avoid returning quickly to prevent user enumeration,
-    # but for simplicity and safety against erroring out on None, we check it here.
-    # To truly prevent timing attacks on user existence, we'd hash a dummy password here, 
-    # but returning standard 401 is requested.
+    # 2. Verify password (constant time comparison prevents timing attacks).
+    # To prevent user enumeration through timing, always run a PBKDF2
+    # verification even when the user does not exist (dummy hash). This
+    # equalizes the response time for existing vs. nonexistent accounts.
     if not user or not user.hashed_password:
+        verify_password(credentials.password, DUMMY_PASSWORD_HASH)
+        logger.warning("Login failed: roll_number not found or no password set")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect roll number or password",
         )
         
     if not verify_password(credentials.password, user.hashed_password):
+        logger.warning("Login failed: incorrect password for roll_number=%s", credentials.roll_number)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect roll number or password",
@@ -54,17 +82,15 @@ async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(5, 3600, "register")),
+):
     """
     Creates a PostgreSQL-native student account and provisions its academic
     enrollment in a single transaction.
-
-    Academic context is resolved from authoritative configuration only:
-      active AcademicSession -> its Semester -> its Section -> semester subjects.
-    The client never submits section, semester, session, or subject IDs.
-
-    On success a JWT is issued through the exact same mechanism as login, so
-    the student can immediately use the authenticated application.
+    ...
     """
     name = request.name.strip()
     roll_number = request.roll_number.strip()
@@ -74,8 +100,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=422, detail="Full name is required")
     if not re.fullmatch(r"\d{13}", roll_number):
         raise HTTPException(status_code=422, detail="Roll number must be 13 digits")
-    if len(request.password) < 8:
-        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    # Password validation is enforced by the Pydantic model (RegisterRequest)
 
     # --- Resolve authoritative academic context ---
     result = await db.execute(select(AcademicSession).where(AcademicSession.is_active == True))  # noqa: E712
@@ -121,8 +146,6 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
             db.add(StudentEnrollment(user_id=user.id, subject_id=subject.id))
         await db.commit()
     except IntegrityError:
-        # Unique constraint on roll_number: duplicate registration (also the
-        # race-condition guard between concurrent requests).
         await db.rollback()
         raise HTTPException(status_code=409, detail="An account with this roll number already exists")
     except Exception:

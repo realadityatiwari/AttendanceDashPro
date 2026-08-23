@@ -137,4 +137,10 @@ async def mutate_attendance(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Log the internal detail server-side; never leak it to the client.
+        import logging
+        logging.getLogger(__name__).exception(
+            "Attendance mutation failed for user %s session %s",
+            current_user.id, request.class_session_id,
+        )
+        raise HTTPException(status_code=400, detail="Unable to update attendance")

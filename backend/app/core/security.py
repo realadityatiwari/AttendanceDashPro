@@ -47,12 +47,20 @@ def hash_password(password: str) -> str:
 
 def create_access_token(subject: str, roll_number: str) -> str:
     """Creates a standard JWT access token."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {
         "exp": expire,
+        "iat": now,
         "sub": subject,
         "roll_number": roll_number,
         "type": "access"
     }
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
+
+
+# A pre-computed dummy PBKDF2 hash used to equalize login timing when a
+# roll_number does not exist, preventing user enumeration through response
+# time differences (Phase 16).
+DUMMY_PASSWORD_HASH = hash_password("dummy_password_for_timing_equalization")

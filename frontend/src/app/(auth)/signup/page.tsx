@@ -34,6 +34,12 @@ export default function SignupPage() {
     }
     if (password.length < 8) {
       next.password = "Password must be at least 8 characters.";
+    } else if (password.length > 128) {
+      next.password = "Password must not exceed 128 characters.";
+    } else if (!/[A-Za-z]/.test(password)) {
+      next.password = "Password must contain at least one letter.";
+    } else if (!/[0-9]/.test(password)) {
+      next.password = "Password must contain at least one digit.";
     }
     if (confirmPassword !== password) {
       next.confirmPassword = "Passwords do not match.";

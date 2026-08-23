@@ -1420,14 +1420,38 @@ Status: **COMPLETE** — retirement finished; zero DB changes; no commit.
 - [x] Governance synchronized
 - HARD STOP — Phase 16 NOT STARTED; no commit made.
 
-## Phase 16 — Production Security Hardening (NOT STARTED — next authorized phase)
+## Phase 16 — Production Security Hardening (COMPLETE, 2026-08-23)
 
-- [ ] Password policy
-- [ ] JWT expiry / refresh / invalidation strategy
-- [ ] Brute-force protection / login rate limiting
-- [ ] Cross-user access verification on every sensitive endpoint
+Status: **COMPLETE** — security audit + hardening; zero DB mutations; no commit.
+
+- [x] Security audit: config, security.py, deps.py, auth endpoints, CORS, main.py, all endpoints, IDOR, error handling, logging, secrets, frontend, dependencies
+- [x] JWT: expiry default 480 min (env-configurable, was 30 days); `iat` claim; `type=="access"` enforced at decode
+- [x] Password policy: 8–128 chars, ≥1 letter, ≥1 digit (Pydantic + frontend signup synced)
+- [x] Rate limiting: in-process sliding window — login 10/15min, register 5/h, per-IP, 429 + Retry-After
+- [x] Login timing equalization: dummy PBKDF2 hash when roll_number not found
+- [x] Security headers: X-Content-Type-Options, X-Frame-Options DENY, Referrer-Policy no-referrer, Permissions-Policy; HSTS env-gated
+- [x] Global 500 exception handler (logs server-side, generic client response)
+- [x] Error-leak fix: attendance mutation returns generic 400 (internals logged)
+- [x] Logging setup: auth failures + unhandled errors; no passwords/tokens/secrets
+- [x] `backend/.env.example` updated with all security env vars (placeholders only)
+- [x] CORS env-driven explicit origins (no wildcard with credentials)
+- [x] `verify_phase_16.py` created — 34/34 PASS (auth matrix, admin, cross-user isolation, rate limiting, password policy, headers, CORS, error non-leak)
+- [x] Frozen verifiers re-run: 6.5 27/27, 10C 23/23, 10D 18/18, 11A 19/19 — all PASS
+- [x] `python -m compileall backend/app` PASS
+- [x] `npx tsc --noEmit` PASS
+- [x] `npm run build` PASS (15/15)
+- [x] `git diff --check` PASS
+- [x] Alembic single head `e1f2a3b4c5d6` unchanged; zero DB mutations
+- [x] Frozen systems untouched (engines, PWA, auth architecture, legacy retirement)
+- [x] Governance synchronized
+- HARD STOP — Phase 17 NOT STARTED; no commit made.
+
+## Phase 17 — Data Integrity & Migration Hardening (NOT STARTED — next authorized phase)
+
 - [ ] Database backup / restore / migration test / rollback strategy
-- [ ] Security headers, CORS, production logging
+- [ ] Seed strategy / semester transition strategy
+- [ ] Duplicate prevention / orphan detection / data cleanup procedures
+- [ ] Long-term academic model (multi-semester support)
 
 ---
 
