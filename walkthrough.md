@@ -2679,6 +2679,80 @@ INSERT=0 · UPDATE=0 · DELETE=0 · ALTER=0 · DROP=0 · Alembic head `e1f2a3b4c
 
 ---
 
+# AttendanceDash Pro — Phase 21A.1 Walkthrough (Approved Account Cleanup)
+
+Date: 2026-08-24 · Scope: user-authorized destructive account cleanup · 31 → 1
+
+> **PHASE 21A.1 COMPLETE & FROZEN.** The user explicitly authorized deletion
+> of all accounts except the owner (`2401220100027`, ADMIN). The cleanup was
+> executed in a single verified transaction: 59 dependent rows + 30 user rows
+> deleted; post-delete state = 1 user with all admin invariants preserved and
+> zero orphans. No Git commit/push.
+
+## Authorization
+
+User approved deletion of all accounts except `2401220100027` — superseding
+the Phase 21A REQUIRES REVIEW classifications. 31 accounts → 1 account.
+
+## Pre-Delete State (read-only)
+
+- User count: 31 · Owner: 2401220100027 Aditya Tiwari ADMIN · Deletion set:
+  30 non-owner IDs (owner excluded) — all checks PASS.
+- Admin baseline: enrollments 9 · attendance 159 · notifications 39 ·
+  preferences 1 · feedback 0 · lab 0.
+- FK dependency graph (dynamic): attendance_records, feedback, notifications,
+  student_enrollments, userpreferences, laboratory_records (4 user columns) —
+  all `ON DELETE NO ACTION` → children first.
+
+## Execution (single transaction)
+
+1. Reconfirmed owner ADMIN + 30-account deletion set in-transaction.
+2. Deleted dependents: attendance 5 · notifications 34 · enrollments 18 ·
+   preferences 2 · feedback 0 · lab 0 (59 rows, all owned by deleted users).
+3. Deleted 30 user rows.
+4. Verified: 1 user remains (owner ADMIN) · admin invariants unchanged ·
+   0 orphan rows.
+5. **COMMIT.**
+
+> Note: an initial run hit a harness bug in the orphan-check step (missing
+> `await`) and correctly ROLLED BACK before commit — no partial state. The
+> corrected run passed every in-transaction assertion and committed.
+
+## Post-Delete State (fresh session, verified)
+
+- Users: **1** — 2401220100027 Aditya Tiwari ADMIN, password intact.
+- Admin: enrollments 9 · attendance 159 (incl. the 5 QA-window records) ·
+  notifications 39 · preferences 1 · feedback 0 · lab 0.
+- Orphans: 0 (all 9 FK columns).
+- Academic/system data untouched: subjects 9 · sessions 720 · quiz 18 ·
+  events 60 · cycles 3 · policies 3 · timetable 28 · sections 1 · semesters 1.
+- Alembic head: `e1f2a3b4c5d6`.
+
+## Integrity
+
+Backend import OK · ORM user query OK (ADMIN) · JWT mint + `get_current_user`
+OK · `require_admin` OK · login wrong-password → 401. Admin hash/role
+unchanged; no new accounts created.
+
+## Database Mutation Counts
+
+INSERT 0 · UPDATE 0 · **DELETE 90** (30 users + 59 dependents; explicitly
+authorized) · ALTER 0 · DROP 0.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21A.1 section added — COMPLETE & FROZEN.
+- `implementation_plan.md`: 21A.1 execution record — COMPLETE.
+- `task.md`: 21A.1 checklist complete; 21B unchecked.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21a1_account_cleanup.md`: full cleanup report.
+
+**PHASE 21A.1 — COMPLETE / FROZEN.**
+**PHASE 21B — Feedback Admin System (NOT STARTED — next authorized slice).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed. No production touched.
+
+---
+
 ---
 
 ---

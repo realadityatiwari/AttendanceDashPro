@@ -1648,11 +1648,29 @@ Status: **BLOCKED** — pre-flight gates unsatisfied; no deployment attempted.
 - [ ] Production backup execution + verification — after gates pass
 - [ ] Smoke tests (auth, student, attendance, calendar, quiz, lab, settings, security) — after gates pass
 - [ ] Rollback plan documented + monitoring verified — after gates pass
-- HARD STOP — Phase 21 BLOCKED; 21A read-only complete; no deletion; no commit made.
+- HARD STOP — Phase 21 BLOCKED; 21A + 21A.1 complete; no commit made.
+
+### Phase 21A.1 — Approved Account Cleanup (COMPLETE & FROZEN, 2026-08-24)
+
+- [x] User authorization confirmed (delete all except 2401220100027)
+- [x] Governance review + DB identification (dev `attendancedash`, no production)
+- [x] Pre-mutation safety check: 31 users, owner ADMIN present, deletion set = 30 (owner excluded)
+- [x] Admin baseline captured (enrollments 9, attendance 159, notifications 39, prefs 1, feedback 0)
+- [x] Dependency graph via dynamic FK inspection (all NO ACTION; children first)
+- [x] Transactional execution: dependents (59 rows) → 30 users → in-transaction verification → COMMIT
+- [x] Post-delete verification: 1 user (owner ADMIN, password intact)
+- [x] Admin invariants preserved (enrollments 9, attendance 159 incl. QA-window 5, notifications 39, prefs 1, feedback 0)
+- [x] Orphan check: 0 rows across all 9 user FK columns
+- [x] Academic/system data untouched (subjects 9, sessions 720, quiz 18, events 60)
+- [x] Alembic head `e1f2a3b4c5d6` unchanged
+- [x] Application integrity: backend import, ORM lookup, JWT, require_admin, login-401 PASS
+- [x] `docs/phase_21/phase_21a1_account_cleanup.md` created
+- [x] Governance synchronized
+- HARD STOP — Phase 21B NOT STARTED; no commit made.
 
 ### Phase 21B — Feedback Admin System (NOT STARTED — next authorized slice)
 
-- [ ] Admin feedback review surface (established from Phase 21A feedback association: 0 records currently)
+- [ ] Admin feedback review surface (Phase 21A/21A.1: feedback records = 0)
 
 ### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
 

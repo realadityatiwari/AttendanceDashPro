@@ -1426,6 +1426,22 @@ deltas (5 attendance under owner, 62 notifications) left intact. Report:
 `docs/phase_21/phase_21a_account_audit.md`. Deletion requires explicit user
 approval of the proposed set.
 
+## 21A.1 — Approved Account Cleanup (COMPLETE & FROZEN, 2026-08-24)
+
+**User-authorized destructive cleanup executed and verified.** The user
+explicitly approved deletion of ALL accounts except `2401220100027` (Aditya
+Tiwari, ADMIN), superseding the Phase 21A REQUIRES REVIEW classifications.
+
+- **31 → 1**: 30 users deleted (24 zero-data + 6 review accounts) in a single
+  verified transaction; dependent rows removed first (FK NO ACTION).
+- **Dependent rows deleted**: attendance 5, notifications 34, enrollments 18,
+  preferences 2, feedback 0, lab 0 (59 total, all owned by deleted users).
+- **Admin invariants preserved**: enrollments 9, attendance 159 (incl. 5
+  QA-window records), notifications 39, preferences 1, feedback 0.
+- **Post-delete**: 1 user (owner ADMIN, password intact), 0 orphan rows,
+  academic/system data untouched, alembic head `e1f2a3b4c5d6`.
+- Report: `docs/phase_21/phase_21a1_account_cleanup.md`.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

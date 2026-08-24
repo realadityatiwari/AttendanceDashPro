@@ -2030,8 +2030,39 @@ Report: `docs/phase_21/phase_21a_account_audit.md`.
 **Next authorized step:** Phase 21B — Feedback Admin System. Account deletion
 remains NOT AUTHORIZED until the user approves the deletion set.
 
-**Phase status: BLOCKED.** Next: re-run Phase 21 when the operator satisfies
-gates A, B, and C; then execute the documented launch sequence.
+#### 21A.1 — Approved Account Cleanup (COMPLETE & FROZEN, 2026-08-24)
+
+**User authorization:** explicit approval to delete ALL accounts except
+`2401220100027` (Aditya Tiwari, ADMIN) — superseding the 21A REQUIRES REVIEW
+classifications. Report: `docs/phase_21/phase_21a1_account_cleanup.md`.
+
+**Executed (single verified transaction, COMMITTED):**
+
+- Pre-check: 31 users; owner `2401220100027` ADMIN present; deletion set =
+  exactly 30 non-owner IDs (owner excluded).
+- Admin baseline captured in-transaction: enrollments 9, attendance 159,
+  notifications 39, preferences 1, feedback 0, lab 0.
+- Dependent rows deleted first (FK NO ACTION): attendance 5, notifications
+  34, enrollments 18, preferences 2, feedback 0, lab 0 — 59 rows, all owned
+  by deleted users.
+- 30 user rows deleted. In-transaction verification: 1 user remains (owner
+  ADMIN), admin invariants unchanged, 0 orphan rows across all 9 FK columns.
+- COMMIT. (An earlier harness bug caused a clean ROLLBACK before commit —
+  no partial state.)
+
+**Post-delete verification:** 1 user (2401220100027, ADMIN, password intact) ·
+admin enrollments 9 · attendance 159 (incl. 5 QA-window records) ·
+notifications 39 · preferences 1 · feedback 0 · 0 orphans · academic/system
+data untouched (subjects 9, sessions 720, quiz 18, events 60, cycles 3,
+policies 3, timetable 28) · alembic `e1f2a3b4c5d6` · backend import + ORM +
+JWT + require_admin + login-401 all PASS.
+
+**Database mutation counts:** INSERT 0 · UPDATE 0 · DELETE 90 (authorized) ·
+ALTER 0 · DROP 0.
+
+**Phase status: 21A.1 COMPLETE & FROZEN.** Next authorized slice: Phase 21B —
+Feedback Admin System (NOT STARTED). Phase 21 launch remains BLOCKED on
+pre-flight gates.
 
 ---
 
