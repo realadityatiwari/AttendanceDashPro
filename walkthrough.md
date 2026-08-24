@@ -2926,6 +2926,82 @@ Without a deployment target and credentials, launch cannot begin. Gate A
 
 ---
 
+# AttendanceDash Pro — Phase 21D.0 Walkthrough (Free Beta Architecture & Provider Selection)
+
+Date: 2026-08-25 · Scope: ₹0 deployment architecture research · Zero mutations, no deployment
+
+> **PHASE 21D.0 COMPLETE & FROZEN.** A concrete ₹0/month deployment
+> architecture was researched, compared, and selected for 100–300 beta
+> users: **Vercel Hobby** (frontend SSR) + **Render Free Web Service**
+> (FastAPI Docker) + **Supabase Free** (PostgreSQL). No code changes needed;
+> no provider projects created; no cloud resources; zero database
+> mutations; no deployment.
+
+## Repository Architecture (verified)
+
+| Layer | Finding |
+|---|---|
+| Frontend | Next.js 16.3 SSR (`output: "standalone"`); client components; no middleware/route-handlers/server-actions; PWA in public/ |
+| Backend | FastAPI + uvicorn, Python 3.13, Dockerfile-compatible |
+| Database | PostgreSQL 16; 9.1 MB total (1.12 MB user data); 1 user; 162 attendance records |
+
+## Provider Research (official docs 2026-08-25)
+
+| Provider | Verdict | Reason |
+|---|---|---|
+| Vercel Hobby | ✅ Frontend | Native Next.js SSR; ₹0; 1M invocations, 100 GB transfer; HTTPS via `*.vercel.app` |
+| Cloudflare Pages Free | ❌ | Static-only; SSR incompatible without code change (forbidden in 21D.0) |
+| Render Free Web Service | ✅ Backend | Docker-compatible; 512 MB, 0.1 CPU, 750 h/mo; cold start ~1 min (beta limitation); HTTPS via `*.onrender.com` |
+| Railway | ❌ | No free tier (min $5/mo) |
+| Fly.io / Oracle / Koyeb | ❌ | Credit card / ops overhead / no reliable free tier |
+| Cloudflare Workers | ❌ | Incompatible runtime (V8/JS vs FastAPI/Python) |
+| Supabase Free | ✅ Database | 500 MB PostgreSQL; current DB 9.1 MB → 300-user est. < 50 MB; HTTPS via `*.supabase.co` |
+| Render Postgres Free | ❌ | 30-day expiration |
+
+## DB Size Analysis
+
+- Current: 9.1 MB (1.12 MB user data; rest overhead/indexes)
+- 300 users, one semester: ~40–50 MB estimate (attendance ~6 MB, notifications ~3 MB, other small)
+- Supabase 500 MB quota: **10× headroom**
+
+## Recommended Architecture
+
+```text
+GitHub → Vercel (Next.js SSR, *.vercel.app) → HTTPS → Render (FastAPI Docker, *.onrender.com) → HTTPS → Supabase (PostgreSQL, 500 MB)
+```
+
+- No paid domain, no DNS, no TLS management (all providers auto-HTTPS).
+- No application code changes — only env vars/CORS configuration.
+- Legacy Docker Compose/Caddy/backup artifacts preserved for future VPS path.
+- CI quality gate reused; deployment gate stays disabled.
+
+## Backup / Beta Limitation
+
+Supabase Free has **no automatic backups**. Manual pg_dump via a scheduled
+GitHub Actions workflow is the 21D.x approach; until then:
+
+**Beta backup limitation — no paid-grade disaster recovery guarantee.**
+
+## Files
+
+- `docs/phase_21/phase_21d0_free_beta_architecture.md` created.
+- Governance (MASTER_ROADMAP, implementation_plan, task, walkthrough)
+  synchronized.
+
+## Status
+
+- Phase 21D.0: COMPLETE & FROZEN (research)
+- Phase 21D.1: NOT STARTED — next authorized slice
+- Database mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0
+- Cloud resources created: ZERO
+- Production deployment: NOT PERFORMED
+- Git: commit NONE, push NONE
+
+**PHASE 21D.0 — COMPLETE / FROZEN.**
+**HARD STOP:** No commit made. No push performed. No deployment. No cloud resources created. No production touched.
+
+---
+
 ---
 
 ---

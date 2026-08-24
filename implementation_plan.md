@@ -2141,6 +2141,39 @@ responsibility. **Single clearest blocker: production infrastructure absent
 **Phase status: 21C COMPLETE & FROZEN (assessment).** Phase 21 remains
 BLOCKED. No production readiness claimed.
 
+#### 21D.0 — Free Beta Deployment Architecture & Provider Selection (COMPLETE & FROZEN, 2026-08-25)
+
+**Objective:** research and design a ₹0/month deployment architecture for
+100–300 beta users. No code changes, no deployment, no provisioning.
+
+**Recommended architecture** (see `docs/phase_21/phase_21d0_free_beta_architecture.md`):
+
+| Layer | Provider | Cost | Key Limits | Reason |
+|---|---|---|---|---|
+| Frontend | **Vercel Hobby** | $0 | 1M function invocations, 100 GB transfer, SSR | Native Next.js SSR; no code changes needed. Cloudflare Pages rejected (static-only; SSR incompatible) |
+| Backend | **Render Free Web Service** | $0 | 512 MB, 0.1 CPU, 750 h/mo, 5 GB bandwidth, sleeps after 15 min idle | Docker-compatible (existing Dockerfile); ₹0; cold start ~1 min (documented beta limitation). Railway/Fly/Oracle/Workers rejected (no free tier or incompatible runtime) |
+| Database | **Supabase Free** | $0 | 500 MB, 50k MAU, 5 GB egress, **no auto backups** | Current DB 9.1 MB → 300-user est. < 50 MB; 500 MB is comfortable. Render Postgres Free rejected (30-day expiration) |
+| HTTPS | Provider subdomains | $0 | Automatic TLS | No paid domain, no DNS, no TLS management needed |
+| Backup | **Manual** (GitHub Actions scheduled pg_dump) | $0 | No paid-grade DR; best-effort recovery | Supabase Free has no auto backups; documented as beta limitation |
+
+**Key findings:**
+- Frontend uses `output: "standalone"` (SSR) — cannot run on Cloudflare Pages
+  Free without converting to static export (forbidden in 21D.0). Vercel Hobby
+  supports it natively.
+- Backend Dockerfile is fully compatible with Render's Docker build pipeline.
+  No app code changes needed.
+- Database is tiny (9.1 MB); 500 MB Supabase quota is 10× the expected
+  maximum for 300 users.
+- All three providers supply HTTPS on their subdomains — no custom domain,
+  no DNS, no TLS certificate management required.
+- The existing Docker Compose/Caddy/backup infrastructure is preserved for
+  the future paid-production path (VPS).
+- Zero cloud resources created; zero database mutations; no deployment.
+
+**Phase status: 21D.0 COMPLETE & FROZEN (research).** Next authorized slice:
+21D.1 — Production Configuration Hardening (provider projects, secrets,
+CORS, migration procedure).
+
 ---
 
 ---

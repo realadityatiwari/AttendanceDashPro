@@ -1487,6 +1487,46 @@ remains **BLOCKED**. Report: `docs/phase_21/phase_21c_readiness.md`.
 Phase 21 cannot launch until Gates A (user) and C (infrastructure) are
 resolved.
 
+## 21D — Free Public Beta Deployment (IN PROGRESS)
+
+### 21D.0 — Architecture & Provider Selection (COMPLETE & FROZEN, 2026-08-25)
+
+Research-only phase: selected a **₹0/month** deployment architecture for
+100–300 beta users. Report: `docs/phase_21/phase_21d0_free_beta_architecture.md`.
+
+**Recommended architecture** (no code changes required):
+
+```text
+GitHub
+  ↓  auto-deploy
+Vercel Hobby (Next.js SSR, *.vercel.app, HTTPS)
+  ↓  HTTPS
+Render Free Web Service (FastAPI Docker, *.onrender.com, HTTPS)
+  ↓  HTTPS
+Supabase Free PostgreSQL (500 MB, 50k MAU, 5 GB egress)
+```
+
+- **Frontend**: Vercel Hobby — native Next.js 16 SSR support, 1M function
+  invocations, 100 GB transfer, automatic HTTPS. Cloudflare Pages rejected
+  (static-only; would require a config change forbidden in 21D.0).
+- **Backend**: Render Free Web Service — Docker-compatible with the existing
+  `backend/Dockerfile`; 0.1 CPU / 512 MB / 750 h/mo; sleeps after 15 min
+  idle (~1 min cold start, acceptable beta limitation). Railway/Fly/Oracle/
+  Workers rejected (no free tier / card required / incompatible runtime).
+- **Database**: Supabase Free — current DB is 9.1 MB; 300-user estimate
+  < 50 MB (500 MB quota). **No automatic backups on Free** → documented beta
+  backup limitation (manual pg_dump via GitHub Actions is the 21D.x option).
+  Render Postgres Free rejected (30-day expiration).
+- **HTTPS/domain**: all providers supply HTTPS on their subdomains — no paid
+  domain, no DNS, no TLS management.
+- **Capacity**: reasonable for 100–300 normal beta users under normal usage.
+- **CI/CD**: existing `.github/workflows/ci.yml` reused as quality gate;
+  deployment gate stays `if: false`. Provider Git integrations handle deploy.
+- **Legacy artifacts preserved** (frontend/backend Dockerfiles,
+  docker-compose.prod.yml, Caddy, backup container) for the future paid/VPS
+  path — nothing deleted.
+- Zero cloud resources created; zero database mutations; no deployment.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

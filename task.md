@@ -1704,6 +1704,37 @@ Status: **COMPLETE** (assessment) — Phase 21 remains BLOCKED; read-only; no de
 - [ ] USER/OPERATOR TASK: provision production infrastructure (Gate C: host, credentials, domain/DNS, TLS, off-host)
 - HARD STOP — Phase 21 BLOCKED; no commit made.
 
+### Phase 21D — Free Public Beta Deployment (IN PROGRESS)
+
+#### 21D.0 — Architecture & Provider Selection (COMPLETE & FROZEN, 2026-08-25)
+
+- [x] Governance review + repo architecture inspection (Next.js SSR, FastAPI Docker, PostgreSQL 9.1 MB)
+- [x] Free-tier research (official docs 2026-08-25): Vercel, Cloudflare Pages, Render, Supabase, Railway, Fly, Oracle, Workers
+- [x] DB size analysis: current 9.1 MB; 300-user estimate < 50 MB (Supabase 500 MB quota = 10× headroom)
+- [x] Provider decision matrix produced
+- [x] Recommended architecture selected: Vercel (frontend) + Render (backend) + Supabase (DB), ₹0
+- [x] Cloudflare Pages rejected (static-only; SSR incompatible without code change)
+- [x] Render Postgres Free rejected (30-day expiration)
+- [x] Capacity analysis for 100–300 normal beta users
+- [x] Security requirements mapped (HTTPS, secrets, CORS, admin auth preserved)
+- [x] Backup strategy documented (Supabase Free has NO auto backups — beta limitation)
+- [x] HTTPS/domain: all providers supply HTTPS on subdomains — no paid domain needed
+- [x] CI/CD note: existing quality gate reused; deployment gate stays disabled
+- [x] Future scaling path documented (provider upgrades, portable code)
+- [x] Legacy deployment artifacts preserved (Dockerfiles, compose, Caddy, backup container)
+- [x] `docs/phase_21/phase_21d0_free_beta_architecture.md` created
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [x] Zero database mutations; zero cloud resources; no deployment
+- HARD STOP — Phase 21D.1 NOT STARTED; no commit made.
+
+#### 21D.1 — Production Configuration Hardening (NOT STARTED — next authorized slice)
+
+- [ ] Create Vercel + Render + Supabase projects (provider account setup)
+- [ ] Configure environment variables / secrets on each provider
+- [ ] Set `NEXT_PUBLIC_API_URL` (Vercel) + `BACKEND_CORS_ORIGINS` (Render) to provider URLs
+- [ ] Wire CORS, JWT secret, DATABASE_URI (Supabase pooler connection)
+- [ ] Test deployment + health check + migration-on-deploy
+
 ### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
 
 - [ ] Monitor errors, collect feedback, production bug fixes, semester rollover
