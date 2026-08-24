@@ -68,7 +68,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 18 | Production Infrastructure | 🟡 **IN PROGRESS / PARTIAL** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** · **18D deployment & verification ⚠️ PARTIAL** — rehearsal deployment verified end-to-end (5 services healthy, real backup executed + verified, isolated restore PASS, scheduler + retention + locking verified, no secrets); **production deployment BLOCKED** on missing infrastructure (no host/domain/credentials/off-host destination); 2 deployment defects fixed (PyJWT dep, Caddy /health route); `docs/phase_18/phase_18d_deployment.md` |
 | 19 | CI/CD | ✅ **COMPLETE & FROZEN** — GitHub Actions quality gate (`.github/workflows/ci.yml`): integrity, backend, frontend, docker, compose, migrations, config-contract, backup-infra jobs; deployment gate disabled (`if: false`); all checks verified locally; migration validated on disposable postgres:16 to head `e1f2a3b4c5d6`; no deployment, no secrets |
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
-| 21 | Production Launch | 🔴 Later |
+| 21 | Production Launch | 🔴 **BLOCKED** — pre-flight gates unsatisfied: (A) Phase 20 manual browser QA NOT CONFIRMED by user · (B) Phase 20 QA-window deltas (5 attendance + 62 notifications) UNRESOLVED · (C) production infrastructure absent (no VPS/host, no credentials, no domain/DNS/TLS, no off-host backup). Launch report: `docs/phase_21/phase_21_production_launch.md`. No deployment attempted; CI deploy gate remains disabled. |
 | 22 | Post-Launch | 🔵 Ongoing |
 
 ---
@@ -1412,9 +1412,42 @@ Perform a complete real-user journey.
 
 # 🔴 Phase 21 — Production Launch
 
-Only after QA passes.
+**Status: BLOCKED (2026-08-24).** Launch cannot proceed until all three
+pre-flight gates are satisfied. Full assessment:
+`docs/phase_21/phase_21_production_launch.md`.
 
-Deployment sequence:
+## Required prerequisites (unmet)
+
+### Gate A — Phase 20 manual browser QA
+The 42-item manual browser QA checklist was delivered in Phase 20
+(`docs/phase_20/phase_20_production_qa.md` §19). The user must complete and
+report it. Agent has NOT performed any browser testing.
+
+### Gate B — Phase 20 QA-window data disposition
+Phase 20 reported 5 attendance records + 62 notifications with uncertain
+provenance. The user must review and explicitly disposition them (confirm,
+authorize cleanup, or document residual uncertainty).
+
+### Gate C — Production infrastructure
+- VPS/cloud host: **NOT PROVISIONED**
+- Production credentials (`deploy/.env.prod`): **NOT CREATED**
+- Domain + DNS: **NOT CONFIGURED** (placeholder `app.example.com`)
+- TLS/HTTPS: **NOT PROVISIONED** (Caddy config HTTP-only, ready for TLS)
+- Off-host backup destination: **NOT CONFIGURED** (OFFHOST_TYPE=none;
+  operator must either provision or explicitly accept the risk)
+
+## What is ready (verified pre-launch, waiting on gates)
+
+- Dockerfiles, production compose, Caddy config, backup container — **verified
+  in Phase 18A/18C/18D rehearsal**
+- Environment contract, secret guard, production config validation — **verified
+  in Phase 18B/17**
+- CI quality gate with disabled deploy job — **verified in Phase 19**
+- In-process QA, cross-surface consistency, frozen verifier regression — **verified
+  in Phase 20**
+- Manual browser QA checklist — **delivered to user, awaiting completion**
+
+## Deployment sequence (when gates pass)
 
 ```text
 Production Database
@@ -1429,6 +1462,10 @@ Domain
         ↓
 HTTPS
 ```
+
+Once all three gates pass, the operator can execute the Phase 21 launch
+sequence (provision → configure → migrate → deploy backend → deploy frontend
+→ Caddy/HTTPS → backup → smoke → monitor → rollback).
 
 Production data setup:
 
@@ -1750,7 +1787,7 @@ PHASE 9  ████████████████████  COMPLETE 
 PHASE 10 ████████████████████  COMPLETE 🔒 (10.0 audit · 10A settings · 10B program/profile · 10C feedback · 10D preferences · 10E freeze)
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
-Phase 21 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+Phase 21 ░░░░░░░░░░░░░░░░░░░░  BLOCKED (pre-flight gates)
 Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
 
 > **Next phase:** Phase 18D — Deployment & Verification **IN PROGRESS (2026-08-23)** — production deployment BLOCKED on missing infrastructure (no VPS/cloud host, no domain/DNS/TLS, no production credentials, no off-host destination exist); local rehearsal deployment + full backup/restore verification being performed to prove the deployment mechanism.

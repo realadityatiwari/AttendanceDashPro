@@ -1610,10 +1610,32 @@ Status: **PARTIAL** — rehearsal deployment + full verification PASS; productio
 - [ ] USER TASK: confirm attendance/notification QA-window deltas (§16) — user review
 - HARD STOP — Phase 21 NOT STARTED; no commit made.
 
-### Phase 21 — Production Launch (NOT STARTED — next authorized slice)
+### Phase 21 — Production Launch (BLOCKED, 2026-08-24)
 
-- [ ] Subject to Phase 18D infrastructure resolution AND user browser-QA completion
-- [ ] Production launch steps
+Status: **BLOCKED** — pre-flight gates unsatisfied; no deployment attempted.
+
+- [x] Governance review (roadmap, plan, task, walkthrough, Phase 20/18D/19 docs)
+- [x] Pre-flight gate assessment: A (browser QA) / B (QA-window data) / C (infrastructure)
+- [x] Static launch-readiness inspection (read-only: CI gate disabled, env contract, Caddy, alembic head, infra evidence)
+- [x] `docs/phase_21/phase_21_production_launch.md` created (full launch assessment + blockers + sequence + rollback)
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [x] Working database untouched (INSERT/UPDATE/DELETE/ALTER/DROP = 0)
+- [ ] GATE A: user completes Phase 20 manual browser QA (42-item checklist) — USER RESPONSIBILITY
+- [ ] GATE B: user dispositions Phase 20 QA-window deltas (5 attendance + 62 notifications) — USER RESPONSIBILITY
+- [ ] GATE C: operator provisions VPS/cloud host, production credentials, domain/DNS, TLS/HTTPS, off-host backup
+- [ ] Production DB migration (`alembic upgrade head`) — after gates pass
+- [ ] Production academic config initialization — after gates pass
+- [ ] Backend deploy + health — after gates pass
+- [ ] Frontend deploy + health — after gates pass
+- [ ] Caddy/HTTPS/domain verification — after gates pass
+- [ ] Production backup execution + verification — after gates pass
+- [ ] Smoke tests (auth, student, attendance, calendar, quiz, lab, settings, security) — after gates pass
+- [ ] Rollback plan documented + monitoring verified — after gates pass
+- HARD STOP — Phase 21 BLOCKED; no commit made.
+
+### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
+
+- [ ] Monitor errors, collect feedback, production bug fixes, semester rollover
 
 ---
 
