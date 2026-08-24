@@ -1727,7 +1727,29 @@ Status: **COMPLETE** (assessment) — Phase 21 remains BLOCKED; read-only; no de
 - [x] Zero database mutations; zero cloud resources; no deployment
 - HARD STOP — Phase 21D.1 NOT STARTED; no commit made.
 
-#### 21D.1 — Production Configuration Hardening (NOT STARTED — next authorized slice)
+#### 21D.1 — Production Configuration Hardening (COMPLETE & FROZEN, 2026-08-25)
+
+- [x] Read-only baseline inspection (env vars, config.py, Dockerfile, alembic, health, gitignore)
+- [x] Production environment contract documented (frontend public / backend secret / backend config)
+- [x] Frontend production URL guard: `NEXT_PUBLIC_API_URL` missing or localhost → fail loudly (no silent dev fallback)
+- [x] Backend Dockerfile: `--port ${PORT:-8000}` + healthcheck reads PORT (Render compatible)
+- [x] Runtime PORT verification (PORT=18080 → /health 200)
+- [x] `render.yaml` blueprint created (docker build, healthCheckPath, env placeholders, secret markers)
+- [x] `FORWARDED_ALLOW_IPS` kept at secure default (coarse rate limiter behind Render proxy; no spoofable XFF)
+- [x] Env examples hardened (frontend + backend: Supabase DATABASE_URI, CORS, PORT, HSTS contract)
+- [x] Migration-on-deploy contract documented (one-shot pre-deploy, not in container CMD)
+- [x] Health endpoint reused (`GET /health`, no auth/DB) — no duplicate health system
+- [x] CORS/security review confirmed (env-driven exact origins; localhost rejected in production; no `*`)
+- [x] Secret-pattern scan clean (only legit: config default, examples, CI integrity grep)
+- [x] Gitignore verified (`.env`, `.env.local`, `deploy/.env.prod` ignored)
+- [x] Frozen areas untouched (engines, auth, JWT, require_admin, schema, migrations, PWA, routes)
+- [x] `npx tsc --noEmit` PASS; `compileall` PASS; `docker build` PASS; `git diff --check` PASS
+- [x] `docs/phase_21/phase_21d1_config_hardening.md` created
+- [x] Governance synchronized
+- [x] Zero DB mutations; zero cloud resources; no deployment; no production secrets
+- HARD STOP — Phase 21D.2 NOT STARTED; no commit made.
+
+#### 21D.2 — Provider Project Provisioning & Environment Wiring (NOT STARTED — next authorized slice)
 
 - [ ] Create Vercel + Render + Supabase projects (provider account setup)
 - [ ] Configure environment variables / secrets on each provider

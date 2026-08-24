@@ -1,4 +1,20 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+// Production build must never silently fall back to a localhost API URL.
+// NEXT_PUBLIC_API_URL is a build-time public variable (inlined into the
+// client bundle). If it is missing or points at a development host while
+// building for production, fail loudly instead of shipping a broken client.
+const DEV_API_URL = "http://127.0.0.1:8080";
+const configuredApiUrl = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+const isLocalDevUrl = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(configuredApiUrl);
+
+if (process.env.NODE_ENV === "production" && (!configuredApiUrl || isLocalDevUrl)) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL must be set to the production backend HTTPS URL " +
+    "when building for production (e.g. https://your-api.onrender.com). " +
+    "Refusing to fall back to a localhost API URL."
+  );
+}
+
+const API_BASE_URL = configuredApiUrl || DEV_API_URL;
 
 interface FetchOptions extends RequestInit {
   requireAuth?: boolean;

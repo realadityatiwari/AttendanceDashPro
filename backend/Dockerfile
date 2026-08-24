@@ -11,7 +11,7 @@
 # - Healthcheck uses the existing GET /health endpoint (no auth required).
 #
 # Startup (override workers via UVICORN_WORKERS env, default 1):
-#   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers N --proxy-headers \
+#   uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers N --proxy-headers \
 #     --forwarded-allow-ips ${FORWARDED_ALLOW_IPS}
 #
 # NOTE: `--proxy-headers` makes Uvicorn trust X-Forwarded-* headers, but ONLY
@@ -48,6 +48,6 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"
+    CMD python -c "import os,urllib.request,sys; p=os.environ.get('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/health').status==200 else 1)"
 
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}"]

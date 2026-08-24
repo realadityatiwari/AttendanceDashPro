@@ -3002,6 +3002,98 @@ GitHub Actions workflow is the 21D.x approach; until then:
 
 ---
 
+# AttendanceDash Pro — Phase 21D.1 Walkthrough (Production Configuration Hardening)
+
+Date: 2026-08-25 · Scope: repo prepared for ₹0 beta (Vercel + Render + Supabase) · Zero mutations, no deployment
+
+> **PHASE 21D.1 COMPLETE & FROZEN.** The repository was hardened for the
+> approved free-beta architecture. Two genuine configuration defects were
+> found and fixed (silent production localhost fallback; hardcoded port that
+> ignored Render's PORT). A Render blueprint was added, env examples document
+> the full production contract, and the migration-on-deploy strategy was
+> designed. No deployment, no cloud resources, no production DB, no secrets.
+
+## Baseline Inspection
+
+| Area | Finding |
+|---|---|
+| Frontend API URL | `NEXT_PUBLIC_API_URL || http://127.0.0.1:8080` — production could silently call localhost ❌ |
+| Backend Dockerfile | hardcoded `--port 8000` + healthcheck `127.0.0.1:8000` — ignored Render PORT ❌ |
+| Config guards | Phase 17/18B production validation already present ✅ |
+| Health endpoint | `GET /health` — no auth, no DB, ideal for Render ✅ |
+| Alembic / SQLAlchemy | reads `settings.DATABASE_URI`; provider-agnostic ✅ |
+| Env files | all secret files gitignored; only examples tracked ✅ |
+
+## Fixes Applied
+
+1. **`frontend/src/lib/api.ts`** — production build throws at module load if
+   `NEXT_PUBLIC_API_URL` is missing or points to localhost/127.0.0.1/0.0.0.0.
+   Eliminates the silent dev fallback in production.
+2. **`backend/Dockerfile`** — `--port ${PORT:-8000}` and healthcheck reads
+   `PORT`. Verified: image runs with `PORT=18080`, `/health` → 200 on that
+   port; local Compose default (8000) unchanged.
+
+## Created
+
+- **`render.yaml`** — Render blueprint: `attendancedash-api` web service,
+  docker build from `./backend`, `healthCheckPath: /health`, env placeholders;
+  `DATABASE_URI` + `JWT_SECRET_KEY` marked `sync: false` (set in dashboard).
+  `FORWARDED_ALLOW_IPS` kept at secure default (coarse rate limiter behind
+  Render's proxy — no spoofable X-Forwarded-For).
+
+## Configuration Contract (documented)
+
+- Frontend public: `NEXT_PUBLIC_API_URL` (Vercel env, e.g.
+  `https://your-api.onrender.com`).
+- Backend secret: `DATABASE_URI` (Supabase pooler,
+  `...@...:6543/postgres?sslmode=require`), `JWT_SECRET_KEY`.
+- Backend config: `APP_ENV=production`, `BACKEND_CORS_ORIGINS` (exact Vercel
+  origin), `JWT_ALGORITHM`, `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`, `UVICORN_WORKERS`,
+  `SECURITY_HSTS_ENABLED`, `PORT` (Render-supplied).
+
+## Migration-on-Deploy Contract
+
+One-shot `alembic upgrade head` as a pre-deploy step (Render Blueprint
+`preDeployCommand` or manual) — NOT in the container CMD — so migration
+failure does not start the app and health checks stay independent. Single
+Render instance → no migration race.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | ✅ PASS |
+| `python -m compileall` | ✅ PASS |
+| `docker build backend/` | ✅ PASS |
+| Runtime PORT test (18080 → /health 200) | ✅ PASS |
+| Secret-pattern scan | ✅ clean (only legit: config default, examples, CI grep) |
+| `git diff --check` | ✅ PASS |
+| DB mutations | ZERO |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21D.1 section added — COMPLETE & FROZEN.
+- `implementation_plan.md`: 21D.1 section — COMPLETE & FROZEN.
+- `task.md`: 21D.1 checklist complete; 21D.2 next.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21d1_config_hardening.md`: full report.
+
+## Status
+
+- Phase 21D.1: COMPLETE & FROZEN (config hardening)
+- Phase 21D.2: NOT STARTED — next authorized slice
+- Database mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0
+- Cloud resources created: ZERO
+- Production deployment: NOT PERFORMED
+- Production database: NOT CREATED
+- Production secrets: NOT CREATED
+- Git: commit NONE, push NONE
+
+**PHASE 21D.1 — COMPLETE / FROZEN.**
+**HARD STOP:** No commit made. No push performed. No deployment. No cloud resources created. No production touched.
+
+---
+
 ---
 
 ---

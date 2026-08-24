@@ -2174,6 +2174,53 @@ BLOCKED. No production readiness claimed.
 21D.1 — Production Configuration Hardening (provider projects, secrets,
 CORS, migration procedure).
 
+#### 21D.1 — Production Configuration Hardening (COMPLETE & FROZEN, 2026-08-25)
+
+**Objective:** prepare the repository for the ₹0 beta architecture
+(Vercel Hobby → Next.js → Render Free → FastAPI → Supabase Free PostgreSQL).
+Configuration only — no deployment, no cloud resources, no production DB, no
+secrets created. Report: `docs/phase_21/phase_21d1_config_hardening.md`.
+
+**Delivered:**
+
+1. **Frontend production URL guard** (`frontend/src/lib/api.ts`): a production
+   build now throws at module load if `NEXT_PUBLIC_API_URL` is missing or
+   points to localhost/127.0.0.1/0.0.0.0 — the previous silent fallback to
+   `http://127.0.0.1:8080` is eliminated.
+2. **Render PORT compatibility** (`backend/Dockerfile`): uvicorn binds
+   `--port ${PORT:-8000}` and the healthcheck reads `PORT` (default 8000).
+   Verified: image runs with `PORT=18080`, `/health` → 200 on that port;
+   local Docker Compose default unchanged.
+3. **`render.yaml` (NEW)**: provider-native Render blueprint — service
+   `attendancedash-api`, docker build from `./backend`, `healthCheckPath:
+   /health`, env vars (placeholders only; `DATABASE_URI` and `JWT_SECRET_KEY`
+   marked `sync: false` secrets). `FORWARDED_ALLOW_IPS` intentionally left at
+   the Dockerfile default (coarse-but-secure rate limiting behind Render's
+   proxy).
+4. **Env examples hardened**: `frontend/.env.example` and `backend/.env.example`
+   document the full production contract (Supabase DATABASE_URI shape with
+   `?sslmode=require`, CORS origin, PORT, HSTS).
+5. **Migration-on-deploy contract**: for the Render single-instance beta,
+   `alembic upgrade head` runs as a one-shot pre-deploy step (Render
+   Blueprint `preDeployCommand` or manual one-time run) — NOT in the container
+   CMD — so migration failure does not start the app and health checks are
+   independent.
+6. **CORS/security confirmed**: env-driven exact origins; localhost rejected
+   in production (existing Phase 17/18B guard). No `*`, credentials
+   preserved. Health endpoint `GET /health` reused (no auth, no DB).
+
+**Verification:** `npx tsc --noEmit` PASS · `python -m compileall` PASS ·
+`docker build backend/` PASS · runtime PORT test PASS (`18080` → 200) ·
+secret-pattern scan clean (only legit: config default, examples, CI grep) ·
+`git diff --check` PASS · zero DB mutations.
+
+**Frozen areas untouched:** engines, auth/JWT/require_admin, schema,
+migrations, PWA, routes.
+
+**Phase status: 21D.1 COMPLETE & FROZEN (config hardening).** Next authorized
+slice: 21D.2 — Provider Project Provisioning & Environment Wiring (create
+Vercel/Render/Supabase projects, set secrets/env vars, first deployment).
+
 ---
 
 ---

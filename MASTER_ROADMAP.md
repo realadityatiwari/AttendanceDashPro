@@ -1527,6 +1527,32 @@ Supabase Free PostgreSQL (500 MB, 50k MAU, 5 GB egress)
   path — nothing deleted.
 - Zero cloud resources created; zero database mutations; no deployment.
 
+### 21D.1 — Production Configuration Hardening (COMPLETE & FROZEN, 2026-08-25)
+
+Repository prepared for the ₹0 beta architecture (Vercel + Render + Supabase).
+Configuration only — no deployment, no cloud resources, no production DB, no
+secrets created. Report: `docs/phase_21/phase_21d1_config_hardening.md`.
+
+**Changes:**
+- `frontend/src/lib/api.ts` — production build now FAILS LOUDLY if
+  `NEXT_PUBLIC_API_URL` is missing or points to localhost/127.0.0.1 (no more
+  silent dev fallback in production).
+- `backend/Dockerfile` — `--port ${PORT:-8000}` + healthcheck reads `PORT`
+  (Render injects PORT; local Compose still uses 8000). Verified: image runs
+  with `PORT=18080`, `/health` → 200.
+- `render.yaml` (NEW) — provider-native Render blueprint: docker build from
+  `./backend`, `healthCheckPath: /health`, env placeholders; `DATABASE_URI` +
+  `JWT_SECRET_KEY` marked secret (set in dashboard). `FORWARDED_ALLOW_IPS`
+  left at default (coarse-but-secure rate limiter behind Render proxy).
+- Env examples (`frontend/.env.example`, `backend/.env.example`) document the
+  full production contract (Supabase DATABASE_URI shape, CORS, PORT, HSTS).
+- **Frozen areas untouched**: engines, auth, JWT semantics, require_admin,
+  schema, migrations, PWA, routes.
+
+**Verification:** tsc PASS · compileall PASS · Docker build PASS · PORT
+runtime test PASS · secret scan clean · `git diff --check` PASS · zero DB
+mutations.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

@@ -1,0 +1,42 @@
+# AttendanceDash Pro — Render Blueprint (Phase 21D.1)
+#
+# Declares the FastAPI backend as a Render web service built from the
+# existing Dockerfile. This is provider-native configuration prepared for
+# Phase 21D.2 (project provisioning); nothing is deployed from this file
+# until the operator creates the service via the Render dashboard/CLI.
+#
+# Environment values are PLACEHOLDERS ONLY — real secrets must be entered
+# in the Render dashboard (or via `render blueprint apply` prompts), never
+# committed.
+
+services:
+  - type: web
+    name: attendancedash-api
+    runtime: docker
+    repo: https://github.com/realadityatiwari/AttendanceDashPro
+    plan: free
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URI
+        sync: false            # secret — set in Render dashboard (Supabase pooler URL)
+      - key: JWT_SECRET_KEY
+        sync: false            # secret — set in Render dashboard
+      - key: BACKEND_CORS_ORIGINS
+        value: '["https://<your-project>.vercel.app"]'   # replace with the real Vercel origin
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      - key: UVICORN_WORKERS
+        value: "1"
+      # FORWARDED_ALLOW_IPS intentionally left at the Dockerfile default
+      # (127.0.0.1). With Render's TLS proxy in front, the rate limiter sees
+      # Render's proxy IP for all clients — coarse but secure (no spoofable
+      # X-Forwarded-For). A precise Render proxy CIDR may be added when
+      # provisioning (Phase 21D.2) if Render documents one.
+      - key: SECURITY_HSTS_ENABLED
+        value: "true"          # Render + Vercel serve HTTPS
