@@ -676,3 +676,30 @@ export interface NotificationUpdate {
   is_read?: boolean;
   is_dismissed?: boolean;
 }
+
+// ── Feedback (Phase 10C submission + Phase 21B admin review) ──────────────
+export type FeedbackType = "BUG" | "SUGGESTION" | "QUESTION" | "PRAISE";
+
+export interface FeedbackAdminItem {
+  id: string;
+  feedback_type: FeedbackType;
+  message: string;
+  context: string | null;
+  created_at: string;
+  roll_number: string;
+  name: string;
+}
+
+export interface FeedbackAdminListResponse {
+  items: FeedbackAdminItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface AdminFeedbackParams {
+  page?: number;
+  page_size?: number;
+  feedback_type?: FeedbackType | "";
+}

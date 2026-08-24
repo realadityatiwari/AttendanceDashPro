@@ -13,8 +13,10 @@ import {
   CalendarDays,
   CalendarRange,
   Gauge,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useProfile } from "@/hooks/useApi";
 import { UserMenu, ShellModalId } from "@/components/layout/UserMenu";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -36,6 +38,8 @@ const NAV_ITEMS = [
   { label: "Events", href: "/tools/events", icon: CalendarDays },
 ];
 
+const ADMIN_NAV_ITEM = { label: "Feedback", href: "/tools/feedback", icon: MessageSquareText };
+
 /**
  * Full-width compact top navigation bar. Replaces the legacy sidebar:
  * brand on the left, primary navigation in the middle, authenticated user
@@ -44,12 +48,17 @@ const NAV_ITEMS = [
  */
 export function TopNav() {
   const pathname = usePathname();
+  const { profile } = useProfile();
   const [activeModal, setActiveModal] = useState<ShellModalId | null>(null);
   const { deferredPrompt, isStandalone } = useInstallPrompt();
 
   const closeModal = (open: boolean) => {
     if (!open) setActiveModal(null);
   };
+
+  const navItems = profile?.role === "ADMIN"
+    ? [...NAV_ITEMS, ADMIN_NAV_ITEM]
+    : NAV_ITEMS;
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6 lg:px-8">
@@ -69,7 +78,7 @@ export function TopNav() {
         aria-label="Primary"
         className="hidden min-w-0 items-center gap-1 md:flex lg:gap-1.5"
       >
-        {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+        {navItems.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link

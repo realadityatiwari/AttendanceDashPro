@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Text, ForeignKey, Enum
 from app.db.base_class import Base
 from app.models.enums import FeedbackType
@@ -18,6 +18,10 @@ class Feedback(Base):
     # Optional free-form context (e.g. the screen the user was on). Nullable;
     # the frontend is not required to send it and nothing auto-captures it.
     context: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Admin read path: joined query loads the submitter's identity without
+    # exposing hashed_password or secrets (response schema controls output).
+    user: Mapped["User"] = relationship(foreign_keys=[user_id], lazy="selectin")
 
     # id / created_at / updated_at come from the Base mixin. No relationships
     # to any domain table (attendance/events/quiz/lab) — feedback is isolated.

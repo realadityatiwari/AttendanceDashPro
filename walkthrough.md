@@ -2753,6 +2753,72 @@ authorized) · ALTER 0 · DROP 0.
 
 ---
 
+# AttendanceDash Pro — Phase 21B Walkthrough (Feedback Admin System)
+
+Date: 2026-08-25 · Scope: admin feedback review surface · No migration, no deployment, no commit
+
+> **PHASE 21B COMPLETE & FROZEN.** The admin-side Feedback System was
+> implemented over the existing PostgreSQL/FastAPI/Next.js stack: admin-only
+> list/detail endpoints (require_admin), a `/tools/feedback` admin page with
+> loading/error/empty/list states + type filter + pagination, and
+> ADMIN-only navigation links. Student submission is unchanged. Verified
+> in-process 17/17; `tsc` and `npm run build` PASS. No schema changes.
+
+## Backend
+
+| Change | Detail |
+|---|---|
+| `schemas/feedback_admin.py` (NEW) | `FeedbackListItem`, `FeedbackListResponse` — submitter roll_number/name; no credentials |
+| `models/feedback.py` | `user` relationship for admin join |
+| `repositories/feedback_repo.py` | `list_all` (newest-first, paginated, filter), `get_by_id` |
+| `services/feedback_service.py` | `list_admin`, `get_admin` (404) |
+| `endpoints/feedback.py` | `GET /admin` + `GET /admin/{id}` — both `require_admin` |
+
+## Frontend
+
+| Change | Detail |
+|---|---|
+| `types/api.ts` | Feedback admin types + params |
+| `hooks/useApi.ts` | `useAdminFeedback()` SWR hook |
+| `tools/feedback/page.tsx` (NEW) | Admin page: skeletons / ErrorState / EmptyState / list with type badge + identity + message + timestamp; type filter; pagination |
+| `layout/TopNav.tsx` | Feedback link — ADMIN only (UX layer) |
+| `layout/MobileBottomNav.tsx` | Feedback link in MORE — ADMIN only (UX layer) |
+
+## Verification (17/17 in-process PASS)
+
+401 unauthenticated · 403 STUDENT (require_admin) · 200 ADMIN list/detail ·
+404 missing id · filters (BUG 1 / SUGGESTION 1 / PRAISE 0) · pagination
+(pages=2) · newest-first · identity joined · no credentials in response ·
+student submission user_id from JWT · short message → 422 · harness rows
+cleaned (feedback 0, users 1).
+
+Static: `compileall` PASS · `tsc --noEmit` PASS · `npm run build` PASS
+(incl. `/tools/feedback` route) · `git diff --check` PASS · alembic head
+`e1f2a3b4c5d6` unchanged · no migration needed.
+
+## Database Status
+
+- Harness rows (2 feedback + 1 temp user) deleted; feedback back to 0,
+  users back to 1 (admin intact).
+- Protected admin data: enrollments 9, preferences 1, feedback 0 — preserved.
+- User-activity deltas observed during the phase (running dev server, not
+  Phase 21B artifacts): admin attendance 159 → 162 (3 MISSED for 2026-08-25)
+  and notifications 39 → 41 — created by normal app use, left intact.
+- Production: untouched.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21B section added — COMPLETE & FROZEN.
+- `implementation_plan.md`: 21B section — COMPLETE & FROZEN.
+- `task.md`: 21B checklist complete (browser verification flagged USER TASK).
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21b_feedback_admin.md`: full phase report.
+
+**PHASE 21B — COMPLETE / FROZEN.**
+**HARD STOP:** No commit made. No push performed. No browser testing performed. No production touched.
+
+---
+
 ---
 
 ---

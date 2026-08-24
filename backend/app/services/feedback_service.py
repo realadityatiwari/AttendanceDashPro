@@ -42,3 +42,27 @@ class FeedbackService:
             message=message,
             context=context,
         )
+
+    async def list_admin(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        feedback_type: Optional[str] = None,
+    ) -> tuple[list[Feedback], int]:
+        """Admin-only: paginated list of all feedback, newest first.
+
+        `feedback_type` filters on the existing enum column when provided.
+        Returns (items, total_count).
+        """
+        return await self.repo.list_all(
+            page=page,
+            page_size=page_size,
+            feedback_type=feedback_type,
+        )
+
+    async def get_admin(self, feedback_id) -> Feedback:
+        """Admin-only: single feedback item (raises 404 when absent)."""
+        feedback = await self.repo.get_by_id(feedback_id)
+        if feedback is None:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+        return feedback

@@ -2064,6 +2064,40 @@ ALTER 0 · DROP 0.
 Feedback Admin System (NOT STARTED). Phase 21 launch remains BLOCKED on
 pre-flight gates.
 
+#### 21B — Feedback Admin System (COMPLETE & FROZEN, 2026-08-25)
+
+**Objective:** implement the admin-side Feedback System: a read-only admin
+review surface over the existing PostgreSQL/FastAPI/Next.js stack. No schema
+changes, no migration, no status/response workflow (phase forbids inventing
+workflow fields). Report: `docs/phase_21/phase_21b_feedback_admin.md`.
+
+**Delivered:**
+
+1. **Backend admin endpoints** (`GET /api/v1/feedback/admin` — paginated,
+   `feedback_type` filter; `GET /api/v1/feedback/admin/{id}` — single item):
+   both `Depends(require_admin)`; unauthenticated → 401, STUDENT → 403.
+   Submitter identity (roll_number, name) joined via the Feedback.user
+   relationship; no credentials serialized. Existing student submission
+   endpoint (`POST /api/v1/feedback`) unchanged.
+2. **Frontend admin page** (`/tools/feedback`): loading skeletons, error
+   state, empty state, type-filter buttons, paginated feedback list with
+   submitter identity, type badge, message, context, timestamp. Nav link in
+   TopNav (desktop) + MobileBottomNav (MORE) — visible only when
+   `role === "ADMIN"` (UX layer; backend remains the authorization boundary).
+3. **Types + hooks**: `FeedbackAdminItem`, `FeedbackAdminListResponse`,
+   `AdminFeedbackParams`, `useAdminFeedback()` SWR hook (STANDARD_CACHE).
+4. **Verification (17/17 in-process checks PASS)**: auth matrix (401, 403,
+   200), pagination, filters, 404, identity join, no credentials, student
+   submission user_id from JWT, short message → 422, harness cleanup.
+   `tsc` PASS · `npm run build` PASS (incl. `/tools/feedback`) ·
+   `compileall` PASS · `git diff --check` PASS. No migration needed.
+   Harness rows (2 feedback + 1 temp user) deleted; user-activity deltas
+   (3 attendance + 2 notifications from running dev server) preserved.
+
+**Phase status: 21B COMPLETE & FROZEN.** Next authorized slice: TBD from
+authoritative roadmap at next prompt. Phase 21 launch remains BLOCKED on
+pre-flight gates.
+
 ---
 
 ---

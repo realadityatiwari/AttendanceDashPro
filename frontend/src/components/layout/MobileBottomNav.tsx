@@ -12,9 +12,11 @@ import {
   FlaskConical,
   History,
   LayoutDashboard,
+  MessageSquareText,
   TestTubes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useProfile } from "@/hooks/useApi";
 import {
   Sheet,
   SheetContent,
@@ -39,6 +41,8 @@ const MORE_ITEMS = [
   { label: "Events", href: "/tools/events", icon: CalendarDays },
 ] as const;
 
+const ADMIN_MORE_ITEM = { label: "Feedback", href: "/tools/feedback", icon: MessageSquareText } as const;
+
 /**
  * Mobile primary navigation — Phase 12A.
  *
@@ -53,9 +57,13 @@ const MORE_ITEMS = [
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const { profile } = useProfile();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const profileActive = pathname === PROFILE_HREF || moreOpen;
+  const moreItems = profile?.role === "ADMIN"
+    ? [...MORE_ITEMS, ADMIN_MORE_ITEM]
+    : MORE_ITEMS;
 
   return (
     <>
@@ -125,7 +133,7 @@ export function MobileBottomNav() {
               Profile
             </Link>
             <div className="my-2 h-px bg-border" aria-hidden="true" />
-            {MORE_ITEMS.map(({ label, href, icon: Icon }) => {
+            {moreItems.map(({ label, href, icon: Icon }) => {
               const active = pathname === href;
               return (
                 <Link

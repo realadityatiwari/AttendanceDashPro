@@ -1442,6 +1442,27 @@ Tiwari, ADMIN), superseding the Phase 21A REQUIRES REVIEW classifications.
   academic/system data untouched, alembic head `e1f2a3b4c5d6`.
 - Report: `docs/phase_21/phase_21a1_account_cleanup.md`.
 
+## 21B — Feedback Admin System (COMPLETE & FROZEN, 2026-08-25)
+
+Admin feedback review surface over the existing PostgreSQL/FastAPI/Next.js
+stack (read-only — the schema has no status field and the phase forbids
+inventing workflow fields):
+
+- **Backend**: `GET /api/v1/feedback/admin` (paginated, `feedback_type`
+  filter) + `GET /api/v1/feedback/admin/{id}` — both `require_admin`;
+  unauthenticated → 401, STUDENT → 403; submitter roll_number/name joined;
+  no credentials serialized. Existing `POST /api/v1/feedback` student
+  submission unchanged (JWT-derived user_id).
+- **Frontend**: `/tools/feedback` admin page (loading/error/empty/list +
+  type filter + pagination); Feedback nav link in TopNav (desktop) and
+  MobileBottomNav (mobile MORE) — visible only when `role === "ADMIN"` (UX
+  layer; backend remains the authorization boundary).
+- **Verification**: backend 17/17 in-process checks PASS · `tsc` PASS ·
+  `npm run build` PASS (incl. `/tools/feedback`) · `git diff --check` PASS ·
+  no migration needed (existing table reused) · feedback 0 → 0 after harness
+  cleanup · admin account + enrollments/preferences intact.
+- Report: `docs/phase_21/phase_21b_feedback_admin.md`.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

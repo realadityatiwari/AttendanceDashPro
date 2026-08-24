@@ -1668,9 +1668,26 @@ Status: **BLOCKED** — pre-flight gates unsatisfied; no deployment attempted.
 - [x] Governance synchronized
 - HARD STOP — Phase 21B NOT STARTED; no commit made.
 
-### Phase 21B — Feedback Admin System (NOT STARTED — next authorized slice)
+### Phase 21B — Feedback Admin System (COMPLETE & FROZEN, 2026-08-25)
 
-- [ ] Admin feedback review surface (Phase 21A/21A.1: feedback records = 0)
+- [x] Audit existing feedback model/schema/API/frontend (Phase 10C exists; no admin contract/UI)
+- [x] Backend: `GET /api/v1/feedback/admin` (paginated, feedback_type filter) + `GET /api/v1/feedback/admin/{id}` — require_admin
+- [x] Backend: Feedback.user relationship + repo list_all/get_by_id + service list_admin/get_admin
+- [x] Backend: schemas (FeedbackListItem, FeedbackListResponse) — no credentials serialized
+- [x] Frontend: types (FeedbackType, FeedbackAdminItem, FeedbackAdminListResponse, AdminFeedbackParams)
+- [x] Frontend: `useAdminFeedback()` hook
+- [x] Frontend: `/tools/feedback` admin page (loading/error/empty/list + filter + pagination)
+- [x] Navigation: Feedback link in TopNav + MobileBottomNav — ADMIN-only at UX layer
+- [x] Student submission flow preserved (POST /api/v1/feedback, JWT-derived user_id, server validation)
+- [x] Auth matrix verified: unauthenticated 401, STUDENT 403, ADMIN 200, 404, filters, pagination (17/17 PASS)
+- [x] Harness rows (2 feedback + 1 temp user) cleaned; feedback back to 0; users back to 1
+- [x] `npx tsc --noEmit` PASS; `npm run build` PASS (incl. /tools/feedback); compileall PASS; git diff --check PASS
+- [x] No migration needed (existing table reused); alembic head unchanged
+- [x] Protected admin data intact (enrollments 9, preferences 1, feedback 0); user-activity deltas preserved
+- [x] `docs/phase_21/phase_21b_feedback_admin.md` created
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [ ] USER TASK: browser/manual verification of the admin feedback page — NOT PERFORMED (user responsibility)
+- HARD STOP — next authorized slice TBD; no commit made.
 
 ### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
 

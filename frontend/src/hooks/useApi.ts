@@ -30,7 +30,9 @@ import {
   UserPreferencesUpdate,
   NotificationsResponse,
   NotificationItem,
-  NotificationUpdate
+  NotificationUpdate,
+  FeedbackAdminListResponse,
+  AdminFeedbackParams
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -441,4 +443,19 @@ export function useNotificationMutation() {
   };
 
   return { updateNotification };
+}
+
+// Phase 21B admin feedback review (GET /api/v1/feedback/admin).
+// Admin-only on the backend (require_admin); calling it as a STUDENT returns
+// 403 and is surfaced through isError. The frontend link is role-gated at the
+// UX layer only — the backend remains the authorization boundary.
+export function useAdminFeedback(params: AdminFeedbackParams = {}) {
+  const query = new URLSearchParams();
+  if (params.page && params.page > 1) query.set("page", String(params.page));
+  if (params.page_size) query.set("page_size", String(params.page_size));
+  if (params.feedback_type) query.set("feedback_type", params.feedback_type);
+  const qs = query.toString();
+  const key = qs ? `/api/v1/feedback/admin?${qs}` : "/api/v1/feedback/admin";
+  const { data, error, isLoading, mutate } = useSWR<FeedbackAdminListResponse>(key, fetcher, STANDARD_CACHE);
+  return { feedback: data, isLoading, isError: error, mutate };
 }
