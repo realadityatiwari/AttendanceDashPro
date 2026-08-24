@@ -1457,10 +1457,19 @@ inventing workflow fields):
   type filter + pagination); Feedback nav link in TopNav (desktop) and
   MobileBottomNav (mobile MORE) — visible only when `role === "ADMIN"` (UX
   layer; backend remains the authorization boundary).
-- **Verification**: backend 17/17 in-process checks PASS · `tsc` PASS ·
-  `npm run build` PASS (incl. `/tools/feedback`) · `git diff --check` PASS ·
-  no migration needed (existing table reused) · feedback 0 → 0 after harness
-  cleanup · admin account + enrollments/preferences intact.
+- **Defect found in browser verification & fixed (2026-08-25)**: the live
+  dev backend (started 2026-08-24 21:16 without `--reload`) predated the
+  Phase 21B code, so `/api/v1/feedback/admin` returned 404 in the browser
+  ("admin feedback service may be unavailable"). Root cause: stale server,
+  not the endpoint — in-process tests bypassed HTTP. Fixed by restarting the
+  dev backend; verified live HTTP 12/12 (401/401/200/200/404,
+  submit→list→detail). ErrorState now surfaces the actual API error detail
+  instead of a generic message.
+- **Verification**: backend 17/17 in-process + 12/12 live-HTTP PASS ·
+  `tsc` PASS · `npm run build` PASS (incl. `/tools/feedback`) ·
+  `git diff --check` PASS · no migration needed (existing table reused) ·
+  feedback 0 → 0 after harness cleanup · admin account + enrollments/
+  preferences intact.
 - Report: `docs/phase_21/phase_21b_feedback_admin.md`.
 
 ## Required prerequisites (unmet)

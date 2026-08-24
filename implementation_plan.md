@@ -2094,9 +2094,30 @@ workflow fields). Report: `docs/phase_21/phase_21b_feedback_admin.md`.
    Harness rows (2 feedback + 1 temp user) deleted; user-activity deltas
    (3 attendance + 2 notifications from running dev server) preserved.
 
-**Phase status: 21B COMPLETE & FROZEN.** Next authorized slice: TBD from
-authoritative roadmap at next prompt. Phase 21 launch remains BLOCKED on
-pre-flight gates.
+**Defect correction (browser integration, 2026-08-25):**
+
+- **Reported**: browser showed "Failed to load data — Could not load
+  feedback. The admin feedback service may be unavailable." despite 17/17
+  in-process checks passing.
+- **Root cause**: the live dev backend (PID 12304, started 2026-08-24
+  21:16:18, `uvicorn` without `--reload`) predated the Phase 21B code — the
+  running server did not serve `/api/v1/feedback/admin` (HTTP 404). The
+  in-process tests called the endpoint functions directly, bypassing the
+  HTTP layer, so they could not catch a stale server. The browser path goes
+  through the live server → 404 → apiFetch error → generic ErrorState.
+- **Fix**: restarted the dev backend (now serving the Phase 21B code).
+  Verified the exact browser path over live HTTP: 12/12 PASS
+  (unauthenticated 401, invalid token 401, ADMIN 200, query params 200,
+  detail 404-for-missing, submit 201 → list 200 → detail 200 → cleanup).
+- **Error handling**: `tools/feedback` ErrorState now surfaces the actual
+  API error detail (`Could not load feedback: <detail>`) instead of a
+  generic message, preserving the ErrorState convention.
+- **Backend contracts untouched**: no endpoint, schema, model, or
+  authorization change; only the dev server process was restarted.
+
+**Phase status: 21B COMPLETE & FROZEN (after defect correction).** Next
+authorized slice: TBD from authoritative roadmap at next prompt. Phase 21
+launch remains BLOCKED on pre-flight gates.
 
 ---
 

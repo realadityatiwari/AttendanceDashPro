@@ -2819,6 +2819,69 @@ Static: `compileall` PASS · `tsc --noEmit` PASS · `npm run build` PASS
 
 ---
 
+# AttendanceDash Pro — Phase 21B Walkthrough (Browser Integration Defect Correction)
+
+Date: 2026-08-25 · Scope: diagnose and fix Phase 21B browser-facing integration defect · Backend contracts untouched
+
+> **Defect correction applied.** The root cause was **not** the backend endpoint
+> (which existed in code and passed in-process checks) but the **stale running
+> dev server** — the dev backend (PID 12304, started 2026-08-24 21:16 without
+> `--reload`) predated the Phase 21B code and returned 404 for the new admin
+> route. In-process tests bypassed the HTTP layer and could not catch this.
+> Fix: restarted the backend; verified the exact browser path over live HTTP
+> (12/12 PASS). ErrorState now surfaces the actual API error detail.
+
+## Diagnosis
+
+| Check | Finding |
+|---|---|
+| In-process (direct function calls) | ✅ 17/17 PASS |
+| Live HTTP probe (`GET /api/v1/feedback/admin`) | ❌ **404 Not Found** |
+| Running server start time | 2026-08-24 21:16:18 |
+| feedback.py last modified | 2026-08-24 23:46:08 |
+| uvicorn reload flag | **absent** (no `--reload`) |
+| Root cause | Server predates code changes; stale server lacks the route |
+
+## Fix
+
+1. Restarted the dev backend (stopped PID 12304, started new instance).
+2. Live HTTP re-verification: **12/12 PASS** — unauthenticated 401, invalid
+   token 401, ADMIN 200, query params 200, detail 404-for-missing, submit
+   201 → list 200 → detail 200 → cleanup.
+3. Error handling: `tools/feedback` ErrorState now surfaces the actual API
+   error detail (`Could not load feedback: <detail>`) instead of the generic
+   message, making the genuine failure distinguishable.
+
+## Backend Contracts
+
+**Untouched.** No endpoint, schema, model, authorization, or route change.
+Only the dev server process was restarted. The frontend error message was
+improved to surface the API detail.
+
+## Files Changed
+
+- `frontend/src/app/(authenticated)/tools/feedback/page.tsx` — ErrorState
+  message now includes `isError?.message` (the actual API error detail)
+  instead of a hardcoded generic string.
+- Governance: `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`,
+  `walkthrough.md` — defect correction recorded.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| Live HTTP (12 checks) | ✅ 12/12 PASS |
+| `npx tsc --noEmit` | ✅ PASS |
+| `python -m compileall backend/app` | ✅ PASS |
+| `git diff --check` | ✅ PASS |
+| Backend contracts | untouched |
+| Page now shows real error detail | ✅ |
+
+**PHASE 21B — COMPLETE / FROZEN (defect corrected).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed. No production touched. Backend contracts untouched.
+
+---
+
 ---
 
 ---

@@ -95,7 +95,11 @@ export default function FeedbackAdminPage() {
       </div>
 
       {isError ? (
-        <ErrorState message="Could not load feedback. The admin feedback service may be unavailable." />
+        <ErrorState
+          message={isError?.message
+            ? `Could not load feedback: ${isError.message}`
+            : "Could not load feedback. The admin feedback service may be unavailable."}
+        />
       ) : isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
