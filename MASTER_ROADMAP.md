@@ -6,7 +6,7 @@
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
 > 
-> **Next phase:** Phase 19 — CI/CD **NOT STARTED**. Phase 18 (Production Infrastructure) **IN PROGRESS / PARTIAL** — 18.0 audit ✅, 18A containerization ✅, 18B env & secrets ✅, 18C backup automation ✅, **18D deployment & verification ⚠️ PARTIAL** (production deployment BLOCKED on missing infrastructure: no VPS/cloud host, domain, credentials, or off-host destination; rehearsal deployment verified end-to-end — all 5 services healthy, real backup executed, isolated restore PASS, 2 deployment defects fixed: PyJWT dep + Caddy /health route). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 20 — Production QA **NOT STARTED** (subject to Phase 18D infrastructure resolution before real deployment). Phase 19 (CI/CD) **COMPLETE & FROZEN** — GitHub Actions quality gate with 8 verification jobs + disabled deployment gate; all checks verified. Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -66,7 +66,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 16 | Production Security Hardening | ✅ **COMPLETE & FROZEN** — JWT expiry bounded (8h env-configurable), password policy strengthened (8–128, letter+digit), in-process rate limiting (login 10/15min, register 5/h, 429 + Retry-After), security headers (nosniff/DENY/no-referrer/permissions; HSTS env-gated), global 500 handler + error-leak fixes, login timing equalization, structured logging, CORS env-driven; `verify_phase_16.py` 34/34 PASS; frozen verifiers green (6.5/10C/10D/11A); zero DB mutations |
 | 17 | Data Integrity & Migration Hardening | ✅ **COMPLETE & FROZEN** — JWT production-secret guard ✅ (APP_ENV; `verify_phase_17_jwt_guard.py` 6/6) · integrity audit ✅ (zero orphans/duplicates/FK violations) · **NO MIGRATION REQUIRED** (single linear Alembic head `e1f2a3b4c5d6`) · backup/restore ✅ verified (isolated container) · retention policy ✅ documented (7 daily / 4 weekly / 3 monthly) · seed audit ✅ · semester-transition analysis ✅ · cleanup: NONE REQUIRED · working-DB mutations ZERO |
 | 18 | Production Infrastructure | 🟡 **IN PROGRESS / PARTIAL** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** · **18D deployment & verification ⚠️ PARTIAL** — rehearsal deployment verified end-to-end (5 services healthy, real backup executed + verified, isolated restore PASS, scheduler + retention + locking verified, no secrets); **production deployment BLOCKED** on missing infrastructure (no host/domain/credentials/off-host destination); 2 deployment defects fixed (PyJWT dep, Caddy /health route); `docs/phase_18/phase_18d_deployment.md` |
-| 19 | CI/CD | 🔴 Later |
+| 19 | CI/CD | ✅ **COMPLETE & FROZEN** — GitHub Actions quality gate (`.github/workflows/ci.yml`): integrity, backend, frontend, docker, compose, migrations, config-contract, backup-infra jobs; deployment gate disabled (`if: false`); all checks verified locally; migration validated on disposable postgres:16 to head `e1f2a3b4c5d6`; no deployment, no secrets |
 | 20 | Production QA | 🔴 Later |
 | 21 | Production Launch | 🔴 Later |
 | 22 | Post-Launch | 🔵 Ongoing |
@@ -1310,27 +1310,40 @@ Local rehearsal deployment proved the full production mechanism works, but
 - Domain/DNS/TLS → operator must register and configure.
 - Off-host backup destination → operator must provision (or accept none).
 
-## 19 — CI/CD (NOT STARTED — next authorized slice, subject to 18D resolution)
+## 19 — CI/CD (COMPLETE & FROZEN — 2026-08-23)
 
-# 🔴 Phase 19 — CI/CD
+# ✅ Phase 19 — CI/CD
 
-Establish a production quality gate:
+Production quality gate established (`.github/workflows/ci.yml`):
 
 ```text
-GitHub
-   ↓
-Push
+GitHub (PR / push to main)
    ↓
 CI
- ├── TypeScript check
- ├── Python checks
- ├── Frontend build
- └── Migration checks
-   ↓
-Deployment
+ ├── integrity        — tracked secrets, env files, Firebase artifacts
+ ├── backend          — compileall, import, JWT guard (8/8), static invariants
+ ├── frontend         — npm ci (npm 11), tsc, lint (informational), build
+ ├── docker           — backend + frontend + backup image builds
+ ├── compose          — docker-compose.prod.yml config (CI placeholders)
+ ├── migrations       — disposable postgres:16, alembic upgrade head, head verify
+ ├── config-contract  — env example vs compose contract
+ ├── backup-infra     — shell syntax + backup image build
+ └── deploy           — DISABLED (${{ false }}); requires production env
 ```
 
-Development workflows should remain quota-efficient, while production receives appropriate verification.
+- Deployment gate is **permanently disabled** until Phase 18D blockers resolve
+  (no VPS, no credentials, no domain, no off-host destination).
+- Lint is informational (`continue-on-error`) — 6 pre-existing ESLint errors
+  live in frozen systems (AuthContext, auth pages, history page,
+  service-worker.js); fixing them is out of scope. Authoritative gate = tsc +
+  build.
+- Migrations validated on a disposable postgres:16: single head
+  `e1f2a3b4c5d6`, upgrade to head clean, DB revision matches head.
+- All checks verified locally; working application DB untouched; no secrets;
+  no deployment. Full doc: `docs/phase_19/phase_19_cicd.md`.
+
+Development workflows remain quota-efficient (caching, no matrix, no browser
+automation).
 
 ---
 

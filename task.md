@@ -1565,10 +1565,32 @@ Status: **PARTIAL** — rehearsal deployment + full verification PASS; productio
 - [ ] **BLOCKED**: production deployment requires operator to provision VPS/host + credentials + domain + optional off-host destination
 - HARD STOP — no commit made.
 
-### Phase 19 — CI/CD (NOT STARTED — next authorized slice, subject to 18D resolution)
+### Phase 19 — CI/CD (COMPLETE & FROZEN, 2026-08-23)
 
-- [ ] Production quality gate (TypeScript, Python checks, frontend build, migration checks)
-- [ ] Deployment pipeline
+- [x] `.github/workflows/ci.yml` created (PR + push to main, concurrency cancel-in-progress)
+- [x] JOB integrity — secret/env-file/Firebase-artifact scan + required-file validation
+- [x] JOB backend — compileall, app import, JWT guard verifier (8/8), static invariants (12E)
+- [x] JOB frontend — npm ci (npm 11), tsc, lint (informational), production build
+- [x] JOB docker — backend + frontend + backup image builds (no registry push)
+- [x] JOB compose — `docker compose config --quiet` with CI placeholders + hardcoded-secret scan
+- [x] JOB migrations — disposable postgres:16, single-head check, `alembic upgrade head`, revision match
+- [x] JOB config-contract — env example required vars, no dev creds in prod example
+- [x] JOB backup-infra — `bash -n` all backup scripts + backup image build
+- [x] JOB deploy — disabled (`if: ${{ false }}`), environment: production, needs all quality jobs
+- [x] Lint made informational (6 pre-existing frozen-system ESLint errors; documented, not fixed)
+- [x] YAML validation PASS (triggers, 9 jobs, deploy disabled)
+- [x] Local verification of every job: backend/frontend/docker/compose/migrations/config/backup PASS
+- [x] Migration validated on disposable postgres:16 to head `e1f2a3b4c5d6`; disposable DB cleaned
+- [x] `docs/phase_19/phase_19_cicd.md` created
+- [x] `git diff --check` PASS
+- [x] No deployment; no secrets; no cloud resources; working application DB untouched
+- [x] Governance synchronized
+- HARD STOP — Phase 20 NOT STARTED; no commit made.
+
+### Phase 20 — Production QA (NOT STARTED — next authorized slice)
+
+- [ ] Subject to Phase 18D infrastructure resolution before real deployment
+- [ ] Production QA checks
 
 ---
 

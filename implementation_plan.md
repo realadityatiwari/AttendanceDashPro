@@ -1896,6 +1896,57 @@ report, blocker list, deployment runbook).
 rehearsal + all verification PASS. Next phase (CI/CD) subject to operator
 providing production infrastructure.
 
+### Phase 19 — CI/CD (COMPLETE, 2026-08-23)
+
+**Objective:** establish a production-quality automated quality gate that
+prevents broken code from reaching a future production deployment. No
+deployment, no infrastructure provisioning.
+
+**Delivered:**
+
+1. **`.github/workflows/ci.yml`** — GitHub Actions workflow on PR + push to
+   `main`, with `concurrency` cancel-in-progress.
+2. **Jobs (9):**
+   - `integrity` — blocks tracked `deploy/.env.prod`, tracked non-example
+     `.env*` files, dev JWT secret outside allowed files (config.py,
+     backend/.env.example, guard verifier), Firebase deployment artifacts;
+     validates required production files exist.
+   - `backend` — Python 3.13, `compileall`, `app.main` import,
+     `verify_phase_17_jwt_guard.py` (8/8), `verify_phase_12e.py`.
+   - `frontend` — Node 20 + npm 11 (lockfile alignment), `npm ci`, `tsc
+     --noEmit`, **lint informational** (`continue-on-error`; 6 pre-existing
+     ESLint errors in frozen systems), `npm run build`.
+   - `docker` — backend, frontend (CI build arg), backup image builds; no
+     registry push.
+   - `compose` — `docker compose -f docker-compose.prod.yml config --quiet`
+     with CI-only placeholders; hardcoded-secret-literal scan.
+   - `migrations` — disposable `postgres:16` service; single-head check;
+     `alembic upgrade head`; DB revision == head verification.
+   - `config-contract` — required vars present in `deploy/.env.prod.example`;
+     no dev DB credentials in prod example; placeholder-only secret values.
+   - `backup-infra` — `bash -n` on all `deploy/backup/*.sh`; backup image
+     build.
+   - `deploy` — **disabled** (`if: ${{ false }}`), `environment: production`;
+     impossible for a PR/push to deploy.
+3. **CI-safe placeholder env** at workflow level (never real secrets).
+
+**Verification results (local, mirroring each CI job):** YAML valid (triggers +
+9 jobs + deploy disabled) · compileall + import PASS · JWT guard 8/8 PASS ·
+12E static PASS · `tsc` PASS · `npm run build` PASS (15/15) · all 3 Docker
+images build PASS · compose config valid with placeholders · migration:
+single head `e1f2a3b4c5d6`, upgrade head clean, revision match PASS (disposable
+postgres:16, removed after) · config-contract PASS · backup shell syntax +
+image PASS · secret scan PASS (only example env files tracked) ·
+`git diff --check` PASS.
+
+**Scope guards:** no application/business-logic changes (lint errors in frozen
+systems intentionally not fixed; lint made informational and documented); no
+deployment; no secrets; no cloud resources; working application DB untouched
+(INSERT/UPDATE/DELETE/ALTER/DROP = 0); disposable migration DB cleaned.
+
+**Next authorized slice:** Phase 20 — Production QA (NOT STARTED; subject to
+Phase 18D infrastructure resolution before real deployment).
+
 ---
 
 ---

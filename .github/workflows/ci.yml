@@ -1,0 +1,339 @@
+name: CI — AttendanceDash Pro Quality Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI-only placeholder values — NEVER real production secrets. These are used
+  # solely for compose config parsing / Docker build validation.
+  CI_POSTGRES_USER: ci_user
+  CI_POSTGRES_PASSWORD: ci_placeholder_password_123
+  CI_POSTGRES_DB: attendancedash
+  CI_JWT_SECRET_KEY: ci_placeholder_jwt_secret_0123456789abcdef
+  CI_CORS_ORIGINS: '["https://ci.example.com"]'
+  CI_API_URL: https://ci.example.com
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Repository integrity (structure + secret/config safety)
+  # ────────────────────────────────────────────────────────────────────────
+  integrity:
+    name: Repository Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block tracked production secrets / env files
+        run: |
+          set -euo pipefail
+          # The production env file must never be tracked.
+          if git ls-files --error-unmatch deploy/.env.prod >/dev/null 2>&1; then
+            echo "::error::deploy/.env.prod must not be committed"
+            exit 1
+          fi
+          # No .env.local / .env (non-example) tracked anywhere.
+          TRACKED_ENV=$(git ls-files | grep -E '(^|/)\.env($|[^a-z])' | grep -v '\.example$' || true)
+          if [ -n "$TRACKED_ENV" ]; then
+            echo "::error::Tracked non-example env files detected:"
+            echo "$TRACKED_ENV"
+            exit 1
+          fi
+          # Development JWT secret must not appear in tracked files (allowed
+          # only in config.py default, backend/.env.example, and the guard
+          # verifier which tests that production rejects it without printing).
+          if grep -rIl --exclude-dir=node_modules --exclude-dir=.git \
+              "supersecret_development_key_change_in_production" . 2>/dev/null \
+              | grep -v 'config.py$' | grep -v '\.env\.example$' \
+              | grep -v 'verify_phase_17_jwt_guard.py$' >/dev/null; then
+            echo "::error::Development JWT secret found outside allowed files"
+            exit 1
+          fi
+          # No Firebase-era deployment artifacts reintroduced.
+          for f in firebase.json .firebaserc firestore.rules firestore.indexes.json; do
+            if [ -f "$f" ]; then
+              echo "::error::Firebase artifact '$f' must not exist"
+              exit 1
+            fi
+          done
+
+      - name: Validate required production files exist
+        run: |
+          set -euo pipefail
+          for f in docker-compose.prod.yml frontend/Dockerfile backend/Dockerfile \
+                   deploy/caddy/Caddyfile deploy/.env.prod.example \
+                   deploy/backup/Dockerfile deploy/backup/backup.sh \
+                   deploy/backup/retention.sh deploy/backup/offhost.sh deploy/backup/run.sh; do
+            [ -f "$f" ] || { echo "::error::Missing required file: $f"; exit 1; }
+          done
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Backend quality (compile + import + guards)
+  # ────────────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile validation
+        run: python -m compileall app alembic scripts
+
+      - name: Application import validation
+        run: python -c "from app.main import app; print('app import OK')"
+
+      - name: Production config guard (Phase 17/18B)
+        run: python scripts/verify_phase_17_jwt_guard.py
+
+      - name: Static invariants (Phase 12E)
+        run: python scripts/verify_phase_12e.py
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Frontend quality (deps + typecheck + build + lint)
+  # ────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Align npm with lockfile (npm 11)
+        run: npm install -g npm@11
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      # Informational only: the repository has 6 pre-existing ESLint errors in
+      # frozen systems (AuthContext, login/signup pages, history page,
+      # service-worker.js). Fixing them is out of Phase 19 scope (frozen-system
+      # protection). The authoritative frontend gate is tsc + build above.
+      - name: Lint (informational, non-blocking)
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 4 — Docker production image builds
+  # ────────────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker Production Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t attendancedash-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build --build-arg NEXT_PUBLIC_API_URL=${{ env.CI_API_URL }} \
+             -t attendancedash-frontend:ci ./frontend
+
+      - name: Build backup image
+        run: docker build -t attendancedash-backup:ci ./deploy/backup
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 5 — Production compose validation (CI-safe placeholders only)
+  # ────────────────────────────────────────────────────────────────────────
+  compose:
+    name: Production Compose Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production compose configuration
+        env:
+          POSTGRES_USER: ${{ env.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.CI_POSTGRES_DB }}
+          JWT_SECRET_KEY: ${{ env.CI_JWT_SECRET_KEY }}
+          BACKEND_CORS_ORIGINS: ${{ env.CI_CORS_ORIGINS }}
+          NEXT_PUBLIC_API_URL: ${{ env.CI_API_URL }}
+          DOMAIN: ci.example.com
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
+      - name: Enforce no hardcoded secrets in compose
+        run: |
+          set -euo pipefail
+          if grep -E 'password|secret|token' docker-compose.prod.yml | grep -v '\$\{' | grep -v '#' ; then
+            echo "::error::docker-compose.prod.yml contains a hardcoded secret-like literal"
+            exit 1
+          fi
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 6 — Database migration validation (disposable PostgreSQL only)
+  # ────────────────────────────────────────────────────────────────────────
+  migrations:
+    name: Migration Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ${{ env.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.CI_POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.CI_POSTGRES_USER }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Single Alembic head check
+        env:
+          DATABASE_URI: postgresql+asyncpg://${{ env.CI_POSTGRES_USER }}:${{ env.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ env.CI_POSTGRES_DB }}
+        run: |
+          python - <<'EOF'
+          import sys, os
+          sys.path.insert(0, '.')
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          s = ScriptDirectory.from_config(Config('alembic.ini'))
+          heads = s.get_heads()
+          print('heads:', heads)
+          assert len(heads) == 1, f'expected exactly one head, got {heads}'
+          EOF
+
+      - name: Apply migrations to disposable DB (upgrade head)
+        env:
+          DATABASE_URI: postgresql+asyncpg://${{ env.CI_POSTGRES_USER }}:${{ env.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ env.CI_POSTGRES_DB }}
+        run: python -m alembic upgrade head
+
+      - name: Verify final revision matches head
+        env:
+          DATABASE_URI: postgresql+asyncpg://${{ env.CI_POSTGRES_USER }}:${{ env.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ env.CI_POSTGRES_DB }}
+        run: |
+          python - <<'EOF'
+          import asyncio, sys
+          sys.path.insert(0, '.')
+          from sqlalchemy import text
+          from app.db.session import AsyncSessionLocal
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          s = ScriptDirectory.from_config(Config('alembic.ini'))
+          head = s.get_heads()[0]
+          async def main():
+              async with AsyncSessionLocal() as db:
+                  r = await db.execute(text('SELECT version_num FROM alembic_version'))
+                  db_rev = r.scalar()
+                  print('db revision:', db_rev, '| head:', head)
+                  assert db_rev == head, f'mismatch: db={db_rev} head={head}'
+          asyncio.run(main())
+          EOF
+
+      # The disposable PostgreSQL service container is destroyed automatically
+      # when the job ends — no cleanup step required.
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 7 — Production config contract (env example vs compose/backend)
+  # ────────────────────────────────────────────────────────────────────────
+  config-contract:
+    name: Production Config Contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate env example vs compose contract
+        run: |
+          set -euo pipefail
+          # Required secrets referenced by compose must be documented in the example.
+          EXAMPLE="$(cat deploy/.env.prod.example)"
+          for VAR in POSTGRES_USER POSTGRES_PASSWORD JWT_SECRET_KEY BACKEND_CORS_ORIGINS NEXT_PUBLIC_API_URL; do
+            echo "$EXAMPLE" | grep -q "^$VAR=" || { echo "::error::deploy/.env.prod.example missing required var $VAR"; exit 1; }
+          done
+          # Example must contain only placeholders (no real-looking secrets).
+          if grep -qE '^(POSTGRES_PASSWORD|JWT_SECRET_KEY)=[^c]' deploy/.env.prod.example; then
+            echo "::error::env example contains a non-placeholder secret value"
+            exit 1
+          fi
+          # Backend dev example must not leak into production expectations.
+          if grep -q 'postgres:postgres@localhost' deploy/.env.prod.example; then
+            echo "::error::production env example contains dev database credentials"
+            exit 1
+          fi
+
+  # ────────────────────────────────────────────────────────────────────────
+  # JOB 8 — Backup infrastructure regression (lightweight)
+  # ────────────────────────────────────────────────────────────────────────
+  backup-infra:
+    name: Backup Infrastructure Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax validation
+        run: |
+          set -euo pipefail
+          for f in deploy/backup/*.sh; do
+            bash -n "$f"
+            echo "syntax OK: $f"
+          done
+
+      - name: Backup image build (parse-level)
+        run: docker build -t attendancedash-backup:ci ./deploy/backup
+
+  # ────────────────────────────────────────────────────────────────────────
+  # DEPLOYMENT GATE — DESIGN ONLY. Disabled until production infrastructure
+  # exists (Phase 18D blockers: no VPS/cloud host, no credentials, no
+  # domain/DNS/TLS, no off-host destination). It is impossible for an
+  # ordinary PR or push to trigger deployment.
+  # ────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deployment Gate (disabled)
+    runs-on: ubuntu-latest
+    if: ${{ false }}   # Permanently disabled until blockers are resolved
+    needs: [integrity, backend, frontend, docker, compose, migrations, config-contract, backup-infra]
+    environment: production
+    steps:
+      - name: Deployment not yet authorized
+        run: |
+          echo "Production deployment is DISABLED."
+          echo "Blockers: no VPS/cloud host, no production credentials,"
+          echo "no domain/DNS/TLS, no off-host backup destination."
+          echo "Re-enable ONLY after Phase 18D blockers are resolved."
+          exit 1
