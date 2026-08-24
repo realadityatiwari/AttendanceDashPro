@@ -1472,6 +1472,21 @@ inventing workflow fields):
   preferences intact.
 - Report: `docs/phase_21/phase_21b_feedback_admin.md`.
 
+## 21C — Production Launch Pre-flight / Gate Closure (COMPLETE & FROZEN, 2026-08-25)
+
+Readiness assessment (read-only) of the Phase 21 launch gates. Phase 21
+remains **BLOCKED**. Report: `docs/phase_21/phase_21c_readiness.md`.
+
+| Gate | Status | Blocker |
+|---|---|---|
+| A — Browser QA confirmation | **BLOCKED — USER RESPONSIBILITY** | Operator has not confirmed the Phase 20 42-item manual browser QA checklist (Phase 21B page exercise is not the checklist) |
+| B — QA-window data disposition | **RESOLVED** | All QA-window records now owner-owned (5 attendance + 30 notifications); non-owner portions removed by authorized 21A.1 cleanup; feedback 0 |
+| C — Production infrastructure | **BLOCKED** | No VPS/cloud host, no `deploy/.env.prod`, no domain/DNS/TLS, no off-host backup; CI deploy gate still disabled (`if: false`) |
+
+**Single clearest blocker**: production infrastructure does not exist (Gate C).
+Phase 21 cannot launch until Gates A (user) and C (infrastructure) are
+resolved.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA
