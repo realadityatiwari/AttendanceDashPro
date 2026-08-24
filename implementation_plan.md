@@ -1947,6 +1947,52 @@ deployment; no secrets; no cloud resources; working application DB untouched
 **Next authorized slice:** Phase 20 — Production QA (NOT STARTED; subject to
 Phase 18D infrastructure resolution before real deployment).
 
+### Phase 20 — Production QA (COMPLETE & FROZEN, 2026-08-24)
+
+**Objective:** production-readiness QA pass over the complete application
+(auth, dashboard, track, history, calendar, events, quiz, laboratory, profile,
+security, cross-surface consistency) before any real production launch. QA
+only — no feature work, no deployment.
+
+**Delivered:**
+
+1. **In-process QA suite** (real DB, guaranteed-rollback, temp user removed):
+   - Authentication: password round-trip (pbkdf2_sha256, salted, wrong/empty
+     rejected), login valid/wrong-401/nonexistent-401, registration policy
+     (short/overlong/letter-less/digit-less rejected), JWT mint +
+     get_current_user valid/invalid-401, require_admin ADMIN-ok/STUDENT-403.
+   - Profile: all 11 contract fields present, no firebase_uid.
+   - Dashboard, Track (daily sessions, cancelled-409), History (100 items,
+     semester-bounded), Calendar (month/today/date), Events, Quiz eligibility
+     (full contract + thresholds vs policy rows), Laboratory (BCS-551),
+     Preferences, Notifications — all PASS.
+   - Security: cancelled-session mutation blocked (409), distinct tokens,
+     event-create admin dependency, owner-scoped notifications.
+2. **Cross-surface consistency** (20/20 PASS): attendance summary BCS-054 avg
+   50.0% == canonical DB (12/12/24 = 50.0%); quiz thresholds 70/70 ==
+   eligibility_policies; calendar month 128 sessions == DB; history ==
+   canonical attendance; dashboard attendance context == DB count (159).
+3. **Frozen verifier regression**: 6.5 27/27 · 6.6 36/36 · 6.7 30/31 (known
+   pre-existing check-7) · 12E 8/8 · 16 34/34 · 17 8/8.
+4. **Database hygiene**: 1 QA temp-user artifact removed (in-process harness
+   side effect); 5 attendance records + 62 notifications in the QA window
+   reported for user review (attendance history protected — NOT deleted;
+   notifications are regenerable read projections). No canonical data
+   mutation. Final: users 31, alembic `e1f2a3b4c5d6`.
+5. **Manual browser QA checklist** (42 items across auth, dashboard, track,
+   history, calendar, events, quiz, lab, profile/settings/feedback,
+   responsive/PWA) delivered in `docs/phase_20/phase_20_production_qa.md` —
+   user responsibility.
+6. **Governance synchronized** (roadmap, plan, task, walkthrough).
+
+**Known limitations:** Phase 7 quiz eligibility audit discrepancies remain
+(product decision required); 6.7 check 7 (pre-existing live data); browser QA
+NOT PERFORMED (user); lint informational in CI.
+
+**Phase status: COMPLETE & FROZEN.** Next authorized phase: Phase 21 —
+Production Launch (subject to Phase 18D infrastructure resolution AND user
+browser-QA completion).
+
 ---
 
 ---

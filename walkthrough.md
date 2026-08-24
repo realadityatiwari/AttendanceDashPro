@@ -2477,6 +2477,89 @@ CI (9 jobs, parallel)
 
 ---
 
+# AttendanceDash Pro — Phase 20 Walkthrough (Production QA)
+
+Date: 2026-08-24 · Scope: production-readiness QA over all surfaces · No deployment, no feature work
+
+> **PHASE 20 COMPLETE & FROZEN.** Automated/in-process QA passed across all
+> application surfaces; cross-surface canonical consistency verified; frozen
+> verifier regression green; no critical defects found. A 42-item manual
+> browser QA checklist was delivered for the user. One QA temp-user artifact
+> was removed; attendance/notification QA-window deltas were reported for user
+> review (attendance history protected). No deployment, no infrastructure
+> changes, no production credentials.
+
+## QA Coverage (in-process, real DB, rollback)
+
+| Area | Result |
+|---|---|
+| Authentication (password, login 401s, register policy, JWT, require_admin) | ✅ PASS |
+| Profile contract (11 fields, no firebase_uid) | ✅ PASS |
+| Dashboard summary (attendance/quiz/attention/events context) | ✅ PASS |
+| Track (daily sessions; cancelled-session 409 protection) | ✅ PASS |
+| History (100 items, semester-bounded 2026-07-15 → today) | ✅ PASS |
+| Calendar (month/today/date; 128 DB sessions in month) | ✅ PASS |
+| Events (list + admin dependency; Phase 6.5 auth matrix) | ✅ PASS |
+| Quiz eligibility (full contract; thresholds == policy rows 70/70) | ✅ PASS |
+| Laboratory (BCS-551 summary; admin-only mutation → 403) | ✅ PASS |
+| Preferences / notifications / security isolation | ✅ PASS |
+
+## Cross-Surface Consistency (20/20 PASS)
+
+- Attendance summary BCS-054 avg **50.0% == canonical DB (12/12/24 = 50.0%)**
+- Quiz eligibility thresholds == `eligibility_policies` (70.0/70.0)
+- Calendar month == class_sessions count (128)
+- History items == canonical attendance pipeline
+- Dashboard attendance context == DB count (159)
+
+## Frozen Verifier Regression
+
+| Verifier | Result |
+|---|---|
+| Phase 6.5 (auth/events) | ✅ 27/27 |
+| Phase 6.6 (event lifecycle + baseline restore) | ✅ 36/36 |
+| Phase 6.7 (calendar) | ✅ 30/31 (known pre-existing check-7 live-data discrepancy) |
+| Phase 12E (static) | ✅ 8/8 |
+| Phase 16 (security) | ✅ 34/34 |
+| Phase 17 (JWT guard) | ✅ 8/8 |
+
+## Database Status
+
+- **Removed**: 1 QA temp-user artifact (roll 9900000000999) — created by the
+  in-process harness within a session persisted by a service-side commit;
+  removed completely. Users back to 31; alembic head `e1f2a3b4c5d6`.
+- **Reported for user review** (left intact, NOT deleted):
+  - 5 `attendance_records` dated 2026-08-24 for the admin's today sessions —
+    provenance uncertain (dev server running; may be legitimate user
+    activity); attendance history is protected.
+  - 62 `notifications` — regenerable read-model projections (Phase 11B
+    materialization on read); not authoritative history.
+- Canonical data: INSERT 0 (except removed QA artifact) · UPDATE 0 · DELETE 0
+  (except removed QA artifact) · ALTER 0 · DROP 0.
+
+## Deliverables
+
+- `docs/phase_20/phase_20_production_qa.md` — full QA report incl. the
+  42-item manual browser QA checklist (auth, dashboard, track, history,
+  calendar, events, quiz, lab, profile/settings/feedback, responsive/PWA).
+- Governance synchronized: roadmap (20 COMPLETE, 21 next), implementation
+  plan, task (20 complete; user tasks flagged), walkthrough (this entry).
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 20 COMPLETE & FROZEN; Phase 21 next (subject to
+  18D resolution + user browser QA); status table + header + section synced.
+- `implementation_plan.md`: Phase 20 section — COMPLETE & FROZEN; 21 pending.
+- `task.md`: Phase 20 checklist complete; user tasks flagged; 21 unchecked.
+- `walkthrough.md`: this entry.
+
+**PHASE 20 — COMPLETE / FROZEN.**
+**Phase 21 — Production Launch (NOT STARTED — next authorized slice; subject to Phase 18D infrastructure resolution AND user browser-QA completion).**
+**HARD STOP:** No commit made. No push performed. No browser testing performed.
+**Production deployment: NO. Cloud resources: ZERO. Real production secrets: ZERO.**
+
+---
+
 ---
 
 ---

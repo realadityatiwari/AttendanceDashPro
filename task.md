@@ -1587,10 +1587,33 @@ Status: **PARTIAL** — rehearsal deployment + full verification PASS; productio
 - [x] Governance synchronized
 - HARD STOP — Phase 20 NOT STARTED; no commit made.
 
-### Phase 20 — Production QA (NOT STARTED — next authorized slice)
+### Phase 20 — Production QA (COMPLETE & FROZEN, 2026-08-24)
 
-- [ ] Subject to Phase 18D infrastructure resolution before real deployment
-- [ ] Production QA checks
+- [x] Governance review (roadmap, plan, task, walkthrough, Phase 19/18D docs)
+- [x] In-process QA: authentication (password, login 401s, register policy, JWT, require_admin)
+- [x] In-process QA: profile contract (11 fields, no firebase_uid)
+- [x] In-process QA: dashboard summary (attendance, quiz snapshot, attention, events)
+- [x] In-process QA: Track daily sessions + cancelled-session 409 protection
+- [x] In-process QA: History (100 items, semester-bounded, item contract)
+- [x] In-process QA: Calendar month/today/date + DB session count
+- [x] In-process QA: Events list + admin dependency
+- [x] In-process QA: Quiz eligibility full contract + threshold-vs-policy consistency
+- [x] In-process QA: Laboratory BCS-551 + admin-only mutation 403
+- [x] In-process QA: Preferences, notifications, security isolation
+- [x] Cross-surface consistency (20/20): summary==DB, quiz thresholds==policy, calendar==DB, history==canonical
+- [x] Frozen verifier regression: 6.5 27/27, 6.6 36/36, 6.7 30/31 (known), 12E 8/8, 16 34/34, 17 8/8
+- [x] QA temp-user artifact removed; DB hygiene verified (users 31, alembic e1f2a3b4c5d6)
+- [x] 5 attendance + 62 notification QA-window deltas documented for user review (attendance protected)
+- [x] `docs/phase_20/phase_20_production_qa.md` created (incl. 42-item manual browser QA checklist)
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [ ] USER TASK: manual browser QA checklist (§19) — NOT PERFORMED BY AGENT (user responsibility)
+- [ ] USER TASK: confirm attendance/notification QA-window deltas (§16) — user review
+- HARD STOP — Phase 21 NOT STARTED; no commit made.
+
+### Phase 21 — Production Launch (NOT STARTED — next authorized slice)
+
+- [ ] Subject to Phase 18D infrastructure resolution AND user browser-QA completion
+- [ ] Production launch steps
 
 ---
 
