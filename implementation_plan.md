@@ -1999,27 +1999,36 @@ browser-QA completion).
 phase pre-flight gate is unsatisfied on all three checks; no launch action
 was taken (per the phase hard-stop rule).
 
-**Pre-flight gate assessment (all unmet):**
+#### 21A — Account Audit & Cleanup (COMPLETE & FROZEN, 2026-08-24)
 
-| Gate | Required | Actual | Status |
-|---|---|---|---|
-| A. Phase 20 manual browser QA | User confirms 42-item checklist completed; no critical failures | No user confirmation exists | **BLOCKED — USER RESPONSIBILITY** |
-| B. Phase 20 QA-window data | 5 attendance + 62 notifications reviewed/dispositioned by user | Unresolved; records left intact | **BLOCKED — USER RESPONSIBILITY** |
-| C. Production infrastructure | VPS/cloud host, credentials, domain/DNS, TLS, off-host backup | None exist; `deploy/.env.prod` absent; placeholder domain | **BLOCKED** |
+**Objective:** read-only audit of all login accounts before public release.
+Report: `docs/phase_21/phase_21a_account_audit.md`.
 
-**Static verification performed (read-only, no changes):**
+**Findings:**
 
-- CI deploy gate still disabled (`if: ${{ false }}` in `.github/workflows/ci.yml`).
-- `deploy/.env.prod` does not exist; `.env.prod.example` placeholders only.
-- Caddy config is HTTP-only with placeholder domain `app.example.com`.
-- Alembic repo head `e1f2a3b4c5d6` (no production migration run).
-- No VPS/cloud/DNS/TLS/off-host evidence anywhere in the repository.
-- Working database untouched (INSERT/UPDATE/DELETE/ALTER/DROP = 0).
+- **31 accounts** in the local development database (`attendancedash`,
+  PostgreSQL 16, no production DB exists).
+- **Owner verified**: `2401220100027` Aditya Tiwari, ADMIN, password set,
+  9 enrollments, 159 attendance, 39 notifications, 1 preference — PROTECTED.
+- **Login-capable accounts**: 3 (owner ADMIN + 2 STUDENT with passwords).
+  28 accounts have NULL password → cannot log in (Firebase-era legacy).
+- **Classification**: 1 PROTECTED OWNER · 1 LIKELY REAL USER
+  (`1234567890124` Aditya Tripathi — user review required) · 29 LIKELY TEST.
+- **Deletion proposal (24 accounts)**: zero dependent data, no password —
+  proposed for deletion, **pending explicit user approval**; NO deletion
+  performed.
+- **6 accounts REQUIRE REVIEW** (dependent attendance/enrollments/
+  notifications): `1234567890124`, `9999999999999`, `2200000000054`,
+  `2201430100001`, `2401230100001`, `9000000000002`.
+- **FK semantics**: all user FKs `ON DELETE NO ACTION`; no application delete
+  implementation — deletion requires dependent-row removal first.
+- **QA-window deltas**: 5 attendance records (owner, 2026-08-24) + 62
+  notifications (owner 28, 9999999999999 17, 1234567890124 17) — left intact.
+- **Feedback**: 0 records exist.
+- **Database mutations**: ZERO (INSERT/UPDATE/DELETE/ALTER/DROP = 0).
 
-**Deliverables:** `docs/phase_21/phase_21_production_launch.md` — full launch
-assessment, blocker list, deployment sequence, rollback plan, monitoring
-surface, residual risks. Governance synchronized (roadmap, plan, task,
-walkthrough).
+**Next authorized step:** Phase 21B — Feedback Admin System. Account deletion
+remains NOT AUTHORIZED until the user approves the deletion set.
 
 **Phase status: BLOCKED.** Next: re-run Phase 21 when the operator satisfies
 gates A, B, and C; then execute the documented launch sequence.

@@ -1618,10 +1618,27 @@ Status: **BLOCKED** — pre-flight gates unsatisfied; no deployment attempted.
 - [x] Pre-flight gate assessment: A (browser QA) / B (QA-window data) / C (infrastructure)
 - [x] Static launch-readiness inspection (read-only: CI gate disabled, env contract, Caddy, alembic head, infra evidence)
 - [x] `docs/phase_21/phase_21_production_launch.md` created (full launch assessment + blockers + sequence + rollback)
-- [x] Governance synchronized (roadmap, plan, task, walkthrough)
 - [x] Working database untouched (INSERT/UPDATE/DELETE/ALTER/DROP = 0)
+
+### Phase 21A — Account Audit & Cleanup (COMPLETE & FROZEN, 2026-08-24)
+
+- [x] Governance review + database identification (dev `attendancedash`, PostgreSQL 16; no production DB)
+- [x] Account schema inspection (users table columns, roles, hashed_password)
+- [x] Complete account inventory — 31 accounts, actual DB values
+- [x] Owner verification — 2401220100027 Aditya Tiwari ADMIN PROTECTED
+- [x] Dependent-data audit per user (enrollments, attendance, notifications, preferences, feedback, lab)
+- [x] QA-window delta association (5 attendance → owner; 62 notifications → owner/9999999999999/1234567890124)
+- [x] Feedback association (0 records)
+- [x] Auth model check (login by roll_number, PBKDF2, JWT, DB role; no delete implementation; FKs NO ACTION)
+- [x] Classification (1 PROTECTED OWNER, 1 LIKELY REAL USER, 29 LIKELY TEST)
+- [x] Proposed cleanup plan (24 delete-after-approval, 6 review, 1 protected)
+- [x] `docs/phase_21/phase_21a_account_audit.md` created
+- [x] Zero database mutations (INSERT/UPDATE/DELETE/ALTER/DROP = 0); git diff --check PASS
+- [x] Governance synchronized
+- [ ] USER TASK: approve/reject the 24-account deletion set — deletion NOT AUTHORIZED until approval
+- [ ] USER TASK: classify 1234567890124 (real user vs test); disposition 6 REVIEW accounts
 - [ ] GATE A: user completes Phase 20 manual browser QA (42-item checklist) — USER RESPONSIBILITY
-- [ ] GATE B: user dispositions Phase 20 QA-window deltas (5 attendance + 62 notifications) — USER RESPONSIBILITY
+- [ ] GATE B: user dispositions Phase 20 QA-window deltas — USER RESPONSIBILITY
 - [ ] GATE C: operator provisions VPS/cloud host, production credentials, domain/DNS, TLS/HTTPS, off-host backup
 - [ ] Production DB migration (`alembic upgrade head`) — after gates pass
 - [ ] Production academic config initialization — after gates pass
@@ -1631,7 +1648,11 @@ Status: **BLOCKED** — pre-flight gates unsatisfied; no deployment attempted.
 - [ ] Production backup execution + verification — after gates pass
 - [ ] Smoke tests (auth, student, attendance, calendar, quiz, lab, settings, security) — after gates pass
 - [ ] Rollback plan documented + monitoring verified — after gates pass
-- HARD STOP — Phase 21 BLOCKED; no commit made.
+- HARD STOP — Phase 21 BLOCKED; 21A read-only complete; no deletion; no commit made.
+
+### Phase 21B — Feedback Admin System (NOT STARTED — next authorized slice)
+
+- [ ] Admin feedback review surface (established from Phase 21A feedback association: 0 records currently)
 
 ### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
 

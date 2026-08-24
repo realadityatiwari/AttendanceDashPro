@@ -2632,6 +2632,53 @@ infrastructure), then execute the documented launch sequence.
 
 ---
 
+# AttendanceDash Pro — Phase 21A Walkthrough (Account Audit & Cleanup)
+
+Date: 2026-08-24 · Scope: read-only account inventory audit · Zero mutations
+
+> **PHASE 21A COMPLETE & FROZEN.** Read-only audit of all 31 accounts in the
+> development database. Owner verified (2401220100027, ADMIN, PROTECTED).
+> 24 test accounts proposed for deletion (zero dependent data, no password) —
+> **pending user approval, no deletion performed**. QA-window deltas left
+> intact. All FKs NO ACTION (no cascade). Feedback: 0 records. No database
+> mutations, no deployment, no commit.
+
+## Account Inventory (31 accounts)
+
+| Classification | Count | Details |
+|---|---|---|
+| A. PROTECTED OWNER | 1 | 2401220100027 Aditya Tiwari (ADMIN, login-capable, 159 attendance) |
+| D. LIKELY REAL USER | 1 | 1234567890124 Aditya Tripathi (STUDENT, login-capable, 9 enrollments) |
+| C. LIKELY TEST | 29 | 24 with zero dependent data + 5 with trivial attendance (1-2 records) |
+| **Total** | **31** | 3 login-capable (1 ADMIN + 2 STUDENT); 28 cannot log in (NULL password) |
+
+## Proposed Cleanup
+
+- **KEEP**: 2401220100027 (owner)
+- **DELETE AFTER USER APPROVAL**: 24 accounts (zero dependent data, no password)
+- **REQUIRES REVIEW**: 6 accounts (1234567890124, 9999999999999, 2200000000054,
+  2201430100001, 2401230100001, 9000000000002)
+- **DO NOT DELETE**: owner; anything not explicitly approved
+
+## Database Status
+
+INSERT=0 · UPDATE=0 · DELETE=0 · ALTER=0 · DROP=0 · Alembic head `e1f2a3b4c5d6`
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21A section added — COMPLETE & FROZEN; 21B identified as
+  next authorized slice; launch pre-flight gates preserved.
+- `implementation_plan.md`: 21A section — COMPLETE; deletion gated on user approval.
+- `task.md`: 21A checklist complete; 21B unchecked; deletion tasks marked USER
+  RESPONSIBILITY.
+- `walkthrough.md`: this entry.
+
+**PHASE 21A — COMPLETE / FROZEN.**
+**PHASE 21B — Feedback Admin System (NOT STARTED — next authorized slice).**
+**HARD STOP:** No commit made. No push performed. No deletion performed. No browser testing performed.
+
+---
+
 ---
 
 ---

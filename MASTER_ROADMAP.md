@@ -1412,9 +1412,19 @@ Perform a complete real-user journey.
 
 # 🔴 Phase 21 — Production Launch
 
-**Status: BLOCKED (2026-08-24).** Launch cannot proceed until all three
-pre-flight gates are satisfied. Full assessment:
-`docs/phase_21/phase_21_production_launch.md`.
+**Status: BLOCKED (2026-08-24)** — launch pending; **21A (Account Audit & Cleanup) ✅ COMPLETE & FROZEN**.
+
+## 21A — Account Audit & Cleanup (COMPLETE & FROZEN, 2026-08-24)
+
+Read-only account inventory audit: **31 accounts** found (1 PROTECTED owner
+ADMIN `2401220100027`; 1 LIKELY REAL USER `1234567890124`; 29 LIKELY TEST).
+**24 test accounts proposed for deletion** (zero dependent data) — pending
+user approval; **no deletion performed**. 28 accounts cannot log in (NULL
+password; Firebase-era legacy, Phase 14 boundary). All user FKs are
+`ON DELETE NO ACTION` (no cascade; no delete implementation exists). QA-window
+deltas (5 attendance under owner, 62 notifications) left intact. Report:
+`docs/phase_21/phase_21a_account_audit.md`. Deletion requires explicit user
+approval of the proposed set.
 
 ## Required prerequisites (unmet)
 
