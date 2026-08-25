@@ -2343,14 +2343,17 @@ login lookup returns None → Phase 16 anti-enumeration → 401. Localhost works
 because the dev DB holds the account (1 user, PBKDF2, verified). Same auth
 code in both environments — an operational/data-state gap, not a code defect.
 
-**Fix plan (not implemented; awaiting authorization):** 1. seed production
-academic baseline (idempotent, from `timetable.json` via seed scripts);
-2. create owner account via `POST /api/v1/auth/register` (production);
-3. grant ADMIN via `provision_admin.py`; 4. verify login. Dev DB untouched.
+**Fix plan (not implemented; awaiting authorization):** Approach A — direct
+row-for-row copy of all 18 tables from localhost to Supabase, preserving
+UUIDs, timestamps, and the PBKDF2 password hash, keeping the exact same
+password valid. A dedicated `migrate_localhost_to_supabase.py` tool is
+planned (idempotent, `ON CONFLICT DO NOTHING`, read-only on localhost).
+Full report: `docs/phase_21/phase_21d2_full_state_migration_audit.md`.
 
-**Phase status: 21D.2 auth-discrepancy audit COMPLETE; provisioning still
-BLOCKED.** Next authorized slice: 21D.3 — Beta Validation & Launch Gate
-(after operator provisions providers and runs the migration).
+**Phase status: 21D.2 full-state migration audit COMPLETE; provisioning still
+BLOCKED (awaiting operator authorization for migration execution).** Next
+authorized slice: 21D.3 — Beta Validation & Launch Gate (after the migration
+is executed and validated).
 
 ---
 

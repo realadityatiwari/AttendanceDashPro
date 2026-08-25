@@ -3470,6 +3470,57 @@ lookup finds no user → generic 401. Same auth code in both environments
 
 ---
 
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Full Localhost→Production Migration Audit)
+
+Date: 2026-08-26 · Scope: full-state migration plan for localhost ADMIN → production Supabase · Read-only
+
+> **AUDIT COMPLETE.** A complete migration plan was produced to reproduce the
+> localhost ADMIN environment in production. All 18 application tables were
+> inventoried (row counts, FKs, unique constraints). **Approach A** (direct
+> row-for-row copy preserving UUIDs + PBKDF2 password hash) is recommended —
+> it keeps the exact password valid and every user-owned relationship
+> FK-consistent without remapping. No migration executed; zero mutations.
+
+## Audit Summary
+
+| Area | Finding |
+|---|---|
+| Localhost state | 18 tables; 1 owner (ADMIN, PBKDF2 hash); 9 enrollments; 165 attendance; 43 notifications; full academic baseline (720 sessions, 9 subjects, 28 timetable entries, 3 quiz cycles, 18 quiz schedules, 61 events) |
+| Production state | schema at head `e1f2a3b4c5d6`, zero application rows (prior audit; row-level inspection not performed this phase — no repo credentials) |
+| UUID preservation | **Safe** — production empty; no conflicts; all FKs intact; no remap needed |
+| Password hash | **Portable** (PBKDF2 verified) — Approach A keeps the same password valid |
+| Approach A vs B | A (direct copy) recommended over B (registration+remap) — exact equivalence, lowest risk |
+| Tooling | No existing row-for-row copy tool; new `migrate_localhost_to_supabase.py` planned (idempotent) |
+| Idempotency | `ON CONFLICT DO NOTHING` on PK; re-runs safe |
+| Validation | 20+ read-only checks (counts, identity, role, login, attendance breakdown, dashboard) |
+| Rollback | TRUNCATE migrated tables in reverse order; localhost untouched |
+
+## Migration Order (18 tables)
+
+academic_sessions, quiz_cycles → semesters → sections → subjects → users →
+timetable_entries → class_sessions → student_enrollments → academic_events →
+quiz_schedules → eligibility_policies → attendance_records → notifications →
+userpreferences (laboratory_* + feedback empty)
+
+## Database / Safety
+
+- Localhost mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0 (read-only SELECT).
+- Production: NOT ACCESSED · NOT MIGRATED · NOT MUTATED.
+- No account/data/auth logic changed. No password exposed. No migration run.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: full-state migration audit record added.
+- `implementation_plan.md`: audit section added; Approach A documented.
+- `task.md`: audit checklist complete; operator authorization items open.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21d2_full_state_migration_audit.md`: full report.
+
+**PHASE 21D.2 — FULL-STATE MIGRATION AUDIT COMPLETE / EXECUTION PENDING OPERATOR AUTHORIZATION.**
+**HARD STOP:** No further changes. No commit made. No push performed. No production DB touched.
+
+---
+
 ---
 
 ---

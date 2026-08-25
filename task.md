@@ -1821,11 +1821,30 @@ Status: **BLOCKED — provider access unavailable (operator action required).**
 - [x] Verified 21D.2 runbook: production init = schema only ("No application data")
 - [x] Determined production Supabase has ZERO user rows → login returns 401 (anti-enumeration)
 - [x] Confirmed same auth code both environments — not a code defect; data-state gap
-- [x] Fix plan documented (seed baseline → register owner → provision ADMIN → verify) — NOT implemented
+- [x] Fix plan documented (Approach A: direct copy w/ hash preservation; supersedes earlier registration sketch) — NOT implemented
 - [x] `docs/phase_21/phase_21d2_auth_discrepancy_audit.md` created
 - [x] Zero mutations; no production DB accessed; no account/data/auth logic changed
 - [ ] OPERATOR: confirm Render log shows "roll_number not found or no password set" branch
-- [ ] OPERATOR/AUTH: authorize fix plan (seed baseline → register owner → provision ADMIN)
+- [ ] OPERATOR/AUTH: authorize fix plan (Approach A direct migration)
+- HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
+
+#### 21D.2 — Full Localhost→Production Migration Audit (COMPLETE, read-only, 2026-08-26)
+
+- [x] Enumerated all 18 application tables (models + migrations)
+- [x] Captured localhost row counts + owner-specific counts (read-only)
+- [x] Mapped all FK relationships + unique constraints (dependency graph)
+- [x] Verified academic baseline state (session, semester, section, subjects, sessions, events, quiz, timetable)
+- [x] Confirmed production has zero application rows (prior audit; row-level inspection NOT performed — no repo credentials)
+- [x] Determined UUID preservation is safe (production empty → no conflicts, no remap)
+- [x] Determined PBKDF2 password hash is portable → **Approach A** recommended (direct copy; password stays valid)
+- [x] Compared Approach A vs B (direct copy vs registration+remap) — A is safer for exact equivalence
+- [x] Assessed existing tooling (seeders regenerate; migrate_* is Firebase-era; new dedicated tool planned)
+- [x] Defined 18-table dependency order + idempotency (`ON CONFLICT DO NOTHING`)
+- [x] Defined validation plan (counts, identity, role, login, attendance breakdown, dashboard)
+- [x] Defined rollback strategy (TRUNCATE reverse order; localhost untouched)
+- [x] `docs/phase_21/phase_21d2_full_state_migration_audit.md` created
+- [x] Zero mutations; no production DB accessed; no app logic changed
+- [ ] OPERATOR/AUTH: authorize creation of `migrate_localhost_to_supabase.py` + execution
 - HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
 - [ ] OPERATOR TASK: create Supabase Free project (region near India) + note reference
 - [ ] OPERATOR TASK: run `alembic upgrade head` against the NEW Supabase DB (head `e1f2a3b4c5d6`)

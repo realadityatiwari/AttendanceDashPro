@@ -1656,10 +1656,33 @@ hash, verified read-only).
 **Not a code defect** — same auth code in both environments; an
 operational/data-state gap. No fix implemented (read-only audit).
 
-**Planned steps (awaiting authorization):** seed production academic baseline
-(idempotent, from `timetable.json`) → create owner account via canonical
-`POST /api/v1/auth/register` → grant ADMIN via `provision_admin.py` →
-verify login. Dev DB untouched.
+**Planned steps (awaiting authorization):** see the Full-State Migration
+Audit below — **Approach A (direct row-for-row copy with UUID + password-hash
+preservation)** supersedes the earlier registration-based sketch.
+
+### 21D.2 — Full Localhost→Production Migration Audit (COMPLETE, read-only, 2026-08-26)
+
+**Discovery:** to reproduce the localhost ADMIN environment in production
+faithfully, a full-state migration plan was produced. Report:
+`docs/phase_21/phase_21d2_full_state_migration_audit.md`.
+
+**Key findings:**
+- Localhost: 18 tables; 1 owner user (PBKDF2 hash, ADMIN); 9 enrollments;
+  165 attendance; 43 notifications; 1 preference; full academic baseline
+  (1 session, 1 semester, 1 section, 9 subjects, 720 class_sessions,
+  28 timetable entries, 3 quiz cycles, 18 quiz schedules, 61 events).
+- Production: schema at head `e1f2a3b4c5d6`; zero application rows.
+- **UUIDs are preservable** (production empty → no conflicts; all FKs stay
+  intact; no remap needed).
+- **Password hash is preservable** (PBKDF2 format verified; Approach A
+  recommended over registration-based Approach B — direct copy keeps the
+  exact password valid and all user-owned relationships FK-consistent).
+- No existing script does a row-for-row copy; a new
+  `migrate_localhost_to_supabase.py` tool is planned (idempotent,
+  `ON CONFLICT DO NOTHING`, read-only on localhost).
+- Validation plan defined (counts, identity, role, login, attendance
+  breakdown, dashboard equivalence).
+- **NOT executed** — zero mutations, awaiting operator authorization.
 
 ## Gate A — Phase 20 manual browser QA
 The 42-item manual browser QA checklist was delivered in Phase 20
