@@ -2305,7 +2305,27 @@ settings.DATABASE_URI)` raised `ValueError: invalid interpolation syntax` when
   created. The failed attempt never connected to or mutated Supabase.
 - Report: `docs/phase_21/phase_21d2_alembic_url_fix.md`.
 
-**Phase status: 21D.2 config fix COMPLETE; provisioning still BLOCKED
+**Phase status: 21D.2 Alembic fix COMPLETE; provisioning still BLOCKED
+(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
+Launch Gate (after operator provisions providers and runs the migration).
+
+#### 21D.2 — Vercel/Next.js 16.3 Deployment Compatibility Fix (COMPLETE, 2026-08-25)
+
+**Objective:** fix the Vercel deployment failure
+(`ENOENT: /vercel/path0/frontend/.next/next-server.js.nft.json`) caused by
+unconditional `output: "standalone"` in `frontend/next.config.ts`.
+
+- **Fix**: `output: process.env.VERCEL ? undefined : "standalone"` — Vercel
+  builds use normal Next.js output; Docker and local builds retain
+  `standalone`. SSR and PWA preserved in both modes. No other config or
+  application logic changed.
+- **Verified (static, both modes)**: non-Vercel build exit 0 +
+  `.next/standalone/server.js` present · Vercel-mode build (`VERCEL=1`) exit 0
+  + `.next/standalone` absent + `.next/next-server.js.nft.json` present ·
+  `npx tsc --noEmit` PASS · `git diff --check` PASS.
+- **Git**: committed and pushed to `main` so Vercel can auto-redeploy.
+
+**Phase status: 21D.2 Vercel fix COMPLETE; provisioning still BLOCKED
 (awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
 Launch Gate (after operator provisions providers and runs the migration).
 

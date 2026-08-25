@@ -3325,6 +3325,77 @@ operation.
 
 ---
 
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Vercel/Next.js 16.3 Deployment Compatibility Fix)
+
+Date: 2026-08-25 · Scope: fix Vercel `ENOENT` on `.next/next-server.js.nft.json` · Config-only change
+
+> **FIX COMPLETE.** Vercel's deployment failed with
+> `ENOENT: /vercel/path0/frontend/.next/next-server.js.nft.json` because
+> `frontend/next.config.ts` set `output: "standalone"` unconditionally
+> (Phase 18A Docker requirement), which conflicts with Vercel's adapter on
+> Next.js 16.3.0. The config now selects output by environment:
+> Vercel → default output; non-Vercel → standalone. Verified in both modes.
+> Committed and pushed to `main` so Vercel can auto-redeploy.
+
+## Root Cause
+
+`output: "standalone"` produces `.next/standalone/` (with `server.js` +
+traced files) and omits the top-level `.next/next-server.js.nft.json` trace
+that Vercel's adapter expects for the project root at `/vercel/path0/frontend/`.
+On Next.js 16.3.0 the unconditional standalone output is incompatible with the
+Vercel build adapter → `ENOENT`.
+
+## Fix
+
+`frontend/next.config.ts`:
+
+```ts
+output: process.env.VERCEL ? undefined : "standalone",
+```
+
+- Vercel sets `VERCEL=1` during builds → default (normal) Next.js output.
+- Docker (`backend`/`frontend` Dockerfiles) and local builds → `standalone`
+  retained.
+- SSR and the Phase 13 PWA are preserved in both modes. Not a static export.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` (non-Vercel env) | ✅ PASS |
+| Non-Vercel build (`npm run build`) | ✅ exit 0, 15/15 routes, `.next/standalone/server.js` present |
+| Vercel-mode build (`VERCEL=1 npm run build`) | ✅ exit 0, `.next/standalone` absent, `.next/next-server.js.nft.json` present |
+| `git diff --check` | ✅ PASS |
+
+> Note: builds used a placeholder public API URL (`NEXT_PUBLIC_API_URL`) as
+> required by the Phase 21D.1 production guard; the guard correctly refuses a
+> production build that falls back to localhost.
+
+## Scope
+
+- Changed: `frontend/next.config.ts` only (plus governance docs).
+- Unchanged: API URLs, authentication, backend, Docker configuration,
+  application logic, database, migration files.
+- No browser tests run (user responsibility).
+
+## Git
+
+- Committed to `main` with message describing the Vercel/Next.js 16.3
+  compatibility fix.
+- Pushed to `origin` so Vercel can auto-redeploy.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21D.2 Vercel fix record added.
+- `implementation_plan.md`: fix section added.
+- `task.md`: fix checklist complete.
+- `walkthrough.md`: this entry.
+
+**PHASE 21D.2 — VERCEL FIX COMPLETE / PROVISIONING STILL BLOCKED.**
+**HARD STOP:** No further changes. No browser testing performed. No production DB touched.
+
+---
+
 ---
 
 ---

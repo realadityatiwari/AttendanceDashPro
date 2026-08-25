@@ -1785,6 +1785,20 @@ Status: **COMPLETE** (assessment) — Phase 21 remains BLOCKED; read-only; no de
 - [x] Development DB: 0 mutations · Production DB: NOT ACCESSED/NOT MIGRATED/NOT MUTATED
 - HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
 
+#### 21D.2 — Vercel/Next.js 16.3 Deployment Compatibility Fix (COMPLETE, 2026-08-25)
+
+- [x] Reproduced/understood `ENOENT: /vercel/path0/frontend/.next/next-server.js.nft.json` (unconditional standalone + Vercel adapter)
+- [x] Verified installed Next.js 16.3 `output` docs (standalone + default behavior)
+- [x] Applied fix in `frontend/next.config.ts`: `output: process.env.VERCEL ? undefined : "standalone"`
+- [x] Non-Vercel build (Docker/local path) exit 0 — `.next/standalone/server.js` present
+- [x] Vercel-mode build (`VERCEL=1`) exit 0 — `.next/standalone` absent, `.next/next-server.js.nft.json` present
+- [x] `npx tsc --noEmit` PASS
+- [x] `git diff --check` PASS
+- [x] No API URLs, auth, backend, or Docker config changed; SSR + PWA preserved
+- [x] Governance synchronized (roadmap, plan, task, walkthrough)
+- [x] COMMIT + PUSH to `main` (so Vercel can auto-redeploy)
+- HARD STOP — 21D.2 provisioning still BLOCKED.
+
 #### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
 
 Status: **BLOCKED — provider access unavailable (operator action required).**

@@ -1617,6 +1617,25 @@ URL contained `%23` (percent-encoded `#`).
   files, models, or application code changed.
 - Report: `docs/phase_21/phase_21d2_alembic_url_fix.md`.
 
+### 21D.2 — Vercel/Next.js 16.3 Deployment Compatibility Fix (COMPLETE, 2026-08-25)
+
+**Vercel deployment failure fixed** — `ENOENT: /vercel/path0/frontend/.next/next-server.js.nft.json`.
+
+- **Root cause**: `output: "standalone"` (unconditional, Phase 18A) is
+  incompatible with Vercel's adapter on Next.js 16.3.0 during Vercel builds —
+  the standalone output omits the top-level `.next/next-server.js.nft.json`
+  trace that Vercel expects.
+- **Fix** (`frontend/next.config.ts`): `output: process.env.VERCEL ? undefined
+  : "standalone"` — Vercel builds (VERCEL=1) use normal Next.js output; Docker
+  and local builds retain standalone. SSR and the Phase 13 PWA preserved.
+- **Verified (both modes, static)**: non-Vercel build exit 0 with
+  `.next/standalone/server.js` present · Vercel-mode build (VERCEL=1) exit 0
+  with `.next/standalone` absent and `.next/next-server.js.nft.json` present ·
+  `npx tsc --noEmit` PASS · `git diff --check` PASS.
+- No API URLs, auth, backend, or Docker configuration changed.
+- Committed and pushed to `main` (commit in walkthrough) so Vercel can
+  auto-redeploy.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA
