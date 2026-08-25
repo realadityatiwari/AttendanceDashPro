@@ -37,7 +37,7 @@ security regressions. Configuration only — no deployment.
 
 | Variable | Consumer | Required | Secret | Example (prod) | Dev source | Provider |
 |---|---|---|---|---|---|---|
-| `DATABASE_URI` | `db/session.py`, `alembic/env.py` | ✅ | **Yes** | `postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require` | `postgresql+asyncpg://postgres:postgres@localhost:55432/attendancedash` | Render (secret env) |
+| `DATABASE_URI` | `db/session.py`, `alembic/env.py` | ✅ | **Yes** | `postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?ssl=require` | `postgresql+asyncpg://postgres:postgres@localhost:55432/attendancedash` | Render (secret env) |
 | `JWT_SECRET_KEY` | `config.py`, `security.py` | ✅ | **Yes** | 64-char random hex | dev default (guarded) | Render (secret env) |
 | `BACKEND_CORS_ORIGINS` | `main.py` (CORS) | ✅ | No (value is public origin) | `["https://your-project.vercel.app"]` | localhost:3100 | Render env |
 | `APP_ENV` | `config.py` | ✅ | No | `production` | `development` | Render env |
@@ -88,8 +88,10 @@ secrets. They are safe in env vars but must not be embedded in client code.
 
 - Standard SQLAlchemy `create_async_engine(settings.DATABASE_URI)` with
   `asyncpg` — fully portable to Supabase or any PostgreSQL.
-- Supabase connection: `postgresql+asyncpg://...@...:6543/postgres?sslmode=require`
-  (pooler port 6543; asyncpg supports `sslmode=require`).
+- Supabase connection: `postgresql+asyncpg://...@...:5432/postgres?ssl=require`
+  (Session Pooler port 5432; asyncpg-native `ssl=require` — `sslmode=` is NOT
+  a valid asyncpg keyword and would crash; verified against installed
+  asyncpg 0.31.0 / SQLAlchemy 2.0.52).
 - Alembic `env.py` reads `settings.DATABASE_URI` — migrations run against
   whatever DB the env points to. **No provider-specific dependency added.**
 - Development DB untouched; production DB not created.

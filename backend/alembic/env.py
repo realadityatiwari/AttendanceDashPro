@@ -2,6 +2,7 @@ import asyncio
 from logging.config import fileConfig
 import sys
 import os
+from configparser import Interpolation
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -15,6 +16,17 @@ import app.models  # Ensure models are loaded
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Disable ConfigParser interpolation on the Alembic config parser.
+#
+# The production DATABASE_URI contains percent-encoded credential characters
+# (e.g. '%23' for '#'). Alembic's Config creates its ConfigParser with the
+# default BasicInterpolation, which interprets '%' sequences and raises
+# `ValueError: invalid interpolation syntax` in set_main_option().
+# Replacing `_interpolation` with the no-op `Interpolation` class (the same
+# object configparser uses for `interpolation=None`) lets the URL pass through
+# verbatim. `file_config` is memoized, so this is applied once before use.
+config.file_config._interpolation = Interpolation()
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

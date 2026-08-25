@@ -52,12 +52,13 @@ success. Record the blocker and the exact manual actions instead.
 5. Note the **project reference** (e.g. `abcdefghijklmnopqrst`).
 6. **Do not** enable any paid add-ons, backups, or compute upgrades.
 7. Copy the connection string from Settings → Database → Connection string →
-   **Session pooler** (port 6543, `?sslmode=require`).
+   **Session pooler** (port 5432 for the session pooler; use asyncpg-native
+   `?ssl=require`, NOT `sslmode`).
 
 ### Step 2 — Initialize production schema (Alembic)
 
 1. Export the pooler URL (with `+asyncpg` driver):
-   `postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require`
+   `postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?ssl=require`
 2. From `backend/`:
    ```
    DATABASE_URI=<url above> python -m alembic upgrade head

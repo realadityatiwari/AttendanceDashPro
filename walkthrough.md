@@ -3163,6 +3163,168 @@ Plus free-tier guardrails and no-dev-data-import rules.
 
 ---
 
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Database Connection Compatibility Audit)
+
+Date: 2026-08-25 · Scope: pre-migration SQLAlchemy/asyncpg/Supabase compatibility audit · Read-only
+
+> **AUDIT COMPLETE.** Verified SQLAlchemy 2.0.52 + asyncpg 0.31.0 compatibility
+> with the Supabase Session Pooler. Found and corrected a documentation
+> defect: `?sslmode=require` is invalid for asyncpg (would crash at connect);
+> the correct asyncpg-native form is `?ssl=require`. No code change needed —
+> only the documented connection contract was corrected (also port 6543 →
+> 5432 for the Session Pooler). No production DB accessed, no secrets touched,
+> zero mutations.
+
+## Finding (root cause verified from installed drivers)
+
+- `asyncpg.connect()` signature accepts `ssl=` but **not** `sslmode=`
+  (`sslmode` is only parsed from a raw DSN string, which SQLAlchemy doesn't
+  use).
+- SQLAlchemy's asyncpg dialect `create_connect_args()` does
+  `opts.update(url.query)` — every URL query param is passed verbatim as an
+  `asyncpg.connect()` keyword.
+- Therefore `?sslmode=require` → `TypeError: unexpected keyword argument
+  'sslmode'` at connect.
+- Correct form: **`?ssl=require`** (asyncpg accepts the string `'require'`).
+
+## Fix (documentation only — no application code change)
+
+| File | Change |
+|---|---|
+| `backend/.env.example` | Supabase comment: `?ssl=require`, port 5432 |
+| `docs/phase_21/phase_21d1_config_hardening.md` | env contract table + DB section corrected |
+| `docs/phase_21/phase_21d2_provisioning_runbook.md` | Supabase/Alembic steps corrected |
+| `docs/phase_21/phase_21d2_database_connection_audit.md` | NEW — full audit |
+
+## Verified Compatible
+
+- Full placeholder Session Pooler URL parses: host/port 5432/user
+  `postgres.<ref>`/db `postgres`/`ssl=require` ✅
+- Session-mode PgBouncer supports prepared statements — SQLAlchemy asyncpg
+  default `prepared_statement_cache_size=100` is safe ✅ (transaction pooler
+  6543 would need `?pgbouncer=true`, not used)
+- Alembic uses the same `settings.DATABASE_URI` (single head
+  `e1f2a3b4c5d6`) ✅
+- Render can supply `DATABASE_URI` as a secret (`sync: false`) ✅
+- Local development behavior unchanged ✅
+
+## Database / Secrets / Git
+
+- Dev DB mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0.
+- Production DB: **NOT ACCESSED · NOT MIGRATED · NOT MUTATED**.
+- Secrets: **none accessed or generated**; placeholder password `REDACTED`
+  used in all examples.
+- Git: commit NONE, push NONE.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21D.2 connection-audit record added.
+- `implementation_plan.md`: audit section added.
+- `task.md`: audit checklist complete; provisioning checklist still
+  operator-gated.
+- `walkthrough.md`: this entry.
+
+## Phase Status
+
+- 21D.2 connection audit: COMPLETE
+- 21D.2 provider provisioning: BLOCKED (awaiting operator)
+- 21D.3: NOT STARTED — next authorized slice
+
+**PHASE 21D.2 — AUDIT COMPLETE / PROVISIONING STILL BLOCKED.**
+**HARD STOP:** No commit made. No push performed. No provider resource created. No deployment. No production DB touched.
+
+---
+
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Alembic URL Interpolation Defect Fix)
+
+Date: 2026-08-25 · Scope: fix `ValueError: invalid interpolation syntax` in `set_main_option` · No DB connection
+
+> **DEFECT FIXED.** The first production migration attempt was stopped
+> locally — before any Supabase connection — by an Alembic ConfigParser
+> interpolation error. The `%23` (percent-encoded `#`) in the `DATABASE_URI`
+> triggered `BasicInterpolation().before_set()` to raise
+> `ValueError: invalid interpolation syntax`. The fix: replace the parser's
+> interpolation with the no-op `configparser.Interpolation()` class.
+> Verified with offline SQL generation (exit 0, 289 lines, upgrade to head
+> `e1f2a3b4c5d6`). No database was ever connected to or mutated.
+
+## Symptom
+
+```
+ValueError: invalid interpolation syntax in
+'postgresql+asyncpg://...%23...?...'
+at config.set_main_option("sqlalchemy.url", settings.DATABASE_URI)
+```
+
+The error occurred during **local Alembic configuration loading**, before any
+database connection. Supabase was never contacted.
+
+## Root Cause
+
+Alembic 1.19.1's `Config` creates its `ConfigParser` via
+`ConfigParser(self.config_args)` (line 246 of `alembic/config.py`) — the
+`config_args` dict is passed as the positional `defaults` parameter, so the
+`interpolation=` keyword argument cannot be injected. The default
+`BasicInterpolation()` interprets `%` sequences; `%23` → `before_set` raises
+`ValueError`.
+
+## Fix
+
+`backend/alembic/env.py`, +12 lines:
+
+```python
+from configparser import Interpolation
+config.file_config._interpolation = Interpolation()
+```
+
+`Interpolation()` is the no-op base class — the same object `configparser`
+normalizes `interpolation=None` to (CPython 3.13 `configparser.py` lines
+667-668). `file_config` is `@util.memoized_property`, so the parser is
+created once and this change applies once.
+
+## Verification (no connection, no migration)
+
+| Check | Result |
+|---|---|
+| Reproduced `ValueError` with default parser → confirmed | ✅ |
+| `Interpolation()` fix → `set()` + `get()` with `%23` OK | ✅ ✅ |
+| `alembic heads` with `%23` URL | ✅ `e1f2a3b4c5d6 (head)`, exit 0 |
+| `alembic upgrade head --sql` (offline; executes env.py; **no DB connection**) | ✅ exit 0, 289 lines SQL, upgrade to `e1f2a3b4c5d6` present |
+| `python -m compileall` | ✅ PASS |
+| `git diff --check` | ✅ PASS |
+| Production DB | NOT ACCESSED · NOT MIGRATED · NOT MUTATED |
+| Dev DB | NOT ACCESSED |
+
+## Failed Attempt
+
+The failed migration attempt **never connected to or mutated Supabase**.
+The error was purely local — Alembic's `ConfigParser.set()` raised the
+`ValueError` during configuration parsing, before any SQL or network
+operation.
+
+## Database Status
+
+- Development DB: INSERT/UPDATE/DELETE/ALTER/DROP = 0
+- Production DB: NOT ACCESSED · NOT MIGRATED · NOT MUTATED
+
+## Files Changed
+
+- `backend/alembic/env.py` — the fix (+12 lines, —0 lines)
+- `docs/phase_21/phase_21d2_alembic_url_fix.md` — defect report (NEW)
+- Governance: MASTER_ROADMAP, implementation_plan, task, walkthrough
+
+## Governance
+
+- `MASTER_ROADMAP.md`: defect fix record added.
+- `implementation_plan.md`: fix section added.
+- `task.md`: fix checklist complete.
+- `walkthrough.md`: this entry.
+
+**PHASE 21D.2 — ALEMBIC FIX COMPLETE / PROVISIONING STILL BLOCKED.**
+**HARD STOP:** No commit made. No push performed. No provider resource created. No deployment. No production DB touched.
+
+---
+
 ---
 
 ---

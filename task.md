@@ -1747,7 +1747,43 @@ Status: **COMPLETE** (assessment) — Phase 21 remains BLOCKED; read-only; no de
 - [x] `docs/phase_21/phase_21d1_config_hardening.md` created
 - [x] Governance synchronized
 - [x] Zero DB mutations; zero cloud resources; no deployment; no production secrets
-- HARD STOP — Phase 21D.2 NOT STARTED; no commit made.
+- HARD STOP — 21D.1 complete; 21D.2 audit next; no commit made.
+
+#### 21D.2 — Database Connection Compatibility Audit (COMPLETE, 2026-08-25)
+
+- [x] Inspect connection architecture (config.py, db/session.py, alembic env.py, requirements, Dockerfile, render.yaml)
+- [x] Verify installed versions: SQLAlchemy 2.0.52, asyncpg 0.31.0
+- [x] Confirm asyncpg.connect() accepts `ssl=` but NOT `sslmode=`
+- [x] Confirm SQLAlchemy asyncpg dialect passes URL query params verbatim (`opts.update(url.query)`)
+- [x] Defect found: `?sslmode=require` would raise TypeError at connect
+- [x] Corrected documentation to asyncpg-native `?ssl=require` (backend/.env.example, 21D.1 doc, 21D.2 runbook; port 6543 → 5432)
+- [x] Verified full Session Pooler URL parse (host/port/user/db/ssl=require)
+- [x] Verified session-mode PgBouncer supports prepared statements (no cache tuning needed)
+- [x] Verified Alembic uses same settings.DATABASE_URI (single head e1f2a3b4c5d6)
+- [x] Verified Render can supply DATABASE_URI as secret (sync: false)
+- [x] No code change required (URL is env-driven; only docs corrected)
+- [x] No production DB accessed/mutated; no secrets accessed/generated
+- [x] `docs/phase_21/phase_21d2_database_connection_audit.md` created
+- [x] Zero DB mutations (dev + production); git diff --check PASS
+- [x] Governance synchronized
+- HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
+
+#### 21D.2 — Alembic URL Interpolation Defect Fix (COMPLETE, 2026-08-25)
+
+- [x] Reproduced `ValueError: invalid interpolation syntax` with `%23` in URL (default ConfigParser)
+- [x] Confirmed Alembic 1.19.1 `file_config` memoized; `config_args` passes as defaults (interpolation= not injectable)
+- [x] Confirmed `Interpolation()` no-op fixes both `set()` and `get()` (same as interpolation=None)
+- [x] Applied fix in `backend/alembic/env.py`: `config.file_config._interpolation = Interpolation()` (+12 lines)
+- [x] `alembic heads` with `%23` URL → `e1f2a3b4c5d6 (head)`, exit 0
+- [x] `alembic upgrade head --sql` (offline; executes env.py; NO DB connection) → exit 0, 289 lines SQL, upgrade to head present
+- [x] `python -m compileall alembic app` PASS
+- [x] `git diff --check` PASS
+- [x] No migration files/models/app code changed; no migration created
+- [x] Failed migration attempt never connected to or mutated Supabase (error was local, pre-connection)
+- [x] `docs/phase_21/phase_21d2_alembic_url_fix.md` created
+- [x] Governance synchronized
+- [x] Development DB: 0 mutations · Production DB: NOT ACCESSED/NOT MIGRATED/NOT MUTATED
+- HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
 
 #### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
 

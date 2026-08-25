@@ -1573,6 +1573,50 @@ explicit "do not import dev data" rules.
 **No code changed. No provider resource created. No production DB created.
 No secrets generated/committed. Zero DB mutations.**
 
+### 21D.2 — Production Database Connection Compatibility Audit (COMPLETE, 2026-08-25)
+
+Pre-migration compatibility audit of SQLAlchemy 2.0.52 + asyncpg 0.31.0 with
+the Supabase Session Pooler (port 5432). Report:
+`docs/phase_21/phase_21d2_database_connection_audit.md`.
+
+**Finding — documentation defect corrected (no code change):** the documented
+`?sslmode=require` parameter is **invalid** for asyncpg — SQLAlchemy passes URL
+query params verbatim to `asyncpg.connect()`, whose signature accepts `ssl=`
+but not `sslmode=`. `?sslmode=require` would raise `TypeError` at connect.
+Corrected to asyncpg-native **`?ssl=require`** in `backend/.env.example`,
+`phase_21d1_config_hardening.md`, and `phase_21d2_provisioning_runbook.md`;
+port corrected 6543 → 5432 (Session Pooler).
+
+**Verified compatible:** Session Pooler (session-mode PgBouncer) supports
+prepared statements — no `prepared_statement_cache_size` change needed ·
+Alembic uses the same `settings.DATABASE_URI` (head `e1f2a3b4c5d6`) · Render
+can supply `DATABASE_URI` as a secret (`sync: false`) · local dev unchanged.
+
+No production DB accessed/mutated; no secrets accessed/generated. Zero DB
+mutations.
+
+### 21D.2 — Alembic URL Interpolation Defect Fix (COMPLETE, 2026-08-25)
+
+**Deployment-blocking configuration defect found and fixed.** The first
+production migration attempt was stopped locally by
+`ValueError: invalid interpolation syntax` in
+`config.set_main_option("sqlalchemy.url", settings.DATABASE_URI)` when the
+URL contained `%23` (percent-encoded `#`).
+
+- **Root cause**: Alembic's `Config` builds its `ConfigParser` with default
+  `BasicInterpolation()` (Alembic 1.19.1, `config_args` passed as defaults so
+  `interpolation=` cannot be injected); `%` sequences trigger interpolation.
+- **Fix** (`backend/alembic/env.py`, +12 lines): `config.file_config._interpolation
+  = Interpolation()` — the same no-op interpolation class configparser uses
+  for `interpolation=None`. Applied once (memoized), before the URL is set.
+- **Verified without connecting**: `alembic heads` OK ·
+  `alembic upgrade head --sql` (offline; executes env.py; NO DB connection)
+  exit 0, 289 lines of SQL, upgrade to `e1f2a3b4c5d6` present ·
+  `compileall` PASS · `git diff --check` PASS.
+- The failed attempt **never connected to or mutated Supabase**. No migration
+  files, models, or application code changed.
+- Report: `docs/phase_21/phase_21d2_alembic_url_fix.md`.
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

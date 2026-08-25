@@ -2255,6 +2255,60 @@ No secrets generated/committed. Zero DB mutations.**
 operator provisions the providers and reports back, 21D.3 (Beta Validation &
 Launch Gate) is the next authorized slice.
 
+#### 21D.2 — Database Connection Compatibility Audit (COMPLETE, 2026-08-25)
+
+**Objective:** pre-migration audit of SQLAlchemy/asyncpg compatibility with
+the Supabase Session Pooler (port 5432). Read-only — no DB access, no secrets,
+no mutations. Report: `docs/phase_21/phase_21d2_database_connection_audit.md`.
+
+**Finding (documentation defect, corrected — no code change):**
+
+- Installed: SQLAlchemy 2.0.52, asyncpg 0.31.0.
+- `asyncpg.connect()` accepts `ssl=` but NOT `sslmode=`; SQLAlchemy's asyncpg
+  dialect passes URL query params verbatim as kwargs
+  (`opts.update(url.query)` in `create_connect_args`).
+- Therefore `?sslmode=require` → `asyncpg.connect(sslmode=...)` →
+  `TypeError` at connect. The correct form is **`?ssl=require`**.
+- Corrected in: `backend/.env.example`, `phase_21d1_config_hardening.md`,
+  `phase_21d2_provisioning_runbook.md` (also port 6543 → 5432 for the
+  Session Pooler).
+
+**Verified compatible:** full placeholder Session Pooler URL parses correctly
+(host/port/user/db/ssl=require) · session-mode PgBouncer supports prepared
+statements (no cache tuning needed; transaction pooler 6543 would require
+`?pgbouncer=true`, not used) · Alembic uses the same `settings.DATABASE_URI`
+(single head `e1f2a3b4c5d6`) · Render can supply `DATABASE_URI` as a secret.
+
+**Phase status: 21D.2 connection audit COMPLETE; provisioning still BLOCKED
+(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
+Launch Gate (after operator provisioning).
+
+#### 21D.2 — Alembic URL Interpolation Defect Fix (COMPLETE, 2026-08-25)
+
+**Deployment-blocking config defect:** `config.set_main_option("sqlalchemy.url",
+settings.DATABASE_URI)` raised `ValueError: invalid interpolation syntax` when
+`DATABASE_URI` contained `%23` (percent-encoded `#`). The error occurred
+**locally before any DB connection** — Supabase was never touched.
+
+- **Root cause**: Alembic 1.19.1's `Config` creates its `ConfigParser` with
+  default `BasicInterpolation()` (Alembic `config_args` passes as defaults,
+  not `interpolation=`, so the keyword cannot be injected). `BasicInterpolation`
+  interprets `%` as interpolation markers → `before_set` raises ValueError.
+- **Fix** (`backend/alembic/env.py`, +12 lines): `config.file_config._interpolation
+  = Interpolation()` — the no-op `Interpolation` class (same as
+  `configparser(interpolation=None)` normalizes to) replaces the active
+  interpolation. `file_config` is memoized, so this is applied once.
+- **Verified**: `alembic heads` OK · `alembic upgrade head --sql` (offline;
+  executes env.py fully; **no DB connection**) exit 0, 289 lines SQL, upgrade
+  to `e1f2a3b4c5d6` · `compileall` PASS · `git diff --check` PASS.
+- No migration files, models, or application code changed. No migration
+  created. The failed attempt never connected to or mutated Supabase.
+- Report: `docs/phase_21/phase_21d2_alembic_url_fix.md`.
+
+**Phase status: 21D.2 config fix COMPLETE; provisioning still BLOCKED
+(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
+Launch Gate (after operator provisions providers and runs the migration).
+
 ---
 
 ---
