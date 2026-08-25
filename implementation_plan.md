@@ -2221,6 +2221,40 @@ migrations, PWA, routes.
 slice: 21D.2 — Provider Project Provisioning & Environment Wiring (create
 Vercel/Render/Supabase projects, set secrets/env vars, first deployment).
 
+#### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
+
+**Objective:** provision Vercel Hobby, Render Free Web Service, and Supabase
+Free PostgreSQL; wire env vars; initialize a NEW production schema via
+Alembic; minimal connectivity verification.
+
+**Status: BLOCKED — provider access unavailable.**
+
+**Evidence:**
+- No `vercel` / `render` / `supabase` / `gh` CLI installed.
+- No provider API tokens in the environment.
+- No provider state directories (`.vercel`, `.render`, `supabase/`).
+- Only `render.yaml` exists (repository configuration from 21D.1, not a
+  provisioned service).
+
+**Decision (per phase rule "do not invent success"):** all three providers
+require operator account creation or operator-created API tokens. The coding
+agent cannot provision on the user's behalf. No resources were fabricated or
+claimed.
+
+**Delivered:** `docs/phase_21/phase_21d2_provisioning_runbook.md` — an 8-step
+operator runbook (Supabase Free project → Alembic schema init → Render Free
+service → Render env wiring incl. new JWT secret → `/health` verify → Vercel
+Hobby project with real Render URL → Render CORS to real Vercel URL →
+connectivity verification) plus free-tier guardrails and
+no-dev-data-import rules.
+
+**No code changed. No provider resource created. No production DB created.
+No secrets generated/committed. Zero DB mutations.**
+
+**Phase status: 21D.2 BLOCKED (awaiting operator provisioning).** Once the
+operator provisions the providers and reports back, 21D.3 (Beta Validation &
+Launch Gate) is the next authorized slice.
+
 ---
 
 ---

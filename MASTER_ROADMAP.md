@@ -1553,6 +1553,26 @@ secrets created. Report: `docs/phase_21/phase_21d1_config_hardening.md`.
 runtime test PASS · secret scan clean · `git diff --check` PASS · zero DB
 mutations.
 
+### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
+
+**Status: BLOCKED — provider access unavailable (operator action required).**
+Runbook: `docs/phase_21/phase_21d2_provisioning_runbook.md`.
+
+**Blocker:** no Vercel/Render/Supabase CLI installed, no provider API tokens
+in the environment, no `gh` CLI, no provider state directories, and no
+fabricated resources. All three providers require operator account creation
+or operator-created API tokens. The coding agent has no legitimate path to
+provision provider projects.
+
+**Delivered:** a precise 8-step operator provisioning runbook (Supabase Free
+project + region → Alembic schema init → Render Free service → Render env
+wiring → /health verify → Vercel Hobby project → CORS wiring → connectivity
+verification) with free-tier guardrails, secret-generation guidance, and
+explicit "do not import dev data" rules.
+
+**No code changed. No provider resource created. No production DB created.
+No secrets generated/committed. Zero DB mutations.**
+
 ## Required prerequisites (unmet)
 
 ### Gate A — Phase 20 manual browser QA

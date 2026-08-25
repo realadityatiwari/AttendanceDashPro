@@ -1749,13 +1749,27 @@ Status: **COMPLETE** (assessment) — Phase 21 remains BLOCKED; read-only; no de
 - [x] Zero DB mutations; zero cloud resources; no deployment; no production secrets
 - HARD STOP — Phase 21D.2 NOT STARTED; no commit made.
 
-#### 21D.2 — Provider Project Provisioning & Environment Wiring (NOT STARTED — next authorized slice)
+#### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
 
-- [ ] Create Vercel + Render + Supabase projects (provider account setup)
-- [ ] Configure environment variables / secrets on each provider
-- [ ] Set `NEXT_PUBLIC_API_URL` (Vercel) + `BACKEND_CORS_ORIGINS` (Render) to provider URLs
-- [ ] Wire CORS, JWT secret, DATABASE_URI (Supabase pooler connection)
-- [ ] Test deployment + health check + migration-on-deploy
+Status: **BLOCKED — provider access unavailable (operator action required).**
+
+- [x] Governance review (roadmap, plan, task, walkthrough, 21D.0/21D.1 reports)
+- [x] Provider access check: vercel/render/supabase/gh CLIs — none installed
+- [x] Provider tokens in environment — none found
+- [x] Provider state dirs (`.vercel`, `.render`, `supabase/`) — none exist
+- [x] No fabricated project IDs/URLs/credentials (none created, none claimed)
+- [x] `docs/phase_21/phase_21d2_provisioning_runbook.md` created (8-step operator runbook + guardrails)
+- [x] Zero DB mutations; zero cloud resources; zero code changes
+- [x] Governance synchronized
+- [ ] OPERATOR TASK: create Supabase Free project (region near India) + note reference
+- [ ] OPERATOR TASK: run `alembic upgrade head` against the NEW Supabase DB (head `e1f2a3b4c5d6`)
+- [ ] OPERATOR TASK: create Render Free web service from `render.yaml` / Dockerfile
+- [ ] OPERATOR TASK: set Render env vars (DATABASE_URI, new JWT_SECRET_KEY, CORS, APP_ENV=production)
+- [ ] OPERATOR TASK: verify `GET https://<service>.onrender.com/health` → 200
+- [ ] OPERATOR TASK: create Vercel Hobby project (root `frontend/`), set `NEXT_PUBLIC_API_URL` to real Render URL
+- [ ] OPERATOR TASK: update Render `BACKEND_CORS_ORIGINS` to exact Vercel URL; restart Render
+- [ ] OPERATOR TASK: minimal connectivity verification (health 200, invalid-login 401, no localhost fallback)
+- HARD STOP — Phase 21D.3 NOT STARTED; no commit made.
 
 ### Phase 22 — Post-Launch (NOT STARTED — only after Phase 21 launch succeeds)
 

@@ -3094,6 +3094,75 @@ Render instance → no migration race.
 
 ---
 
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Provider Provisioning — BLOCKED)
+
+Date: 2026-08-25 · Scope: provision Vercel/Render/Supabase + wire env + init prod schema · **BLOCKED — provider access unavailable**
+
+> **PHASE 21D.2 BLOCKED.** No Vercel, Render, or Supabase CLI is installed and
+> no provider API tokens exist in the environment. Provisioning requires
+> operator account creation or operator-created API tokens — the coding agent
+> cannot provision on the user's behalf. Per the phase rule ("do not invent
+> success"), no provider resources were created and none are claimed. An
+> 8-step operator runbook was delivered.
+
+## Provider Access Check (evidence)
+
+| Provider | CLI | Token (env) | State dir | Status |
+|---|---|---|---|---|
+| Vercel | ❌ | ❌ | ❌ | BLOCKED |
+| Render | ❌ | ❌ | ❌ | BLOCKED |
+| Supabase | ❌ | ❌ | ❌ | BLOCKED |
+| GitHub (`gh`) | ❌ | ❌ | — | BLOCKED |
+
+Only `render.yaml` exists in the repo (repository configuration from 21D.1,
+not a provisioned service). No project IDs, URLs, or credentials were
+fabricated.
+
+## Decision
+
+All three providers require operator action (account creation and/or API
+token). This phase stops at the access boundary per the phase's explicit
+failure-handling rule. The repository-side preparation is already complete
+(21D.1): `render.yaml`, PORT-aware Dockerfile, production URL guard, env
+contract.
+
+## Deliverable
+
+`docs/phase_21/phase_21d2_provisioning_runbook.md` — 8-step operator runbook:
+
+1. Create Supabase Free project (region near India) + note reference
+2. Run `alembic upgrade head` against the NEW Supabase DB (head
+   `e1f2a3b4c5d6`) — no dev data import
+3. Create Render Free web service (Docker, `./backend`)
+4. Set Render env vars (DATABASE_URI, new JWT_SECRET_KEY, CORS, APP_ENV)
+5. Verify `GET /health` → 200
+6. Create Vercel Hobby project (root `frontend/`), set `NEXT_PUBLIC_API_URL`
+   to the real Render URL
+7. Update Render `BACKEND_CORS_ORIGINS` to the exact Vercel URL; restart
+8. Minimal connectivity verification (health 200, invalid-login 401, no
+   localhost fallback)
+
+Plus free-tier guardrails and no-dev-data-import rules.
+
+## Database / Files / Git
+
+- Development DB mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0.
+- Production DB: NOT CREATED (no schema, no migration, no data).
+- Cloud resources created: ZERO.
+- Files: `docs/phase_21/phase_21d2_provisioning_runbook.md` created;
+  governance synchronized.
+- Git: commit NONE, push NONE.
+
+## Phase Status
+
+- Phase 21D.2: **BLOCKED** (awaiting operator provisioning)
+- Phase 21D.3: NOT STARTED — next authorized slice (after 21D.2 completes)
+
+**PHASE 21D.2 — BLOCKED / HARD STOP.**
+**HARD STOP:** No commit made. No push performed. No provider resource created. No deployment. No production touched.
+
+---
+
 ---
 
 ---
