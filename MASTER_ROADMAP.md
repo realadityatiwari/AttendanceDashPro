@@ -1638,7 +1638,30 @@ URL contained `%23` (percent-encoded `#`).
 
 ## Required prerequisites (unmet)
 
-### Gate A — Phase 20 manual browser QA
+### 21D.2 — Production Auth Discrepancy Audit (COMPLETE, read-only, 2026-08-25)
+
+**Discovery:** owner account (`2401220100027`, ADMIN) authenticates on
+localhost but returns `401 "Incorrect roll number or password"` on production
+(Vercel → Render → Supabase). Report:
+`docs/phase_21/phase_21d2_auth_discrepancy_audit.md`.
+
+**Root cause (evidence-based):** the production Supabase database contains
+**zero application user rows**. The 21D.2 runbook initializes schema only
+(`alembic upgrade head`; "No application data"), no migration or script
+copies dev users, and no user was provisioned against production. The login
+lookup finds no row → Phase 16 anti-enumeration returns the generic 401.
+Localhost succeeds because the dev DB holds the account (1 user, PBKDF2
+hash, verified read-only).
+
+**Not a code defect** — same auth code in both environments; an
+operational/data-state gap. No fix implemented (read-only audit).
+
+**Planned steps (awaiting authorization):** seed production academic baseline
+(idempotent, from `timetable.json`) → create owner account via canonical
+`POST /api/v1/auth/register` → grant ADMIN via `provision_admin.py` →
+verify login. Dev DB untouched.
+
+## Gate A — Phase 20 manual browser QA
 The 42-item manual browser QA checklist was delivered in Phase 20
 (`docs/phase_20/phase_20_production_qa.md` §19). The user must complete and
 report it. Agent has NOT performed any browser testing.

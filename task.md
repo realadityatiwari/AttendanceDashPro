@@ -1811,6 +1811,22 @@ Status: **BLOCKED — provider access unavailable (operator action required).**
 - [x] `docs/phase_21/phase_21d2_provisioning_runbook.md` created (8-step operator runbook + guardrails)
 - [x] Zero DB mutations; zero cloud resources; zero code changes
 - [x] Governance synchronized
+
+#### 21D.2 — Production Auth Discrepancy Audit (COMPLETE, read-only, 2026-08-25)
+
+- [x] Traced full auth flow (login endpoint, security.py PBKDF2, deps, user model)
+- [x] Verified dev DB read-only: 1 user (owner, ADMIN, PBKDF2 hash) — localhost succeeds
+- [x] Audited migration scripts (migrate_extract/execute — no password hash transfer; set_initial_password, provision_admin)
+- [x] Verified no Alembic migration seeds user rows
+- [x] Verified 21D.2 runbook: production init = schema only ("No application data")
+- [x] Determined production Supabase has ZERO user rows → login returns 401 (anti-enumeration)
+- [x] Confirmed same auth code both environments — not a code defect; data-state gap
+- [x] Fix plan documented (seed baseline → register owner → provision ADMIN → verify) — NOT implemented
+- [x] `docs/phase_21/phase_21d2_auth_discrepancy_audit.md` created
+- [x] Zero mutations; no production DB accessed; no account/data/auth logic changed
+- [ ] OPERATOR: confirm Render log shows "roll_number not found or no password set" branch
+- [ ] OPERATOR/AUTH: authorize fix plan (seed baseline → register owner → provision ADMIN)
+- HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
 - [ ] OPERATOR TASK: create Supabase Free project (region near India) + note reference
 - [ ] OPERATOR TASK: run `alembic upgrade head` against the NEW Supabase DB (head `e1f2a3b4c5d6`)
 - [ ] OPERATOR TASK: create Render Free web service from `render.yaml` / Dockerfile

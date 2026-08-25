@@ -2329,6 +2329,29 @@ unconditional `output: "standalone"` in `frontend/next.config.ts`.
 (awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
 Launch Gate (after operator provisions providers and runs the migration).
 
+#### 21D.2 — Production Auth Discrepancy Audit (COMPLETE, read-only, 2026-08-25)
+
+**Objective:** investigate why the owner account (`2401220100027`, ADMIN)
+authenticates on localhost but returns 401 on production. Read-only — no
+mutations. Report: `docs/phase_21/phase_21d2_auth_discrepancy_audit.md`.
+
+**Root cause (evidence-based):** the production Supabase database has **zero
+user rows**. The 21D.2 initialization procedure creates schema only
+(`alembic upgrade head`; "No application data" per the runbook); no migration
+or script copies dev users; no user was provisioned against production. The
+login lookup returns None → Phase 16 anti-enumeration → 401. Localhost works
+because the dev DB holds the account (1 user, PBKDF2, verified). Same auth
+code in both environments — an operational/data-state gap, not a code defect.
+
+**Fix plan (not implemented; awaiting authorization):** 1. seed production
+academic baseline (idempotent, from `timetable.json` via seed scripts);
+2. create owner account via `POST /api/v1/auth/register` (production);
+3. grant ADMIN via `provision_admin.py`; 4. verify login. Dev DB untouched.
+
+**Phase status: 21D.2 auth-discrepancy audit COMPLETE; provisioning still
+BLOCKED.** Next authorized slice: 21D.3 — Beta Validation & Launch Gate
+(after operator provisions providers and runs the migration).
+
 ---
 
 ---

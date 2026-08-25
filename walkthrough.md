@@ -3396,6 +3396,80 @@ output: process.env.VERCEL ? undefined : "standalone",
 
 ---
 
+# AttendanceDash Pro — Phase 21D.2 Walkthrough (Production Auth Discrepancy Audit)
+
+Date: 2026-08-25 · Scope: root-cause the production 401 on login · Read-only — zero mutations
+
+> **AUDIT COMPLETE.** The owner account authenticates on localhost but
+> returns `401 "Incorrect roll number or password"` on production
+> (Vercel → Render → Supabase). Root cause identified: **the production
+> Supabase database contains zero user rows** — the 21D.2 initialization
+> creates schema only (`alembic upgrade head`; "No application data"), and
+> no user was ever provisioned against production. This is an
+> operational/data-state gap, not a code defect. No fix implemented.
+
+## Auth Flow (traced)
+
+```
+POST /api/v1/auth/login
+  → SELECT User WHERE roll_number = :r          (auth.py:57)
+  → user found + hash present?
+       → verify_password(pbkdf2_sha256$salt$hex)  (security.py:8)
+            True  → JWT 200
+            False → 401 (log: "incorrect password")
+  → user missing / no hash → dummy-hash verify → 401 (log: "roll_number not found")
+```
+
+Both 401 branches return the same message (Phase 16 anti-enumeration); only
+the server log line differs.
+
+## Evidence
+
+| Check | Finding |
+|---|---|
+| Dev DB (read-only) | 1 user: 2401220100027 Aditya Tiwari, ADMIN, PBKDF2 hash present |
+| Production DB | schema exists (login returns 401, not 500); **no user rows** |
+| Alembic migrations seed users? | NO (zero `INSERT INTO users` in versions/) |
+| Scripts copy dev users to Supabase? | NO — runbook forbids; no such script |
+| Firebase migration (Phase 4.5) | transferred firebase_uid/roll_number/name only — never password hashes |
+| Owner password origin | set locally via `set_initial_password.py` (PBKDF2); exists only in dev DB |
+| Register on production | would 503 — no active AcademicSession (baseline not seeded) |
+
+## Root Cause
+
+Production Supabase was initialized schema-only per the 21D.2 runbook. Login
+lookup finds no user → generic 401. Same auth code in both environments
+(`auth.py`, `security.py`, models identical) — confirms a data-state gap.
+
+## Fix Plan (documented, NOT implemented)
+
+1. Confirm Render log branch ("roll_number not found or no password set").
+2. Seed production academic baseline (idempotent, `timetable.json` via
+   `seed_academic_baseline.py` / `expand_baseline.py` / `seed_academic_events.py`).
+3. Create owner via canonical `POST /api/v1/auth/register` (production).
+4. Grant ADMIN via `provision_admin.py 2401220100027`.
+5. Verify login + `/student/me`. Dev DB untouched; no production rows exist to
+   overwrite.
+
+## Database / Safety
+
+- Dev DB mutations: INSERT/UPDATE/DELETE/ALTER/DROP = 0.
+- Production DB: NOT ACCESSED (no credentials; read-only audit of dev DB only).
+- No account, data, or authentication logic mutated. No fix implemented.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: auth-discrepancy discovery record added.
+- `implementation_plan.md`: audit section added (fix plan pending).
+- `task.md`: audit checklist complete; operator confirm/authorize items open.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21d2_auth_discrepancy_audit.md`: full report.
+
+**PHASE 21D.2 — AUTH AUDIT COMPLETE / FIX PENDING OPERATOR AUTHORIZATION.**
+**HARD STOP:** No further changes. No commit made. No push performed. No production DB touched.
+
+---
+
 ---
 
 ---
