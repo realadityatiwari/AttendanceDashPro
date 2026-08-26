@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, Date, ForeignKey, Enum
 from app.db.base_class import Base
-from app.models.enums import EventType, ClassType
+from app.models.enums import EventType, ClassType, ElectiveSlot
 import datetime
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
@@ -13,6 +13,16 @@ class AcademicEvent(Base):
     end_date: Mapped[datetime.date] = mapped_column(Date)
     
     subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=True)
+    # Phase 22.4: an event may be scoped to a Departmental Elective LOGICAL
+    # SLOT instead of a concrete subject. The shared event stays ONE row for
+    # all students (never per-student duplicates) and keeps the anchor subject
+    # in `subject_id` (BCS-054 for ELECTIVE_I, BCS-058 for ELECTIVE_II) so the
+    # shared schedule/synchronizer semantics are unchanged; `elective_slot`
+    # marks the slot so student-facing reads resolve to each student's
+    # selected concrete subject. NULL = a regular (non-elective) event.
+    elective_slot: Mapped[ElectiveSlot | None] = mapped_column(
+        Enum(ElectiveSlot), nullable=True, default=None
+    )
     class_type: Mapped[ClassType | None] = mapped_column(Enum(ClassType), nullable=True)
     
     is_working_day: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

@@ -7,6 +7,7 @@ from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.preference_repo import PreferenceRepository
 from app.services.attendance_service import AttendanceService, institution_today
 from app.services.eligibility_service import EligibilityService
+from app.services.elective_resolver import ElectiveResolver
 from app.engines.attendance_engine import classify_attendance_status
 from app.engines.practical_occurrence import occurrence_is_cancelled
 from app.schemas.notification import NotificationItem, NotificationsResponse
@@ -259,33 +260,49 @@ class NotificationService:
     async def _academic_events(self, user, as_of: date, subjects) -> List[NotificationItem]:
         """Upcoming academic events — the identical canonical selection the
         dashboard upcoming-events section uses (active, end_date >= today,
-        enrolled-scoped, sorted by (start_date, event_type), capped at 4)."""
+        enrolled-scoped, sorted by (start_date, event_type), capped at 4).
+        Phase 22.4: elective-slot events resolve to the student's selected
+        subject (shared anchor when no selection exists)."""
         enrolled_ids = {s.id for s in subjects}
         subject_by_id = {s.id: s for s in subjects}
+
+        resolver = ElectiveResolver(self.db)
+        choices = await resolver.load_choices(user.id)
+        anchor_subjects = await resolver.anchor_subjects()
 
         events = await self.calendar_repo.get_all_events()
         upcoming = []
         for e in events:
             if not e.active or e.end_date < as_of:
                 continue
-            if e.subject_id is not None and e.subject_id not in enrolled_ids:
-                continue
-            upcoming.append(e)
+            if e.elective_slot is not None:
+                choice = choices.get(e.elective_slot)
+                subject = choice.subject if choice is not None else anchor_subjects.get(e.elective_slot)
+                if subject is None or subject.id not in enrolled_ids:
+                    continue
+                effective = subject
+            else:
+                if e.subject_id is not None and e.subject_id not in enrolled_ids:
+                    continue
+                effective = subject_by_id.get(e.subject_id) if e.subject_id else None
+            upcoming.append((e, effective))
 
-        upcoming.sort(key=lambda x: (x.start_date, x.event_type.value))
-        return [NotificationItem(
-            id=f"{NotificationKind.ACADEMIC_EVENT.value}:{e.id}",
-            kind=NotificationKind.ACADEMIC_EVENT,
-            date=e.start_date,
-            subject_code=subject_by_id[e.subject_id].code if e.subject_id and e.subject_id in subject_by_id else None,
-            subject_name=subject_by_id[e.subject_id].name if e.subject_id and e.subject_id in subject_by_id else None,
-            message=self._event_message(e, subject_by_id),
-            event_id=e.id,
-        ) for e in upcoming[:4]]
+        upcoming.sort(key=lambda x: (x[0].start_date, x[0].event_type.value))
+        return [
+            NotificationItem(
+                id=f"{NotificationKind.ACADEMIC_EVENT.value}:{e.id}",
+                kind=NotificationKind.ACADEMIC_EVENT,
+                date=e.start_date,
+                subject_code=effective.code if effective else None,
+                subject_name=effective.name if effective else None,
+                message=self._event_message(e, effective),
+                event_id=e.id,
+            )
+            for e, effective in upcoming[:4]
+        ]
 
     @staticmethod
-    def _event_message(e, subject_by_id) -> str:
-        subject = subject_by_id.get(e.subject_id) if e.subject_id else None
+    def _event_message(e, subject) -> str:
         label = e.event_type.value.replace('_', ' ').title()
         if e.start_date == e.end_date:
             date_text = e.start_date.strftime("%d %b %Y")

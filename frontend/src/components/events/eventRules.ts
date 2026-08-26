@@ -1,6 +1,6 @@
 "use client";
 
-import { ClassType, EventType } from "@/types/api";
+import { ClassType, ElectiveSlot, EventType } from "@/types/api";
 
 /**
  * Frontend mirror of the backend event validation registry
@@ -160,6 +160,32 @@ export const CLASS_TYPE_LABELS: Record<ClassType, string> = {
   [ClassType.PRACTICAL]: "Practical",
   [ClassType.PRACTICAL2]: "Practical", // legacy alias, never returned by the backend
 };
+
+// Phase 22.4: the ADMIN-facing "subject" options for Departmental Elective
+// logical slots. ADMIN creates ONE shared event scoped to the slot; each
+// student sees it resolved to their own selected subject. These are not
+// concrete subjects — the backend rejects them for non-ADMIN users and for
+// practical/lab event types.
+export const ELECTIVE_SLOT_LABELS: Record<ElectiveSlot, string> = {
+  [ElectiveSlot.ELECTIVE_I]: "Departmental Elective-I",
+  [ElectiveSlot.ELECTIVE_II]: "Departmental Elective-II",
+};
+
+// Option values used by the event form's subject selector to represent the
+// logical slots (prefixed so they can never collide with subject UUIDs).
+export const SLOT_OPTION_PREFIX = "slot:";
+
+export function slotOptionValue(slot: ElectiveSlot): string {
+  return `${SLOT_OPTION_PREFIX}${slot}`;
+}
+
+export function parseSlotOption(value: string): ElectiveSlot | null {
+  if (!value.startsWith(SLOT_OPTION_PREFIX)) return null;
+  const slot = value.slice(SLOT_OPTION_PREFIX.length);
+  return (Object.values(ElectiveSlot) as string[]).includes(slot)
+    ? (slot as ElectiveSlot)
+    : null;
+}
 
 export function getRule(eventType: EventType): EventTypeRule {
   return EVENT_TYPE_RULES[eventType] ?? {

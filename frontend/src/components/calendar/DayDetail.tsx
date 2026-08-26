@@ -112,6 +112,14 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
           <Badge variant="outline" className="h-4 py-0 text-[10px] uppercase tracking-wider">{classLabel}</Badge>
         )}
       </div>
+      {event.resolved_subject_code && (
+        <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+          <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px] tracking-wide">
+            {event.resolved_subject_code}
+          </span>
+          {event.resolved_subject_name}
+        </p>
+      )}
       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
         <CalendarDays className="size-3 shrink-0" aria-hidden />
         {range}

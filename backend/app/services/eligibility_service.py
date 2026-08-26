@@ -16,6 +16,7 @@ from app.engines.calendar_engine import (
 from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import normalize_class_type
 from app.schemas.academic import Subject as SubjectSchema, Milestone, Timeline
+from app.services.elective_resolver import ElectiveResolver
 
 class EligibilityService:
     def __init__(self, db: AsyncSession):
@@ -38,8 +39,13 @@ class EligibilityService:
             raise HTTPException(status_code=404, detail="Subject not found")
 
         # Quiz dates are authoritative from active QUIZ_DAY AcademicEvents
-        # (Phase 2): positional cycles over the subject's effective quiz dates.
-        effective_dates = await self.quiz_repo.get_effective_quiz_dates_for_subject(subject_id)
+        # (Phase 2 + Phase 22.4): positional cycles over the subject's
+        # effective quiz dates. A Departmental Elective subject the student
+        # selected resolves the shared slot's quiz dates.
+        elective_scope = await ElectiveResolver(self.db).chosen_elective_map(user_id)
+        effective_dates = await self.quiz_repo.get_effective_quiz_dates_for_subject(
+            subject_id, elective_scope=elective_scope
+        )
 
         # 2. Fetch Quiz Cycle Policy (persisted configuration is authoritative;
         # the engine's hardcoded 70/75/75 is only the fallback).
@@ -75,8 +81,11 @@ class EligibilityService:
         if not cycle_model or not cycle_model.policy:
             raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
         events = await self.calendar_repo.get_all_events()
+        # Phase 22.4: resolve elective subjects' quiz dates from the shared
+        # slot events (the student's chosen elective maps to the slot).
+        elective_scope = await ElectiveResolver(self.db).chosen_elective_map(user_id)
         effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
-            [s.id for s in subjects]
+            [s.id for s in subjects], elective_scope=elective_scope
         )
         results: List[EligibilityResult] = []
         for subject in subjects:
@@ -214,8 +223,11 @@ class EligibilityService:
         subjects = await self.user_repo.get_enrolled_subjects(user_id)
         quiz_applicable = [s for s in subjects if s.quiz_applicable]
 
+        # Phase 22.4: elective subjects the student selected resolve the shared
+        # slot's quiz dates.
+        elective_scope = await ElectiveResolver(self.db).chosen_elective_map(user_id)
         effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
-            [s.id for s in quiz_applicable]
+            [s.id for s in quiz_applicable], elective_scope=elective_scope
         )
         resolved = [(cycle, quiz_date) for lst in effective_by_subject.values() for cycle, quiz_date in lst]
         future = [(cycle, quiz_date) for cycle, quiz_date in resolved if quiz_date >= date.today()]

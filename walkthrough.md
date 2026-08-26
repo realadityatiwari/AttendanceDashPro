@@ -4117,3 +4117,173 @@ OPERATOR.** **HARD STOP:** No commit made. No push performed. Production not
 touched; production migration is the operator's next action.
 
 ---
+
+# Phase 22.4 — Departmental Elective Resolution Across All Engines & Surfaces
+
+**Date:** 2026-08-26 · **Status:** IMPLEMENTATION COMPLETE (dev DB verified);
+production migration is a separate operator action.
+
+## Objective
+
+Departmental Elective-I and Elective-II are LOGICAL SLOTS. Every student-facing
+surface must resolve each slot to the student's selected concrete subject while
+the shared schedule, dates, quiz cycles, sessions, events, and calendar stay
+exactly as scheduled. This phase completes the Phase 22.3 model across quiz,
+events, event-created sessions, dashboard, notifications, calendar, analytics,
+and history — with ONE authoritative resolver.
+
+## Read-only audit outcome
+
+Phase 22.3 already solved: slot enum, choice table, timetable + attendance
+resolution (timetable-linked sessions), registration, seeds, signup UI.
+
+Phase 22.4 gaps found during audit:
+1. `quiz_schedules` had no slot marker — a student who chose BCS-052 (Elective-I)
+   saw UNRESOLVED quiz eligibility everywhere (only BCS-054/058 carried dates).
+2. `academic_events` had no slot marker — slot events were skipped on the
+   dashboard/notifications for any student not enrolled in the anchor subject
+   (BCS-054/058), and event subjects could not resolve per student.
+3. Event-created sessions (extras, quiz-day) with `timetable_entry_id IS NULL`
+   could not resolve per student — attendance fell back to the anchor.
+4. ADMIN had no way to create a shared event against "Departmental Elective-I/II"
+   without picking a specific student's subject.
+5. Catalog + resolution logic was duplicated (auth validators, signup
+   constants, timetable/attendance inline) with no single source of truth.
+
+## Design decisions
+
+1. **Additive nullable `elective_slot` columns** on `quiz_schedules`,
+   `academic_events`, `class_sessions`. The shared anchor subject stays in
+   `subject_id` (BCS-054/058) so the synchronizer, duplicate guard, seeds, and
+   existing queries keep working unchanged; `elective_slot` marks the logical
+   slot for per-student resolution. `class_sessions.elective_slot` makes
+   resolution independent of the timetable link (event-created sessions).
+2. **`app/services/elective_resolver.py`** is the single authoritative
+   mechanism: catalog constants + `ElectiveResolver` (loads the student's two
+   choices once; resolves slot → chosen subject in memory; falls back to the
+   shared anchor when no choice exists; never fabricates).
+3. **Quiz dates** resolve through the slot's active QUIZ_DAY events — the
+   existing BCS-054/058 quiz dates ARE the slot quiz dates (dates/cycles
+   unchanged). One query per request covers all subjects.
+4. **Events** are shared rows. New slot-scoped events are ADMIN-only,
+   mutually exclusive with `subject_id`, rejected for lab-only event types,
+   and stored with the anchor subject + slot marker. Read endpoints resolve
+   `resolved_subject_*` per authenticated user.
+5. **Frozen contracts preserved:** no attendance/eligibility/calendar formula
+   changed; no per-student timetable/event/session duplication; no fabrication
+   of existing users' choices; ADMIN keeps the anchor representation.
+
+## Implementation
+
+Backend:
+- `app/services/elective_resolver.py` — authoritative catalog + resolver.
+- `app/models/quiz.py`, `app/models/event.py`, `app/models/timetable.py` —
+  `elective_slot` columns.
+- `alembic/versions/b7c8d9e0f1a2_add_elective_slot_resolution.py` — migration
+  + tag-based backfill (down_revision `a3b4c5d6e7f8`).
+- `app/repositories/quiz_repo.py` — slot-aware effective quiz dates.
+- `app/services/eligibility_service.py` — elective scope for single/batch/
+  current-cycle resolution.
+- `app/repositories/attendance_repo.py` — COALESCE slot predicates.
+- `app/services/attendance_service.py` — session-marker resolution on mutation.
+- `app/services/event_registry.py` — `elective_slot` param + lab-type guard.
+- `app/services/event_service.py` — slot create/update (ADMIN-only, anchor
+  resolution, mutual exclusion).
+- `app/services/event_session_service.py` + `app/repositories/session_repo.py`
+  — slot-mark extras/quiz-day sessions.
+- `app/services/dashboard_service.py`, `app/services/notification_service.py`,
+  `app/services/calendar_service.py` — slot-aware upcoming events / notifications /
+  calendar reads.
+- `app/api/v1/endpoints/{events,calendar,timetable,auth}.py` — resolution +
+  catalog constants.
+- `app/schemas/{calendar,timetable}.py` — `elective_slot` + `resolved_subject_*`.
+- `scripts/seed_academic_events.py`, `scripts/materialize_quiz_day_sessions.py`
+  — carry the schedule's slot marker.
+
+Frontend:
+- `src/types/api.ts` — `ElectiveSlot`, `elective_slot`, `resolved_subject_*`.
+- `src/components/events/eventRules.ts` — slot labels + option helpers.
+- `src/components/events/EventFormDialog.tsx` — ADMIN slot subject options
+  ("Departmental Elective-I/II").
+- `src/components/events/EventRow.tsx`, `src/components/calendar/DayDetail.tsx`
+  — resolved-subject display.
+
+## Records classified as elective slots (authoritative schedule, dev DB)
+
+- `quiz_schedules`: BCS-054 ×3 (09-07/09-28/10-23) → ELECTIVE_I; BCS-058 ×3
+  (09-11/10-05/10-26) → ELECTIVE_II.
+- `academic_events` (14 rows): BCS-054 QUIZ_DAY ×3; BCS-058 EXTRA_LECTURE
+  07-17/08-17, CLASS_CANCELLED 07-29 ×3 + 07-30 ×2, SURPRISE_QUIZ 08-06,
+  QUIZ_DAY ×3 → slot events.
+- `class_sessions`: all 102 BCS-054 + 103 BCS-058 sessions slot-marked
+  (including 8 event-created extras/quiz-days with no timetable link).
+
+## Verification (dev DB only)
+
+- `py_compile` (backend/app, migration, verifier) PASS.
+- `tsc --noEmit` (frontend) PASS.
+- Alembic offline upgrade SQL + offline downgrade SQL PASS.
+- Dev DB migration applied + backfill PASS; downgrade → upgrade round-trip PASS.
+- `verify_phase_22_4.py` — **71/71 PASS**: schema + backfill; catalog; fixture
+  students A (BCS-052/BCS-056) and B (BCS-053/BCS-055) receive DIFFERENT
+  effective subjects for the SAME slot across timetable, quiz dates +
+  eligibility, attendance counts, daily/Track, history, and dashboard scans;
+  same quiz dates/cycles preserved; regular BCS-501 unchanged; no cross-student
+  leakage; ADMIN creates Extra Lecture + Quiz Day against slots without a
+  choice (201), synchronizer slot-marks created sessions; student slot-event
+  creation rejected (403); DB baseline restored (fixtures + artifacts removed).
+- `git diff --check` — no whitespace errors (CRLF warnings only).
+
+## Production / operator boundary
+
+- **No production writes were performed.** The local alembic config targets
+  production Supabase; the migration was applied ONLY to the local dev DB
+  (docker `attendancedashpro_db`, port 55432) with an explicit DATABASE_URI
+  override.
+- **Operator action (two migrations):** apply `alembic upgrade head`
+  (Phase 22.3 `a3b4c5d6e7f8`, then Phase 22.4 `b7c8d9e0f1a2`) to production.
+  Downgrade (Phase 22.4): `alembic downgrade a3b4c5d6e7f8`.
+- **Existing users:** the only existing account (admin 2401220100027) has no
+  choices → keeps anchors; no silent elective assignment. Any future legacy
+  student without choices keeps the anchor representation (documented
+  remediation path: an operator assigns choices, or the student re-registers).
+
+## Files touched
+
+- Backend: `app/services/elective_resolver.py` (new), models (quiz/event/
+  timetable), `alembic/versions/b7c8d9e0f1a2_*.py` (new), repositories
+  (quiz/attendance/session), services (eligibility/attendance/event/event_
+  registry/event_session/dashboard/notification/calendar), endpoints
+  (events/calendar/timetable/auth), schemas (calendar/timetable), seeds
+  (seed_academic_events, materialize_quiz_day_sessions),
+  `scripts/verify_phase_22_4.py` (new).
+- Frontend: `src/types/api.ts`, `src/components/events/eventRules.ts`,
+  `src/components/events/EventFormDialog.tsx`, `src/components/events/EventRow.tsx`,
+  `src/components/calendar/DayDetail.tsx`.
+- Governance: `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`,
+  `walkthrough.md`, `docs/phase_22/phase_22_4_departmental_elective_resolution.md`.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.4 section added; header/next-phase, dependency
+  path, and progress bar updated.
+- `implementation_plan.md`: Phase 22.4 authoritative plan added.
+- `task.md`: Phase 22.4 checklist — implementation items closed; operator
+  production-migration item left open.
+- `walkthrough.md`: this entry.
+
+## Database / Safety
+
+- Dev DB: migration `b7c8d9e0f1a2` applied; verifier fixture users/events/
+  sessions created then removed (baseline restored); only the migration's
+  schema + backfill persist.
+- Production DB: **zero mutations** — not accessed for writes; migrations not
+  applied.
+- No attendance/eligibility/calendar formula changed; no auth/password/JWT
+  semantics changed; no Phase 22.1/22.2/22.3 work reopened.
+
+**PHASE 22.4 — IMPLEMENTATION COMPLETE / PRODUCTION MIGRATION PENDING
+OPERATOR.** **HARD STOP:** No commit made. No push performed. Production not
+touched; production migration is the operator's next action.
+
+---

@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** (production migration pending operator) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** (production migration pending operator) · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** (production migration pending operator) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -1992,6 +1992,97 @@ column, subjects, and enum type.
 
 ---
 
+## Phase 22.4 — Departmental Elective Resolution Across All Engines & Surfaces (COMPLETE, 2026-08-26)
+
+**Status: COMPLETE** — implementation + local verification on the dev DB
+(71/71 verifier checks PASS). Production migration (revision `b7c8d9e0f1a2`)
+is a separate operator action; the agent performed no production writes.
+
+**Objective:** the final, authoritative departmental-elective model. The two
+Departmental Elective slots are resolved to each student's selected concrete
+subject everywhere subject identity is applicable — quiz schedule, academic
+events, event-created sessions, dashboard, notifications, calendar, analytics,
+history — while the existing shared schedule, dates, quiz cycles, class
+sessions, and attendance/eligibility formulas remain untouched.
+
+**Read-only audit outcome:** Phase 22.3 already solved the slot enum, choice
+table, timetable + attendance resolution. Phase 22.4 added the remaining
+surfaces: quiz schedules, academic events, event-created (extra/quiz-day)
+sessions, event creation, calendar, notifications, dashboard/analytics, and
+one authoritative resolver (`app/services/elective_resolver.py`).
+
+**Implemented:**
+
+1. **Authoritative resolver** — `ElectiveResolver` in
+   `backend/app/services/elective_resolver.py`: the single source of truth for
+   the elective catalog (exactly 3 Elective-I + 3 Elective-II codes), the
+   shared anchors (BCS-054 → Elective-I, BCS-058 → Elective-II), and
+   per-student `slot → selected subject` resolution. Never fabricates a
+   student's choice; missing choice falls back to the shared anchor (ADMIN
+   keeps the anchor behavior).
+2. **Migration `b7c8d9e0f1a2`** — adds nullable `elective_slot` to
+   `quiz_schedules`, `academic_events`, `class_sessions`; backfills from the
+   anchor subjects' tags. All existing dates/cycles/sessions are preserved.
+   Downgrade drops the three columns.
+3. **Quiz schedule** — existing BCS-054 quiz schedules marked as Elective-I,
+   BCS-058 as Elective-II. Quiz eligibility resolves a student's chosen
+   elective to the shared slot's QUIZ_DAY dates (same dates/cycles per slot;
+   different subject per student). Quiz Schedule page, Quiz Eligibility,
+   dashboard quiz snapshot, current-cycle, and notifications all resolve.
+4. **Academic events** — existing BCS-054/058 events classified as elective
+   slot events; ADMIN can create new events (Extra Lecture, Extra Tutorial,
+   Cancelled Class, Surprise Quiz, Quiz Day) against "Departmental
+   Elective-I/II" without knowing a student's selection (ADMIN-only;
+   mutually exclusive with subject_id; lab/practical event types rejected for
+   slots). The shared event stays ONE row; student-facing reads resolve the
+   effective subject per student (events list, calendar, dashboard upcoming,
+   notifications).
+5. **Event-created sessions** — the EventSessionSynchronizer marks extras and
+   quiz-day sessions created from slot events with `elective_slot`, so
+   attendance on those sessions resolves per student too (timetable-linked
+   sessions already resolved via the timetable entry). No per-student session
+   duplication; no change to cancellation/closure/quiz-day semantics.
+6. **Attendance/eligibility** — attendance repo predicates extended to
+   `COALESCE(timetable.elective_slot, class_session.elective_slot)`; the
+   frozen formulas are untouched. Attendance, history, daily/Track, dashboard
+   scans, analytics, and eligibility counts attribute slot sessions to each
+   student's selected subject.
+7. **Frontend** — ADMIN event form exposes "Departmental Elective-I/II" in
+   the subject selector; event rows and calendar day details show the
+   resolved concrete subject; `types/api.ts` contract extended
+   (`elective_slot` + `resolved_subject_*`). Signup selectors unchanged.
+8. **Seeds** — `seed_academic_events.py` and
+   `materialize_quiz_day_sessions.py` carry the schedule's `elective_slot`
+   into created QUIZ_DAY events / quiz-day sessions.
+
+**Data classification (authoritative schedule):**
+- `quiz_schedules`: BCS-054 ×3 → ELECTIVE_I, BCS-058 ×3 → ELECTIVE_II.
+- `academic_events`: all 14 BCS-054/058 events (6 QUIZ_DAY + 8 class-reality:
+  EXTRA_LECTURE 07-17/08-17, CLASS_CANCELLED 07-29/07-30, SURPRISE_QUIZ 08-06)
+  → slot events (these subjects exist only as elective anchors).
+- `class_sessions`: every BCS-054/058 session slot-marked (incl. extras and
+  quiz-day sessions without a timetable link).
+
+**Verification (dev DB only):** py_compile PASS · tsc --noEmit PASS ·
+alembic offline upgrade/downgrade SQL PASS · dev DB migration applied +
+backfill PASS · downgrade → upgrade round-trip PASS ·
+`verify_phase_22_4.py` — 71/71 PASS (schema/backfill, catalog, per-student
+resolution across timetable/quiz/events/attendance/history/dashboard scans,
+no-leakage, ADMIN slot-event creation + synchronizer slot marking, regular
+subjects unchanged, DB baseline restored) · `git diff --check` PASS (no
+whitespace errors).
+
+**Existing users:** the only existing account (admin 2401220100027) has no
+elective choices and keeps the anchor subjects; no choice is fabricated and
+no existing user is silently assigned an elective.
+
+**Production migration (OPERATOR ACTION — NOT applied by the agent):** apply
+`alembic upgrade head` (revision `b7c8d9e0f1a2`) to production Supabase. The
+operator must first apply Phase 22.3 (`a3b4c5d6e7f8`, still pending), then
+Phase 22.4. Downgrade: `alembic downgrade a3b4c5d6e7f8`.
+
+---
+
 # 🔗 Critical Dependency Path
 
 ```text
@@ -2041,7 +2132,7 @@ PHASE 20
    ↓
 PHASE 21  ← COMPLETE & FROZEN
    ↓
-PHASE 22  ← ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE)
+PHASE 22  ← ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2276,7 +2367,7 @@ PHASE 10 ████████████████████  COMPLETE 
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
-Phase 22 ██████████░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE)
+Phase 22 ██████████░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
 
 > **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
 > live. The next work items are: monitor errors, collect feedback, identify

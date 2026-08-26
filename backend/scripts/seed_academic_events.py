@@ -70,6 +70,7 @@ async def main() -> None:
                 class_type=None,
                 is_working_day=None,
                 substitution_schedule_override=None,
+                elective_slot=schedule.elective_slot,
             )
             existing = await session.execute(
                 select(AcademicEvent.id).where(

@@ -54,6 +54,11 @@ export interface SubjectResponse {
   attendance_applicable: boolean;
 }
 
+export enum ElectiveSlot {
+  ELECTIVE_I = "ELECTIVE_I",
+  ELECTIVE_II = "ELECTIVE_II",
+}
+
 export enum ClassType {
   LECTURE = "L",
   TUTORIAL = "T",
@@ -66,6 +71,9 @@ export interface TimetableEntryResponse {
   day_of_week: number;
   class_type: ClassType;
   subject: SubjectResponse;
+  /** Phase 22.4: the logical Departmental Elective slot this shared entry
+      belongs to (ELECTIVE_I / ELECTIVE_II), or null for regular entries. */
+  elective_slot: ElectiveSlot | null;
 }
 
 export enum AttendanceStatus {
@@ -355,6 +363,15 @@ export interface AcademicEventResponse {
   start_date: string;
   end_date: string;
   subject_id: string | null;
+  /** Phase 22.4: the logical Departmental Elective slot the event belongs to
+      (null for regular events). A slot event is ONE shared row for all
+      students; `resolved_subject_*` carries the effective subject resolved
+      for the authenticated student (their selected elective, or the shared
+      anchor for a user with no selection — e.g. ADMIN). */
+  elective_slot: ElectiveSlot | null;
+  resolved_subject_id: string | null;
+  resolved_subject_code: string | null;
+  resolved_subject_name: string | null;
   class_type: ClassType | null;
   is_working_day: boolean | null;
   substitution_schedule_override: string | null;
@@ -374,11 +391,15 @@ export interface EventsParams {
 // Admin mutation payloads for POST/PATCH /api/v1/events (Phase 6.5).
 // Only fields the AcademicEvent model actually has. Server validation
 // (event validation registry) remains authoritative.
+// Phase 22.4: `elective_slot` scopes the event to a Departmental Elective
+// logical slot (ADMIN-only; mutually exclusive with subject_id — the server
+// stores the shared anchor subject and resolves per student on read).
 export interface AcademicEventPayload {
   event_type: EventType;
   start_date: string;
   end_date: string;
   subject_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
   class_type?: ClassType | null;
   is_working_day?: boolean | null;
   substitution_schedule_override?: string | null;

@@ -7,6 +7,7 @@ from app.repositories.user_repo import UserRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from app.models.user import User
 from app.schemas.calendar import CalendarMonthResponse, CalendarDayItem, AcademicEventResponse
+from app.services.elective_resolver import ElectiveResolver
 
 class CalendarService:
     def __init__(self, db: AsyncSession):
@@ -106,6 +107,13 @@ class CalendarService:
         events = await self.repo.get_all_events(
             active=True, date_from=effective_start, date_to=effective_end
         )
+        # Phase 22.4: resolve elective-slot events to the authenticated
+        # student's selected subject (shared anchor when no selection exists).
+        resolver = ElectiveResolver(self.db)
+        choices = await resolver.load_choices(user.id)
+        events = await resolver.resolve_events(events, choices)
+        event_by_id = {e.id: e for e in events}
+
         session_rows = await self.attendance_repo.get_sessions_with_status(
             user.id, effective_start, effective_end
         )
@@ -130,7 +138,7 @@ class CalendarService:
                 original_day_of_week=day.original_day_of_week,
                 substitution_schedule_override=day.substitution_schedule_override,
                 non_working_reason=self._non_working_reason(day),
-                events=[AcademicEventResponse.model_validate(e) for e in day.events],
+                events=[AcademicEventResponse.model_validate(event_by_id[e.id]) for e in day.events if e.id in event_by_id],
                 session_count=counts_by_date.get(current, 0),
             ))
             current += timedelta(days=1)

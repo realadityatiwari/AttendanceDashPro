@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AcademicEventPayload, AcademicEventResponse, ClassType, EventType, SubjectCategory } from "@/types/api";
+import { AcademicEventPayload, AcademicEventResponse, ClassType, ElectiveSlot, EventType, SubjectCategory } from "@/types/api";
 import { useSubjects, useTimetable, useEventMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,9 @@ import {
   STUDENT_CREATABLE_EVENT_TYPES,
   defaultDurationMode,
   DurationMode,
+  ELECTIVE_SLOT_LABELS,
+  slotOptionValue,
+  parseSlotOption,
 } from "@/components/events/eventRules";
 import { AlertCircle } from "lucide-react";
 
@@ -78,12 +81,17 @@ function initialState(event: AcademicEventResponse | null, isAdmin: boolean): Fo
   const durationMode = event && hasDates
     ? (event.start_date === event.end_date ? "single" : "range")
     : defaultDurationMode(defaultType);
+  // Phase 22.4: a slot-scoped event seeds the subject selector with the
+  // logical Departmental Elective option (never the shared anchor UUID).
+  const subjectSelection = event?.elective_slot
+    ? slotOptionValue(event.elective_slot)
+    : (event?.subject_id ?? "");
   return {
     event_type: defaultType,
     duration_mode: durationMode,
     start_date: event?.start_date ?? "",
     end_date: event?.end_date ?? "",
-    subject_id: event?.subject_id ?? "",
+    subject_id: subjectSelection,
     class_type: event?.class_type ?? "",
     is_working_day: event?.is_working_day === null || event?.is_working_day === undefined
       ? "" : String(event.is_working_day),
@@ -255,10 +263,13 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   // user switched from a lecture event to a lab event, or subjects arrived
   // after the dialog seeded an edit — clear it so a stale subject can never be
   // submitted. Runs only once subjects are loaded so edit-mode seeding is kept.
+  // Phase 22.4: a logical elective-slot option (prefixed value) is never a
+  // subject UUID, so it is exempt from this subject-clearing guard.
   if (
     subjects !== undefined
     && rule.requiresSubject
     && form.subject_id
+    && parseSlotOption(form.subject_id) === null
     && !subjectsForEvent.some(s => s.id === form.subject_id)
   ) {
     set("subject_id", "");
@@ -300,11 +311,15 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     // Single-day is represented by start_date == end_date (the backend has no
     // separate duration concept); the picked date is mirrored into both.
     const singleDay = form.duration_mode === "single";
+    // Phase 22.4: a logical elective-slot selection (prefixed value) sends
+    // elective_slot instead of a concrete subject_id (mutually exclusive).
+    const slotSelection = rule.requiresSubject ? parseSlotOption(form.subject_id) : null;
     const payload: AcademicEventPayload = {
       event_type: form.event_type,
       start_date: form.start_date,
       end_date: singleDay ? form.start_date : form.end_date,
-      subject_id: rule.requiresSubject ? form.subject_id : null,
+      subject_id: rule.requiresSubject && !slotSelection ? form.subject_id : null,
+      elective_slot: slotSelection,
       class_type: rule.requiresClassType ? (form.class_type as ClassType) : null,
       // Working Saturday implies its own working-day semantics — never send a
       // contradictory explicit override.
@@ -441,6 +456,18 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                     {subject.code} — {subject.name}
                   </option>
                 ))}
+                {/* Phase 22.4: ADMIN may scope a shared event to a Departmental
+                    Elective logical slot instead of a concrete subject. Each
+                    student sees the event resolved to their own selection. The
+                    backend enforces ADMIN-only and rejects slots for
+                    practical/lab event types. */}
+                {isAdmin && !labScopedEvent && (
+                  (Object.values(ElectiveSlot) as ElectiveSlot[]).map(slot => (
+                    <option key={slot} value={slotOptionValue(slot)}>
+                      {ELECTIVE_SLOT_LABELS[slot]}
+                    </option>
+                  ))
+                )}
               </select>
               {isClassCancelled && subjectsForEvent.length === 0 && form.start_date && (
                 <p className="text-[10px] text-muted-foreground">

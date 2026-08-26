@@ -1965,3 +1965,24 @@ production migration (revision `a3b4c5d6e7f8`) is a separate operator step.
 - [x] Verification: py_compile PASS · tsc --noEmit PASS · verify_phase_22_3.py 16/16 PASS (dev DB, rolled-back txn) · git diff --check PASS · no attendance/eligibility/calendar engine changed
 - [ ] OPERATOR: apply `alembic upgrade head` (revision `a3b4c5d6e7f8`) to production Supabase (adds elective_slot + student_elective_choices + 4 elective subjects) — NOT YET DONE
 - HARD STOP — Phase 22.3 implementation COMPLETE; production migration is the operator's action; no commit made.
+
+#### Phase 22.4 — Departmental Elective Resolution Across All Engines & Surfaces (COMPLETE — implementation; production migration pending operator)
+
+Status: **COMPLETE** (implementation + local verification, 2026-08-26). The
+production migration (revision `b7c8d9e0f1a2`) is a separate operator step.
+
+- [x] Read-only audit: Phase 22.3 solved slot enum/choice/timetable/attendance; gaps = quiz schedules (no slot marking), academic events (no slot marking; skipped for non-anchor-enrolled students), event-created sessions (extras/quiz-day), ADMIN slot-event creation, single authoritative resolver
+- [x] Data classification: quiz_schedules BCS-054×3→EI, BCS-058×3→EII; all 14 BCS-054/058 events → slot events; all BCS-054/058 sessions slot-marked — dates/cycles/sessions preserved
+- [x] Authoritative resolver: `app/services/elective_resolver.py` (catalog constants + ElectiveResolver; no fabrication; missing choice → shared anchor)
+- [x] Models: `QuizSchedule.elective_slot`, `AcademicEvent.elective_slot`, `ClassSession.elective_slot` (nullable)
+- [x] Migration `b7c8d9e0f1a2`: 3 columns + tag-based backfill; downgrade drops columns; round-trip PASS on dev DB
+- [x] Quiz: slot-aware `get_effective_quiz_dates_for_subjects` (one query, elective scope); EligibilityService single/batch/current-cycle resolve chosen electives to slot dates; existing dates/cycles unchanged
+- [x] Events backend: create/update accept `elective_slot` (ADMIN-only, mutually exclusive with subject_id, lab types rejected); service stores shared anchor; registry extended; synchronizer slot-marks extra/quiz-day sessions
+- [x] Events/calendar reads: list/create/update/deactivate + calendar month/day resolve `resolved_subject_*` per user
+- [x] Attendance: `_elective_choice_on`/`_resolved_subject_match` → COALESCE(timetable, class_session).elective_slot; record_attendance resolves session marker; formulas frozen
+- [x] Dashboard/notifications: upcoming events + academic-event notifications include slot events resolved per student; quiz snapshot resolves chosen electives
+- [x] Frontend: `types/api.ts` ElectiveSlot + elective_slot + resolved_subject_*; EventFormDialog admin slot options; EventRow + DayDetail resolved-subject display
+- [x] Seeds: seed_academic_events.py + materialize_quiz_day_sessions.py carry quiz_schedules.elective_slot
+- [x] Verification: py_compile PASS · tsc --noEmit PASS · alembic offline SQL PASS · dev DB migration + backfill PASS · downgrade→upgrade round-trip PASS · verify_phase_22_4.py 71/71 PASS · git diff --check PASS · no attendance/eligibility/calendar formula changed
+- [ ] OPERATOR: apply `alembic upgrade head` (revision `b7c8d9e0f1a2`) to production Supabase AFTER Phase 22.3 (`a3b4c5d6e7f8`) — NOT YET DONE
+- HARD STOP — Phase 22.4 implementation COMPLETE; production migration is the operator's action; no commit made.

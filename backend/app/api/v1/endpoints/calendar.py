@@ -4,9 +4,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
 from app.services.calendar_service import CalendarService
+from app.services.elective_resolver import ElectiveResolver
 from app.schemas.calendar import AcademicDayResponse, AcademicEventResponse, CalendarMonthResponse
 
 router = APIRouter()
+
+async def _day_response(service: CalendarService, user: User, target_date: date) -> AcademicDayResponse:
+    """Build the academic-day response with elective-slot events resolved to
+    the authenticated student's selected subject (Phase 22.4)."""
+    day = await service.get_day_schedule(target_date)
+    resolver = ElectiveResolver(service.db)
+    events = await resolver.resolve_events(
+        day.events, await resolver.load_choices(user.id)
+    )
+    event_by_id = {e.id: e for e in events}
+    return AcademicDayResponse(
+        date=day.date,
+        is_working_day=day.is_working_day,
+        day_type=day.day_type,
+        is_teaching_day=day.is_teaching_day,
+        original_day_of_week=day.original_day_of_week,
+        substitution_schedule_override=day.substitution_schedule_override,
+        events=[AcademicEventResponse.model_validate(event_by_id[e.id]) for e in day.events if e.id in event_by_id]
+    )
 
 @router.get("", response_model=CalendarMonthResponse)
 async def get_month_calendar(
@@ -40,16 +60,7 @@ async def get_today_calendar(
     Returns the resolved academic day for today.
     """
     service = CalendarService(db)
-    day = await service.get_day_schedule(date.today())
-    return AcademicDayResponse(
-        date=day.date,
-        is_working_day=day.is_working_day,
-        day_type=day.day_type,
-        is_teaching_day=day.is_teaching_day,
-        original_day_of_week=day.original_day_of_week,
-        substitution_schedule_override=day.substitution_schedule_override,
-        events=[AcademicEventResponse.model_validate(e) for e in day.events]
-    )
+    return await _day_response(service, current_user, date.today())
 
 @router.get("/{target_date}", response_model=AcademicDayResponse)
 async def get_calendar_by_date(
@@ -61,13 +72,4 @@ async def get_calendar_by_date(
     Returns the resolved academic day for a specific date.
     """
     service = CalendarService(db)
-    day = await service.get_day_schedule(target_date)
-    return AcademicDayResponse(
-        date=day.date,
-        is_working_day=day.is_working_day,
-        day_type=day.day_type,
-        is_teaching_day=day.is_teaching_day,
-        original_day_of_week=day.original_day_of_week,
-        substitution_schedule_override=day.substitution_schedule_override,
-        events=[AcademicEventResponse.model_validate(e) for e in day.events]
-    )
+    return await _day_response(service, current_user, target_date)

@@ -74,7 +74,7 @@ from app.engines.calendar_engine import (
     get_event_priority,
 )
 from app.models.event import AcademicEvent
-from app.models.enums import EventType, ClassType, SessionDesignation
+from app.models.enums import EventType, ClassType, SessionDesignation, ElectiveSlot
 from app.models.timetable import ClassSession, TimetableEntry
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
@@ -190,7 +190,7 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, desired_extras, mid_sem_active, desired_quiz_days, cancellation_removed = (
+            desired_scheduled, desired_extras, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed = (
                 self._desired_schedule(
                     current, all_active_events, entries_by_dow,
                     by_date.get(current, []), attended_ids,
@@ -200,8 +200,10 @@ class EventSessionSynchronizer:
                 current,
                 desired_scheduled,
                 desired_extras,
+                extras_slots,
                 mid_sem_active,
                 desired_quiz_days,
+                quiz_day_slots,
                 cancellation_removed,
                 manage_mid_sem,
                 mid_sem_subject,
@@ -251,13 +253,16 @@ class EventSessionSynchronizer:
         entries_by_dow: Dict[int, list],
         existing: List[ClassSession],
         attended_ids: set,
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], set, set, set]:
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
                              classes the engine says should exist on the date.
           desired_extras:    {(subject_id, class_type): count} of extra
                              occurrences to materialize.
+          extras_slots:      {(subject_id, class_type): ElectiveSlot | None} —
+                             the logical elective slot of each extra occurrence
+                             (Phase 22.4). None for regular extras.
           mid_sem_active:    subject_ids whose practical occurrence on this
                              date is the mid-semester practical (Phase 9.1).
                              A subject is EXCLUDED when a practical
@@ -266,6 +271,9 @@ class EventSessionSynchronizer:
           desired_quiz_days: subject_ids with an active QUIZ_DAY event on this
                              date — each is one attendance-bearing quiz-day
                              occurrence (see _reconcile_date).
+          quiz_day_slots:    {subject_id: ElectiveSlot | None} — the logical
+                             elective slot of each quiz-day occurrence (Phase
+                             22.4). None for regular quiz days.
           cancellation_removed: timetable_entry_ids explicitly removed from
                              the desired schedule by an active CLASS_CANCELLED
                              event on this date. This is the canonical marker
@@ -283,7 +291,7 @@ class EventSessionSynchronizer:
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}, set(), set(), set()
+            return {}, {}, {}, set(), set(), {}, set()
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
@@ -303,6 +311,7 @@ class EventSessionSynchronizer:
         )
 
         extras: Dict[Tuple[object, object], int] = {}
+        extras_slots: Dict[Tuple[object, object], Optional[ElectiveSlot]] = {}
         cancelled_practical_subjects: set = set()
         cancellation_removed: set = set()
         for event in ordered:
@@ -324,6 +333,11 @@ class EventSessionSynchronizer:
             elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                 key = (event.subject_id, event.class_type)
                 extras[key] = extras.get(key, 0) + 1
+                # Phase 22.4: an extra materialized from an elective-slot event
+                # carries the logical slot so per-student resolution works on
+                # the resulting session (it has no timetable link).
+                if event.elective_slot is not None:
+                    extras_slots[key] = event.elective_slot
 
         # Phase 9.1 mid-sem plan (state-based, idempotent):
         #   - cancellation wins (the occurrence is cancelled, never markable,
@@ -359,8 +373,17 @@ class EventSessionSynchronizer:
             if event.event_type == EventType.QUIZ_DAY
             and event.subject_id is not None
         }
+        # Phase 22.4: track the elective slot (if any) for each quiz-day
+        # occurrence so the resulting session carries the slot marker.
+        quiz_day_slots: Dict[object, Optional[ElectiveSlot]] = {
+            event.subject_id: event.elective_slot
+            for event in ordered
+            if event.event_type == EventType.QUIZ_DAY
+            and event.subject_id is not None
+            and event.elective_slot is not None
+        }
 
-        return scheduled, extras, mid_sem_active, quiz_day_subjects, cancellation_removed
+        return scheduled, extras, extras_slots, mid_sem_active, quiz_day_subjects, quiz_day_slots, cancellation_removed
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -379,8 +402,10 @@ class EventSessionSynchronizer:
         target: date,
         desired_scheduled: Dict[object, object],
         desired_extras: Dict[Tuple[object, object], int],
+        extras_slots: Dict[Tuple[object, object], Optional[ElectiveSlot]],
         mid_sem_active: set,
         desired_quiz_days: set,
+        quiz_day_slots: Dict[object, Optional[ElectiveSlot]],
         cancellation_removed: set,
         manage_mid_sem: bool,
         mid_sem_subject: object,
@@ -482,6 +507,7 @@ class EventSessionSynchronizer:
                         class_type=key[1],
                         is_extra=True,
                         timetable_entry_id=None,
+                        elective_slot=extras_slots.get(key),
                     )
                 )
 
@@ -550,6 +576,7 @@ class EventSessionSynchronizer:
                     class_type=ClassType.LECTURE,
                     is_extra=False,
                     timetable_entry_id=None,
+                    elective_slot=quiz_day_slots.get(subject_id),
                 )
             )
 

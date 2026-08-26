@@ -99,6 +99,17 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
             <CalendarDays className="size-3.5 shrink-0" aria-hidden />
             {dateRange}
           </p>
+          {/* Phase 22.4: the effective subject of the event as resolved for
+              the authenticated student (their selected elective for
+              Departmental Elective slot events; null for global events). */}
+          {event.resolved_subject_code && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+              <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] tracking-wide">
+                {event.resolved_subject_code}
+              </span>
+              {event.resolved_subject_name}
+            </p>
+          )}
           {event.substitution_schedule_override && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Info className="size-3 shrink-0" aria-hidden />

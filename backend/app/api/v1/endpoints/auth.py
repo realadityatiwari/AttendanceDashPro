@@ -12,6 +12,7 @@ from app.core.security import verify_password, create_access_token, hash_passwor
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
 from app.api.dependencies.deps import get_db
+from app.services.elective_resolver import ELECTIVE_I_CODES, ELECTIVE_II_CODES
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -52,14 +53,14 @@ class RegisterRequest(BaseModel):
     @field_validator("elective_i")
     @classmethod
     def validate_elective_i(cls, v: str) -> str:
-        if v not in ("BCS-052", "BCS-053", "BCS-054"):
+        if v not in ELECTIVE_I_CODES:
             raise ValueError("Invalid Department Elective-I selection")
         return v
 
     @field_validator("elective_ii")
     @classmethod
     def validate_elective_ii(cls, v: str) -> str:
-        if v not in ("BCS-055", "BCS-056", "BCS-058"):
+        if v not in ELECTIVE_II_CODES:
             raise ValueError("Invalid Department Elective-II selection")
         return v
 

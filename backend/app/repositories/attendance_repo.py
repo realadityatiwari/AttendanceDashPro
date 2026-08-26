@@ -21,25 +21,32 @@ class AttendanceRepository:
     @staticmethod
     def _elective_choice_on(user_id: UUID):
         """ON-clause for the per-user elective choice join: matches a
-        timetable entry's elective slot to the student's selected subject for
-        that slot. Non-elective entries (elective_slot NULL) never match, so
-        regular sessions resolve through ClassSession.subject_id as before."""
+        timetable entry's elective slot (or, for event-created sessions with
+        no timetable link, the session's own elective slot marker — Phase
+        22.4) to the student's selected subject for that slot. Non-elective
+        sessions (elective_slot NULL everywhere) never match, so regular
+        sessions resolve through ClassSession.subject_id as before."""
         return and_(
             StudentElectiveChoice.user_id == user_id,
-            StudentElectiveChoice.elective_slot == TimetableEntry.elective_slot,
+            StudentElectiveChoice.elective_slot == func.coalesce(
+                TimetableEntry.elective_slot, ClassSession.elective_slot
+            ),
         )
 
     @staticmethod
     def _resolved_subject_match(subject_id: UUID):
         """WHERE predicate: a session belongs to `subject_id` when its
         concrete subject is the subject (regular sessions, and the student who
-        selected the slot anchor subject), OR when the session's timetable
-        entry is a Department Elective slot and the student selected
-        `subject_id` for that slot."""
+        selected the slot anchor subject), OR when the session belongs to a
+        Department Elective slot (via its timetable entry or its own marker)
+        and the student selected `subject_id` for that slot."""
+        resolved_slot = func.coalesce(
+            TimetableEntry.elective_slot, ClassSession.elective_slot
+        )
         return or_(
             ClassSession.subject_id == subject_id,
             and_(
-                TimetableEntry.elective_slot.isnot(None),
+                resolved_slot.isnot(None),
                 StudentElectiveChoice.subject_id == subject_id,
             ),
         )

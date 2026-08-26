@@ -118,6 +118,7 @@ async def run(undo: bool) -> int:
                     is_extra=False,
                     is_cancelled=False,
                     timetable_entry_id=None,
+                    elective_slot=qs.elective_slot,
                 )
             )
             created_count += 1

@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
-from app.models.enums import ClassType
+from app.models.enums import ClassType, ElectiveSlot
 
 
 class SessionRepository:
@@ -91,6 +91,7 @@ class SessionRepository:
         class_type: ClassType,
         is_extra: bool,
         timetable_entry_id: Optional[UUID],
+        elective_slot: Optional[ElectiveSlot] = None,
     ) -> ClassSession:
         session = ClassSession(
             subject_id=subject_id,
@@ -99,6 +100,7 @@ class SessionRepository:
             is_extra=is_extra,
             is_cancelled=False,
             timetable_entry_id=timetable_entry_id,
+            elective_slot=elective_slot,
         )
         self.db.add(session)
         return session

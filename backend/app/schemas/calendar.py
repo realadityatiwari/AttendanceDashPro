@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional, List
 from uuid import UUID
-from app.models.enums import EventType, ClassType
+from app.models.enums import EventType, ClassType, ElectiveSlot
 
 class AcademicEventResponse(BaseModel):
     id: UUID
@@ -10,6 +10,15 @@ class AcademicEventResponse(BaseModel):
     start_date: date
     end_date: date
     subject_id: Optional[UUID] = None
+    # Phase 22.4: the logical Departmental Elective slot the event belongs to
+    # (null for regular events). A slot event is ONE shared row for all
+    # students; `resolved_subject_*` carries the effective subject resolved
+    # for the authenticated student (their selected elective, or the shared
+    # anchor for a user with no selection — e.g. ADMIN).
+    elective_slot: Optional[ElectiveSlot] = None
+    resolved_subject_id: Optional[UUID] = None
+    resolved_subject_code: Optional[str] = None
+    resolved_subject_name: Optional[str] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
     substitution_schedule_override: Optional[str] = None
@@ -21,13 +30,17 @@ class AcademicEventResponse(BaseModel):
 
 class AcademicEventCreate(BaseModel):
     """
-    Create payload (Phase 6.5 + Phase 9.1). Structural shape only; business
-    rules live in the event validation registry (EventService).
+    Create payload (Phase 6.5 + Phase 9.1 + Phase 22.4). Structural shape only;
+    business rules live in the event validation registry (EventService).
+    `elective_slot` scopes the event to a Departmental Elective logical slot
+    (ADMIN-only; the server resolves and stores the shared anchor subject).
+    `subject_id` and `elective_slot` are mutually exclusive.
     """
     event_type: EventType
     start_date: date
     end_date: date
     subject_id: Optional[UUID] = None
+    elective_slot: Optional[ElectiveSlot] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
     substitution_schedule_override: Optional[str] = None
@@ -40,6 +53,7 @@ class AcademicEventUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     subject_id: Optional[UUID] = None
+    elective_slot: Optional[ElectiveSlot] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
     substitution_schedule_override: Optional[str] = None

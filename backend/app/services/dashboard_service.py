@@ -31,6 +31,7 @@ from app.schemas.dashboard import (
 from app.models.academic import Semester, Subject
 from app.models.user import Section
 from app.models.enums import AttendanceStatus
+from app.services.elective_resolver import ElectiveResolver
 
 # DAY_LABELS + banding constants/functions now live in the canonical
 # attendance engine (single definition; dashboard + analytics + subject
@@ -91,7 +92,7 @@ class DashboardService:
             weekly=self._build_weekly(rows, today, summaries),
             quiz_snapshot=await self._build_quiz_snapshot(user, subjects, semester_start),
             attention_required=self._build_attention_required(subjects, summaries),
-            upcoming_events=await self._build_upcoming_events(subjects),
+            upcoming_events=await self._build_upcoming_events(user, subjects),
         )
 
     async def _subject_summaries(self, user_id, subjects: List[Subject], as_of_date: date):
@@ -298,9 +299,11 @@ class DashboardService:
         # batched eligibility evaluation (single canonical engine path),
         # replacing the previous per-subject schedule + eligibility loops.
         # Quiz dates are authoritative from active QUIZ_DAY AcademicEvents
-        # (Phase 2), with positional cycle ranks.
+        # (Phase 2), with positional cycle ranks. Phase 22.4: elective
+        # subjects the student selected resolve the shared slot's quiz dates.
+        elective_scope = await ElectiveResolver(self.db).chosen_elective_map(user.id)
         effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
-            [s.id for s in quiz_applicable]
+            [s.id for s in quiz_applicable], elective_scope=elective_scope
         )
         resolved = [(cyc, d) for lst in effective_by_subject.values() for cyc, d in lst]
         future = [(cyc, d) for cyc, d in resolved if d >= date.today()]
@@ -357,19 +360,32 @@ class DashboardService:
         items.sort(key=lambda x: (x.status == "CRITICAL", -(x.current_pct if x.current_pct is not None else 0)), reverse=True)
         return items
 
-    async def _build_upcoming_events(self, subjects: List[Subject]) -> List[UpcomingEventItem]:
+    async def _build_upcoming_events(self, user, subjects: List[Subject]) -> List[UpcomingEventItem]:
         today = date.today()
         enrolled_ids = {s.id for s in subjects}
         subject_by_id = {s.id: s for s in subjects}
+
+        # Phase 22.4: elective-slot events are shared admin events resolved to
+        # the student's selected subject; a user with no selection (ADMIN)
+        # falls back to the shared anchor subject.
+        resolver = ElectiveResolver(self.db)
+        choices = await resolver.load_choices(user.id)
+        anchor_subjects = await resolver.anchor_subjects()
 
         events = await self.calendar_repo.get_all_events()
         upcoming: List[UpcomingEventItem] = []
         for e in events:
             if not e.active or e.end_date < today:
                 continue
-            if e.subject_id is not None and e.subject_id not in enrolled_ids:
-                continue
-            subject = subject_by_id.get(e.subject_id) if e.subject_id else None
+            if e.elective_slot is not None:
+                choice = choices.get(e.elective_slot)
+                subject = choice.subject if choice is not None else anchor_subjects.get(e.elective_slot)
+                if subject is None or subject.id not in enrolled_ids:
+                    continue
+            else:
+                if e.subject_id is not None and e.subject_id not in enrolled_ids:
+                    continue
+                subject = subject_by_id.get(e.subject_id) if e.subject_id else None
             upcoming.append(UpcomingEventItem(
                 id=e.id,
                 event_type=e.event_type,

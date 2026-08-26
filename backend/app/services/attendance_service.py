@@ -168,22 +168,28 @@ class AttendanceService:
         if session.is_cancelled:
             raise HTTPException(status_code=409, detail="Cannot mark attendance for a cancelled class session")
 
-        # Phase 22.3: elective slot sessions carry the anchor subject
+        # Phase 22.3/22.4: elective slot sessions carry the anchor subject
         # (BCS-054 / BCS-058). Check enrollment against the student's
-        # RESOLVED subject (their selection for that slot) instead.
+        # RESOLVED subject (their selection for that slot) instead. The slot
+        # is read from the timetable entry when the session is timetable-
+        # linked, otherwise from the session's own elective_slot marker
+        # (event-created extras / quiz-day sessions).
         effective_subject_id = session.subject_id
+        slot = session.elective_slot
         if session.timetable_entry_id is not None:
             timetable_entry = await self.db.get(TimetableEntry, session.timetable_entry_id)
             if timetable_entry is not None and timetable_entry.elective_slot is not None:
-                result = await self.db.execute(
-                    select(StudentElectiveChoice).where(
-                        StudentElectiveChoice.user_id == user_id,
-                        StudentElectiveChoice.elective_slot == timetable_entry.elective_slot,
-                    )
+                slot = timetable_entry.elective_slot
+        if slot is not None:
+            result = await self.db.execute(
+                select(StudentElectiveChoice).where(
+                    StudentElectiveChoice.user_id == user_id,
+                    StudentElectiveChoice.elective_slot == slot,
                 )
-                choice = result.scalars().first()
-                if choice is not None:
-                    effective_subject_id = choice.subject_id
+            )
+            choice = result.scalars().first()
+            if choice is not None:
+                effective_subject_id = choice.subject_id
 
         enrolled = await self.repo.is_enrolled(user_id, effective_subject_id)
         if not enrolled:

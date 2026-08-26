@@ -13,6 +13,7 @@ from app.schemas.calendar import (
 )
 from app.services.event_service import EventService, EventForbidden
 from app.services.event_registry import EventValidationError
+from app.services.elective_resolver import ElectiveResolver
 from app.repositories.event_repo import EventNotFound, EventConflict
 
 router = APIRouter()
@@ -62,6 +63,14 @@ async def get_all_events(
         date_to=date_to,
         upcoming=upcoming,
     )
+    # Phase 22.4: resolve elective-slot events to the authenticated user's
+    # selected subject (shared anchor when no selection exists — ADMIN keeps
+    # the anchor representation). The raw elective_slot marker stays exposed
+    # for admin form/editing context.
+    resolver = ElectiveResolver(db)
+    events = await resolver.resolve_events(
+        events, await resolver.load_choices(current_user.id)
+    )
     return events
 
 
@@ -75,9 +84,12 @@ async def create_event(
     Event creation (Phase 6.5 + attendance-spec alignment). Authenticated
     users may create the flexible subject-scoped event types (extra classes,
     class cancellations, surprise quizzes) for their own enrolled subjects;
-    global/closure/quiz-schedule events remain admin-only. Authorization and
-    business validation happen in the EventService / validation registry;
-    business conflicts return 409.
+    global/closure/quiz-schedule events remain admin-only. Phase 22.4: ADMIN
+    may additionally scope an event to a Departmental Elective logical slot
+    (elective_slot) without choosing a specific student's subject. The shared
+    event is stored with the slot + anchor; the response resolves it for the
+    creating user. Authorization and business validation happen in the
+    EventService / validation registry; business conflicts return 409.
     """
     service = EventService(db)
     try:
@@ -88,7 +100,8 @@ async def create_event(
         raise HTTPException(status_code=422, detail=str(exc))
     except EventConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return event
+    resolver = ElectiveResolver(db)
+    return (await resolver.resolve_events([event], await resolver.load_choices(current_user.id)))[0]
 
 
 @router.patch("/{event_id}", response_model=AcademicEventResponse)
@@ -114,7 +127,8 @@ async def update_event(
         raise HTTPException(status_code=422, detail=str(exc))
     except EventConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    return event
+    resolver = ElectiveResolver(db)
+    return (await resolver.resolve_events([event], await resolver.load_choices(current_user.id)))[0]
 
 
 @router.delete("/{event_id}", response_model=AcademicEventResponse)
@@ -138,4 +152,5 @@ async def delete_event(
         raise HTTPException(status_code=403, detail=str(exc))
     except EventNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    return event
+    resolver = ElectiveResolver(db)
+    return (await resolver.resolve_events([event], await resolver.load_choices(current_user.id)))[0]

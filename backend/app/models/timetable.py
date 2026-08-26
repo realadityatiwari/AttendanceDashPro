@@ -37,6 +37,14 @@ class ClassSession(Base):
     is_extra: Mapped[bool] = mapped_column(Boolean, default=False)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     timetable_entry_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("timetable_entries.id"), nullable=True)
+    # Phase 22.4: the logical elective slot a session belongs to. For
+    # timetable-linked sessions this is redundant with the timetable entry's
+    # elective_slot; for event-created sessions (extras, quiz-day) with no
+    # timetable link, this marker ensures per-student resolution works.
+    # NULL = a regular non-elective session.
+    elective_slot: Mapped[ElectiveSlot | None] = mapped_column(
+        Enum(ElectiveSlot), nullable=True, default=None
+    )
     # Phase 8.2: optional ADMIN-controlled session designation (e.g.
     # MID_SEM_PRACTICAL). NULL = regular session. This is a session-level fact
     # tied to an actual scheduled ClassSession — it is never inferred from

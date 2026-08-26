@@ -4,10 +4,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import AcademicEvent
-from app.models.enums import EventType, ClassType, UserRole
+from app.models.enums import EventType, ClassType, UserRole, ElectiveSlot
 from app.models.user import User
 from app.repositories.event_repo import EventRepository, EventNotFound, EventConflict
 from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
+from app.services.elective_resolver import ElectiveResolver
 from app.services.event_registry import (
     EventValidationError,
     validate_event,
@@ -105,6 +106,39 @@ class EventService:
             raise EventValidationError("Unknown subject_id")
         return subject
 
+    async def _resolve_elective_scope(
+        self,
+        user: User,
+        *,
+        elective_slot: Optional[ElectiveSlot],
+        subject_id: Optional[UUID],
+    ) -> tuple:
+        """Phase 22.4: resolve an elective-slot event to its shared anchor.
+
+        Returns (subject_id, subject_category, elective_slot) for the event.
+        Elective-slot events are ADMIN-only (the admin cannot know each
+        student's selection; the event is ONE shared row scoped to the logical
+        slot). The shared anchor subject (BCS-054 / BCS-058) is stored in
+        subject_id so the shared schedule/synchronizer semantics are
+        unchanged; `elective_slot` marks the slot for per-student resolution.
+        """
+        if elective_slot is not None:
+            if user.role != UserRole.ADMIN:
+                raise EventForbidden(
+                    "Elective-slot events are restricted to administrators."
+                )
+            if subject_id is not None:
+                raise EventValidationError(
+                    "subject_id and elective_slot are mutually exclusive"
+                )
+            anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(elective_slot)
+            if anchor is None:
+                raise EventValidationError(
+                    f"No shared anchor subject is configured for {elective_slot.value}"
+                )
+            return anchor.id, anchor.category, elective_slot
+        return subject_id, None, None
+
     async def _check_duplicate(
         self,
         event_type: EventType,
@@ -123,20 +157,32 @@ class EventService:
             )
 
     async def create_event(self, user: User, data: AcademicEventCreate) -> AcademicEvent:
-        # Student-adjustable events: authorize before any side effect.
+        # Phase 22.4: resolve an elective-slot event to its shared anchor first
+        # (subject_id + category), then run the standard authorization and
+        # registry validation against that anchor.
+        effective_subject_id, anchor_category, elective_slot = await self._resolve_elective_scope(
+            user,
+            elective_slot=data.elective_slot,
+            subject_id=data.subject_id,
+        )
+        # Student-adjustable events: authorize before any side effect. The
+        # subject check uses the resolved anchor (a student without an
+        # enrollment there is rejected; elective-slot events already require
+        # ADMIN above).
         await self.assert_mutation_allowed(
-            user, event_type=data.event_type, subject_id=data.subject_id
+            user, event_type=data.event_type, subject_id=effective_subject_id
         )
         # Structural fields arrive validated by the Pydantic schema.
-        subject_category = None
-        if data.subject_id is not None:
-            subject = await self._ensure_subject(data.subject_id)
+        subject_category = anchor_category
+        if effective_subject_id is not None and subject_category is None:
+            subject = await self._ensure_subject(effective_subject_id)
             subject_category = subject.category
         validate_event(
             event_type=data.event_type,
             start_date=data.start_date,
             end_date=data.end_date,
-            subject_id=data.subject_id,
+            subject_id=effective_subject_id,
+            elective_slot=elective_slot,
             class_type=data.class_type,
             subject_category=subject_category,
             substitution_schedule_override=data.substitution_schedule_override,
@@ -156,7 +202,7 @@ class EventService:
             data.event_type,
             data.start_date,
             data.end_date,
-            data.subject_id,
+            effective_subject_id,
             data.class_type,
         )
 
@@ -164,7 +210,8 @@ class EventService:
             event_type=data.event_type,
             start_date=data.start_date,
             end_date=data.end_date,
-            subject_id=data.subject_id,
+            subject_id=effective_subject_id,
+            elective_slot=elective_slot,
             class_type=data.class_type,
             is_working_day=data.is_working_day,
             substitution_schedule_override=data.substitution_schedule_override,
@@ -212,6 +259,8 @@ class EventService:
             event.end_date = data.end_date
         if "subject_id" in fields:
             event.subject_id = data.subject_id
+        if "elective_slot" in fields:
+            event.elective_slot = data.elective_slot
         if "class_type" in fields:
             event.class_type = data.class_type
         if "is_working_day" in fields:
@@ -222,6 +271,25 @@ class EventService:
             event.note = data.note
         if "active" in fields:
             event.active = data.active
+
+        # Phase 22.4: a slot-scoped event must resolve to its shared anchor
+        # subject. ADMIN-only (same rule as creation); the final state may
+        # never carry both a concrete subject and a slot, nor a mismatch.
+        if event.elective_slot is not None:
+            if user.role != UserRole.ADMIN:
+                raise EventForbidden(
+                    "Elective-slot events are restricted to administrators."
+                )
+            anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(event.elective_slot)
+            if anchor is None:
+                raise EventValidationError(
+                    f"No shared anchor subject is configured for {event.elective_slot.value}"
+                )
+            if event.subject_id is not None and event.subject_id != anchor.id:
+                raise EventValidationError(
+                    "An elective-slot event must not carry a different concrete subject"
+                )
+            event.subject_id = anchor.id
 
         # Re-authorize on the FINAL state: a student changing the subject or
         # type must still land on a flexible, enrolled-subject event.
@@ -238,6 +306,7 @@ class EventService:
             start_date=event.start_date,
             end_date=event.end_date,
             subject_id=event.subject_id,
+            elective_slot=event.elective_slot,
             class_type=event.class_type,
             subject_category=subject_category,
             substitution_schedule_override=event.substitution_schedule_override,

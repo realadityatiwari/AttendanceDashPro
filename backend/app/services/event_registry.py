@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import List, Optional
 
-from app.models.enums import ClassType, EventType, SubjectCategory
+from app.models.enums import ClassType, EventType, SubjectCategory, ElectiveSlot
 from app.engines.calendar_engine import DAY_NAMES
 
 
@@ -177,6 +177,14 @@ QUIZ_BEARING_EVENT_TYPES = {
     EventType.QUIZ_DAY,
 }
 
+# Phase 9.1 laboratory event types: PRACTICAL-only, scoped to concrete
+# practical subjects. Departmental Elective slots are theory subjects and can
+# never host these events (the shared anchors BCS-054 / BCS-058 are theory).
+LAB_ONLY_EVENT_TYPES = {
+    EventType.MID_SEM_PRACTICAL,
+    EventType.LAB_CANCELLED,
+}
+
 
 def get_rule(event_type: EventType) -> EventTypeRule:
     rule = EVENT_TYPE_RULES.get(event_type)
@@ -191,6 +199,7 @@ def validate_event(
     start_date: date,
     end_date: date,
     subject_id: Optional[object] = None,
+    elective_slot: Optional[ElectiveSlot] = None,
     class_type: Optional[ClassType] = None,
     subject_category: Optional[SubjectCategory] = None,
     substitution_schedule_override: Optional[str] = None,
@@ -202,11 +211,21 @@ def validate_event(
     Structural shape (types, presence) is already enforced by the Pydantic
     schemas; this checks the registry rules that depend on actual values.
     Raises EventValidationError with a concrete message on failure.
+
+    `elective_slot` (Phase 22.4) scopes the event to a Departmental Elective
+    logical slot; the service resolves and passes the shared anchor subject's
+    id/category, so the subject-scoped rules below apply to the anchor.
     """
     rule = get_rule(event_type)
 
     if start_date > end_date:
         raise EventValidationError("start_date must not be after end_date")
+
+    if elective_slot is not None and event_type in LAB_ONLY_EVENT_TYPES:
+        raise EventValidationError(
+            f"{rule.display_name} is a practical/lab event; "
+            "Departmental Elective slots are theory subjects and cannot host it"
+        )
 
     if rule.requires_subject and subject_id is None:
         raise EventValidationError(f"{rule.display_name} requires a subject")
