@@ -9,7 +9,9 @@ from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.user_repo import UserRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
-from app.models.enums import AttendanceStatus
+from app.models.timetable import TimetableEntry
+from app.models.academic import StudentElectiveChoice
+from app.models.enums import AttendanceStatus, ElectiveSlot
 from app.core.config import settings
 from app.engines.attendance_engine import (
     compute_subject_stats,
@@ -166,7 +168,24 @@ class AttendanceService:
         if session.is_cancelled:
             raise HTTPException(status_code=409, detail="Cannot mark attendance for a cancelled class session")
 
-        enrolled = await self.repo.is_enrolled(user_id, session.subject_id)
+        # Phase 22.3: elective slot sessions carry the anchor subject
+        # (BCS-054 / BCS-058). Check enrollment against the student's
+        # RESOLVED subject (their selection for that slot) instead.
+        effective_subject_id = session.subject_id
+        if session.timetable_entry_id is not None:
+            timetable_entry = await self.db.get(TimetableEntry, session.timetable_entry_id)
+            if timetable_entry is not None and timetable_entry.elective_slot is not None:
+                result = await self.db.execute(
+                    select(StudentElectiveChoice).where(
+                        StudentElectiveChoice.user_id == user_id,
+                        StudentElectiveChoice.elective_slot == timetable_entry.elective_slot,
+                    )
+                )
+                choice = result.scalars().first()
+                if choice is not None:
+                    effective_subject_id = choice.subject_id
+
+        enrolled = await self.repo.is_enrolled(user_id, effective_subject_id)
         if not enrolled:
             raise HTTPException(status_code=403, detail="Not enrolled in this subject")
 

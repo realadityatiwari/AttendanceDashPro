@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** (production migration pending operator) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -1920,6 +1920,76 @@ decision (not modified by this phase).
 guarded `apiFetch` except login/register (now fixed); no backend mutation
 defect found.
 
+## Phase 22.3 — Student Elective Selection & Timetable Resolution (COMPLETE, 2026-08-26)
+
+**Status: COMPLETE** — implementation + local verification on the dev DB.
+Production migration (revision `a3b4c5d6e7f8`) is a separate operator action.
+
+**Objective:** each student selects one Department Elective-I and one
+Department Elective-II; the shared CSE-51 timetable's Elective-I / Elective-II
+slots resolve to the individual student's selected subjects. No separate
+timetable per student; the institutional timetable stays shared by section.
+
+**Authoritative elective catalog (CSE-51 V Semester CTT):**
+- Elective-I: BCS-052 (Data Analytics), BCS-053 (Computer Graphics),
+  BCS-054 (OOS Design with C++)
+- Elective-II: BCS-055 (Machine Learning Techniques), BCS-056 (Application of
+  Soft Computing), BCS-058 (Data Warehousing & Data Mining)
+
+**Audit findings:**
+- No elective choice representation existed in the schema before this phase.
+- `student_enrollments` enrolls a user in all semester subjects (registration
+  loop); it could not represent a per-student elective selection.
+- The shared timetable entries for electives point at the concrete anchor
+  subjects BCS-054 (Elective-I) and BCS-058 (Elective-II); only those two
+  elective subjects existed in `subjects`. ClassSession carries a concrete
+  subject_id; attendance becomes subject-specific through that link.
+- Therefore a database migration WAS necessary: elective slot marking,
+  a per-student choice table, and the four missing elective subjects.
+
+**Implemented:**
+1. `timetable_entries.elective_slot` (nullable enum ELECTIVE_I / ELECTIVE_II)
+   — marks the shared Department Elective slots; backfilled from the subject
+   tag. NULL = regular entry (never resolved).
+2. New `student_elective_choices` table — one row per (user, elective slot),
+   UNIQUE(user_id, elective_slot); absence of a row = no selection made
+   (incomplete-selection state; never fabricated).
+3. Inserted the four missing CTT subjects (BCS-052/053/055/056) scoped to the
+   active semester.
+4. Registration now requires `elective_i` / `elective_ii` codes (validated
+   against the CTT options) and enrolls the student in all non-elective
+   subjects PLUS their chosen electives only.
+5. `GET /api/v1/timetable` resolves each elective slot to the authenticated
+   student's selected subject (anchor subject kept when no choice exists).
+6. Attendance read paths (per-subject counts, batched dashboard counts,
+   quiz-window counts, daily/Track, history) resolve elective slot sessions
+   to the student's chosen subject via a coalesced effective-subject join.
+7. Attendance mutation resolves the effective subject for the enrollment
+   check on elective slot sessions.
+8. Seed pipeline (`seed_academic_baseline.py`, `timetable.json`) marks
+   elective slots and includes the full elective catalog.
+9. Signup UI adds Department Elective-I / Elective-II selectors.
+
+**Verification:** 16/16 checks PASS on the dev DB (schema, slot marking,
+registration/enrollment path in a rolled-back transaction, timetable
+resolution to BCS-052/BCS-055, attendance counts resolving the chosen
+elective, daily sessions showing the chosen subject and never the anchor).
+`git diff --check` PASS. No attendance/eligibility/calendar engine changed.
+
+**Existing users:** the only existing account (admin 2401220100027) has no
+elective choices and keeps the anchor subjects (no fabricated selection) —
+consistent with ADMIN not being a student.
+
+**Known limitation:** the new elective subjects (BCS-052/053/055/056) have no
+quiz schedules (quiz dates not present in the CTT data); quiz eligibility for
+them is deferred (only BCS-054/BCS-058 have quiz schedules, matching the
+existing seed).
+
+**Production migration (OPERATOR ACTION — not yet applied):** apply revision
+`a3b4c5d6e7f8` (adds elective_slot + student_elective_choices + 4 subjects) to
+production Supabase via `alembic upgrade head`; downgrade drops the table,
+column, subjects, and enum type.
+
 ---
 
 # 🔗 Critical Dependency Path
@@ -1971,7 +2041,7 @@ PHASE 20
    ↓
 PHASE 21  ← COMPLETE & FROZEN
    ↓
-PHASE 22  ← ACTIVE (22.1 COMPLETE — production migration pending)
+PHASE 22  ← ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE)
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2206,7 +2276,7 @@ PHASE 10 ████████████████████  COMPLETE 
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
-Phase 22 ████████░░░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE)
+Phase 22 ██████████░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE)
 
 > **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
 > live. The next work items are: monitor errors, collect feedback, identify

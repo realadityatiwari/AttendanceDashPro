@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, Date, ForeignKey, Enum
+from sqlalchemy import String, Boolean, Date, ForeignKey, Enum, UniqueConstraint
 from app.db.base_class import Base
-from app.models.enums import SubjectCategory
+from app.models.enums import SubjectCategory, ElectiveSlot
 import datetime
 from typing import List
 import uuid
@@ -53,3 +53,21 @@ class StudentEnrollment(Base):
 
     user: Mapped["User"] = relationship(back_populates="enrollments")
     subject: Mapped["Subject"] = relationship(back_populates="enrollments")
+
+
+class StudentElectiveChoice(Base):
+    """Per-student selection of one Department Elective-I and one Elective-II
+    subject. Each student may have at most one choice per elective slot; the
+    absence of a row means the student has not yet made the selection.
+    FK constraints ensure the chosen subject exists and belongs to the
+    correct elective group (tag matches the slot)."""
+    __tablename__ = "student_elective_choices"
+    __table_args__ = (
+        UniqueConstraint("user_id", "elective_slot", name="uq_user_elective_slot"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    elective_slot: Mapped[ElectiveSlot] = mapped_column(Enum(ElectiveSlot))
+    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"))
+
+    user: Mapped["User"] = relationship(back_populates="elective_choices")
+    subject: Mapped["Subject"] = relationship()

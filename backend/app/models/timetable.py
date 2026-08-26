@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Integer, Time, Boolean, Date, ForeignKey, Enum
 from app.db.base_class import Base
-from app.models.enums import ClassType, SessionDesignation
+from app.models.enums import ClassType, SessionDesignation, ElectiveSlot
 import datetime
 from typing import List
 import uuid
@@ -15,6 +15,14 @@ class TimetableEntry(Base):
     end_time: Mapped[datetime.time] = mapped_column(Time)
     class_type: Mapped[ClassType] = mapped_column(Enum(ClassType))
     section_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sections.id"))
+    # Phase 22.3: the shared institutional timetable keeps concrete elective
+    # subject slots (BCS-054 / BCS-058). `elective_slot` marks which shared
+    # slot an entry belongs to so the application can resolve the entry to
+    # each student's selected Department Elective-I / Elective-II subject.
+    # NULL = a regular non-elective timetable entry (never resolved).
+    elective_slot: Mapped["ElectiveSlot | None"] = mapped_column(
+        Enum(ElectiveSlot), nullable=True, default=None
+    )
 
     subject: Mapped["Subject"] = relationship(back_populates="timetable_entries")
     section: Mapped["Section"] = relationship(back_populates="timetable_entries")

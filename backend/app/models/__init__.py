@@ -1,6 +1,6 @@
 # Expose all models here so Alembic can easily import them via Base
 from .user import User, Section
-from .academic import AcademicSession, Semester, Subject, StudentEnrollment
+from .academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from .timetable import TimetableEntry, ClassSession
 from .attendance import AttendanceRecord
 from .event import AcademicEvent

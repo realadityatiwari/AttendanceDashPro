@@ -70,6 +70,11 @@ class FeedbackType(str, Enum):
     QUESTION = "QUESTION"
     PRAISE = "PRAISE"
 
+class ElectiveSlot(str, Enum):
+    """Timetable slot type for per-student elective resolution (Phase 22.3)."""
+    ELECTIVE_I = "ELECTIVE_I"
+    ELECTIVE_II = "ELECTIVE_II"
+
 class WeekStartsOn(str, Enum):
     """User preference: the weekday the calendar week is considered to start
     (Phase 10D). STORAGE/PREFERENCE DATA ONLY — nothing in the current

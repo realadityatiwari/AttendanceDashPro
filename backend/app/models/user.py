@@ -35,6 +35,7 @@ class User(Base):
     
     section: Mapped["Section"] = relationship(back_populates="users")
     enrollments: Mapped[List["StudentEnrollment"]] = relationship(back_populates="user")
+    elective_choices: Mapped[List["StudentElectiveChoice"]] = relationship(back_populates="user")
     attendance_records: Mapped[List["AttendanceRecord"]] = relationship(back_populates="user")
     # foreign_keys: laboratory_records has four FKs to users (user_id,
     # signed_by, created_by, updated_by) — explicit join required.

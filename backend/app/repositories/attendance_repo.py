@@ -2,10 +2,11 @@ from uuid import UUID
 from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, or_, String
+from sqlalchemy import func, or_, and_, String
 from datetime import date
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
+from app.models.academic import StudentElectiveChoice
 from app.models.enums import AttendanceStatus, ClassType
 from app.engines.practical_occurrence import (
     collapse_count_rows,
@@ -16,7 +17,33 @@ from app.engines.practical_occurrence import (
 class AttendanceRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-        
+
+    @staticmethod
+    def _elective_choice_on(user_id: UUID):
+        """ON-clause for the per-user elective choice join: matches a
+        timetable entry's elective slot to the student's selected subject for
+        that slot. Non-elective entries (elective_slot NULL) never match, so
+        regular sessions resolve through ClassSession.subject_id as before."""
+        return and_(
+            StudentElectiveChoice.user_id == user_id,
+            StudentElectiveChoice.elective_slot == TimetableEntry.elective_slot,
+        )
+
+    @staticmethod
+    def _resolved_subject_match(subject_id: UUID):
+        """WHERE predicate: a session belongs to `subject_id` when its
+        concrete subject is the subject (regular sessions, and the student who
+        selected the slot anchor subject), OR when the session's timetable
+        entry is a Department Elective slot and the student selected
+        `subject_id` for that slot."""
+        return or_(
+            ClassSession.subject_id == subject_id,
+            and_(
+                TimetableEntry.elective_slot.isnot(None),
+                StudentElectiveChoice.subject_id == subject_id,
+            ),
+        )
+
     async def get_attendance_for_session(self, user_id: UUID, class_session_id: UUID) -> Optional[AttendanceRecord]:
         stmt = select(AttendanceRecord).filter(
             AttendanceRecord.user_id == user_id,
@@ -64,8 +91,10 @@ class AttendanceRepository:
             AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
         ).filter(
-            ClassSession.subject_id == subject_id,
+            self._resolved_subject_match(subject_id),
             ClassSession.date <= end_date,
         ).order_by(
             ClassSession.date,
@@ -98,19 +127,30 @@ class AttendanceRepository:
         """
         from app.models.academic import StudentEnrollment
 
+        # Phase 22.3: the effective subject of an elective slot session is the
+        # student's selection for that slot; enrollment scoping and the
+        # grouped subject_id both use the resolved subject.
+        resolved_subject_id = func.coalesce(
+            StudentElectiveChoice.subject_id, ClassSession.subject_id
+        )
         stmt = select(
-            ClassSession.subject_id,
+            resolved_subject_id.label('subject_id'),
             ClassSession.class_type,
             AttendanceRecord.status,
             ClassSession.date,
             ClassSession.is_cancelled,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
-        ).join(StudentEnrollment, (StudentEnrollment.subject_id == ClassSession.subject_id)
-               & (StudentEnrollment.user_id == user_id))\
-            .outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
-                       & (AttendanceRecord.user_id == user_id))\
-            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)\
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).join(
+            StudentEnrollment,
+            (StudentEnrollment.user_id == user_id)
+            & (StudentEnrollment.subject_id == resolved_subject_id)
+        ).outerjoin(AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id)
+                    & (AttendanceRecord.user_id == user_id))\
             .filter(
                 ClassSession.date <= end_date,
             ).order_by(
@@ -190,8 +230,10 @@ class AttendanceRepository:
             AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
         ).filter(
-            ClassSession.subject_id == subject_id,
+            self._resolved_subject_match(subject_id),
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
         )
@@ -232,6 +274,13 @@ class AttendanceRepository:
         """
         from app.models.academic import Subject, StudentEnrollment
 
+        # Phase 22.3: elective slot sessions display the student's selected
+        # subject (not the shared slot anchor). Effective subject =
+        # COALESCE(choice.subject_id, ClassSession.subject_id); enrollment
+        # scope and the Subject join both use that resolved subject.
+        resolved_subject_id = func.coalesce(
+            StudentElectiveChoice.subject_id, ClassSession.subject_id
+        )
         stmt = select(
             ClassSession.id,
             ClassSession.date,
@@ -245,17 +294,20 @@ class AttendanceRepository:
             AttendanceRecord.status,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
         ).join(
-            Subject, ClassSession.subject_id == Subject.id
+            Subject, Subject.id == resolved_subject_id
         ).join(
             # Scope every read to the authenticated student's enrolled subjects
             StudentEnrollment,
-            (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
+            (StudentEnrollment.user_id == user_id)
+            & (StudentEnrollment.subject_id == resolved_subject_id)
         ).outerjoin(
             AttendanceRecord,
             (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
-        ).outerjoin(
-            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).filter(
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
@@ -275,6 +327,9 @@ class AttendanceRepository:
     async def get_daily_sessions(self, user_id: UUID, target_date: date) -> List[dict]:
         from app.models.academic import Subject, StudentEnrollment
 
+        resolved_subject_id = func.coalesce(
+            StudentElectiveChoice.subject_id, ClassSession.subject_id
+        )
         stmt = select(
             ClassSession.id,
             ClassSession.date,
@@ -287,14 +342,17 @@ class AttendanceRepository:
             AttendanceRecord.status,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
         ).join(
-            Subject, ClassSession.subject_id == Subject.id
+            Subject, Subject.id == resolved_subject_id
         ).join(
             # Scope every read to the authenticated student's enrolled subjects
             StudentEnrollment,
-            (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
-        ).outerjoin(
-            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+            (StudentEnrollment.user_id == user_id)
+            & (StudentEnrollment.subject_id == resolved_subject_id)
         ).outerjoin(
             AttendanceRecord,
             (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
@@ -352,6 +410,9 @@ class AttendanceRepository:
         into logical occurrences (contiguous two-period labs = one row)."""
         from app.models.academic import Subject, StudentEnrollment
 
+        resolved_subject_id = func.coalesce(
+            StudentElectiveChoice.subject_id, ClassSession.subject_id
+        )
         stmt = (
             select(
                 ClassSession.id,
@@ -367,13 +428,15 @@ class AttendanceRepository:
                 TimetableEntry.start_time,
                 TimetableEntry.end_time,
             )
-            .join(Subject, ClassSession.subject_id == Subject.id)
+            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+            .outerjoin(StudentElectiveChoice, self._elective_choice_on(user_id))
+            .join(Subject, Subject.id == resolved_subject_id)
             .join(
                 # Scope every read to the authenticated student's enrolled subjects
                 StudentEnrollment,
-                (StudentEnrollment.subject_id == Subject.id) & (StudentEnrollment.user_id == user_id)
+                (StudentEnrollment.user_id == user_id)
+                & (StudentEnrollment.subject_id == resolved_subject_id)
             )
-            .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
             .outerjoin(
                 AttendanceRecord,
                 (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)

@@ -12,13 +12,30 @@ type FormErrors = {
   rollNumber?: string;
   password?: string;
   confirmPassword?: string;
+  electiveI?: string;
+  electiveII?: string;
 };
+
+// Phase 22.3: authoritative CSE-51 V Semester Department Elective options.
+const ELECTIVE_I_OPTIONS = [
+  { code: "BCS-052", name: "Data Analytics" },
+  { code: "BCS-053", name: "Computer Graphics" },
+  { code: "BCS-054", name: "OOS Design with C++" },
+];
+
+const ELECTIVE_II_OPTIONS = [
+  { code: "BCS-055", name: "Machine Learning Techniques" },
+  { code: "BCS-056", name: "Application of Soft Computing" },
+  { code: "BCS-058", name: "Data Warehousing & Data Mining" },
+];
 
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [rollNumber, setRollNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [electiveI, setElectiveI] = useState("");
+  const [electiveII, setElectiveII] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -45,6 +62,12 @@ export default function SignupPage() {
     if (confirmPassword !== password) {
       next.confirmPassword = "Passwords do not match.";
     }
+    if (!electiveI) {
+      next.electiveI = "Please select a Department Elective-I.";
+    }
+    if (!electiveII) {
+      next.electiveII = "Please select a Department Elective-II.";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -59,7 +82,13 @@ export default function SignupPage() {
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), roll_number: rollNumber.trim(), password }),
+        body: JSON.stringify({
+          name: name.trim(),
+          roll_number: rollNumber.trim(),
+          password,
+          elective_i: electiveI,
+          elective_ii: electiveII,
+        }),
       });
 
       if (!response.ok) {
@@ -192,6 +221,40 @@ export default function SignupPage() {
               </button>
             </div>
             {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="electiveI" className={labelClass}>Department Elective-I</label>
+            <select
+              id="electiveI"
+              value={electiveI}
+              onChange={(e) => { setElectiveI(e.target.value); setErrors(prev => ({ ...prev, electiveI: undefined })); }}
+              className={inputClass}
+              required
+            >
+              <option value="">Select Elective-I</option>
+              {ELECTIVE_I_OPTIONS.map(o => (
+                <option key={o.code} value={o.code}>{o.code} — {o.name}</option>
+              ))}
+            </select>
+            {errors.electiveI && <p className="text-xs text-destructive">{errors.electiveI}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="electiveII" className={labelClass}>Department Elective-II</label>
+            <select
+              id="electiveII"
+              value={electiveII}
+              onChange={(e) => { setElectiveII(e.target.value); setErrors(prev => ({ ...prev, electiveII: undefined })); }}
+              className={inputClass}
+              required
+            >
+              <option value="">Select Elective-II</option>
+              {ELECTIVE_II_OPTIONS.map(o => (
+                <option key={o.code} value={o.code}>{o.code} — {o.name}</option>
+              ))}
+            </select>
+            {errors.electiveII && <p className="text-xs text-destructive">{errors.electiveII}</p>}
           </div>
 
           <button

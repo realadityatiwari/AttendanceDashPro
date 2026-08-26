@@ -3976,3 +3976,144 @@ Date: 2026-08-26 · Scope: production-parity audit + confirmed fixes · Frontend
 performed. No backend/DB/production config changed. Phase 22.3 not started.
 
 ---
+
+# AttendanceDash Pro — Phase 22.3 Walkthrough (Student Elective Selection & Timetable Resolution)
+
+Date: 2026-08-26 · Scope: per-student Department Elective selection + shared-timetable slot resolution · Backend + migration + frontend signup
+
+> **PHASE 22.3 — COMPLETE (implementation + local verification).** Each
+> student now selects one Department Elective-I and one Department
+> Elective-II, and the shared CSE-51 timetable's elective slots resolve to
+> the individual student's selection. No separate timetable per student; the
+> institutional timetable stays shared by section. Production migration
+> (revision `a3b4c5d6e7f8`) is a separate operator action — NOT applied.
+
+## What Was Completed
+
+1. **Step 0 read-only architectural audit** — traced User → Section →
+   enrollment → Subject → TimetableEntry → ClassSession → attendance, and
+   answered all 15 audit questions from repository evidence.
+2. **Models** — `ElectiveSlot` enum (ELECTIVE_I / ELECTIVE_II);
+   `TimetableEntry.elective_slot` (nullable, marks shared slots);
+   `StudentElectiveChoice` table (user_id + elective_slot + subject_id,
+   UNIQUE(user_id, elective_slot)); relationships wired through User.
+3. **Migration `a3b4c5d6e7f8`** — adds `timetable_entries.elective_slot`
+   (backfilled from subject tags: BCS-054 → ELECTIVE_I, BCS-058 →
+   ELECTIVE_II), creates `student_elective_choices`, and inserts the four
+   missing CTT elective subjects (BCS-052 Data Analytics, BCS-053 Computer
+   Graphics, BCS-055 Machine Learning Techniques, BCS-056 Application of
+   Soft Computing) scoped to the active semester. Downgrade drops the
+   table, column, subjects, and enum type.
+4. **Registration** — `RegisterRequest` requires `elective_i` /
+   `elective_ii` codes (validated against the CTT options); the student is
+   enrolled in all non-elective subjects PLUS their two chosen electives
+   only, and `StudentElectiveChoice` rows are created.
+5. **Timetable endpoint** — `GET /api/v1/timetable` resolves each elective
+   slot entry to the authenticated student's selected subject; students
+   with no recorded choice keep the anchor subject (no fabricated choice).
+6. **Attendance repository** — all 6 query paths (per-subject counts,
+   batched dashboard counts, quiz-window counts, daily/Track, dashboard
+   range scan, history) resolve elective slot sessions to the student's
+   chosen subject via `COALESCE(choice.subject_id, session.subject_id)`.
+   Central helpers: `_elective_choice_on` (join clause) and
+   `_resolved_subject_match` (where predicate).
+7. **Attendance mutation** — `record_attendance` resolves the effective
+   subject for the enrollment check on elective slot sessions (a student
+   who chose BCS-052 records attendance against the shared slot session
+   whose anchor subject is BCS-054).
+8. **Seed pipeline** — `timetable.json` now carries the full 6-subject
+   elective catalog; `seed_academic_baseline.py` sets `elective_slot` on
+   new timetable entries from the subject's tag.
+9. **Frontend signup** — Department Elective-I / Elective-II selectors
+   added to the signup form (CTT options), with client-side validation.
+
+## Migration Result
+
+- Revision `a3b4c5d6e7f8`, down_revision `f2e3d4c5b6a7` (single head).
+- Dev DB applied: head `a3b4c5d6e7f8`, 8 elective slots marked (4x
+  ELECTIVE_I, 4x ELECTIVE_II), 6 elective subjects present.
+- Downgrade → upgrade round-trip verified (table/column/subjects/enum
+  dropped and recreated cleanly).
+- Production DB: **zero mutations** — the migration was NOT applied to
+  production (operator action).
+
+## Verification (dev DB only, rolled-back transaction for fixtures)
+
+| Check | Result |
+|---|---|
+| `py_compile` (models, repo, services, endpoints, migration, seed) | PASS |
+| `tsc --noEmit` (frontend signup changes) | PASS |
+| `alembic upgrade head --sql` / downgrade `--sql` (offline) | PASS |
+| Dev DB migration + backfill (8 slots, 6 elective subjects) | PASS |
+| Dev DB downgrade → upgrade round-trip | PASS |
+| `verify_phase_22_3.py` — 16 checks | 16/16 PASS |
+| `git diff --check` | PASS |
+
+Verifier coverage: schema (elective_slot, student_elective_choices, 6
+elective subjects), slot marking counts, registration/enrollment path
+(enrolls chosen electives only, rolled back), timetable resolution
+(Elective-I → BCS-052, Elective-II → BCS-055, anchor never shown),
+attendance counts (chosen elective BCS-052 receives the slot sessions),
+and daily sessions (show the chosen subject, never the anchor).
+
+## Existing-User Handling
+
+- The only existing account is ADMIN `2401220100027`; it has no elective
+  choices and keeps the anchor subjects — **no selection is fabricated**.
+- Registration now requires choices, so new students always have a complete
+  selection. Absence of a `student_elective_choices` row = incomplete
+  selection; the timetable endpoint and attendance queries fall back to the
+  shared anchor subject without inventing a choice.
+
+## Known Limitations
+
+- The new elective subjects (BCS-052/053/055/056) have **no quiz
+  schedules** (quiz dates are not present in the CTT data provided). Only
+  BCS-054 / BCS-058 have quiz schedules. Quiz eligibility for the new
+  electives is deferred (the quiz pipeline remains unchanged).
+- The shared timetable still uses the concrete anchor subjects BCS-054 /
+  BCS-058 at the session level; resolution happens in the application read
+  and mutation layers (no ClassSession data change).
+
+## Files Changed
+
+- `backend/app/models/enums.py` — ElectiveSlot enum
+- `backend/app/models/timetable.py` — elective_slot column
+- `backend/app/models/academic.py` — StudentElectiveChoice model
+- `backend/app/models/user.py` — elective_choices relationship
+- `backend/app/models/__init__.py` — export StudentElectiveChoice
+- `backend/alembic/versions/a3b4c5d6e7f8_add_elective_slot.py` — NEW migration
+- `backend/app/api/v1/endpoints/auth.py` — registration with elective choices
+- `backend/app/api/v1/endpoints/timetable.py` — elective slot resolution
+- `backend/app/repositories/attendance_repo.py` — elective resolution (6 query paths)
+- `backend/app/services/attendance_service.py` — record_attendance resolution
+- `backend/scripts/seed_academic_baseline.py` — elective_slot seeding
+- `timetable.json` — full elective catalog
+- `frontend/src/app/(auth)/signup/page.tsx` — elective selectors
+- `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md` — Phase 22.3 governance
+- `walkthrough.md` — this entry
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.3 section added; header/next-phase,
+  dependency path, and progress bar updated.
+- `implementation_plan.md`: Phase 22.3 authoritative plan added.
+- `task.md`: Phase 22.3 checklist — implementation items closed; operator
+  production-migration item left open.
+- `walkthrough.md`: this entry.
+
+## Database / Safety
+
+- Dev DB: migration `a3b4c5d6e7f8` applied (schema + 4 subjects + backfill);
+  fixture rows created inside a rolled-back transaction; no persistent data
+  added beyond the migration.
+- Production DB: **zero mutations** — not accessed for writes; migration not
+  applied.
+- No attendance/eligibility/calendar/event engine semantics changed; no
+  auth/password/JWT semantics changed; no Phase 22.1 work reopened.
+
+**PHASE 22.3 — IMPLEMENTATION COMPLETE / PRODUCTION MIGRATION PENDING
+OPERATOR.** **HARD STOP:** No commit made. No push performed. Production not
+touched; production migration is the operator's next action.
+
+---

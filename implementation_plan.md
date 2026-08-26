@@ -2559,10 +2559,80 @@ pooler configuration remains an operator decision; exact runtime
 reproduction of "Failed to fetch" requires operator browser verification
 (the deployed stack itself verified correct).
 
-**Phase status: 22.2 COMPLETE.** Next authorized slice: remaining Phase 22
-scope items (see roadmap).
+**Phase status: 22.2 COMPLETE.** Next authorized slice: Phase 22.3 (Student
+Elective Selection & Timetable Resolution).
 
----
+### Phase 22.3 — Student Elective Selection & Timetable Resolution (COMPLETE — implementation & local verification; production migration = operator action)
+
+**Status: COMPLETE (2026-08-26, implementation + local verification).**
+The production migration (revision `a3b4c5d6e7f8`) is a separate operator
+step.
+
+**Objective:** each student selects one Department Elective-I and one
+Department Elective-II; the shared CSE-51 timetable's elective slots resolve
+to the individual student's selection. No separate timetables per student.
+
+**Audit:** the 15-question Step 0 audit confirmed that (a) no elective choice
+representation existed, (b) `student_enrollments` cannot represent choices,
+(c) timetable entries use concrete BCS-054/BCS-058 subjects (not placeholders),
+(d) ClassSession carries a concrete subject_id, (e) a database migration IS
+necessary (optional elective subjects missing, no slot marking, no choice
+table), and (f) the existing user (admin) has no choices and must not have
+a fabricated selection.
+
+**Delivered:**
+
+1. **Models** — `ElectiveSlot` enum (ELECTIVE_I / ELECTIVE_II);
+   `TimetableEntry.elective_slot` (nullable, marks shared slots);
+   `StudentElectiveChoice` table (user_id, elective_slot, subject_id, UQ).
+2. **Migration `a3b4c5d6e7f8`** — add elective_slot, create
+   student_elective_choices, insert 4 missing elective subjects
+   (BCS-052/053/055/056). Backfill elective_slot from subject tags.
+   Downgrade drops table, column, subjects, and enum.
+3. **Registration** — `RegisterRequest` now requires `elective_i` /
+   `elective_ii` codes validated against the CTT options; enrollment
+   enrolls in all non-elective subjects + the two chosen electives only,
+   and creates `StudentElectiveChoice` rows.
+4. **Timetable endpoint** — resolves each elective slot entry to the
+   authenticated student's selected subject (or anchor if no choice).
+5. **Attendance repository** — all 6 query paths (per-subject counts,
+   batched dashboard counts, quiz-window counts, daily sessions,
+   dashboard range scan, history) resolve elective slot sessions to the
+   student's chosen subject via a `COALESCE(choice.subject_id,
+   session.subject_id)` join pattern. The `_resolved_subject_match` and
+   `_elective_choice_on` static helpers centralize the resolution logic.
+6. **Attendance mutation** — `record_attendance` resolves the effective
+   subject for enrollment checking on elective slot sessions.
+7. **Seed pipeline** — `timetable.json` includes the full 6-subject elective
+   catalog; `seed_academic_baseline.py` sets `elective_slot` on new entries
+   from the subject's tag.
+8. **Frontend signup** — Department Elective-I and Elective-II selectors
+   added, matching the CTT options.
+
+**Verification (dev DB only):** `py_compile` PASS · `tsc --noEmit` PASS ·
+`alembic upgrade head --sql` / downgrade `--sql` PASS · dev DB migration
+applied + backfill PASS (8 slots marked, 6 elective subjects) · downgrade
+→ upgrade round-trip PASS · verify_phase_22_3.py — 16/16 PASS (schema,
+slot marking, registration path in rolled-back txn, timetable resolution
+to BCS-052/BCS-055, attendance counts resolving the chosen elective, daily
+sessions showing chosen subject) · `git diff --check` PASS.
+
+**Existing users:** the admin (only user) has no choices and keeps anchor
+subjects — no fabricated selection. Admin is not a student.
+
+**Known limitation:** new elective subjects (BCS-052/053/055/056) have no
+quiz schedules (quiz dates not in the CTT data). Only BCS-054/BCS-058
+have quiz schedules. Quiz eligibility for the new electives is deferred.
+
+**Production migration (OPERATOR ACTION — NOT applied by the agent):**
+apply `alembic upgrade head` (revision `a3b4c5d6e7f8`) against the
+production Supabase database. Expected: 8 elective slots marked, 6
+elective subjects (existing 2 + 4 new). Downgrade: `alembic downgrade
+f2e3d4c5b6a7`.
+
+**Phase status: 22.3 implementation COMPLETE; production migration pending
+operator action.** Next authorized slice: remaining Phase 22 scope items
+(see roadmap).
 
 ---
 

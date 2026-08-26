@@ -97,6 +97,22 @@
       }
     },
     {
+      "code": "BCS-052",
+      "name": "Data Analytics",
+      "tag": "Elective-I",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-053",
+      "name": "Computer Graphics",
+      "tag": "Elective-I",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
       "code": "BCS-058",
       "name": "Data Warehousing & Data Mining",
       "tag": "Elective-II",
@@ -111,6 +127,22 @@
           { "type": "QUIZ", "milestoneId": "q3", "date": "2026-10-26", "metadata": { "quizCycle": 3 } }
         ]
       }
+    },
+    {
+      "code": "BCS-055",
+      "name": "Machine Learning Techniques",
+      "tag": "Elective-II",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
+    },
+    {
+      "code": "BCS-056",
+      "name": "Application of Soft Computing",
+      "tag": "Elective-II",
+      "category": "theory",
+      "quizApplicable": true,
+      "attendanceApplicable": true
     },
     {
       "code": "BCS-551",

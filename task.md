@@ -1945,3 +1945,23 @@ and "event creation from deployed app fails with 'Failed to fetch'".
 - [x] Verification: tsc --noEmit PASS · git diff --check PASS · no backend/schema/DB/production config changed
 - [ ] OPERATOR (deferred): decide on local .env → production pooler targeting; verify deployed-app event creation from a fresh browser session (clear cache) and report the result
 - HARD STOP — Phase 22.2 COMPLETE; no commit made; Phase 22.3 not started.
+
+#### Phase 22.3 — Student Elective Selection & Timetable Resolution (COMPLETE — implementation; production migration pending operator)
+
+Status: **COMPLETE** (implementation + local verification, 2026-08-26). The
+production migration (revision `a3b4c5d6e7f8`) is a separate operator step.
+
+- [x] Governance review (roadmap, plan, task, walkthrough, Phase 22.0 audit)
+- [x] Step 0 read-only audit: 15 audit questions answered from repo evidence (no elective representation; enrollments cannot represent choices; timetable uses concrete BCS-054/BCS-058 slots; ClassSession has concrete subject_id; migration IS necessary; existing admin has no choices)
+- [x] Model: ElectiveSlot enum + TimetableEntry.elective_slot + StudentElectiveChoice table (UNIQUE user+slot)
+- [x] Migration `a3b4c5d6e7f8`: elective_slot column + backfill from tags · student_elective_choices table · insert BCS-052/053/055/056 subjects · downgrade drops all
+- [x] Migration validated: offline SQL generation PASS · dev DB applied + backfill (8 slots, 6 elective subjects) · downgrade → upgrade round-trip PASS
+- [x] Registration: RegisterRequest requires elective_i / elective_ii (validated vs CTT options); enrolls non-elective subjects + chosen electives only; creates StudentElectiveChoice rows
+- [x] Timetable endpoint: resolves elective slots to the student's selection (anchor if no choice)
+- [x] Attendance read paths (6 queries): elective slot sessions resolve to the student's chosen subject via coalesced effective-subject join
+- [x] Attendance mutation: record_attendance resolves effective subject for enrollment check on elective slots
+- [x] Seed pipeline: timetable.json full elective catalog + seed sets elective_slot from tag
+- [x] Signup UI: Department Elective-I / Elective-II selectors (CTT options)
+- [x] Verification: py_compile PASS · tsc --noEmit PASS · verify_phase_22_3.py 16/16 PASS (dev DB, rolled-back txn) · git diff --check PASS · no attendance/eligibility/calendar engine changed
+- [ ] OPERATOR: apply `alembic upgrade head` (revision `a3b4c5d6e7f8`) to production Supabase (adds elective_slot + student_elective_choices + 4 elective subjects) — NOT YET DONE
+- HARD STOP — Phase 22.3 implementation COMPLETE; production migration is the operator's action; no commit made.

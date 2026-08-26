@@ -6,7 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, field_validator
 
 from app.models.user import User, Section
-from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment
+from app.models.enums import UserRole, ElectiveSlot
+from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from app.core.security import verify_password, create_access_token, hash_password, DUMMY_PASSWORD_HASH
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
@@ -23,6 +24,11 @@ class RegisterRequest(BaseModel):
     name: str
     roll_number: str
     password: str
+    # Phase 22.3: Department Elective selection (subject codes). Required for
+    # every new student account. Elective-I must be one of BCS-052/053/054;
+    # Elective-II one of BCS-055/056/058 (authoritative CSE-51 V Semester CTT).
+    elective_i: str
+    elective_ii: str
 
     @field_validator("password")
     @classmethod
@@ -41,6 +47,20 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one letter")
         if not re.search(r"[0-9]", v):
             raise ValueError("Password must contain at least one digit")
+        return v
+
+    @field_validator("elective_i")
+    @classmethod
+    def validate_elective_i(cls, v: str) -> str:
+        if v not in ("BCS-052", "BCS-053", "BCS-054"):
+            raise ValueError("Invalid Department Elective-I selection")
+        return v
+
+    @field_validator("elective_ii")
+    @classmethod
+    def validate_elective_ii(cls, v: str) -> str:
+        if v not in ("BCS-055", "BCS-056", "BCS-058"):
+            raise ValueError("Invalid Department Elective-II selection")
         return v
 
 class TokenResponse(BaseModel):
@@ -94,6 +114,8 @@ async def register(
     """
     name = request.name.strip()
     roll_number = request.roll_number.strip()
+    elective_i_code = request.elective_i.strip()
+    elective_ii_code = request.elective_ii.strip()
 
     # --- Validation (backend is authoritative) ---
     if not name:
@@ -142,8 +164,43 @@ async def register(
 
     try:
         await db.flush()  # materialize user.id; duplicate roll_number surfaces here
+        # Phase 22.3: enroll in every non-elective subject PLUS the student's
+        # chosen Department Elective-I / Elective-II subjects. The other
+        # elective options are NOT enrolled (each student has their own
+        # selections; the shared timetable resolves the slot per student).
+        elective_i_subject = None
+        elective_ii_subject = None
         for subject in subjects:
-            db.add(StudentEnrollment(user_id=user.id, subject_id=subject.id))
+            if subject.tag == "Elective-I":
+                if subject.code == elective_i_code:
+                    elective_i_subject = subject
+            elif subject.tag == "Elective-II":
+                if subject.code == elective_ii_code:
+                    elective_ii_subject = subject
+            else:
+                db.add(StudentEnrollment(user_id=user.id, subject_id=subject.id))
+
+        if elective_i_subject is None or elective_ii_subject is None:
+            # The chosen codes are validated by the Pydantic model, but the
+            # subject rows must actually exist in the active semester.
+            await db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="The selected elective subjects are not configured for the active semester",
+            )
+
+        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_i_subject.id))
+        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_ii_subject.id))
+        db.add(StudentElectiveChoice(
+            user_id=user.id,
+            elective_slot=ElectiveSlot.ELECTIVE_I,
+            subject_id=elective_i_subject.id,
+        ))
+        db.add(StudentElectiveChoice(
+            user_id=user.id,
+            elective_slot=ElectiveSlot.ELECTIVE_II,
+            subject_id=elective_ii_subject.id,
+        ))
         await db.commit()
     except IntegrityError:
         await db.rollback()

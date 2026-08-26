@@ -12,7 +12,7 @@ from app.models.academic import AcademicSession, Semester, Subject
 from app.models.timetable import TimetableEntry
 from app.models.user import Section
 from app.models.quiz import QuizCycle, EligibilityPolicy, QuizSchedule, ScheduleStatus
-from app.models.enums import SubjectCategory, ClassType
+from app.models.enums import SubjectCategory, ClassType, ElectiveSlot
 from sqlalchemy import select
 
 TIMETABLE_PATH = os.path.join(os.path.dirname(__file__), '../../timetable.json')
@@ -193,13 +193,22 @@ async def seed_baseline():
                     if section is None:
                         print("  Skipping TimetableEntry (no section assigned).")
                         continue
+                    # Phase 22.3: mark the shared Department Elective slots from
+                    # the subject's tag so the application can resolve them to
+                    # each student's selection. Regular entries stay NULL.
+                    elective_slot = None
+                    if subj.tag == "Elective-I":
+                        elective_slot = ElectiveSlot.ELECTIVE_I
+                    elif subj.tag == "Elective-II":
+                        elective_slot = ElectiveSlot.ELECTIVE_II
                     entry = TimetableEntry(
                         subject_id=subj.id,
                         day_of_week=int(day),
                         start_time=parse_time(t_start),
                         end_time=parse_time(t_end),
                         class_type=ctype,
-                        section_id=section.id
+                        section_id=section.id,
+                        elective_slot=elective_slot
                     )
                     db.add(entry)
                     print(f"Created TimetableEntry {subj.code} on Day {day}")
