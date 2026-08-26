@@ -1889,17 +1889,38 @@ Status: **COMPLETE** â€” Phase 21 closed & frozen; Phase 22 activated.
 - [x] Phase 22 transition stated (next project phase)
 - [x] Governance synchronized (roadmap, plan, task, walkthrough); no contradictory BLOCKED status remains in active/current sections
 - [x] No application code, database, Supabase/Render/Vercel config, auth logic, or API contracts changed; no migration; no browser/PWA tests; no commit/push
-- HARD STOP â€” Phase 21 COMPLETE & FROZEN; Phase 22 next; no commit made.
+- HARD STOP — Phase 21 COMPLETE & FROZEN; Phase 22 next; no commit made.
 
-### Phase 22 â€” Post-Launch (ACTIVE â€” next project phase, 2026-08-26)
+### Phase 22 — Post-Launch (ACTIVE — next project phase, 2026-08-26)
 
 Phase 21 production launch is **COMPLETE & FROZEN**. The production system is
 live on Vercel Hobby + Render Free + Supabase Free PostgreSQL, verified by the
 operator (login, ADMIN, dashboard, desktop, mobile, PWA, migrated data).
 
 Phase 22 is the **next active phase**. Phase 22 work is NOT implemented in
-this closure slice â€” only the authoritative starting point is established.
+this closure slice — only the authoritative starting point is established.
 
+- [x] Phase 22.0 — read-only audit + prioritization (no implementation)
 - [ ] Monitor errors, collect feedback, production bug fixes, semester rollover
 
----
+#### Phase 22.1 — Timetable Data-Scope Correction (COMPLETE — implementation; production migration pending operator)
+
+Status: **COMPLETE** (implementation + local verification, 2026-08-26). The
+P0 defect (timetable query ignored section_id; no Section linkage on
+TimetableEntry) is fixed. Production migration is a separate operator step.
+
+- [x] Governance review (roadmap, plan, task, walkthrough, Phase 22.0 audit)
+- [x] Readiness inspection of all TimetableEntry consumers (model, seed, expand, synchronizer, attendance joins, verifiers)
+- [x] Model: TimetableEntry.section_id FK -> sections.id + Section relationship (NOT NULL after migration)
+- [x] Migration f2e3d4c5b6a7: add column + FK, backfill from existing DB state (no hardcoded UUID, no new Section), guarded NOT NULL, downgrade drops column
+- [x] Migration SQL validated offline (upgrade head --sql / downgrade --sql, exit 0)
+- [x] Dev DB migration applied + backfill verified (28 rows, 0 NULL)
+- [x] Dev DB downgrade -> upgrade round-trip verified (28 rows preserved)
+- [x] Repository: get_weekly_entries_for_section filters by section_id
+- [x] Seed pipeline: seed_academic_baseline.py resolves/creates the section (CSE-51, idempotent) and assigns section_id
+- [x] API contract: response shape unchanged; section_id not serialized
+- [x] Synchronizer: no change required (additive column; verified via joins)
+- [x] Verifier backend/scripts/verify_phase_22_1.py created — 19/19 PASS on dev DB
+- [x] Static: compileall PASS · git diff --check PASS · no browser/PWA tests
+- [ ] OPERATOR: apply alembic upgrade head (revision f2e3d4c5b6a7) to production Supabase (1 section, 28 entries backfilled) — NOT YET DONE
+- HARD STOP — Phase 22.1 implementation complete; production migration is the operator's action; no commit made.

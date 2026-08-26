@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app.db.session import AsyncSessionLocal
 from app.models.academic import AcademicSession, Semester, Subject
 from app.models.timetable import TimetableEntry
+from app.models.user import Section
 from app.models.quiz import QuizCycle, EligibilityPolicy, QuizSchedule, ScheduleStatus
 from app.models.enums import SubjectCategory, ClassType
 from sqlalchemy import select
@@ -142,7 +143,30 @@ async def seed_baseline():
                         await db.flush()
                         print(f"  Created QuizSchedule for {subject.code} Cycle {qc.cycle_number} -> {status.value}")
 
-        # 6. Timetable Entries
+        # 6. Section — every timetable entry belongs to exactly one Section.
+        # The current academic model is single-section per semester. Resolve
+        # the Section for this semester; create it if absent (idempotent,
+        # same convention as setup_single_user.py) so timetable entries
+        # always carry a valid section_id.
+        section_name = "CSE-51"
+        stmt = select(Section).filter_by(semester_id=semester.id)
+        sections = (await db.execute(stmt)).scalars().all()
+        if len(sections) == 1:
+            section = sections[0]
+        elif len(sections) == 0:
+            section = Section(name=section_name, semester_id=semester.id, program="CSE")
+            db.add(section)
+            await db.flush()
+            print(f"Created Section: {section_name}")
+        else:
+            print(
+                f"WARNING: {len(sections)} sections exist for semester "
+                f"'{semester_name}'; cannot unambiguously assign timetable "
+                "entries. Skipping timetable seeding."
+            )
+            section = None
+
+        # 7. Timetable Entries
         time_slots = data['time_slots']
         for day, classes in data['day_schedule'].items():
             for idx, cls in enumerate(classes):
@@ -166,12 +190,16 @@ async def seed_baseline():
                 )
                 result = await db.execute(stmt)
                 if not result.scalars().first():
+                    if section is None:
+                        print("  Skipping TimetableEntry (no section assigned).")
+                        continue
                     entry = TimetableEntry(
                         subject_id=subj.id,
                         day_of_week=int(day),
                         start_time=parse_time(t_start),
                         end_time=parse_time(t_end),
-                        class_type=ctype
+                        class_type=ctype,
+                        section_id=section.id
                     )
                     db.add(entry)
                     print(f"Created TimetableEntry {subj.code} on Day {day}")

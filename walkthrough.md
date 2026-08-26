@@ -3694,3 +3694,100 @@ only the authoritative starting point is established.
 **HARD STOP:** No commit made. No push performed. No production touched.
 
 ---
+
+# AttendanceDash Pro — Phase 22.1 Walkthrough (Timetable Data-Scope Correction)
+
+Date: 2026-08-26 · Scope: first Phase 22 implementation slice — P0 timetable
+data-scope fix · Backend + migration + seed + verifier only
+
+> **PHASE 22.1 — IMPLEMENTATION COMPLETE / PRODUCTION MIGRATION PENDING
+> OPERATOR.** The Phase 22.0 audit identified a P0 defect: `GET
+> /api/v1/timetable` accepted the student's section but the repository query
+> never filtered by it, and `TimetableEntry` had no Section linkage — every
+> section's weekly schedule was returned to any authenticated student.
+> Masked by the single-section production state (1 section, 28 entries), it
+> becomes a cross-section data exposure when a second section exists. This
+> slice corrects the data scoping while preserving the API response shape.
+
+## What Was Completed
+
+1. **Model correction** — `TimetableEntry.section_id` (NOT NULL FK →
+   `sections.id`) + `section` relationship; `Section.timetable_entries`
+   back-populates (`backend/app/models/timetable.py`,
+   `backend/app/models/user.py`). Follows the existing FK/relationship
+   conventions (mirrors `Subject.timetable_entries`).
+2. **Alembic migration `f2e3d4c5b6a7`** (`f2e3d4c5b6a7_add_timetable_section.py`):
+   - add `section_id` (nullable) + named FK
+   - backfill all existing rows from existing DB state — active
+     AcademicSession → its Semester → its Section (fallback: a single
+     existing Section). No hardcoded UUID, no new Section created.
+   - guarded NOT NULL enforcement (raises if any row remains NULL)
+   - downgrade drops the FK + column (round-trip verified on dev DB)
+3. **Repository query fix** — `get_weekly_entries_for_section(section_id)`
+   now filters `.where(TimetableEntry.section_id == section_id)`
+   (`backend/app/repositories/timetable_repo.py`).
+4. **Seed pipeline** — `seed_academic_baseline.py` resolves the semester's
+   Section (idempotent create CSE-51 if absent, matching
+   `setup_single_user.py`), assigns `section_id` to every new timetable row,
+   and skips with a warning if the semester is multi-section.
+5. **API contract preserved** — response shape (`id`, `day_of_week`,
+   `class_type`, `subject`) byte-identical; `section_id` is internal-only.
+6. **Synchronizer compatibility** — additive column; `SessionRepository
+   .get_timetable_entries()` and `expand_baseline.py` unchanged (global reads
+   match the single-section baseline); class-session joins verified intact.
+7. **Verifier `backend/scripts/verify_phase_22_1.py`** — 19/19 PASS on the
+   dev DB.
+
+## Migration Result
+
+- Revision `f2e3d4c5b6a7`, down_revision `e1f2a3b4c5d6` (single head).
+- Upgrade SQL: `ADD COLUMN section_id UUID` → `ADD CONSTRAINT
+  timetable_entries_section_id_fkey FOREIGN KEY ...` → backfill UPDATE →
+  guarded count → `SET NOT NULL`. Offline generation exit 0.
+- Downgrade SQL: `DROP CONSTRAINT timetable_entries_section_id_fkey` →
+  `DROP COLUMN section_id`. Offline generation exit 0.
+- Dev DB applied: head `f2e3d4c5b6a7`, 28 timetable rows preserved, 0 NULL
+  section_id. Downgrade → upgrade round-trip preserved all 28 rows.
+
+## Verification Performed (dev DB only)
+
+| Check | Result |
+|---|---|
+| compileall / py_compile (models, repo, seed, migration, verifier) | PASS |
+| `alembic upgrade head --sql` / downgrade `--sql` | PASS (exit 0) |
+| dev DB migration + backfill (28 rows, 0 NULL, head f2e3d4c5b6a7) | PASS |
+| dev DB downgrade → upgrade round-trip | PASS |
+| `verify_phase_22_1.py` — schema / backfill / count / scoping / isolation / API shape / joins | 19/19 PASS |
+| `git diff --check` | PASS |
+
+## Final Production State (unchanged — not touched)
+
+Production remains live on Vercel + Render + Supabase at Phase 21D.4 state.
+The `f2e3d4c5b6a7` migration has NOT been applied to production — that is an
+operator action.
+
+## Database / Safety
+
+- Dev DB (localhost container): migration `f2e3d4c5b6a7` applied (schema +
+  backfill), row counts preserved (28 timetable entries, 1 section, 1 user).
+- Production DB: **zero mutations** — no connection, no migration, no data
+  change (the local `.env` points at production Supabase; all dev work was
+  explicitly overridden to the localhost container).
+- No attendance/eligibility/calendar/event/session synchronizer semantics
+  changed. No auth/JWT/authorization changes. No frontend changes.
+- No browser/PWA tests run.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.1 COMPLETE section added; header/next-phase,
+  dependency path, and progress bar updated.
+- `implementation_plan.md`: Phase 22.1 authoritative plan added.
+- `task.md`: Phase 22.1 checklist — implementation items closed; operator
+  production-migration item left open.
+- `walkthrough.md`: this entry.
+
+**PHASE 22.1 — IMPLEMENTATION COMPLETE / PRODUCTION MIGRATION PENDING
+OPERATOR.** **HARD STOP:** No commit made. No push performed. Production not
+touched; production migration is the operator's next action.
+
+---

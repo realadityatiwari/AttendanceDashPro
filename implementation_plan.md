@@ -2425,8 +2425,67 @@ Phase 22 scope (existing roadmap definition — no new requirements invented):
 - Improve mobile experience
 - Handle semester rollover
 
-Phase 22 work is NOT started in this slice; it is the authoritative starting
-point for the next authorized work.
+### Phase 22.1 — Timetable Data-Scope Correction (COMPLETE — implementation & local verification; production migration = operator action)
+
+**Status: COMPLETE (2026-08-26, implementation).** The P0 data-scope defect
+from the Phase 22.0 audit is fixed; the production migration is a separate
+operator step.
+
+**Defect:** `GET /api/v1/timetable` obtained the student's section but the
+repository query never filtered by it, and `TimetableEntry` had no Section
+linkage — every section's weekly schedule was returned to any authenticated
+student. Masked by the single-section production state (1 section, 28
+entries); becomes a cross-section data exposure when a second section exists.
+
+**Authorized scope:** timetable data scoping only. No semester rollover, no
+multi-section UI, no changes to frozen engines/contracts/auth.
+
+**Delivered:**
+
+1. **Model** — `TimetableEntry.section_id` (NOT NULL FK → `sections.id`) +
+   `Section.timetable_entries` relationship
+   (`backend/app/models/timetable.py`, `backend/app/models/user.py`).
+2. **Migration `f2e3d4c5b6a7`** (`backend/alembic/versions/f2e3d4c5b6a7_add_timetable_section.py`):
+   - add `section_id` (nullable) + FK
+   - backfill from existing DB state: active AcademicSession → its Semester →
+     its Section (fallback: single existing Section). Never hardcodes a
+     UUID; never creates a Section.
+   - guarded NOT NULL enforcement (raises if any row remains NULL)
+   - downgrade: drop FK + column (verified round-trip on dev DB)
+3. **Repository** — `get_weekly_entries_for_section` now filters
+   `.where(TimetableEntry.section_id == section_id)`
+   (`backend/app/repositories/timetable_repo.py`).
+4. **Seed pipeline** — `seed_academic_baseline.py` resolves the semester's
+   Section (creates CSE-51 if absent, idempotent, same convention as
+   `setup_single_user.py`) and assigns `section_id` to every new entry;
+   ambiguous multi-section semester skips timetable seeding with a warning.
+5. **API contract unchanged** — response shape (`id`, `day_of_week`,
+   `class_type`, `subject`) verified identical; `section_id` is internal and
+   not serialized.
+6. **Synchronizer compatibility** — `EventSessionSynchronizer` /
+   `SessionRepository.get_timetable_entries()` and `expand_baseline.py` read
+   entries globally (single-section semantics); the additive column requires
+   no synchronizer change (verified by join checks in the verifier).
+7. **Verifier `backend/scripts/verify_phase_22_1.py`** — 19/19 PASS against
+   the dev DB: schema column, zero NULL/orphan section refs, count 28,
+   owner-section scoping, second-section isolation in a rolled-back
+   transaction, API response shape (no `section_id` leak), session
+   materialization joins intact.
+
+**Verification performed (dev DB only):** `compileall`/`py_compile` PASS ·
+`alembic upgrade head --sql` exit 0 (upgrade + downgrade SQL generated) ·
+dev DB migration applied and backfilled (28 rows, 0 NULL) · downgrade →
+upgrade round-trip PASS · verifier 19/19 PASS · `git diff --check` PASS.
+
+**Production migration (OPERATOR ACTION — NOT applied by the agent):**
+apply `alembic upgrade head` (revision `f2e3d4c5b6a7`) against the
+production Supabase database with the production `DATABASE_URI`. Expected:
+1 section, 28 timetable entries backfilled; rollback = downgrade to
+`e1f2a3b4c5d6`.
+
+**Phase status: 22.1 implementation COMPLETE; production migration pending
+operator action.** Next authorized slice: any remaining Phase 22 scope item
+(see roadmap), after operator review of 22.1.
 
 ---
 

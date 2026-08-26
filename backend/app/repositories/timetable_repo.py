@@ -10,7 +10,9 @@ class TimetableRepository:
         self.db = db
         
     async def get_weekly_entries_for_section(self, section_id: UUID) -> List[TimetableEntry]:
-        stmt = select(TimetableEntry).options(
+        stmt = select(TimetableEntry).where(
+            TimetableEntry.section_id == section_id
+        ).options(
             selectinload(TimetableEntry.subject)
         )
         result = await self.db.execute(stmt)

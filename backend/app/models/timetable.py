@@ -14,8 +14,10 @@ class TimetableEntry(Base):
     start_time: Mapped[datetime.time] = mapped_column(Time)
     end_time: Mapped[datetime.time] = mapped_column(Time)
     class_type: Mapped[ClassType] = mapped_column(Enum(ClassType))
+    section_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sections.id"))
 
     subject: Mapped["Subject"] = relationship(back_populates="timetable_entries")
+    section: Mapped["Section"] = relationship(back_populates="timetable_entries")
     class_sessions: Mapped[List["ClassSession"]] = relationship(back_populates="timetable_entry")
 
 

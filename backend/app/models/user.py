@@ -16,6 +16,7 @@ class Section(Base):
     semester_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("semesters.id"))
 
     users: Mapped[List["User"]] = relationship(back_populates="section")
+    timetable_entries: Mapped[List["TimetableEntry"]] = relationship(back_populates="section")
 
 
 class User(Base):
