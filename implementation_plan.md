@@ -2355,6 +2355,35 @@ BLOCKED (awaiting operator authorization for migration execution).** Next
 authorized slice: 21D.3 — Beta Validation & Launch Gate (after the migration
 is executed and validated).
 
+#### 21D.3 — Controlled Localhost→Supabase Production Migration (IN PROGRESS — BLOCKED at production access)
+
+**Objective:** execute the approved Approach A migration (row-for-row copy,
+UUID + hash + timestamp preservation) from localhost to Supabase production.
+Report: `docs/phase_21/phase_21d3_production_migration_report.md`.
+
+**Delivered (this session):**
+- Created `backend/scripts/migrate_localhost_to_supabase.py` (299 lines):
+  `--verify-only` / `--execute`; reads `DATABASE_URI_SOURCE`/`DATABASE_URI_TARGET`
+  from env (never printed); single-transaction writes; no `ON CONFLICT DO
+  NOTHING`; read-only on localhost; post-migration verification (counts, UUID
+  sets, content sets, FK integrity).
+- Validated: compile PASS; FK order checked against actual schema (parents
+  before children — VALID).
+- Localhost preflight passed: all 18 source counts match the 21D.2 audit;
+  owner identity (2401220100027 ADMIN, hash present); attendance 165
+  (108/57); alembic head e1f2a3b4c5d6.
+- Localhost backup created (88 KB).
+
+**BLOCKED at production access boundary:** `DATABASE_URI_TARGET` (Supabase
+pooler URL) is not available in this environment and may not be requested from
+the operator. The operator must run the tool in their own terminal (exact
+commands documented in the report): set both env vars, run `--verify-only`
+(confirm 18 empty tables), then `--execute`.
+
+**Phase status: 21D.3 BLOCKED on production credentials (operator executes).**
+After a successful operator run and manual login verification, 21D.3 will be
+marked COMPLETE and 21D.3/21D.4 validation can proceed.
+
 ---
 
 ---

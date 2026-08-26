@@ -1684,6 +1684,24 @@ faithfully, a full-state migration plan was produced. Report:
   breakdown, dashboard equivalence).
 - **NOT executed** — zero mutations, awaiting operator authorization.
 
+### 21D.3 — Controlled Localhost→Supabase Production Migration (IN PROGRESS — BLOCKED at production access)
+
+**Authorized migration execution.** The tool
+`backend/scripts/migrate_localhost_to_supabase.py` was created and validated
+(compile PASS, FK order validated against actual schema). Localhost preflight
+passed: source snapshot matches the 21D.2 audit (1 owner ADMIN, 165 attendance
+108/57, 720 sessions, 9 subjects, 61 events, etc.); localhost backup created
+(88 KB); alembic head `e1f2a3b4c5d6`.
+
+**BLOCKED at the production access boundary:** the migration tool requires
+`DATABASE_URI_TARGET` (Supabase Session Pooler URL). This value exists only in
+the operator's environment (Render dashboard); it is not in the repository and
+was not obtainable in this session without requesting credentials from the
+operator (forbidden). The operator must run `--verify-only` then `--execute`
+with the env vars set in their own terminal (exact commands in the report).
+
+Report: `docs/phase_21/phase_21d3_production_migration_report.md`.
+
 ## Gate A — Phase 20 manual browser QA
 The 42-item manual browser QA checklist was delivered in Phase 20
 (`docs/phase_20/phase_20_production_qa.md` §19). The user must complete and

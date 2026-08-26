@@ -1846,6 +1846,24 @@ Status: **BLOCKED — provider access unavailable (operator action required).**
 - [x] Zero mutations; no production DB accessed; no app logic changed
 - [ ] OPERATOR/AUTH: authorize creation of `migrate_localhost_to_supabase.py` + execution
 - HARD STOP — 21D.2 provisioning still BLOCKED; no commit made.
+
+#### 21D.3 — Controlled Localhost→Supabase Production Migration (IN PROGRESS — BLOCKED at production access)
+
+- [x] Created `backend/scripts/migrate_localhost_to_supabase.py` (299 lines, `--verify-only`/`--execute`)
+- [x] Tool design: single transaction; no ON CONFLICT DO NOTHING; UUID/hash/timestamp preservation; read-only source
+- [x] Tool compile PASS
+- [x] FK order validated against actual schema (parents before children — VALID)
+- [x] Source snapshot matches 21D.2 audit (all 18 tables; owner 2401220100027 ADMIN hash present; attendance 165 108/57; alembic e1f2a3b4c5d6)
+- [x] Localhost backup created (88 KB)
+- [x] `docs/phase_21/phase_21d3_production_migration_report.md` created
+- [ ] BLOCKED: `DATABASE_URI_TARGET` not available in this environment (may not be requested from operator)
+- [ ] OPERATOR: run `python scripts/migrate_localhost_to_supabase.py --verify-only` (confirm 18 empty tables)
+- [ ] OPERATOR: run `python scripts/migrate_localhost_to_supabase.py --execute`
+- [ ] OPERATOR: manual production login test (2401220100027) at https://attendance-dash-pro.vercel.app
+- [ ] Post-run: mark 21D.3 COMPLETE + reconcile counts/UUID/content verification
+- HARD STOP — awaiting operator execution; no commit made.
+
+#### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
 - [ ] OPERATOR TASK: create Supabase Free project (region near India) + note reference
 - [ ] OPERATOR TASK: run `alembic upgrade head` against the NEW Supabase DB (head `e1f2a3b4c5d6`)
 - [ ] OPERATOR TASK: create Render Free web service from `render.yaml` / Dockerfile

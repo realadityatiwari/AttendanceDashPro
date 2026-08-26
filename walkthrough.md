@@ -3521,6 +3521,66 @@ userpreferences (laboratory_* + feedback empty)
 
 ---
 
+# AttendanceDash Pro — Phase 21D.3 Walkthrough (Controlled Localhost→Supabase Migration)
+
+Date: 2026-08-26 · Scope: execute approved Approach A migration · **BLOCKED at production access boundary**
+
+> **PHASE 21D.3 IN PROGRESS — BLOCKED on production credentials.** The
+> authorized migration tool was created and validated; localhost preflight
+> passed (source snapshot matches the 21D.2 audit; backup created). The
+> production migration cannot be executed from this environment because
+> `DATABASE_URI_TARGET` (Supabase pooler URL) is not available here and may
+> not be requested from the operator. The operator must run the tool in their
+> own terminal (exact commands documented). No production write occurred.
+
+## Completed (read-only + tooling)
+
+| Step | Result |
+|---|---|
+| Migration tool created | ✅ `backend/scripts/migrate_localhost_to_supabase.py` (299 lines) |
+| Tool compile | ✅ PASS |
+| FK order vs actual schema | ✅ VALID (parents before children) |
+| Source snapshot (all 18 tables) | ✅ matches 21D.2 audit |
+| Owner identity | ✅ 2401220100027 ADMIN, PBKDF2 hash present (not printed) |
+| Attendance | ✅ 165 total (108 ATTENDED / 57 MISSED) |
+| Alembic head | ✅ e1f2a3b4c5d6 |
+| Localhost backup | ✅ 88 KB |
+| Production access (`DATABASE_URI_TARGET`) | ❌ not available in this environment (not requested) |
+
+## Operator Execution (exact commands)
+
+```powershell
+$env:DATABASE_URI_SOURCE = "postgresql+asyncpg://postgres:postgres@localhost:55432/attendancedash"
+$env:DATABASE_URI_TARGET = "postgresql+asyncpg://postgres.zwkdiervvtjalaazscdv:<URL-ENCODED-PASSWORD>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?ssl=require"
+cd AttendanceDashPro/backend
+python scripts/migrate_localhost_to_supabase.py --verify-only   # confirm 18 empty tables
+python scripts/migrate_localhost_to_supabase.py --execute       # migrate in one transaction
+```
+
+Then manual login test at https://attendance-dash-pro.vercel.app (roll
+2401220100027, the same password as localhost).
+
+## Database / Safety
+
+- Localhost: **INSERT/UPDATE/DELETE/ALTER/DROP = 0** (read-only snapshot only).
+- Production: **NOT ACCESSED · NOT MIGRATED · NOT MUTATED** (no credentials).
+- No application code, models, migrations, or auth logic changed.
+- No secrets/passwords/hashes exposed.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: 21D.3 section added — IN PROGRESS/BLOCKED at access.
+- `implementation_plan.md`: 21D.3 section added; operator commands documented.
+- `task.md`: 21D.3 checklist — completed items checked; operator execution
+  items open.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21d3_production_migration_report.md`: full report.
+
+**PHASE 21D.3 — BLOCKED AT PRODUCTION ACCESS / AWAITING OPERATOR EXECUTION.**
+**HARD STOP:** No commit made. No push performed. No production DB touched.
+
+---
+
 ---
 
 ---
