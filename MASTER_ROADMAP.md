@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE** (P0 fix, verified locally, production migration pending operator action) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** (P0 fix; migration applied by operator and verified read-only) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -1861,11 +1861,13 @@ second section exists.
   (schema, backfill, count 28, scoping, second-section isolation in a
   rolled-back transaction, API shape, session-materialization joins).
 
-**Production migration (OPERATOR ACTION — not yet applied):** apply revision
-`f2e3d4c5b6a7` to the production Supabase database (see the migration file
-and the Phase 22.1 final report for the exact command). Expected: 1 section,
-28 timetable entries, all backfilled to the existing section; rollback via
-downgrade drops the column.
+**Production migration — VERIFIED (2026-08-26, read-only):** the operator
+applied revision `f2e3d4c5b6a7` to the production Supabase database
+(`e1f2a3b4c5d6 -> f2e3d4c5b6a7`). Read-only verification confirmed the
+expected state exactly: Alembic head `f2e3d4c5b6a7` · 1 section (CSE-51) ·
+28 timetable entries · 0 NULL section_id · 0 orphan section references · UUID
+and core data sets match the dev source · 0 duplicate timetable rows.
+Rollback (if ever needed) is `alembic downgrade e1f2a3b4c5d6`.
 
 ---
 
@@ -2153,7 +2155,7 @@ PHASE 10 ████████████████████  COMPLETE 
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
-Phase 22 ████░░░░░░░░░░░░░░░░  ACTIVE (22.1 COMPLETE · production migration pending operator action)
+Phase 22 ██████░░░░░░░░░░░░░░  ACTIVE (22.1 COMPLETE · production migration VERIFIED)
 
 > **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
 > live. The next work items are: monitor errors, collect feedback, identify

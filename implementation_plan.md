@@ -2483,13 +2483,17 @@ production Supabase database with the production `DATABASE_URI`. Expected:
 1 section, 28 timetable entries backfilled; rollback = downgrade to
 `e1f2a3b4c5d6`.
 
-**Phase status: 22.1 implementation COMPLETE; production migration pending
-operator action.** The operator's first `alembic upgrade head` attempt was
-blocked by `ModuleNotFoundError: No module named 'psycopg2'` — resolved by
+**Phase status: 22.1 COMPLETE — production migration applied and VERIFIED
+(2026-08-26, read-only).** The operator ran `alembic upgrade head`
+(`e1f2a3b4c5d6 -> f2e3d4c5b6a7`); read-only verification confirmed head
+`f2e3d4c5b6a7`, 1 section (CSE-51), 28 timetable entries, 0 NULL section_id,
+0 orphan references, UUID/core-data parity with the dev source, and 0
+duplicates. The operator's earlier `alembic upgrade head` attempt was blocked
+by `ModuleNotFoundError: No module named 'psycopg2'` — resolved by
 normalizing the bare `postgresql://` scheme to `postgresql+asyncpg://` in
-`alembic/env.py` (the project's async driver is asyncpg, not psycopg2). The
-operator can now retry the production migration. Next authorized slice: any
-remaining Phase 22 scope item (see roadmap), after operator review of 22.1.
+`alembic/env.py` (the project's async driver is asyncpg, not psycopg2). Next
+authorized slice: any remaining Phase 22 scope item (see roadmap), after
+operator review of 22.1.
 
 ---
 

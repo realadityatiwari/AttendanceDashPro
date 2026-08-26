@@ -3844,3 +3844,49 @@ mutated. The operator can now safely retry `alembic upgrade head` on
 production Supabase. **HARD STOP:** No commit made. No push performed.
 
 ---
+
+# AttendanceDash Pro — Phase 22.1 Production Migration Verification (READ-ONLY)
+
+Date: 2026-08-26 · Scope: verify the operator-applied production migration · Read-only
+
+> **PHASE 22.1 — PRODUCTION MIGRATION VERIFIED.** The operator ran
+> `alembic upgrade head` against production Supabase
+> (`e1f2a3b4c5d6 -> f2e3d4c5b6a7`). A strictly read-only verification was
+> performed against the production database; no schema, data, code,
+> configuration, or infrastructure was modified.
+
+## Verification (production, read-only)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Alembic revision = `f2e3d4c5b6a7` | PASS |
+| 2 | `timetable_entries` count = 28 | PASS |
+| 3 | NULL `section_id` rows = 0 (28/28 non-NULL) | PASS |
+| 4 | Orphan `section_id` references = 0; all 28 resolve to CSE-51 | PASS |
+| 5 | Section count = 1 (CSE-51) — no new section created | PASS |
+| 6 | UUID sets + core data (id/subject/day/time/type) match the dev source | PASS (28=28) |
+| 7 | Duplicate timetable groups = 0 | PASS |
+| 8 | Repository applies `section_id` scoping in code (`timetable_repo.py:13-14`) | PASS (code inspection) |
+| 9 | `verify_phase_22_1.py` NOT run against production (it inserts temp rows in a rolled-back savepoint — not strictly read-only); equivalent read-only SQL checks performed instead | N/A (substituted) |
+| 10 | Browser/PWA tests not run | N/A |
+
+## Expected vs Actual (Phase 22.1 state)
+
+| Metric | Expected | Actual |
+|---|---|---|
+| Sections | 1 | 1 (CSE-51) |
+| Timetable entries | 28 | 28 |
+| NULL section_id | 0 | 0 |
+| Alembic head | f2e3d4c5b6a7 | f2e3d4c5b6a7 |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.1 production migration marked VERIFIED; header/progress-bar updated.
+- `implementation_plan.md`: Phase 22.1 status updated (migration applied + verified).
+- `task.md`: operator production-migration item closed; Phase 22.1 marked COMPLETE & VERIFIED.
+- `walkthrough.md`: this entry.
+
+**PHASE 22.1 — COMPLETE & VERIFIED IN PRODUCTION.** Phase 22.2 NOT started.
+**HARD STOP:** No commit made. No push performed. Read-only only.
+
+---

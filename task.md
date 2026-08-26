@@ -1923,5 +1923,5 @@ TimetableEntry) is fixed. Production migration is a separate operator step.
 - [x] Verifier backend/scripts/verify_phase_22_1.py created — 19/19 PASS on dev DB
 - [x] Static: compileall PASS · git diff --check PASS · no browser/PWA tests
 - [x] Alembic driver blocker (operator's `alembic upgrade head` failed: `ModuleNotFoundError: No module named 'psycopg2'`) — RESOLVED in `backend/alembic/env.py`: bare `postgresql://`/`postgres://` scheme normalized to `postgresql+asyncpg://` (asyncpg is the project's installed async driver; no .env change, no extra driver). Verified against localhost dev DB with the bare URL form: `alembic current` → `f2e3d4c5b6a7 (head)`.
-- [ ] OPERATOR: retry `alembic upgrade head` (revision f2e3d4c5b6a7) on production Supabase (1 section, 28 entries backfilled) — NOT YET DONE
-- HARD STOP — Phase 22.1 implementation complete; production migration is the operator's action; no commit made.
+- [x] OPERATOR: retry `alembic upgrade head` (revision f2e3d4c5b6a7) on production Supabase (1 section, 28 entries backfilled) — COMPLETED AND VERIFIED (2026-08-26, read-only: head f2e3d4c5b6a7, 28 rows, 0 NULL, 1 section CSE-51, UUID/core parity with dev, 0 duplicates)
+- HARD STOP — Phase 22.1 COMPLETE & VERIFIED IN PRODUCTION; Phase 22.2 not started; no commit made.
