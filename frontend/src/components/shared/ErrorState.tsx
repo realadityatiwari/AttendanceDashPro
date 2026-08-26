@@ -8,7 +8,7 @@ interface ErrorStateProps {
 
 export function ErrorState({ 
   title = "Failed to load data", 
-  message = "An error occurred while fetching data from the server. The API may be unavailable or not fully implemented." 
+  message = "An error occurred while fetching data from the server. The server may be temporarily unavailable."
 }: ErrorStateProps) {
   return (
     <GlassCard className="bg-red-950/20 border-red-900/50">

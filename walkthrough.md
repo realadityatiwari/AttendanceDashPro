@@ -3890,3 +3890,89 @@ Date: 2026-08-26 · Scope: verify the operator-applied production migration · R
 **HARD STOP:** No commit made. No push performed. Read-only only.
 
 ---
+
+# AttendanceDash Pro — Phase 22.2 Walkthrough (Production Parity & Mutation Reliability)
+
+Date: 2026-08-26 · Scope: production-parity audit + confirmed fixes · Frontend + verification only
+
+> **PHASE 22.2 — COMPLETE.** Triggered by an operator report: a Holiday
+> event created on the localhost app did not appear in the deployed app,
+> and creating an event from the deployed app failed with "Failed to fetch".
+> The audit confirmed the deployed production stack is healthy; the
+> operator's localhost/production confusion was caused by `backend/.env`
+> pointing `DATABASE_URI` at the production Supabase pooler (the localhost
+> app writes to production). No sync was built — the databases are separate
+> by design; the local `.env` configuration creates the shared target.
+
+## Audit Summary
+
+1. **Production stack verified healthy** (read-only probes):
+   - Render backend `/health` 200, CORS preflight for the exact Vercel
+     origin returns 200 with correct `Access-Control-Allow-Origin`,
+     `Allow-Methods`, `Allow-Headers`.
+   - Deployed Vercel frontend bundles carry `https://attendancedash-api
+     .onrender.com` inlined — no localhost fallback in production builds.
+   - Deployed backend OpenAPI confirms all current endpoints including
+     event mutation (POST/PATCH/DELETE), HOLIDAY enum, `note` field.
+   - JWT validation active (dev-secret token → 401); unauth → 401.
+2. **Production Supabase** (read-only asyncpg connection): the
+   operator's "localhost-created" Holiday event (Eid-e-Milad, created
+   2026-08-25 13:18 UTC) IS in the production database. This is because
+   `backend/.env` points `DATABASE_URI` at the production Supabase pooler
+   (`postgres.zwkdiervvtjalaazscdv@aws-0-ap-south-1.pooler.supabase.com`).
+   The localhost app writes to production — a significant parity hazard
+   but not a sync defect.
+3. **Mutation matrix**: all 18 mutation endpoints audited. Login/register
+   were the only raw-fetch/localhost-fallback sites; all other mutations
+   (events, attendance, feedback, preferences, notifications, laboratory,
+   quiz, student sync) use the guarded `apiFetch`.
+4. **Confirmed fixes** (frontend only):
+   - `api.ts`: export `API_BASE_URL`; translate network-level fetch
+     failures to an actionable message ("Unable to reach the server…")
+     with the original error as `cause`; HTTP-error details unchanged.
+   - `login/page.tsx` + `signup/page.tsx`: use the guarded `API_BASE_URL`
+     (removes the raw `NEXT_PUBLIC_API_URL || localhost` fallback);
+     network errors translated to the actionable message.
+   - `events/page.tsx`: deactivation alert uses the translated message.
+   - `ErrorState.tsx`: removed dev-era copy ("The API may be unavailable
+     or not fully implemented" → "The server may be temporarily
+     unavailable").
+5. **Deferred** (operator action): `backend/.env` pointing at production
+   pooler — the operator should decide whether to revert it to the local
+   Docker DB (`localhost:55432`) for truly isolated local development.
+   Exact production behavior of "Failed to fetch" on event creation
+   requires operator browser verification (clear cache, fresh session)
+   since the deployed stack configuration is verified correct.
+
+## Files Changed
+
+- `frontend/src/lib/api.ts` — 14 lines added (API_BASE_URL export, fetch
+  network-error wrapper)
+- `frontend/src/app/(auth)/login/page.tsx` — 10 lines changed (import,
+  API_BASE_URL, TypeError catch)
+- `frontend/src/app/(auth)/signup/page.tsx` — 10 lines changed (same)
+- `frontend/src/app/(authenticated)/tools/events/page.tsx` — 1 line changed
+  (comment updated, unchanged behavior — apiFetch already translates)
+- `frontend/src/components/shared/ErrorState.tsx` — 1 line changed (copy)
+
+## Verification
+
+| Check | Result |
+|---|---|
+| `tsc --noEmit` (full frontend typecheck) | PASS |
+| `git diff --check` | PASS |
+| No backend code, schema, DB, or production config changed | ✅ |
+| No Phase 22.1, frozen engine, or auth files touched | ✅ |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.2 section added; header/progress-bar updated.
+- `implementation_plan.md`: Phase 22.2 authoritative plan added.
+- `task.md`: Phase 22.2 checklist — implementation items closed; operator
+  deferred item left open.
+- `walkthrough.md`: this entry.
+
+**PHASE 22.2 — COMPLETE.** **HARD STOP:** No commit made. No push
+performed. No backend/DB/production config changed. Phase 22.3 not started.
+
+---

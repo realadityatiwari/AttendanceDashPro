@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eye, EyeOff } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api";
 
 type FormErrors = {
   name?: string;
@@ -55,7 +56,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), roll_number: rollNumber.trim(), password }),
@@ -83,7 +84,14 @@ export default function SignupPage() {
       await refreshUser();
       router.push("/dashboard");
     } catch (err: any) {
-      setServerError(err.message || "Unable to create account. Please try again.");
+      // Network-level failures surface as TypeError with the browser's raw
+      // "Failed to fetch" — replace it with an actionable message. HTTP
+      // errors (4xx/5xx) keep their backend-provided detail.
+      if (err instanceof TypeError) {
+        setServerError("Unable to reach the server. Check your connection and try again.");
+      } else {
+        setServerError(err.message || "Unable to create account. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

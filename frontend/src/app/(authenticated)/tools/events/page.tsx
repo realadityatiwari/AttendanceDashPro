@@ -91,6 +91,8 @@ export default function EventsPage() {
       mutate();
       mutateCalendar();
     } catch (err: unknown) {
+      // apiFetch translates network-level failures ("Failed to fetch") into an
+      // actionable message; HTTP errors keep their backend-provided detail.
       const message = err instanceof Error ? err.message : "Unable to deactivate the event.";
       window.alert(message);
     }

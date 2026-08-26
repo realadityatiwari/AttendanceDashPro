@@ -16,6 +16,11 @@ if (process.env.NODE_ENV === "production" && (!configuredApiUrl || isLocalDevUrl
 
 const API_BASE_URL = configuredApiUrl || DEV_API_URL;
 
+/** The guarded, build-time production API base URL (no localhost fallback in
+ * production builds). Shared by apiFetch and the auth pages so every request
+ * uses the same guard and the same base URL. */
+export { API_BASE_URL };
+
 interface FetchOptions extends RequestInit {
   requireAuth?: boolean;
 }
@@ -40,10 +45,23 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
 
   const url = `${API_BASE_URL}${endpoint}`;
   
-  const response = await fetch(url, {
-    ...restOptions,
-    headers: requestHeaders,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...restOptions,
+      headers: requestHeaders,
+    });
+  } catch (err) {
+    // Network-level failure (backend unreachable, TLS, DNS, CORS preflight
+    // rejection, connection reset). The browser's raw "Failed to fetch" is
+    // not actionable; translate it while preserving the original error as
+    // the cause for debugging.
+    console.error(`Network request failed: ${url}`, err);
+    throw new Error(
+      "Unable to reach the server. Check your connection and try again.",
+      { cause: err },
+    );
+  }
 
   if (!response.ok) {
     if (response.status === 401 && typeof window !== 'undefined') {

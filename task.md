@@ -1925,3 +1925,23 @@ TimetableEntry) is fixed. Production migration is a separate operator step.
 - [x] Alembic driver blocker (operator's `alembic upgrade head` failed: `ModuleNotFoundError: No module named 'psycopg2'`) — RESOLVED in `backend/alembic/env.py`: bare `postgresql://`/`postgres://` scheme normalized to `postgresql+asyncpg://` (asyncpg is the project's installed async driver; no .env change, no extra driver). Verified against localhost dev DB with the bare URL form: `alembic current` → `f2e3d4c5b6a7 (head)`.
 - [x] OPERATOR: retry `alembic upgrade head` (revision f2e3d4c5b6a7) on production Supabase (1 section, 28 entries backfilled) — COMPLETED AND VERIFIED (2026-08-26, read-only: head f2e3d4c5b6a7, 28 rows, 0 NULL, 1 section CSE-51, UUID/core parity with dev, 0 duplicates)
 - HARD STOP — Phase 22.1 COMPLETE & VERIFIED IN PRODUCTION; Phase 22.2 not started; no commit made.
+
+#### Phase 22.2 — Production Parity & Mutation Reliability (COMPLETE, 2026-08-26)
+
+Status: **COMPLETE** — production-parity audit + confirmed fixes. Trigger:
+operator-reported "event created on localhost didn't appear in deployed app"
+and "event creation from deployed app fails with 'Failed to fetch'".
+
+- [x] Governance review (roadmap, plan, task, walkthrough, Phase 21/22 docs)
+- [x] Event mutation path traced (frontend EventFormDialog → apiFetch → POST /api/v1/events → EventService → registry → synchronizer → repo)
+- [x] Deployed production stack probed (read-only): backend /health 200 · CORS preflight + actual responses correct for the exact Vercel origin · deployed bundles carry correct API URL (no localhost fallback) · deployed OpenAPI has current event endpoints/HOLIDAY/note · dev-secret JWT correctly rejected 401
+- [x] Production Supabase inspected (read-only): operator's "localhost-created" Holiday event (Eid-e-Milad) IS in production DB — because backend/.env points DATABASE_URI at the production pooler (localhost writes to production; no sync defect; no sync built)
+- [x] All 18 mutation endpoints audited (matrix): login/register were the ONLY raw-fetch/localhost-fallback paths; all others use guarded apiFetch
+- [x] FIX: api.ts — export API_BASE_URL; translate network-level "Failed to fetch" to an actionable message (cause preserved); HTTP-error details unchanged
+- [x] FIX: login/page.tsx — use guarded API_BASE_URL (removes NEXT_PUBLIC_API_URL || localhost fallback); network-error translation
+- [x] FIX: signup/page.tsx — same
+- [x] FIX: events/page.tsx — deactivation alert uses translated message
+- [x] FIX: ErrorState.tsx — removed dev-era copy
+- [x] Verification: tsc --noEmit PASS · git diff --check PASS · no backend/schema/DB/production config changed
+- [ ] OPERATOR (deferred): decide on local .env → production pooler targeting; verify deployed-app event creation from a fresh browser session (clear cache) and report the result
+- HARD STOP — Phase 22.2 COMPLETE; no commit made; Phase 22.3 not started.

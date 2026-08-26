@@ -2495,6 +2495,73 @@ normalizing the bare `postgresql://` scheme to `postgresql+asyncpg://` in
 authorized slice: any remaining Phase 22 scope item (see roadmap), after
 operator review of 22.1.
 
+### Phase 22.2 — Production Parity & Mutation Reliability (COMPLETE, 2026-08-26)
+
+**Status: COMPLETE** — triggered by an operator report: a Holiday event
+created from the localhost app did not appear in the deployed app, and
+creating an event from the deployed app failed with "Failed to fetch".
+
+**Authorized scope:** production-vs-localhost parity audit; find, classify,
+and fix the complete class of production parity/mutation failures. No
+localhost→production synchronization (they are separate applications; the
+localhost app shares the production DB only via `backend/.env` pointing at
+the production pooler).
+
+**Audit results:**
+
+1. **Production stack verified healthy** (read-only probes):
+   - Render backend up (`/health` 200), CORS correctly configured for the
+     exact Vercel origin (`Access-Control-Allow-Origin` present on OPTIONS
+     and actual responses), deployed OpenAPI has all current endpoints
+     (events POST/PATCH/DELETE, HOLIDAY enum, `note` field).
+   - Deployed Vercel bundles carry `https://attendancedash-api.onrender.com`
+     with no localhost fallback; the api.ts production guard is active.
+   - JWT validation active (dev-secret tokens → 401), unauth → 401.
+2. **Confirmed root cause of the operator's confusion:** `backend/.env`
+   points `DATABASE_URI` at the **production Supabase pooler**, so the
+   localhost app wrote the Holiday event directly into the production
+   database (Eid-e-Milad found in production Supabase). This is expected
+   database sharing via the local env, not a sync bug; no sync was built.
+3. **Confirmed parity defect (fixed):** the auth pages used raw `fetch`
+   with a `|| 'http://localhost:8080'` fallback, bypassing the api.ts
+   production URL guard — a latent "works locally, fails when deployed"
+   defect (if `NEXT_PUBLIC_API_URL` were unset on Vercel, deployed
+   login/register would silently target localhost and surface exactly
+   "Failed to fetch").
+4. **Confirmed error-handling gap (fixed):** network-level fetch failures
+   surfaced the browser's raw "Failed to fetch" to the user in apiFetch and
+   auth pages.
+5. **Mutation matrix:** all 18 mutation endpoints audited; all non-auth
+   mutations already use the guarded `apiFetch`; no backend mutation defect
+   found. Read/write data parity confirmed by read-only probes (events
+   present in production Supabase; production backend reachable and
+   correctly auth-gated).
+
+**Delivered:**
+
+- `frontend/src/lib/api.ts`: export `API_BASE_URL`; wrap `fetch` so network
+  failures throw an actionable Error ("Unable to reach the server. Check
+  your connection and try again.") with the original error as `cause`;
+  HTTP-error detail handling unchanged.
+- `frontend/src/app/(auth)/login/page.tsx` + `signup/page.tsx`: use the
+  guarded `API_BASE_URL` (removes the raw `NEXT_PUBLIC_API_URL ||
+  localhost` fallback); translate network errors to the actionable message.
+- `frontend/src/app/(authenticated)/tools/events/page.tsx`: deactivation
+  alert uses the translated message (apiFetch already translated).
+- `frontend/src/components/shared/ErrorState.tsx`: removed dev-era copy
+  ("The API may be unavailable or not fully implemented").
+
+**Verification:** `tsc --noEmit` PASS · `git diff --check` PASS · no
+backend code / schema / DB / production config changed.
+
+**Deferred (documented, not implemented):** the local `.env` → production
+pooler configuration remains an operator decision; exact runtime
+reproduction of "Failed to fetch" requires operator browser verification
+(the deployed stack itself verified correct).
+
+**Phase status: 22.2 COMPLETE.** Next authorized slice: remaining Phase 22
+scope items (see roadmap).
+
 ---
 
 ---

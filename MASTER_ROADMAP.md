@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** (P0 fix; migration applied by operator and verified read-only) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -1869,6 +1869,57 @@ expected state exactly: Alembic head `f2e3d4c5b6a7` · 1 section (CSE-51) ·
 and core data sets match the dev source · 0 duplicate timetable rows.
 Rollback (if ever needed) is `alembic downgrade e1f2a3b4c5d6`.
 
+## Phase 22.2 — Production Parity & Mutation Reliability (COMPLETE, 2026-08-26)
+
+**Status: COMPLETE** — audit + confirmed fixes. Triggered by an operator
+report: a Holiday event created from the localhost app did not appear in the
+deployed app, and creating an event from the deployed app failed with
+"Failed to fetch".
+
+**Key audit finding — localhost writes to production:** `backend/.env`
+points `DATABASE_URI` at the **production Supabase pooler**, so the localhost
+app writes directly to the production database. The operator's
+"localhost-created" Holiday event (Eid-e-Milad) was found IN the production
+Supabase database. This is NOT a sync defect and no synchronization was
+built. Localhost and production are separate applications sharing one
+database through this `.env` configuration.
+
+**Production stack verified healthy (read-only + read-only probes):**
+deployed Render backend up (`/health` 200) · CORS correctly configured for
+the exact Vercel origin · deployed Vercel bundles carry the correct
+`https://attendancedash-api.onrender.com` (no localhost fallback in
+production builds) · deployed backend runs current code (all event
+endpoints, HOLIDAY enum, `note` field present) · JWT validation active
+(dev-secret tokens correctly rejected 401) · unauth requests correctly
+401.
+
+**Confirmed fixes:**
+- `frontend/src/lib/api.ts`: network-level fetch failures (browser
+  "Failed to fetch") now surface an actionable message
+  ("Unable to reach the server...") instead of the raw browser text; the
+  original error is preserved as `cause`; `API_BASE_URL` exported for the
+  auth pages.
+- `login/page.tsx` + `signup/page.tsx`: replaced the raw
+  `process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'` fallback
+  with the guarded `API_BASE_URL` — the only remaining bypass of the
+  production URL guard is removed; network errors translated to an
+  actionable message.
+- `events/page.tsx`: deactivation alert uses the translated message.
+- `ErrorState.tsx`: removed dev-era copy ("The API may be unavailable or
+  not fully implemented").
+
+**Root-cause classification:** the deployed infrastructure was correct
+(CORS, URL, auth, code). The "Failed to fetch" class of error most likely
+originates client-side (transient network / browser cache / cold start) or
+from a localhost-targeting fallback that no longer exists after this fix.
+Exact runtime reproduction requires operator browser verification (see the
+Phase 22.2 report). Local `.env` → production pooler remains an operator
+decision (not modified by this phase).
+
+**Mutation matrix:** all 18 mutation endpoints audited — all use the
+guarded `apiFetch` except login/register (now fixed); no backend mutation
+defect found.
+
 ---
 
 # 🔗 Critical Dependency Path
@@ -2155,7 +2206,7 @@ PHASE 10 ████████████████████  COMPLETE 
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
-Phase 22 ██████░░░░░░░░░░░░░░  ACTIVE (22.1 COMPLETE · production migration VERIFIED)
+Phase 22 ████████░░░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE)
 
 > **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
 > live. The next work items are: monitor errors, collect feedback, identify

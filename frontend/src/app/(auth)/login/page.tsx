@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
   const [rollNumber, setRollNumber] = useState("");
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,7 +45,14 @@ export default function LoginPage() {
       
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Failed to log in.");
+      // Network-level failures surface as TypeError with the browser's raw
+      // "Failed to fetch" — replace it with an actionable message. HTTP
+      // errors (4xx/5xx) keep their backend-provided detail.
+      if (err instanceof TypeError) {
+        setError("Unable to reach the server. Check your connection and try again.");
+      } else {
+        setError(err.message || "Failed to log in.");
+      }
     } finally {
       setLoading(false);
     }
