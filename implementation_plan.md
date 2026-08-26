@@ -1993,11 +1993,13 @@ NOT PERFORMED (user); lint informational in CI.
 Production Launch (subject to Phase 18D infrastructure resolution AND user
 browser-QA completion).
 
-### Phase 21 — Production Launch (BLOCKED, 2026-08-24)
+### Phase 21 — Production Launch (COMPLETE & FROZEN, 2026-08-26)
 
-**Objective:** launch the production deployment. **Status: BLOCKED** — the
-phase pre-flight gate is unsatisfied on all three checks; no launch action
-was taken (per the phase hard-stop rule).
+**Objective:** launch the production deployment. **Status: COMPLETE & FROZEN**
+— production is LIVE (Vercel Hobby + Render Free + Supabase Free PostgreSQL),
+operator-verified end-to-end (login, ADMIN, dashboard, desktop, mobile, PWA,
+migrated data), and all three pre-flight gates resolved. Closure:
+`docs/phase_21/phase_21d4_production_closure.md`.
 
 #### 21A — Account Audit & Cleanup (COMPLETE & FROZEN, 2026-08-24)
 
@@ -2139,7 +2141,10 @@ responsibility. **Single clearest blocker: production infrastructure absent
 (Gate C).** Phase 21 cannot launch until Gates A and C resolve.
 
 **Phase status: 21C COMPLETE & FROZEN (assessment).** Phase 21 remains
-BLOCKED. No production readiness claimed.
+BLOCKED at the time of the 21C assessment. **Superseded (2026-08-26):** Gates
+A and C were subsequently resolved by the operator (browser QA completed;
+free-beta infrastructure provisioned in 21D.2/21D.3). All three gates are now
+RESOLVED and Phase 21 is COMPLETE & FROZEN.
 
 #### 21D.0 — Free Beta Deployment Architecture & Provider Selection (COMPLETE & FROZEN, 2026-08-25)
 
@@ -2221,39 +2226,24 @@ migrations, PWA, routes.
 slice: 21D.2 — Provider Project Provisioning & Environment Wiring (create
 Vercel/Render/Supabase projects, set secrets/env vars, first deployment).
 
-#### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
+#### 21D.2 — Provider Project Provisioning & Environment Wiring (COMPLETE, 2026-08-26)
 
 **Objective:** provision Vercel Hobby, Render Free Web Service, and Supabase
 Free PostgreSQL; wire env vars; initialize a NEW production schema via
 Alembic; minimal connectivity verification.
 
-**Status: BLOCKED — provider access unavailable.**
+**Status: COMPLETE — operator provisioned all three providers.**
 
-**Evidence:**
-- No `vercel` / `render` / `supabase` / `gh` CLI installed.
-- No provider API tokens in the environment.
-- No provider state directories (`.vercel`, `.render`, `supabase/`).
-- Only `render.yaml` exists (repository configuration from 21D.1, not a
-  provisioned service).
+The 21D.2 runbook (`docs/phase_21/phase_21d2_provisioning_runbook.md`) was
+executed by the operator: Supabase Free project created and schema initialized
+at head `e1f2a3b4c5d6`; Render Free Web Service created from the Dockerfile
+with `/health` verified and production env vars wired (DATABASE_URI,
+JWT_SECRET_KEY, CORS, APP_ENV=production); Vercel Hobby project created with
+`NEXT_PUBLIC_API_URL` set to the real Render URL; CORS wired between the exact
+Vercel and Render origins. Production application is LIVE.
 
-**Decision (per phase rule "do not invent success"):** all three providers
-require operator account creation or operator-created API tokens. The coding
-agent cannot provision on the user's behalf. No resources were fabricated or
-claimed.
-
-**Delivered:** `docs/phase_21/phase_21d2_provisioning_runbook.md` — an 8-step
-operator runbook (Supabase Free project → Alembic schema init → Render Free
-service → Render env wiring incl. new JWT secret → `/health` verify → Vercel
-Hobby project with real Render URL → Render CORS to real Vercel URL →
-connectivity verification) plus free-tier guardrails and
-no-dev-data-import rules.
-
-**No code changed. No provider resource created. No production DB created.
-No secrets generated/committed. Zero DB mutations.**
-
-**Phase status: 21D.2 BLOCKED (awaiting operator provisioning).** Once the
-operator provisions the providers and reports back, 21D.3 (Beta Validation &
-Launch Gate) is the next authorized slice.
+**Phase status: 21D.2 provisioning COMPLETE.** 21D.3 (migration) and 21D.4
+(closure) are the subsequent authorized slices.
 
 #### 21D.2 — Database Connection Compatibility Audit (COMPLETE, 2026-08-25)
 
@@ -2279,9 +2269,8 @@ statements (no cache tuning needed; transaction pooler 6543 would require
 `?pgbouncer=true`, not used) · Alembic uses the same `settings.DATABASE_URI`
 (single head `e1f2a3b4c5d6`) · Render can supply `DATABASE_URI` as a secret.
 
-**Phase status: 21D.2 connection audit COMPLETE; provisioning still BLOCKED
-(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
-Launch Gate (after operator provisioning).
+**Phase status: 21D.2 connection audit COMPLETE.** Next authorized slice:
+21D.3 — Beta Validation & Launch Gate (subsequently COMPLETE — see below).
 
 #### 21D.2 — Alembic URL Interpolation Defect Fix (COMPLETE, 2026-08-25)
 
@@ -2305,9 +2294,8 @@ settings.DATABASE_URI)` raised `ValueError: invalid interpolation syntax` when
   created. The failed attempt never connected to or mutated Supabase.
 - Report: `docs/phase_21/phase_21d2_alembic_url_fix.md`.
 
-**Phase status: 21D.2 Alembic fix COMPLETE; provisioning still BLOCKED
-(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
-Launch Gate (after operator provisions providers and runs the migration).
+**Phase status: 21D.2 Alembic fix COMPLETE.** Next authorized slice: 21D.3 —
+Beta Validation & Launch Gate (subsequently COMPLETE — see below).
 
 #### 21D.2 — Vercel/Next.js 16.3 Deployment Compatibility Fix (COMPLETE, 2026-08-25)
 
@@ -2325,9 +2313,8 @@ unconditional `output: "standalone"` in `frontend/next.config.ts`.
   `npx tsc --noEmit` PASS · `git diff --check` PASS.
 - **Git**: committed and pushed to `main` so Vercel can auto-redeploy.
 
-**Phase status: 21D.2 Vercel fix COMPLETE; provisioning still BLOCKED
-(awaiting operator).** Next authorized slice: 21D.3 — Beta Validation &
-Launch Gate (after operator provisions providers and runs the migration).
+**Phase status: 21D.2 Vercel fix COMPLETE.** Next authorized slice: 21D.3 —
+Beta Validation & Launch Gate (subsequently COMPLETE — see below).
 
 #### 21D.2 — Production Auth Discrepancy Audit (COMPLETE, read-only, 2026-08-25)
 
@@ -2350,18 +2337,17 @@ password valid. A dedicated `migrate_localhost_to_supabase.py` tool is
 planned (idempotent, `ON CONFLICT DO NOTHING`, read-only on localhost).
 Full report: `docs/phase_21/phase_21d2_full_state_migration_audit.md`.
 
-**Phase status: 21D.2 full-state migration audit COMPLETE; provisioning still
-BLOCKED (awaiting operator authorization for migration execution).** Next
-authorized slice: 21D.3 — Beta Validation & Launch Gate (after the migration
-is executed and validated).
+**Phase status: 21D.2 full-state migration audit COMPLETE.** Next authorized
+slice: 21D.3 — Beta Validation & Launch Gate (subsequently COMPLETE — see
+below).
 
-#### 21D.3 — Controlled Localhost→Supabase Production Migration (IN PROGRESS — BLOCKED at production access)
+#### 21D.3 — Controlled Localhost→Supabase Production Migration (COMPLETE, 2026-08-26)
 
 **Objective:** execute the approved Approach A migration (row-for-row copy,
 UUID + hash + timestamp preservation) from localhost to Supabase production.
 Report: `docs/phase_21/phase_21d3_production_migration_report.md`.
 
-**Delivered (this session):**
+**Delivered:**
 - Created `backend/scripts/migrate_localhost_to_supabase.py` (299 lines):
   `--verify-only` / `--execute`; reads `DATABASE_URI_SOURCE`/`DATABASE_URI_TARGET`
   from env (never printed); single-transaction writes; no `ON CONFLICT DO
@@ -2374,15 +2360,73 @@ Report: `docs/phase_21/phase_21d3_production_migration_report.md`.
   (108/57); alembic head e1f2a3b4c5d6.
 - Localhost backup created (88 KB).
 
-**BLOCKED at production access boundary:** `DATABASE_URI_TARGET` (Supabase
-pooler URL) is not available in this environment and may not be requested from
-the operator. The operator must run the tool in their own terminal (exact
-commands documented in the report): set both env vars, run `--verify-only`
-(confirm 18 empty tables), then `--execute`.
+**Operator execution (completed 2026-08-26):** the operator ran the tool in
+their own terminal — set `DATABASE_URI_SOURCE`/`DATABASE_URI_TARGET`, ran
+`--verify-only` (all 18 target tables empty), then `--execute`.
 
-**Phase status: 21D.3 BLOCKED on production credentials (operator executes).**
-After a successful operator run and manual login verification, 21D.3 will be
-marked COMPLETE and 21D.3/21D.4 validation can proceed.
+**Verification (operator-confirmed):**
+- All 18 tables migrated (14 populated + 4 empty).
+- Source/target row counts match · UUID sets match · content sets match ·
+  FK integrity zero violations.
+- Existing ADMIN account preserved (`2401220100027`, ADMIN) — identity, UUID,
+  and PBKDF2 password hash preserved verbatim.
+- 165 attendance records preserved (108 ATTENDED / 57 MISSED).
+- Complete academic state preserved (1 session, 1 semester, 1 section,
+  9 subjects, 720 class_sessions, 28 timetable entries, 3 quiz cycles,
+  18 quiz schedules, 61 events, 43 notifications, 1 preference).
+- Production login verified manually by the operator (same password as
+  localhost).
+
+**Phase status: 21D.3 COMPLETE.** Next authorized slice: 21D.4 — Production
+Closure & Governance Reconciliation.
+
+#### 21D.4 — Production Closure & Governance Reconciliation (COMPLETE, 2026-08-26)
+
+**Objective:** reconcile the repository governance state with the ACTUAL
+verified production state and close Phase 21. Governance/documentation only —
+no application code, no database data, no Supabase/Render/Vercel
+configuration, no auth logic, no API contract, no migration, no browser/PWA
+tests, no commit/push. Report: `docs/phase_21/phase_21d4_production_closure.md`.
+
+**Delivered:**
+- Phase 21 marked **COMPLETE & FROZEN** across all governance documents
+  (MASTER_ROADMAP, implementation_plan, task, walkthrough).
+- 21D.2 provisioning and 21D.3 migration marked COMPLETE (operator-verified).
+- Production validation recorded: production login ✅ · ADMIN account ✅ ·
+  dashboard ✅ · migrated data correct ✅ · desktop ✅ · mobile responsive ✅ ·
+  PWA install/launch ✅ · installed PWA ✅.
+- Launch gates reconciled: Gate A (browser QA) **RESOLVED** · Gate B
+  (QA-window data) **RESOLVED** · Gate C (infrastructure) **RESOLVED**.
+- Known beta operational limitations documented (Supabase Free no auto
+  backups; Render Free cold-start/keep-warm) — documented limitations, not
+  launch failures.
+- Phase 22 (Post-Launch) established as the next active phase.
+
+**Phase status: 21D.4 COMPLETE — Phase 21 COMPLETE & FROZEN.**
+
+---
+
+## Phase 22 — Post-Launch (ACTIVE)
+
+**Status: ACTIVE (2026-08-26) — next project phase.**
+
+Phase 21 production launch is COMPLETE & FROZEN; the production system is live
+on Vercel Hobby + Render Free + Supabase Free PostgreSQL and operator-verified
+(login, ADMIN, dashboard, desktop, mobile, PWA, migrated data).
+
+Phase 22 scope (existing roadmap definition — no new requirements invented):
+
+- Monitor errors
+- Collect feedback
+- Identify calculation discrepancies
+- Improve UX
+- Fix production bugs
+- Optimize expensive queries
+- Improve mobile experience
+- Handle semester rollover
+
+Phase 22 work is NOT started in this slice; it is the authoritative starting
+point for the next authorized work.
 
 ---
 

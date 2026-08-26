@@ -5,8 +5,10 @@
 > This document defines the direction, phase structure, priorities, architectural boundaries, and production path for AttendanceDash Pro.
 >
 > **Current position:** Phase 6 (Calendar & Academic Events) **COMPLETE & FROZEN** ✅. Phase 7 (Quiz Eligibility & Schedule Reality) **COMPLETE & FROZEN** ✅ — full math verified, canonical contract, 7.1/7.2 analytics, and final hardening (backend reachability consistency, frontend safety/fallback rendering, cleanup, and pycache removal) verified passing 100% of verifiers. Phase 8 (Attendance Analytics & Intelligence) **COMPLETE & FROZEN** ✅ — backend read model, dashboard analytics, and laboratory domain separation delivered without duplicate math. Phase 9 (Laboratory System) **COMPLETE & FROZEN** ✅ — 9.0 audit, 9.1 event integration, 9.2.0 audit, and 9.2.1 experiment management all complete, plus focused corrections (Track lab attendance, History filters, Quiz Day recovery, and local development infrastructure). Phase 10 (Settings, Feedback & Account Management) **COMPLETE & FROZEN** ✅ — 10.0 audit ✅ · 10A settings UI ✅ · 10B program + profile completion ✅ · 10C real feedback system ✅ · 10D user preferences API + UI ✅ · 10E freeze corrections, verification & governance reconciliation ✅. Phase 11 (Notifications & Reminders) **COMPLETE & FROZEN** ✅. Phase 12 (Mobile / Responsive Experience) **COMPLETE & FROZEN** ✅. Phase 13 (PWA / Installability) **COMPLETE & FROZEN** ✅. **Phase 14 (Firebase Retirement) COMPLETE & FROZEN ✅** — 14.0 audit, 14A frontend removal, 14B backend removal, 14C deployment/config cleanup, 14D `firebase_uid` removal, 14E regression verification, 14F freeze & governance reconciliation all complete. Active architecture: **PostgreSQL + FastAPI + JWT + Next.js**; Firebase fully retired.
-> 
-> **Next phase:** Phase 21 — Production Launch **NOT STARTED** (subject to Phase 18D infrastructure resolution AND user completion of the Phase 20 manual browser QA checklist). Phase 20 (Production QA) **COMPLETE & FROZEN** — automated/in-process QA passed across all surfaces; cross-surface consistency verified; frozen verifiers green; manual browser QA checklist delivered to user; production blockers preserved. Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+>
+> **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
+>
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -68,8 +70,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 18 | Production Infrastructure | 🟡 **IN PROGRESS / PARTIAL** — **18.0 audit ✅ COMPLETE** · **18A containerization ✅ COMPLETE** · **18B env & secrets ✅ COMPLETE** · **18C backup automation ✅ COMPLETE** · **18D deployment & verification ⚠️ PARTIAL** — rehearsal deployment verified end-to-end (5 services healthy, real backup executed + verified, isolated restore PASS, scheduler + retention + locking verified, no secrets); **production deployment BLOCKED** on missing infrastructure (no host/domain/credentials/off-host destination); 2 deployment defects fixed (PyJWT dep, Caddy /health route); `docs/phase_18/phase_18d_deployment.md` |
 | 19 | CI/CD | ✅ **COMPLETE & FROZEN** — GitHub Actions quality gate (`.github/workflows/ci.yml`): integrity, backend, frontend, docker, compose, migrations, config-contract, backup-infra jobs; deployment gate disabled (`if: false`); all checks verified locally; migration validated on disposable postgres:16 to head `e1f2a3b4c5d6`; no deployment, no secrets |
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
-| 21 | Production Launch | 🔴 **BLOCKED** — pre-flight gates unsatisfied: (A) Phase 20 manual browser QA NOT CONFIRMED by user · (B) Phase 20 QA-window deltas (5 attendance + 62 notifications) UNRESOLVED · (C) production infrastructure absent (no VPS/host, no credentials, no domain/DNS/TLS, no off-host backup). Launch report: `docs/phase_21/phase_21_production_launch.md`. No deployment attempted; CI deploy gate remains disabled. |
-| 22 | Post-Launch | 🔵 Ongoing |
+| 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
+| 22 | Post-Launch | 🟢 **ACTIVE** — next project phase. Monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve mobile experience, handle semester rollover. |
 
 ---
 
@@ -1410,9 +1412,12 @@ Perform a complete real-user journey.
 
 ---
 
-# 🔴 Phase 21 — Production Launch
+# ✅ Phase 21 — Production Launch
 
-**Status: BLOCKED (2026-08-24)** — launch pending; **21A (Account Audit & Cleanup) ✅ COMPLETE & FROZEN**.
+**Status: COMPLETE & FROZEN (2026-08-26)** — production launch delivered and
+frozen; **21A/21A.1 (Account Audit & Cleanup) ✅ COMPLETE & FROZEN**, 21B
+(Feedback Admin) ✅, 21C (Pre-flight) ✅, 21D (Free Public Beta Deployment)
+✅ COMPLETE.
 
 ## 21A — Account Audit & Cleanup (COMPLETE & FROZEN, 2026-08-24)
 
@@ -1487,7 +1492,14 @@ remains **BLOCKED**. Report: `docs/phase_21/phase_21c_readiness.md`.
 Phase 21 cannot launch until Gates A (user) and C (infrastructure) are
 resolved.
 
-## 21D — Free Public Beta Deployment (IN PROGRESS)
+> **Superseded (2026-08-26, Phase 21D.4):** the assessment above reflects the
+> 21C snapshot. Gates A and C were subsequently satisfied — the operator
+> completed browser QA (production login/ADMIN/dashboard/desktop/mobile/PWA
+> verified) and provisioned the free-beta infrastructure (Vercel Hobby +
+> Render Free + Supabase Free) in 21D.2/21D.3. All three gates are now
+> **RESOLVED**; Phase 21 is COMPLETE & FROZEN.
+
+## 21D — Free Public Beta Deployment (COMPLETE, 2026-08-26)
 
 ### 21D.0 — Architecture & Provider Selection (COMPLETE & FROZEN, 2026-08-25)
 
@@ -1553,25 +1565,20 @@ secrets created. Report: `docs/phase_21/phase_21d1_config_hardening.md`.
 runtime test PASS · secret scan clean · `git diff --check` PASS · zero DB
 mutations.
 
-### 21D.2 — Provider Project Provisioning & Environment Wiring (BLOCKED, 2026-08-25)
+### 21D.2 — Provider Project Provisioning & Environment Wiring (COMPLETE, 2026-08-26)
 
-**Status: BLOCKED — provider access unavailable (operator action required).**
-Runbook: `docs/phase_21/phase_21d2_provisioning_runbook.md`.
+**Status: COMPLETE — operator provisioned all three providers.** The operator
+created the Supabase Free project, Vercel Hobby project, and Render Free Web
+Service following the 21D.2 runbook, wired environment variables, and verified
+connectivity. Application is live at the provider URLs.
 
-**Blocker:** no Vercel/Render/Supabase CLI installed, no provider API tokens
-in the environment, no `gh` CLI, no provider state directories, and no
-fabricated resources. All three providers require operator account creation
-or operator-created API tokens. The coding agent has no legitimate path to
-provision provider projects.
-
-**Delivered:** a precise 8-step operator provisioning runbook (Supabase Free
-project + region → Alembic schema init → Render Free service → Render env
-wiring → /health verify → Vercel Hobby project → CORS wiring → connectivity
-verification) with free-tier guardrails, secret-generation guidance, and
-explicit "do not import dev data" rules.
-
-**No code changed. No provider resource created. No production DB created.
-No secrets generated/committed. Zero DB mutations.**
+- Supabase Free PostgreSQL: schema initialized at Alembic head `e1f2a3b4c5d6`.
+- Render Free Web Service: `attendancedash-api`, Docker build, `/health` 200,
+  production env vars set (DATABASE_URI, JWT_SECRET_KEY, CORS, APP_ENV).
+- Vercel Hobby: frontend deployed from repo, `NEXT_PUBLIC_API_URL` set to the
+  real Render URL.
+- CORS wired between the exact Vercel and Render origins.
+- Runbook: `docs/phase_21/phase_21d2_provisioning_runbook.md`.
 
 ### 21D.2 — Production Database Connection Compatibility Audit (COMPLETE, 2026-08-25)
 
@@ -1684,43 +1691,60 @@ faithfully, a full-state migration plan was produced. Report:
   breakdown, dashboard equivalence).
 - **NOT executed** — zero mutations, awaiting operator authorization.
 
-### 21D.3 — Controlled Localhost→Supabase Production Migration (IN PROGRESS — BLOCKED at production access)
+### 21D.3 — Controlled Localhost→Supabase Production Migration (COMPLETE, 2026-08-26)
 
-**Authorized migration execution.** The tool
+**Authorized migration execution — COMPLETE and verified.** The tool
 `backend/scripts/migrate_localhost_to_supabase.py` was created and validated
 (compile PASS, FK order validated against actual schema). Localhost preflight
 passed: source snapshot matches the 21D.2 audit (1 owner ADMIN, 165 attendance
 108/57, 720 sessions, 9 subjects, 61 events, etc.); localhost backup created
 (88 KB); alembic head `e1f2a3b4c5d6`.
 
-**BLOCKED at the production access boundary:** the migration tool requires
-`DATABASE_URI_TARGET` (Supabase Session Pooler URL). This value exists only in
-the operator's environment (Render dashboard); it is not in the repository and
-was not obtainable in this session without requesting credentials from the
-operator (forbidden). The operator must run `--verify-only` then `--execute`
-with the env vars set in their own terminal (exact commands in the report).
+The operator executed the migration in their own terminal (`--verify-only`
+then `--execute`) with `DATABASE_URI_SOURCE`/`DATABASE_URI_TARGET` set.
+Post-migration verification passed: all 18 tables migrated, source/target
+counts match, UUID sets match, content sets match, FK integrity zero
+violations, existing ADMIN identity + UUID + PBKDF2 password hash preserved,
+165 attendance records preserved (108 ATTENDED / 57 MISSED), complete
+academic state preserved. Production login verified by the operator
+(roll `2401220100027`, same password as localhost).
 
 Report: `docs/phase_21/phase_21d3_production_migration_report.md`.
+Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 
-## Gate A — Phase 20 manual browser QA
-The 42-item manual browser QA checklist was delivered in Phase 20
-(`docs/phase_20/phase_20_production_qa.md` §19). The user must complete and
-report it. Agent has NOT performed any browser testing.
+### 21D.4 — Production Closure & Governance Reconciliation (COMPLETE, 2026-08-26)
 
-### Gate B — Phase 20 QA-window data disposition
+**Phase 21 closed and frozen.** Governance/documentation slice reconciling the
+repository with the verified production state. Production validation (operator
+performed): login ✅ · ADMIN account ✅ · dashboard ✅ · migrated data correct
+✅ · desktop ✅ · mobile responsive ✅ · PWA install/launch ✅ · installed PWA ✅.
+All three launch gates RESOLVED (A: browser QA completed by operator; B:
+QA-window data disposition; C: free-beta infrastructure provisioned).
+Production LIVE on Vercel Hobby + Render Free + Supabase Free PostgreSQL.
+Documented beta limitations retained: Supabase Free has no automatic backups
+(manual pg_dump / GitHub Actions approach) and Render Free sleeps after ~15
+min idle (~1 min cold start; keep-warm via uptime monitor). Phase 22
+(Post-Launch) is the next active phase. Report:
+`docs/phase_21/phase_21d4_production_closure.md`.
+
+## Gate A — Phase 20 manual browser QA — **RESOLVED (operator-verified, 2026-08-26)**
+The operator completed browser validation of the live production app:
+production login, ADMIN account, dashboard, desktop, mobile responsive UI,
+PWA install/launch, and installed PWA all verified working.
+
+### Gate B — Phase 20 QA-window data disposition — **RESOLVED**
 Phase 20 reported 5 attendance records + 62 notifications with uncertain
-provenance. The user must review and explicitly disposition them (confirm,
-authorize cleanup, or document residual uncertainty).
+provenance. Disposition completed in 21A.1 (authorized cleanup; remaining
+QA-window records owner-owned and preserved) and confirmed in 21C.
 
-### Gate C — Production infrastructure
-- VPS/cloud host: **NOT PROVISIONED**
-- Production credentials (`deploy/.env.prod`): **NOT CREATED**
-- Domain + DNS: **NOT CONFIGURED** (placeholder `app.example.com`)
-- TLS/HTTPS: **NOT PROVISIONED** (Caddy config HTTP-only, ready for TLS)
-- Off-host backup destination: **NOT CONFIGURED** (OFFHOST_TYPE=none;
-  operator must either provision or explicitly accept the risk)
+### Gate C — Production infrastructure — **RESOLVED (21D.2/21D.3)**
+- Host: **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL** — PROVISIONED
+- Production credentials: **set as provider env vars / secrets** (DATABASE_URI, JWT_SECRET_KEY, CORS, NEXT_PUBLIC_API_URL)
+- Domain + DNS: **provider subdomains with automatic HTTPS** (`*.vercel.app`, `*.onrender.com`)
+- TLS/HTTPS: **PROVISIONED** (automatic on provider subdomains)
+- Off-host backup: documented beta limitation (no automatic Supabase Free backups; manual pg_dump / GitHub Actions approach documented in 21D.0)
 
-## What is ready (verified pre-launch, waiting on gates)
+## What was ready (verified pre-launch, then used by the beta launch)
 
 - Dockerfiles, production compose, Caddy config, backup container — **verified
   in Phase 18A/18C/18D rehearsal**
@@ -1729,7 +1753,7 @@ authorize cleanup, or document residual uncertainty).
 - CI quality gate with disabled deploy job — **verified in Phase 19**
 - In-process QA, cross-surface consistency, frozen verifier regression — **verified
   in Phase 20**
-- Manual browser QA checklist — **delivered to user, awaiting completion**
+- Manual browser QA checklist — **completed by the operator (2026-08-26); production browser/mobile/PWA validation passed**
 
 ## Deployment sequence (when gates pass)
 
@@ -1751,29 +1775,39 @@ Once all three gates pass, the operator can execute the Phase 21 launch
 sequence (provision → configure → migrate → deploy backend → deploy frontend
 → Caddy/HTTPS → backup → smoke → monitor → rollback).
 
+> **Executed (2026-08-26):** the free-beta architecture was deployed through
+> provider Git integrations (Vercel + Render auto-deploy) instead of the VPS
+> path. The Caddy/domain/DNS path is preserved for future paid infrastructure.
+
 Production data setup:
 
-- Semester configuration
-- Subjects
-- Timetable
-- Quiz schedules
-- Academic events
-- Initial administrative configuration
+- Semester configuration — ✅ migrated (1 active session)
+- Subjects — ✅ migrated (9 subjects)
+- Timetable — ✅ migrated (28 entries)
+- Quiz schedules — ✅ migrated (18 schedules)
+- Academic events — ✅ migrated (61 events)
+- Initial administrative configuration — ✅ migrated (1 ADMIN owner)
 
 Monitoring:
 
-- Server errors
-- Database health
-- API latency
-- Authentication failures
-- Uptime
-- Backups
+- Server errors — provider dashboards (Vercel + Render)
+- Database health — Supabase dashboard
+- API latency — Render logs
+- Authentication failures — Render logs
+- Uptime — Render health check + optional uptime monitor
+- Backups — manual / GitHub Actions scheduled pg_dump (Supabase Free limitation)
 
 ---
 
-# 🔵 Phase 22 — Post-Launch
+# 🟢 Phase 22 — Post-Launch (ACTIVE)
 
-After real users begin using the system:
+Phase 21 production launch is **COMPLETE & FROZEN**. The production system is
+live on Vercel Hobby + Render Free + Supabase Free PostgreSQL. The operator
+has verified login, ADMIN access, dashboard, desktop, mobile responsive UI,
+PWA install/launch, and migration correctness.
+
+Phase 22 is the **next active phase**. After real users begin using the
+system:
 
 - Monitor errors
 - Collect feedback
@@ -1835,9 +1869,9 @@ PHASE 19
    ↓
 PHASE 20
    ↓
-PHASE 21
+PHASE 21  ← COMPLETE & FROZEN
    ↓
-PHASE 22
+PHASE 22  ← ACTIVE (Post-Launch)
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2071,10 +2105,13 @@ PHASE 9  ████████████████████  COMPLETE 
 PHASE 10 ████████████████████  COMPLETE 🔒 (10.0 audit · 10A settings · 10B program/profile · 10C feedback · 10D preferences · 10E freeze)
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
-Phase 21 ░░░░░░░░░░░░░░░░░░░░  BLOCKED (pre-flight gates)
-Phase 22 ░░░░░░░░░░░░░░░░░░░░  PLANNED
+Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
+Phase 22 ░░░░░░░░░░░░░░░░░░░░  ACTIVE (Post-Launch)
 
-> **Next phase:** Phase 18D — Deployment & Verification **IN PROGRESS (2026-08-23)** — production deployment BLOCKED on missing infrastructure (no VPS/cloud host, no domain/DNS/TLS, no production credentials, no off-host destination exist); local rehearsal deployment + full backup/restore verification being performed to prove the deployment mechanism.
+> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
+> live. The next work items are: monitor errors, collect feedback, identify
+> calculation discrepancies, improve UX, fix production bugs, optimize
+> expensive queries, improve the mobile experience, handle semester rollover.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

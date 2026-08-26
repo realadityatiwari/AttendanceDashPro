@@ -3579,8 +3579,118 @@ Then manual login test at https://attendance-dash-pro.vercel.app (roll
 **PHASE 21D.3 — BLOCKED AT PRODUCTION ACCESS / AWAITING OPERATOR EXECUTION.**
 **HARD STOP:** No commit made. No push performed. No production DB touched.
 
----
+> **SUPERSEDED (2026-08-26):** the operator executed the migration in their
+> own terminal; 21D.3 is COMPLETE and verified. See the Phase 21D.4 entry
+> below.
 
 ---
+
+# AttendanceDash Pro — Phase 21D.4 Walkthrough (Production Closure & Phase 22 Transition)
+
+Date: 2026-08-26 · Scope: governance reconciliation with the verified production state · Documentation only
+
+> **PHASE 21D.4 COMPLETE — PHASE 21 COMPLETE & FROZEN; PHASE 22 ACTIVATED.**
+> The operator completed the provisioning (21D.2) and the controlled
+> localhost→Supabase migration (21D.3), then manually verified production:
+> login works, the existing ADMIN account works, the dashboard works, the
+> migrated attendance/data is correct, desktop works, the mobile responsive
+> UI works, the PWA installs and launches, and the installed PWA works.
+> This slice reconciles the repository governance state with that verified
+> reality — no application code, database, provider configuration,
+> authentication logic, or API contracts were touched.
+
+## What Was Completed
+
+1. **Production closure document** — `docs/phase_21/phase_21d4_production_closure.md`
+   created: phase status, production architecture (Vercel + Render + Supabase),
+   production verification, migration verification, existing-account
+   preservation, launch gates, known beta operational limitations, Phase 21
+   closure, Phase 22 transition.
+2. **Governance reconciliation** — `MASTER_ROADMAP.md`, `implementation_plan.md`,
+   `task.md`, and `walkthrough.md` updated so no active/current status section
+   still marks Phase 21, 21D.2, or 21D.3 as BLOCKED or incomplete.
+
+## Production Migration Result
+
+- All **18 tables** migrated (14 populated + 4 empty).
+- Source/target **row counts match**; **UUID sets match**; **content sets
+  match**; **FK integrity** zero violations.
+- Existing **ADMIN account preserved** — identity (`2401220100027`, ADMIN),
+  UUID, and **PBKDF2 password hash preserved** (same password works on
+  localhost and production).
+- **165 attendance records preserved** — 108 ATTENDED / 57 MISSED.
+- **Complete academic state preserved** — 1 session · 1 semester · 1 section ·
+  9 subjects · 720 class_sessions · 28 timetable entries · 3 quiz cycles ·
+  18 quiz schedules · 61 events.
+
+## Production Validation (operator-performed)
+
+| Check | Result |
+|---|---|
+| Production login | ✅ works |
+| Existing ADMIN account | ✅ works |
+| Production dashboard | ✅ works |
+| Migrated attendance/data correct | ✅ correct |
+| Desktop production | ✅ works |
+| Mobile responsive UI | ✅ works |
+| PWA installs and launches | ✅ works |
+| Installed PWA | ✅ works correctly |
+
+## Launch Gates
+
+| Gate | Status |
+|---|---|
+| A — Browser QA confirmation | **RESOLVED** (operator browser QA; production browser/mobile/PWA validation passed) |
+| B — QA-window data disposition | **RESOLVED** (21A.1 authorization; owner-owned records preserved) |
+| C — Infrastructure | **RESOLVED** (Vercel Hobby + Render Free + Supabase Free provisioned and verified) |
+
+## Final Production State
+
+Phase 21 — Production Launch: **COMPLETE & FROZEN**. Production is LIVE on
+Vercel Hobby (frontend) + Render Free Web Service (backend) + Supabase Free
+PostgreSQL (database). Existing ADMIN account and full academic/attendance
+state preserved from localhost.
+
+## Remaining Beta Operational Limitations
+
+Documented in the 21D.0 architecture and carried into closure — these are
+accepted free-tier limitations, not launch failures:
+
+- **Supabase Free backup limitation** — no automatic backups; manual
+  `pg_dump` via GitHub Actions (or manual dump) is the documented approach.
+- **Render cold-start / keep-warm limitation** — Render Free sleeps after
+  ~15 min idle, ~1 min cold start; an uptime monitor pinging `/health`
+  every ~14 min is the documented mitigation.
+
+## Transition to Phase 22
+
+**Phase 22 — Post-Launch is the next active phase**: monitor errors, collect
+feedback, identify calculation discrepancies, improve UX, fix production
+bugs, optimize expensive queries, improve the mobile experience, handle
+semester rollover. Phase 22 functionality is NOT implemented in this slice —
+only the authoritative starting point is established.
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 21 → **COMPLETE & FROZEN** (header, status table,
+  Phase 21 section, gates, dependency path, operating state); Phase 22 →
+  **ACTIVE**.
+- `implementation_plan.md`: 21D.2 provisioning + 21D.3 migration marked
+  COMPLETE; 21D.4 closure section added; Phase 22 ACTIVE section added.
+- `task.md`: 21D.2/21D.3 checklists closed; 21D.4 checklist complete; Phase 22
+  activated.
+- `walkthrough.md`: this entry.
+- `docs/phase_21/phase_21d4_production_closure.md`: full closure report.
+
+## Database / Safety
+
+- Localhost: zero mutations. Production: zero mutations (migration was
+  operator-executed in 21D.3 and verified).
+- No application code, models, migrations, auth logic, or API contracts changed.
+- No Supabase/Render/Vercel configuration changed.
+- No browser/PWA tests run in this slice (operator already performed them).
+
+**PHASE 21D.4 — COMPLETE / PHASE 21 COMPLETE & FROZEN / PHASE 22 ACTIVE.**
+**HARD STOP:** No commit made. No push performed. No production touched.
 
 ---
