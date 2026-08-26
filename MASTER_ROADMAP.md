@@ -1825,6 +1825,18 @@ Only after the core product is stable should ambitious new features be added.
 **Status: COMPLETE** — first Phase 22 slice, implemented and verified
 locally; production migration is a separate operator action (see below).
 
+> **Operator blocker resolved (2026-08-26):** the operator's first
+> `alembic upgrade head` attempt failed before migration with
+> `ModuleNotFoundError: No module named 'psycopg2'`. Root cause: `alembic/env.py`
+> feeds `settings.DATABASE_URI` to Alembic's **async** engine, and the
+> operator's bare `postgresql://` URL (Supabase dashboard form) resolves to
+> the sync psycopg2 dialect. Fixed by normalizing a bare
+> `postgresql://`/`postgres://` scheme to `postgresql+asyncpg://` in
+> `alembic/env.py` (asyncpg is the project's installed async driver). No
+> `.env` change, no extra driver, no Phase 22.1 logic change. Verified against
+> the localhost dev DB: `alembic current` → `f2e3d4c5b6a7 (head)` with the
+> bare URL form. The operator can now retry the production migration.
+
 Fixes the P0 data-scope defect found in the Phase 22.0 audit: the timetable
 query accepted `section_id` but did not filter by it, and `TimetableEntry`
 had no Section linkage — every section's schedule was returned to any

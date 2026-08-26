@@ -34,7 +34,22 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.core.config import settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URI)
+
+# The Alembic environment runs an ASYNC engine (async_engine_from_config
+# below), which requires an async driver. The application's DATABASE_URI is
+# the single source of truth (Phase 21D.2), but it may carry a bare
+# postgresql:// / postgres:// scheme (e.g. the connection string shown in the
+# Supabase dashboard). SQLAlchemy resolves a bare postgresql:// to the sync
+# psycopg2 dialect, which is not installed — asyncpg is the project's
+# intended PostgreSQL async driver. Normalize the scheme to
+# postgresql+asyncpg:// when no explicit driver suffix is present, preserving
+# everything after :// verbatim (query params like ?ssl=require and
+# percent-encoded credentials). Explicit driver suffixes (e.g.
+# postgresql+asyncpg:// or postgresql+psycopg2://) are left untouched.
+_database_uri = settings.DATABASE_URI
+if _database_uri.startswith("postgresql://") or _database_uri.startswith("postgres://"):
+    _database_uri = "postgresql+asyncpg://" + _database_uri.split("://", 1)[1]
+config.set_main_option("sqlalchemy.url", _database_uri)
 
 target_metadata = Base.metadata
 

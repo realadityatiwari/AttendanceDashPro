@@ -2484,8 +2484,12 @@ production Supabase database with the production `DATABASE_URI`. Expected:
 `e1f2a3b4c5d6`.
 
 **Phase status: 22.1 implementation COMPLETE; production migration pending
-operator action.** Next authorized slice: any remaining Phase 22 scope item
-(see roadmap), after operator review of 22.1.
+operator action.** The operator's first `alembic upgrade head` attempt was
+blocked by `ModuleNotFoundError: No module named 'psycopg2'` — resolved by
+normalizing the bare `postgresql://` scheme to `postgresql+asyncpg://` in
+`alembic/env.py` (the project's async driver is asyncpg, not psycopg2). The
+operator can now retry the production migration. Next authorized slice: any
+remaining Phase 22 scope item (see roadmap), after operator review of 22.1.
 
 ---
 

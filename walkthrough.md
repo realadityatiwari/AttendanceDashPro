@@ -3791,3 +3791,56 @@ OPERATOR.** **HARD STOP:** No commit made. No push performed. Production not
 touched; production migration is the operator's next action.
 
 ---
+
+# AttendanceDash Pro — Phase 22.1 Operator Blocker Resolution (Alembic Driver)
+
+Date: 2026-08-26 · Scope: unblock the operator's production migration · Configuration fix only
+
+> **PHASE 22.1 — OPERATOR BLOCKER RESOLVED.** The operator's first
+> `alembic upgrade head` attempt failed before any migration with
+> `ModuleNotFoundError: No module named 'psycopg2'`. The Phase 22.1
+> implementation itself was untouched — this is a pure Alembic
+> driver/configuration fix so the operator can run the migration.
+
+## Root Cause
+
+`backend/alembic/env.py` feeds `settings.DATABASE_URI` to Alembic's **async**
+engine (`async_engine_from_config`). The operator's `.env` carries the bare
+`postgresql://` form (the connection string Supabase provides). SQLAlchemy
+resolves a bare `postgresql://` URL to the **sync psycopg2** dialect, which is
+not installed — `asyncpg` is the project's intended PostgreSQL async driver
+(`requirements.txt`: `asyncpg>=0.30.0`, installed 0.31.0). No dependency was
+missing; the URL simply lacked the `+asyncpg` driver suffix.
+
+## Fix
+
+`backend/alembic/env.py`: before `config.set_main_option("sqlalchemy.url", …)`,
+normalize a bare `postgresql://` or `postgres://` scheme to
+`postgresql+asyncpg://` (everything after `://` — including query params like
+`?ssl=require` and percent-encoded credentials — is preserved verbatim).
+Explicit driver suffixes (e.g. `postgresql+asyncpg://`) are left untouched.
+No `.env` change, no extra driver installed, no Phase 22.1 logic changed.
+
+## Localhost Verification (dev Docker DB only)
+
+| Check | Result |
+|---|---|
+| `alembic current` with bare `postgresql://` URL (reproduces operator failure form) | PASS → `f2e3d4c5b6a7 (head)` |
+| `alembic current` with explicit `postgresql+asyncpg://` URL | PASS → `f2e3d4c5b6a7 (head)` |
+| `alembic upgrade head` (no-op, already at head) | PASS (exit 0) |
+| `alembic upgrade head --sql` (offline, bare URL form) | PASS (exit 0; add column/FK/backfill/SET NOT NULL generated) |
+| `py_compile alembic/env.py` + AST parse | PASS |
+| `git diff --check` | PASS |
+
+## Governance
+
+- `MASTER_ROADMAP.md`: Phase 22.1 operator-blocker note added.
+- `implementation_plan.md`: Phase 22.1 status note updated (blocker resolved).
+- `task.md`: driver-blocker item checked; operator production-migration item updated to "retry".
+- `walkthrough.md`: this entry.
+
+**PHASE 22.1 — OPERATOR BLOCKER RESOLVED.** Production was NOT accessed or
+mutated. The operator can now safely retry `alembic upgrade head` on
+production Supabase. **HARD STOP:** No commit made. No push performed.
+
+---
