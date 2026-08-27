@@ -50,7 +50,7 @@ from app.models.academic import (
 from app.models.event import AcademicEvent
 from app.models.enums import EventType, ElectiveSlot, EnrollmentType
 from app.schemas.student_context import StudentContext, ContextSubject
-from app.services.elective_resolver import slot_for_code
+from app.services.elective_resolver import ElectiveResolver
 
 
 class StudentContextService:
@@ -128,14 +128,15 @@ class StudentContextService:
     async def _load_elective_choices(self, user_id: UUID, ctx: StudentContext) -> None:
         """One query: the student's recorded elective choices (slot -> concrete
         subject code). A choice whose subject contradicts the authoritative
-        elective catalog is recorded in ``inconsistencies`` and NOT repaired."""
+        DB-backed catalog is recorded in ``inconsistencies`` and NOT repaired."""
         result = await self._db.execute(
             select(StudentElectiveChoice.elective_slot, Subject.code)
             .join(Subject, Subject.id == StudentElectiveChoice.subject_id)
             .where(StudentElectiveChoice.user_id == user_id)
         )
+        resolver = ElectiveResolver(self._db)
         for slot, code in result.all():
-            expected_slot = slot_for_code(code)
+            expected_slot = await resolver.slot_for_code(code)
             if expected_slot is None or expected_slot != slot:
                 ctx.inconsistencies.append(
                     f"elective {slot.value}: stored subject {code} is not a valid "

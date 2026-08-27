@@ -13,9 +13,17 @@ from app.models.timetable import TimetableEntry
 from app.models.user import Section
 from app.models.quiz import QuizCycle, EligibilityPolicy, QuizSchedule, ScheduleStatus
 from app.models.enums import SubjectCategory, ClassType, ElectiveSlot
-from sqlalchemy import select
 
 TIMETABLE_PATH = os.path.join(os.path.dirname(__file__), '../../timetable.json')
+
+def tag_to_elective_slot(tag):
+    """Phase 23.5: the authoritative catalog slot for a subject tag
+    ('Elective-I' -> ELECTIVE_I, 'Elective-II' -> ELECTIVE_II, else None)."""
+    if tag == "Elective-I":
+        return ElectiveSlot.ELECTIVE_I
+    if tag == "Elective-II":
+        return ElectiveSlot.ELECTIVE_II
+    return None
 
 def parse_time(t_str: str) -> time:
     """Parse '09:00 AM' into datetime.time"""
@@ -107,6 +115,7 @@ async def seed_baseline():
                     code=subj['code'],
                     name=subj['name'],
                     tag=subj.get('tag'),
+                    elective_slot=tag_to_elective_slot(subj.get('tag')),
                     category=SubjectCategory.THEORY if subj['category'] == 'theory' else SubjectCategory.LAB,
                     quiz_applicable=subj.get('quizApplicable', True),
                     attendance_applicable=subj.get('attendanceApplicable', True),

@@ -45,6 +45,16 @@ class Subject(Base):
     code: Mapped[str] = mapped_column(String, index=True)
     name: Mapped[str] = mapped_column(String)
     tag: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Phase 23.5 (Elective/Catalog Redesign): the authoritative typed catalog
+    # marker — which Departmental Elective slot this subject belongs to, or
+    # NULL for common/practical (non-elective) subjects. This makes the
+    # elective catalog DB-backed and semester-scoped (subjects are already
+    # semester-scoped): the catalog IS the set of subjects with a non-null
+    # elective_slot. One slot per subject is inherent (single column), so a
+    # subject can never silently belong to both slots. Backfilled from the
+    # legacy free-form `tag` ("Elective-I"/"Elective-II") by migration
+    # f5a6b7c8d9e0; `tag` remains informational only.
+    elective_slot: Mapped[ElectiveSlot | None] = mapped_column(Enum(ElectiveSlot), nullable=True)
     category: Mapped[SubjectCategory] = mapped_column(Enum(SubjectCategory))
     quiz_applicable: Mapped[bool] = mapped_column(Boolean, default=True)
     attendance_applicable: Mapped[bool] = mapped_column(Boolean, default=True)

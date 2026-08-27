@@ -1,5 +1,9 @@
 """
-Authoritative departmental-elective resolution (Phase 22.4).
+Authoritative departmental-elective resolution (Phase 22.4, Phase 23.5).
+
+Frozen semantics — Phase 22.4 established the per-student resolution
+architecture. Phase 23.5 made the elective catalog DB-backed
+(``subjects.elective_slot``) instead of hardcoded code constants.
 
 Departmental Elective-I / Elective-II are LOGICAL SLOTS, not user-facing
 subjects. The shared institutional schedule (timetable, class sessions, quiz
@@ -7,12 +11,12 @@ schedules, academic events) keeps concrete anchor subjects (BCS-054 for
 Elective-I, BCS-058 for Elective-II) and marks the slot. This module is the
 single source of truth for:
 
-  - the elective catalog (which subject codes belong to which slot — hard
-    constraints, never extended without a product decision),
+  - the elective catalog (which subject codes belong to which slot — DB-backed
+    via ``subjects.elective_slot``, scoped to the active academic session),
   - the shared slot anchors (the concrete subjects the schedule uses to
-    represent each slot),
+    represent each slot — still ``ANCHOR_CODES`` constants),
   - per-student resolution: logical slot -> the student's selected concrete
-    subject via their StudentElectiveChoice.
+    subject via their ``StudentElectiveChoice``.
 
 Every consumer (registration, timetable, attendance, quiz, events, calendar,
 dashboard, notifications) resolves through this module instead of embedding
@@ -34,56 +38,89 @@ from app.models.enums import ElectiveSlot
 from app.repositories.subject_repo import SubjectRepository
 
 # ---------------------------------------------------------------------------
-# Authoritative elective catalog (CSE-51 V Semester CTT). HARD CONSTRAINTS:
-# do not add subjects, do not allow cross-slot selection.
-# ---------------------------------------------------------------------------
-ELECTIVE_I_CODES: List[str] = ["BCS-052", "BCS-053", "BCS-054"]
-ELECTIVE_II_CODES: List[str] = ["BCS-055", "BCS-056", "BCS-058"]
-
-SLOT_CODES: Dict[ElectiveSlot, List[str]] = {
-    ElectiveSlot.ELECTIVE_I: ELECTIVE_I_CODES,
-    ElectiveSlot.ELECTIVE_II: ELECTIVE_II_CODES,
-}
-
-# The concrete subjects the shared institutional schedule uses to represent
+# Shared schedule anchors (Phase 22.3).
+# These are the concrete subjects the institutional SCHEDULE uses to represent
 # each logical slot (timetable anchors, session anchors, quiz/event anchors).
+# They are NOT the catalog — the catalog is DB-backed via subjects.elective_slot.
+# ---------------------------------------------------------------------------
 ANCHOR_CODES: Dict[ElectiveSlot, str] = {
     ElectiveSlot.ELECTIVE_I: "BCS-054",
     ElectiveSlot.ELECTIVE_II: "BCS-058",
 }
 
-ALL_ELECTIVE_CODES: set = set(ELECTIVE_I_CODES) | set(ELECTIVE_II_CODES)
-
-
-def slot_for_code(code: str) -> Optional[ElectiveSlot]:
-    """The slot a subject code belongs to, or None for non-elective subjects."""
-    for slot, codes in SLOT_CODES.items():
-        if code in codes:
-            return slot
-    return None
-
-
-def validate_selection(elective_i: str, elective_ii: str) -> Optional[str]:
-    """Returns an error message when either selection is invalid, else None."""
-    if elective_i not in ELECTIVE_I_CODES:
-        return "Invalid Department Elective-I selection"
-    if elective_ii not in ELECTIVE_II_CODES:
-        return "Invalid Department Elective-II selection"
-    return None
-
 
 class ElectiveResolver:
     """Domain-level authoritative resolver: logical slot -> student's subject.
 
-    All lookups are loaded once per request (the student's two choices, the
-    two anchor subjects) and resolved in memory — never one query per
-    timetable/session/event/quiz item.
+    Phase 23.5: the elective catalog is now DB-backed (``subjects.elective_slot``).
+    ``catalog_codes()``, ``slot_for_code()``, and ``validate_selection()`` are
+    async methods that read from the database — no more hardcoded constants.
+
+    All per-request lookups are loaded once (the student's two choices, the
+    catalog, the two anchor subjects) and resolved in memory — never one query
+    per timetable/session/event/quiz item.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self._subject_repo = SubjectRepository(db)
+        self._catalog: Optional[Dict[ElectiveSlot, List[str]]] = None
 
+    # ------------------------------------------------------------------
+    # DB-backed catalog (Phase 23.5)
+    # ------------------------------------------------------------------
+    async def catalog_codes(self) -> Dict[ElectiveSlot, List[str]]:
+        """The authoritative elective catalog from the DB: slot -> ordered
+        subject codes. Scoped to the active academic session's semester
+        (one query, lazily cached per instance)."""
+        if self._catalog is not None:
+            return self._catalog
+        from app.models.academic import AcademicSession, Semester
+
+        catalog: Dict[ElectiveSlot, List[str]] = {
+            ElectiveSlot.ELECTIVE_I: [],
+            ElectiveSlot.ELECTIVE_II: [],
+        }
+        result = await self.db.execute(
+            select(Subject.code, Subject.elective_slot)
+            .join(Semester, Semester.id == Subject.semester_id)
+            .join(AcademicSession, AcademicSession.id == Semester.session_id)
+            .where(
+                AcademicSession.is_active.is_(True),
+                Subject.elective_slot.isnot(None),
+            )
+        )
+        for code, slot in result.all():
+            if slot in catalog:
+                catalog[slot].append(code)
+        for slot in catalog.values():
+            slot.sort()
+        self._catalog = catalog
+        return self._catalog
+
+    async def slot_for_code(self, code: str) -> Optional[ElectiveSlot]:
+        """The slot a subject code belongs to per the DB catalog, or None
+        for non-elective subjects or codes not in the current semester."""
+        for slot, codes in (await self.catalog_codes()).items():
+            if code in codes:
+                return slot
+        return None
+
+    async def validate_selection(
+        self, elective_i: str, elective_ii: str
+    ) -> Optional[str]:
+        """Returns an error message when either selection is invalid per the
+        DB catalog, else None."""
+        catalog = await self.catalog_codes()
+        if elective_i not in catalog[ElectiveSlot.ELECTIVE_I]:
+            return "Invalid Department Elective-I selection"
+        if elective_ii not in catalog[ElectiveSlot.ELECTIVE_II]:
+            return "Invalid Department Elective-II selection"
+        return None
+
+    # ------------------------------------------------------------------
+    # Per-student choice resolution (Phase 22.3/22.4 — unchanged)
+    # ------------------------------------------------------------------
     async def load_choices(self, user_id: Optional[UUID]) -> Dict[ElectiveSlot, StudentElectiveChoice]:
         """The student's StudentElectiveChoice rows keyed by slot (empty when
         the user has no recorded selection — ADMIN or a pre-selection user)."""

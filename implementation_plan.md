@@ -3005,3 +3005,72 @@ identical NULL handling, identical fallbacks.
 **Deferred:** Phase 23.5 (elective/catalog redesign); timetable redesign;
 registration context adoption (provisioning kept separate); `branches` table;
 BNC-501 non-credit modeling.
+
+---
+
+### Phase 23.5 — Elective/Catalog Redesign (implemented 2026-08-28)
+
+**Status: COMPLETE — catalog normalized into the database.** Migration
+`f5a6b7c8d9e0` (parent `e3f4a5b6c7d8`). Offline SQL verified; DB application is
+an operator action (same environment constraint as prior 23.x — `backend/.env` →
+production pooler, Docker down). **Not applied to production.**
+
+**Objective:** normalize the elective/catalog domain only — make the catalog the
+authoritative source of *what can be selected* — without redesigning
+timetable/session/event/quiz/attendance systems, without reopening 23.4, and
+without creating a second elective resolver.
+
+**Discovery — gap:** the catalog was split between hardcoded code constants
+(`ELECTIVE_I_CODES`/`ELECTIVE_II_CODES`/`SLOT_CODES` in `elective_resolver.py`)
+and the free-form `subjects.tag` string (also used for "Lab" practicals).
+Problems: hardcoded catalog (future semesters need a code change); constants vs
+`tag` could diverge (23.2 flag); `tag` is untyped; registration validated via
+constants but enrolled via `tag` — two catalog sources in one flow.
+
+**Catalog model decision (smallest correct):** no new tables. `subjects` is
+already the semester-scoped catalog of concrete subjects; a typed nullable
+`subjects.elective_slot` (`electiveslot` enum) makes slot membership
+authoritative (NULL = common/practical; ELECTIVE_I; ELECTIVE_II). One column ⇒
+one slot per subject (never both). A separate catalog table would be LESS
+normalized (dual-slot membership would be possible).
+
+**Files changed:**
+- `app/models/academic.py` — `Subject.elective_slot` (nullable enum).
+- `alembic/versions/f5a6b7c8d9e0_add_subjects_elective_slot.py` — NEW migration
+  (add column + deterministic backfill from tag; downgrade drops column).
+- `app/services/elective_resolver.py` — DB-driven catalog: `catalog_codes()`
+  (active-session, one query, lazily cached), `slot_for_code(code)`,
+  `validate_selection(elective_i, elective_ii)` (async). Removed the hardcoded
+  constants and module-level sync functions. `ANCHOR_CODES` retained (schedule
+  anchors, not catalog). Per-student resolution API unchanged.
+- `app/api/v1/endpoints/auth.py` — elective validation moved from Pydantic
+  validators to the async endpoint against the DB catalog (422 preserved);
+  enrollment loop uses `subject.elective_slot` (not `tag`).
+- `app/services/student_context_service.py` — validation uses async
+  `ElectiveResolver.slot_for_code`.
+- `app/schemas/subject.py` + `frontend/src/types/api.ts` — additive optional
+  `elective_slot` on `SubjectResponse`.
+- `scripts/seed_academic_baseline.py` — sets `elective_slot` from tag.
+- `scripts/verify_phase_22_4.py` — catalog section verifies the DB-backed
+  catalog (was the removed constants).
+
+**Compatibility impact:** all downstream systems (timetable, quiz, events,
+sessions, attendance, history, Track, dashboard, notifications, calendar,
+analytics) UNCHANGED — the resolver's per-student API is identical; same
+resolved subject as before with a cleaner authoritative catalog underneath.
+
+**Verification:**
+- `compileall` (app + alembic + scripts) — PASS.
+- Frontend `npx tsc --noEmit` — PASS.
+- Alembic single head `f5a6b7c8d9e0`; linear chain preserved.
+- Offline upgrade/downgrade SQL — PASS (`ADD COLUMN` + `UPDATE` backfill;
+  downgrade `DROP COLUMN`).
+- Backfill outcome verified deterministically from the authoritative CTT:
+  DE-I={BCS-052,053,054}, DE-II={BCS-055,056,058}, disjoint; practicals never
+  elective.
+- Two-context matrix (A: BCS-054/BCS-058; B: BCS-052/BCS-055) — no cross-slot,
+  no leakage.
+- No stale references to removed constants in app/scripts.
+- **Migration NOT applied to any DB by the agent** — production pooler, Docker
+  down. Operator applies on dev DB; production only when separately authorized.
+- Git: no commit, no push, no PR (working tree contains 23.5 changes only).

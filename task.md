@@ -2297,4 +2297,51 @@ Create one reusable backend authority for resolving a student's current academic
 
 - Phase 23.4 context service is the authoritative read-only resolver for the migrated consumers. Do not revert to inline reconstruction.
 - Phase 22.3/22.4 elective resolver + catalog remain the single authoritative elective system (the context service consumes them).
-- Phase 23.5 (elective/catalog redesign) is the next implementation slice - requires a fresh execution prompt.
+
+## PHASE 23.5 - ELECTIVE/CATALOG REDESIGN (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - catalog normalized into the database.** Migration `f5a6b7c8d9e0` (parent `e3f4a5b6c7d8`). Offline SQL verified; DB application is an operator action. No commit, no push, no PR.
+
+> Scope note: this execution prompt normalizes the elective catalog into the DB (subjects.elective_slot); the resolver becomes DB-driven. Timetable/session/event/quiz/attendance systems unchanged.
+
+## Objective
+
+Normalize the elective/catalog domain only — make the catalog the authoritative source of what can be selected — without redesigning downstream systems, reopening 23.4, or creating a second elective resolver.
+
+## Delivered
+
+- [x] `app/models/academic.py`: `Subject.elective_slot` (nullable `electiveslot` enum) — the authoritative DB-backed catalog marker
+- [x] Migration `f5a6b7c8d9e0` (parent `e3f4a5b6c7d8`): `ADD COLUMN` + deterministic backfill from `tag` ('Elective-I'?ELECTIVE_I, 'Elective-II'?ELECTIVE_II); downgrade `DROP COLUMN`
+- [x] `app/services/elective_resolver.py`: DB-driven catalog (`catalog_codes()`, `slot_for_code()`, `validate_selection()` async); removed hardcoded `ELECTIVE_I_CODES`/`ELECTIVE_II_CODES`/`SLOT_CODES`/`ALL_ELECTIVE_CODES` and module-level sync functions; `ANCHOR_CODES` retained (schedule anchors); per-student API unchanged
+- [x] Registration (`auth.py`): elective validation moved from Pydantic validators to async endpoint against the DB catalog (422 preserved); enrollment loop uses `subject.elective_slot` (not `tag`)
+- [x] `StudentContextService`: elective-choice validation uses async `ElectiveResolver.slot_for_code`
+- [x] `SubjectResponse` + frontend `SubjectResponse` type: additive optional `elective_slot`
+- [x] `seed_academic_baseline.py`: sets `elective_slot` from tag
+- [x] `verify_phase_22_4.py`: catalog section verifies the DB-backed catalog (was the removed constants)
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic single head `f5a6b7c8d9e0`
+- [x] Backfill outcome verified: DE-I={BCS-052,053,054}, DE-II={BCS-055,056,058}, disjoint, practicals never elective
+- [x] Two-context matrix (A: BCS-054/BCS-058; B: BCS-052/BCS-055): no cross-slot, no leakage
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO student elective switching / semester rollover / subsection/elective remediation
+- [ ] NO timetable / session / occurrence / event / quiz / attendance redesign
+- [ ] NO admin portal / frontend redesign
+- [ ] NO `branches` table / BNC-501 non-credit modeling
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (app + alembic + scripts) PASS; alembic head `f5a6b7c8d9e0` (single head)
+- Offline upgrade/downgrade SQL PASS; `ADD COLUMN` + deterministic `UPDATE` backfill; downgrade `DROP COLUMN`
+- Frontend `npx tsc --noEmit` PASS
+- Logic verification: no stale references to removed constants; backfill outcome deterministic; three catalog concepts distinct
+- **Migration NOT applied to any DB by the agent** - production pooler, Docker down. Operator applies on dev DB; production only when separately authorized. Production DB NOT touched.
+- Git: working tree contains 23.5 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.5 catalog redesign is complete. Do not reopen.
+- `ElectiveResolver` is the single authoritative resolver (DB-driven, never recreated as code constants).
+- Phase 23.6+ (next architecture slice) requires a fresh execution prompt.

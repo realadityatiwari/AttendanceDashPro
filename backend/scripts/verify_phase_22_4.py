@@ -48,12 +48,7 @@ from app.models.user import User
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.timetable_repo import TimetableRepository
-from app.services.elective_resolver import (
-    ElectiveResolver,
-    ELECTIVE_I_CODES,
-    ELECTIVE_II_CODES,
-    validate_selection,
-)
+from app.services.elective_resolver import ElectiveResolver
 from app.services.eligibility_service import EligibilityService
 
 results = []
@@ -159,22 +154,28 @@ async def main() -> int:
         )
 
         # ── 2. Authoritative catalog ─────────────────────────────────────
-        print("\n=== 2. Elective catalog ===")
+        # Phase 23.5: the catalog is DB-backed (subjects.elective_slot).
+        print("\n=== 2. Elective catalog (DB-backed) ===")
+        resolver = ElectiveResolver(db)
+        db_catalog = await resolver.catalog_codes()
         check(
-            sorted(ELECTIVE_I_CODES) == ["BCS-052", "BCS-053", "BCS-054"],
-            f"Elective-I catalog exactly 3 subjects: {sorted(ELECTIVE_I_CODES)}",
+            sorted(db_catalog.get(ElectiveSlot.ELECTIVE_I, [])) == ["BCS-052", "BCS-053", "BCS-054"],
+            f"Elective-I catalog exactly 3 subjects: {sorted(db_catalog.get(ElectiveSlot.ELECTIVE_I, []))}",
         )
         check(
-            sorted(ELECTIVE_II_CODES) == ["BCS-055", "BCS-056", "BCS-058"],
-            f"Elective-II catalog exactly 3 subjects: {sorted(ELECTIVE_II_CODES)}",
+            sorted(db_catalog.get(ElectiveSlot.ELECTIVE_II, [])) == ["BCS-055", "BCS-056", "BCS-058"],
+            f"Elective-II catalog exactly 3 subjects: {sorted(db_catalog.get(ElectiveSlot.ELECTIVE_II, []))}",
         )
-        check(validate_selection("BCS-052", "BCS-055") is None, "valid E-I + E-II accepted")
         check(
-            validate_selection("BCS-055", "BCS-052") is not None,
+            await resolver.validate_selection("BCS-052", "BCS-055") is None,
+            "valid E-I + E-II accepted",
+        )
+        check(
+            await resolver.validate_selection("BCS-055", "BCS-052") is not None,
             "cross-slot selection rejected",
         )
         check(
-            validate_selection("BCS-501", "BCS-055") is not None,
+            await resolver.validate_selection("BCS-501", "BCS-055") is not None,
             "non-catalog subject rejected",
         )
 

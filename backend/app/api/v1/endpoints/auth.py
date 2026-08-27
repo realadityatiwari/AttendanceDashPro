@@ -12,7 +12,6 @@ from app.core.security import verify_password, create_access_token, hash_passwor
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
 from app.api.dependencies.deps import get_db
-from app.services.elective_resolver import ELECTIVE_I_CODES, ELECTIVE_II_CODES
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -26,8 +25,10 @@ class RegisterRequest(BaseModel):
     roll_number: str
     password: str
     # Phase 22.3: Department Elective selection (subject codes). Required for
-    # every new student account. Elective-I must be one of BCS-052/053/054;
-    # Elective-II one of BCS-055/056/058 (authoritative CSE-51 V Semester CTT).
+    # every new student account. Validation is backend-authoritative against
+    # the DB catalog (Phase 23.5 — subjects.elective_slot). The Pydantic model
+    # accepts any non-empty string; the async endpoint validates against the
+    # active semester's catalog.
     elective_i: str
     elective_ii: str
 
@@ -48,20 +49,6 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one letter")
         if not re.search(r"[0-9]", v):
             raise ValueError("Password must contain at least one digit")
-        return v
-
-    @field_validator("elective_i")
-    @classmethod
-    def validate_elective_i(cls, v: str) -> str:
-        if v not in ELECTIVE_I_CODES:
-            raise ValueError("Invalid Department Elective-I selection")
-        return v
-
-    @field_validator("elective_ii")
-    @classmethod
-    def validate_elective_ii(cls, v: str) -> str:
-        if v not in ELECTIVE_II_CODES:
-            raise ValueError("Invalid Department Elective-II selection")
         return v
 
 class TokenResponse(BaseModel):
@@ -154,6 +141,17 @@ async def register(
     result = await db.execute(select(Subject).where(Subject.semester_id == semester.id))
     subjects = list(result.scalars().all())
 
+    # --- Validate elective selection against the authoritative DB catalog ---
+    # Phase 23.5: the catalog is subjects.elective_slot, scoped to the active
+    # semester. An invalid selection is rejected 422 (same contract the old
+    # Pydantic catalog validators produced).
+    catalog_i = [s.code for s in subjects if s.elective_slot == ElectiveSlot.ELECTIVE_I]
+    catalog_ii = [s.code for s in subjects if s.elective_slot == ElectiveSlot.ELECTIVE_II]
+    if elective_i_code not in catalog_i:
+        raise HTTPException(status_code=422, detail="Invalid Department Elective-I selection")
+    if elective_ii_code not in catalog_ii:
+        raise HTTPException(status_code=422, detail="Invalid Department Elective-II selection")
+
     # --- Create user + enrollments transactionally ---
     user = User(
         roll_number=roll_number,
@@ -169,13 +167,15 @@ async def register(
         # chosen Department Elective-I / Elective-II subjects. The other
         # elective options are NOT enrolled (each student has their own
         # selections; the shared timetable resolves the slot per student).
+        # Phase 23.5: slot membership comes from subjects.elective_slot (the
+        # authoritative catalog), not the legacy free-form tag.
         elective_i_subject = None
         elective_ii_subject = None
         for subject in subjects:
-            if subject.tag == "Elective-I":
+            if subject.elective_slot == ElectiveSlot.ELECTIVE_I:
                 if subject.code == elective_i_code:
                     elective_i_subject = subject
-            elif subject.tag == "Elective-II":
+            elif subject.elective_slot == ElectiveSlot.ELECTIVE_II:
                 if subject.code == elective_ii_code:
                     elective_ii_subject = subject
             else:
@@ -186,8 +186,8 @@ async def register(
                 ))
 
         if elective_i_subject is None or elective_ii_subject is None:
-            # The chosen codes are validated by the Pydantic model, but the
-            # subject rows must actually exist in the active semester.
+            # The codes passed the catalog validation above, so a missing
+            # subject row here means the semester configuration is broken.
             await db.rollback()
             raise HTTPException(
                 status_code=503,

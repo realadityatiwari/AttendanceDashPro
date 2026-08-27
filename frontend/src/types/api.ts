@@ -52,6 +52,9 @@ export interface SubjectResponse {
   code: string;
   name: string;
   tag: string | null;
+  /** Phase 23.5: the authoritative DB-backed catalog slot marker.
+      NULL = common/practical (non-elective) subject. Additive/optional. */
+  elective_slot?: ElectiveSlot | null;
   category: SubjectCategory;
   quiz_applicable: boolean;
   attendance_applicable: boolean;

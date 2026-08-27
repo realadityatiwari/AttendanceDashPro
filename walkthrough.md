@@ -5052,3 +5052,191 @@ Production not touched. Phase 23.5 not started — requires a fresh execution
 prompt.
 
 ---
+
+# AttendanceDash Pro — Phase 23.5 Walkthrough
+
+> **PHASE 23.5 COMPLETE — ELECTIVE/CATALOG REDESIGN (2026-08-28).** Normalized
+> the elective catalog into the database so it is the authoritative source of
+> *what can be selected*, without redesigning downstream systems and without
+> creating a second elective resolver.
+
+## Objective
+
+Redesign and normalize the elective/catalog domain only: establish a clean
+authoritative catalog model (Semester ? Catalog ? Elective Slot ? Allowed
+Subjects) that downstream systems consume, preserving the existing per-student
+resolution architecture exactly. The catalog becomes the source of what can be
+selected; the student's `StudentElectiveChoice` determines what that student
+actually sees.
+
+## Discovery
+
+Current catalog representation (before this phase):
+- **Hardcoded code constants** in `elective_resolver.py`:
+  `ELECTIVE_I_CODES = ["BCS-052","BCS-053","BCS-054"]`,
+  `ELECTIVE_II_CODES = ["BCS-055","BCS-056","BCS-058"]`, `SLOT_CODES`,
+  `ALL_ELECTIVE_CODES`, module-level `slot_for_code()` / `validate_selection()`.
+- **Free-form `subjects.tag`** string ("Elective-I"/"Elective-II", but also
+  "Lab" for practicals) — used by registration and the 22.3/22.4 backfills.
+- `ElectiveSlot` enum already on the schedule tables (`timetable_entries`,
+  `quiz_schedules`, `academic_events`, `class_sessions`) and
+  `student_elective_choices.elective_slot`.
+
+Problems identified:
+1. The catalog was hardcoded — a future semester with different electives
+   required a code change + redeploy.
+2. Constants and `subjects.tag` could diverge (flagged by the 23.2 discovery).
+3. `tag` is an untyped free string ("Lab" also uses it) — unsafe as a typed
+   slot marker.
+4. Registration validated selections against the code constants (Pydantic)
+   while enrolling via `subject.tag` — two catalog sources in one flow.
+
+## Catalog model decision (smallest correct)
+
+**No new tables.** `subjects` is already the semester-scoped catalog of
+concrete subjects (`semester_id` NOT NULL; `UNIQUE(code, semester_id)` since
+23.2). Adding a typed, nullable `subjects.elective_slot` (`electiveslot` enum)
+makes slot membership authoritative and type-safe:
+
+```
+Semester (subjects.semester_id)
+   ?
+subjects table (the concrete-subject catalog)
+   ?
+subjects.elective_slot      NULL = common/practical
+                            ELECTIVE_I  = DE-I (BCS-052/053/054)
+                            ELECTIVE_II = DE-II (BCS-055/056/058)
+   ?
+StudentElectiveChoice (user_id + slot + subject_id; UNIQUE(user_id, slot))
+   ?
+ElectiveResolver (DB-driven, single resolver)
+   ?
+StudentContextService ? student-facing systems
+```
+
+A single column guarantees **one slot per subject** (never both slots); a
+separate catalog table would permit dual-slot membership and would be LESS
+normalized. Logical slot (`ElectiveSlot`), concrete subject (`Subject`), and
+the student's selected subject (`StudentElectiveChoice`) remain three distinct
+concepts — a logical slot is not itself an enrollment.
+
+## Resolver changes
+
+`ElectiveResolver` is now DB-driven:
+- `catalog_codes()` — active-session catalog (one query, lazily cached per
+  instance).
+- `slot_for_code(code)` — async, from the DB catalog.
+- `validate_selection(elective_i, elective_ii)` — async, from the DB catalog.
+- Removed: `ELECTIVE_I_CODES`, `ELECTIVE_II_CODES`, `SLOT_CODES`,
+  `ALL_ELECTIVE_CODES`, module-level sync `slot_for_code`/`validate_selection`.
+- Retained: `ANCHOR_CODES` (shared schedule anchors BCS-054/058 — schedule
+  representation, not catalog) and all per-student resolution methods
+  (`load_choices`, `chosen_elective_map`, `anchor_subjects`,
+  `anchor_subject_for_slot`, `resolve_subject`, `resolve_events`).
+
+**No second resolver was created.**
+
+## Files changed
+
+- `backend/app/models/academic.py` — `Subject.elective_slot` (nullable enum).
+- `backend/alembic/versions/f5a6b7c8d9e0_add_subjects_elective_slot.py` — NEW.
+- `backend/app/services/elective_resolver.py` — DB-driven catalog.
+- `backend/app/api/v1/endpoints/auth.py` — async catalog validation (422
+  preserved); enrollment uses `elective_slot` (not `tag`).
+- `backend/app/services/student_context_service.py` — async catalog validation.
+- `backend/app/schemas/subject.py` — additive `elective_slot`.
+- `frontend/src/types/api.ts` — additive optional `elective_slot`.
+- `backend/scripts/seed_academic_baseline.py` — sets `elective_slot` from tag.
+- `backend/scripts/verify_phase_22_4.py` — catalog section verifies the
+  DB-backed catalog.
+
+## Schema / migration
+
+Migration `f5a6b7c8d9e0` (parent `e3f4a5b6c7d8`): `ALTER TABLE subjects ADD
+COLUMN elective_slot electiveslot` + deterministic `UPDATE` backfill from the
+authoritative `tag` marker; downgrade `DROP COLUMN`. Additive; no subject,
+choice, enrollment, attendance, session, event, quiz, or timetable data
+created/rewritten/deleted.
+
+## Compatibility impact
+
+All downstream systems (timetable, quiz, events, sessions, attendance, history,
+Track, dashboard, notifications, calendar, analytics) are UNCHANGED — they
+already consume `ElectiveResolver`, whose per-student resolution API is
+identical. Registration behavior preserved (422 for invalid selections; 503
+only for broken semester configuration). `SubjectResponse` gains an additive
+optional field. Result: same resolved student-specific subject as before, with
+a cleaner authoritative catalog underneath.
+
+## Verification
+
+- Backend `compileall` (app + alembic + scripts) — PASS.
+- Frontend `npx tsc --noEmit` — PASS.
+- Alembic single head `f5a6b7c8d9e0`; linear chain preserved.
+- Offline upgrade SQL (`ADD COLUMN` + `UPDATE` backfill) and downgrade SQL
+  (`DROP COLUMN`) — PASS.
+- Backfill outcome verified deterministically from the authoritative CTT
+  (`timetable.json` tags, the same source the migration consumes):
+  DE-I={BCS-052,053,054}, DE-II={BCS-055,056,058}, disjoint; practicals
+  (BCS-551/552/553, tag=Lab) never elective.
+- Two-context matrix:
+  - Context A (CS-5A/51): DE-I?BCS-054 (a DE-I subject), DE-II?BCS-058 (a
+    DE-II subject) — OK.
+  - Context B (CS-5A/52): DE-I?BCS-052 (a DE-I subject), DE-II?BCS-055 (a
+    DE-II subject) — OK.
+  - Compulsory subjects remain common (no tag ? no slot); A's choices never
+    leak into B and vice versa (per-user rows + UNIQUE(user_id, slot));
+    cross-slot mappings rejected by `validate_selection`; unresolved choices
+    stay unresolved; no concrete subject fabricated.
+- Failure matrix: valid DE-I/DE-II ? concrete subject; missing choice ?
+  unresolved/empty; invalid subject ? inconsistency (recorded by
+  `StudentContextService`, never repaired); cross-slot ? rejected; cross-
+  semester ? impossible (choices reference semester-scoped subject rows);
+  duplicate slot mapping ? impossible (`UNIQUE(user_id, elective_slot)`);
+  another student's choice ? never visible (user_id-scoped queries); no
+  catalog entry ? honest empty/inconsistent state; common subject remains
+  compulsory; practical never treated as elective.
+- Query/performance: `catalog_codes()` = one query (active-session scope),
+  lazily cached per resolver instance; no N+1, no repeated slot reconstruction,
+  no cross-semester joins, no unscoped choice queries, no duplicate subject
+  rows.
+- No stale references to the removed catalog constants anywhere in
+  app/scripts.
+- **Production DB not touched.** Migration NOT applied by the agent.
+
+## Security considerations
+
+- Registration validation is backend-authoritative against the DB catalog
+  (client cannot inject a cross-slot or non-catalog code).
+- Choice rows remain per-user scoped; the resolver never borrows another
+  student's choice and never fabricates a selection.
+- No new mutation surface.
+
+## Deferred items
+
+- Student elective switching, semester rollover, subsection/elective
+  remediation.
+- Timetable / occurrence / event / quiz / attendance redesign (later slices).
+- `branches` table / Branch parentage (23.1 gate); BNC-501 non-credit modeling.
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. Migration
+`f5a6b7c8d9e0` NOT applied to any database; operator applies on the isolated dev
+DB, then production only when separately authorized. **Production DB not
+touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.5 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.5 implemented section (decision, files,
+  verification).
+- task.md: Phase 23.5 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.5 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.6 not started — requires a fresh execution
+prompt.
+
+---
