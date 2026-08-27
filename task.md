@@ -2201,4 +2201,51 @@ Implement the single confirmed REQUIRED change from the Phase 23.2 discovery: ad
 
 - Phase 23.2 schema hardening is complete. Do not reopen for further curriculum changes.
 - Phase 23.2 discovery report + correction matrix remains authoritative for the curriculum context.
-- Phase 23.3 (Timetable + subsection scheduling) is the next implementation slice - requires a fresh execution prompt.
+- Phase 23.3 (Student Academic Assignment) is COMPLETE (2026-08-28) — see below. Timetable + subsection scheduling (the slice the 23.0 blueprint had labeled "23.3") is re-scoped to later Phase 23 timetable redesign.
+
+## PHASE 23.3 - STUDENT ACADEMIC ASSIGNMENT (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - consolidation/normalization, NOT a redesign.** Migration `e3f4a5b6c7d8` (parent `d0e1f2a3b4c5`). Makes the student's academic placement / compulsory enrollment / elective selection explicit and authoritative around the existing Phase 22.3/22.4 elective architecture. No commit, no push, no PR.
+
+> **Scope note:** this execution prompt re-scopes Phase 23.3 as Student Academic Assignment. The timetable/subsection-scheduling slice formerly labeled "23.3" is re-scoped to later Phase 23 timetable redesign and DEFERRED.
+
+## Objective
+
+Make the relationship between a student and their academic placement / enrollment / elective choices explicit and authoritative with the minimum additive normalization, without re-opening 23.1/23.2 and without recreating the 22.3/22.4 elective system.
+
+## Delivered
+
+- [x] `app/models/enums.py`: added `EnrollmentType(COMPULSORY, ELECTIVE)`
+- [x] `app/models/academic.py`: `StudentEnrollment` gains `enrollment_type` (native enum `enrollmenttype`, default/server_default COMPULSORY)
+- [x] Migration `e3f4a5b6c7d8` (parent `d0e1f2a3b4c5`): `CREATE TYPE enrollmenttype` + `ADD COLUMN` (default COMPULSORY) + deterministic backfill (ELECTIVE where a matching `StudentElectiveChoice` for an Elective-I/II subject exists) + `SET NOT NULL`; downgrade reverses
+- [x] Registration (`auth.py`): new enrollments tagged COMPULSORY (non-elective) / ELECTIVE (chosen DE-I/DE-II)
+- [x] `UserRepository.get_elective_codes(user_id)`: the student's own concrete elective codes per slot (never fabricated/borrowed)
+- [x] `/student/me` + `StudentProfile`: additive optional `subsection_name`, `elective_i`, `elective_ii` (backward compatible; no second endpoint)
+- [x] Frontend `types/api.ts`: `StudentProfile` additive optional `subsection_name`, `elective_i`, `elective_ii`
+- [x] `alembic heads` -> single head `e3f4a5b6c7d8`; compileall PASS; frontend tsc PASS
+- [x] Logic-level verification matrix (no DB): catalog separation, cross-slot rejection, concrete->slot mapping, explicit compulsory/elective distinction, slot-not-an-enrollment - ALL PASS
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.4 authoritative student-context service
+- [ ] NO timetable / session / occurrence / event / quiz / attendance redesign
+- [ ] NO admin portal / frontend redesign
+- [ ] NO student elective switching, no semester rollover
+- [ ] NO elective catalog redesign (Phase 23.5), no `branches` table (Branch gate open)
+- [ ] NO subsection / elective fabrication for unassigned legacy users (admin-controlled remediation deferred)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (full backend) PASS; `alembic heads` -> single head `e3f4a5b6c7d8`
+- Offline `upgrade d0e1f2a3b4c5:e3f4a5b6c7d8 --sql` + `downgrade` SQL PASS (correct DDL + deterministic backfill)
+- Frontend `npx tsc --noEmit` PASS
+- **Migration NOT applied to any DB by the agent** - `backend/.env` -> production Supabase pooler, Docker daemon down. Operator applies on dev DB; production only when separately authorized. Production DB NOT touched.
+- Git: working tree contains 23.3 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.3 assignment consolidation is complete. Do not reopen for further assignment schema changes.
+- Phase 22.3/22.4 elective resolver + catalog remain the single authoritative elective system (do not recreate).
+- Phase 23.4 (authoritative student-context) is the next implementation slice - requires a fresh execution prompt.

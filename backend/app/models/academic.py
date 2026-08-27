@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, Date, ForeignKey, Enum, UniqueConstraint
+from sqlalchemy import String, Boolean, Date, ForeignKey, Enum, UniqueConstraint, text
 from app.db.base_class import Base
-from app.models.enums import SubjectCategory, ElectiveSlot
+from app.models.enums import SubjectCategory, ElectiveSlot, EnrollmentType
 import datetime
 from typing import List
 import uuid
@@ -76,6 +76,15 @@ class StudentEnrollment(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"))
+    # Phase 23.3: whether this enrollment is a program requirement (COMPULSORY)
+    # or the student's elective selection (ELECTIVE). Additive discriminator —
+    # the authoritative elective selection remains StudentElectiveChoice +
+    # ElectiveResolver (Phase 22.3/22.4). Existing rows default to COMPULSORY.
+    enrollment_type: Mapped[EnrollmentType] = mapped_column(
+        Enum(EnrollmentType),
+        default=EnrollmentType.COMPULSORY,
+        server_default=text("'COMPULSORY'"),
+    )
 
     user: Mapped["User"] = relationship(back_populates="enrollments")
     subject: Mapped["Subject"] = relationship(back_populates="enrollments")

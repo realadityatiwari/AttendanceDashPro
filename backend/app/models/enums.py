@@ -75,6 +75,25 @@ class ElectiveSlot(str, Enum):
     ELECTIVE_I = "ELECTIVE_I"
     ELECTIVE_II = "ELECTIVE_II"
 
+class EnrollmentType(str, Enum):
+    """Whether a student's subject enrollment is a program requirement or an
+    elective selection (Phase 23.3 — Student Academic Assignment).
+
+    - COMPULSORY: the student is academically enrolled in this subject regardless
+      of any elective selection (common theory + practical subjects).
+    - ELECTIVE: this enrollment corresponds to the concrete subject the student
+      selected for a Department Elective slot (DE-I / DE-II). The logical slot
+      itself is never an enrollment; the concrete subject is.
+
+    This makes the compulsory-vs-elective enrollment distinction EXPLICIT and
+    authoritative on the enrollment row. It does NOT replace the authoritative
+    `StudentElectiveChoice` + `ElectiveResolver` (Phase 22.3/22.4) — that system
+    remains the single source of truth for elective selection. The type is
+    additive and defaulted to COMPULSORY for backward compatibility.
+    """
+    COMPULSORY = "COMPULSORY"
+    ELECTIVE = "ELECTIVE"
+
 class WeekStartsOn(str, Enum):
     """User preference: the weekday the calendar week is considered to start
     (Phase 10D). STORAGE/PREFERENCE DATA ONLY — nothing in the current

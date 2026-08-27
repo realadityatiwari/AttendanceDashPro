@@ -2843,3 +2843,96 @@ Eliminate architectural ambiguity BEFORE implementation. The system must evolve 
 - **Phase 23.1 (implementation):** models changed (`user.py`, `academic.py`, `models/__init__.py`), migration `c8d9e0f1a2b3` created. Verified: `compileall` PASS · `alembic heads` → single head `c8d9e0f1a2b3` · offline `upgrade head --sql` + `downgrade` SQL PASS (correct DDL, guarded constraints). **Migration NOT applied to any database by the agent** — `backend/.env` points at the production Supabase pooler (Phase 22.2 documented state) and the local Docker daemon is down; applying `alembic upgrade` here could touch production, which is forbidden. Dev-DB application is an OPERATOR action (run on the isolated dev container with a dev `DATABASE_URI`), followed by production migration only when separately authorized. **Production DB not touched.**
 - **Phase 23.2 (implementation):** `Subject` model updated (`academic.py`), migration `d0e1f2a3b4c5` created. Verified: `compileall` PASS · `alembic heads` → single head `d0e1f2a3b4c5` · offline `upgrade --sql` + `downgrade` SQL PASS (single ALTER: `UNIQUE (code, semester_id)`) · `ix_subjects_code` preserved. Same DB-application constraint as 23.1 — migration NOT applied by the agent (would touch production); operator applies on the dev DB, and the migration's guarded preflight re-checks duplicates at apply time. **Production DB not touched.**
 - Git: clean working tree; no commit, no push, no PR.
+
+---
+
+### Phase 23.3 — Student Academic Assignment (implemented 2026-08-28)
+
+**Status: COMPLETE — consolidation/normalization around the existing Phase
+22.3/22.4 elective architecture; NOT a redesign.** Migration `e3f4a5b6c7d8`
+(chain: `d0e1f2a3b4c5` → `e3f4a5b6c7d8`). Offline SQL verified; DB application is
+an operator action (same environment constraint as 23.1/23.2 — `backend/.env` →
+production pooler, Docker down). **Not applied to production.**
+
+> **Scope note:** this execution prompt re-scopes Phase 23.3 as **Student
+> Academic Assignment**. The timetable/subsection-scheduling slice the 23.0
+> blueprint had labeled "23.3" is re-scoped to later Phase 23 timetable redesign
+> (per this prompt's roadmap framing: timetable/session/occurrence/event
+> redesign), and is DEFERRED here.
+
+**Objective:** make the relationship between a student and their academic
+placement / enrollment / elective choices explicit and authoritative, with the
+minimum additive normalization, without re-opening 23.1/23.2 and without
+recreating the 22.3/22.4 elective system.
+
+**Conceptual separation:**
+- **A. Academic placement** — `users.section_id` (+ nullable `users.subsection_id`)
+  → `Section` → `Semester` → `AcademicSession`; branch = `Section.program`.
+  Already authoritative (23.1); `/student/me` now also exposes `subsection_name`.
+- **B. Compulsory enrollment** — `student_enrollments` rows with
+  `enrollment_type = COMPULSORY` (common theory + practical subjects).
+- **C. Elective selection** — `StudentElectiveChoice` + `ElectiveResolver`
+  (Phase 22.3/22.4) remain the single authoritative resolver; the chosen
+  concrete subject is enrolled with `enrollment_type = ELECTIVE`. A logical slot
+  (DE-I/DE-II) is never itself an enrollment.
+
+**Models changed:**
+- `app/models/enums.py` — added `EnrollmentType(COMPULSORY, ELECTIVE)`.
+- `app/models/academic.py` — `StudentEnrollment` gains `enrollment_type`
+  (native enum `enrollmenttype`, default COMPULSORY, server_default
+  `'COMPULSORY'`). Import added for `text`.
+
+**Migration `e3f4a5b6c7d8` (parent `d0e1f2a3b4c5`):**
+1. `CREATE TYPE enrollmenttype AS ENUM ('COMPULSORY','ELECTIVE')`.
+2. `ADD COLUMN student_enrollments.enrollment_type ... DEFAULT 'COMPULSORY'`.
+3. Deterministic backfill: `UPDATE ... SET enrollment_type='ELECTIVE'` for every
+   enrollment having a matching `StudentElectiveChoice` for an Elective-I /
+   Elective-II subject.
+4. `ALTER COLUMN ... SET NOT NULL`.
+Downgrade reverses column + enum. Guarded (no destructive data change).
+
+**Services/repositories changed:**
+- `app/api/v1/endpoints/auth.py` — registration tags new enrollments
+  COMPULSORY (non-elective) / ELECTIVE (chosen DE-I/DE-II).
+- `app/repositories/user_repo.py` — added `get_elective_codes(user_id)` (the
+  student's own concrete elective codes per slot; never fabricated/borrowed).
+- `app/api/v1/endpoints/student.py` — `/student/me` now also returns
+  `subsection_name` + `elective_i` / `elective_ii`.
+- `app/schemas/student.py` — `StudentProfile` gains additive optional
+  `subsection_name`, `elective_i`, `elective_ii`.
+
+**API contract impact:** `GET /student/me` additive optional fields only —
+backward compatible; no second academic-assignment endpoint.
+
+**Frontend:** `frontend/src/types/api.ts` — `StudentProfile` gains additive
+optional `subsection_name`, `elective_i`, `elective_ii`.
+
+**Existing-data impact:** none rewritten. One new column backfilled
+deterministically (COMPULSORY default; ELECTIVE where a matching choice exists).
+Existing users/enrollments/choices/attendance unchanged.
+
+**Backward compatibility:** `enrollment_type` defaulted COMPULSORY; all
+consumers of `StudentEnrollment` and the elective resolver unchanged; elective
+catalog untouched.
+
+**Deferred (documented, NOT implemented):** timetable/subsection scheduling
+(original 23.0 "23.3" label — re-scoped later); placement↔enrollment semester
+FK / reusable authoritative student-context (Phase 23.4); subsection + elective
+backfill for unassigned legacy users (admin-controlled remediation); `branches`
+table (Branch gate open); enrollment redesign, elective catalog redesign
+(Phase 23.5), BNC-501 non-credit modeling (undecided).
+
+**Verification:**
+- `compileall` (full backend) — PASS.
+- Offline `alembic upgrade d0e1f2a3b4c5:e3f4a5b6c7d8 --sql` + downgrade SQL —
+  PASS (`CREATE TYPE` + `ADD COLUMN` + deterministic `UPDATE` + `SET NOT NULL`;
+  downgrade reverses).
+- `alembic heads` → single head `e3f4a5b6c7d8`; linear chain preserved.
+- Frontend `npx tsc --noEmit` — PASS.
+- Logic-level verification matrix (no DB, run in `%TEMP%\kilo` then removed):
+  catalog separation, cross-slot rejection, concrete→slot mapping, explicit
+  compulsory/elective distinction, slot-not-an-enrollment — ALL PASS.
+- **Migration NOT applied to any DB by the agent** — `backend/.env` → production
+  pooler, Docker daemon down. Operator applies on dev DB; then production only
+  when separately authorized. **Production DB not touched.**
+- Git: no commit, no push, no PR (working tree contains the 23.3 changes only).

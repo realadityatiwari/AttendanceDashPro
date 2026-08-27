@@ -47,16 +47,21 @@ async def get_student_profile(
     """
     Returns the authenticated student's profile, including read-only
     academic context resolved from the section -> semester -> session
-    chain and the student's quiz schedules.
+    chain, the student's quiz schedules, and the student's authoritative
+    academic assignment (subsection, elective choices — Phase 23.3).
     """
     repo = UserRepository(db)
     academic_context = await repo.get_academic_context(current_user)
+    elective_codes = await repo.get_elective_codes(current_user.id)
     section_name = current_user.section.name if current_user.section else None
+    subsection_name = current_user.subsection.name if current_user.subsection else None
     return StudentProfile(
         id=current_user.id,
         role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
         display_name=current_user.name,
         roll_number=current_user.roll_number,
         section_name=section_name,
-        **academic_context
+        subsection_name=subsection_name,
+        **academic_context,
+        **elective_codes,
     )

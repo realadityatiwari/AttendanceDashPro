@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, field_validator
 
 from app.models.user import User, Section
-from app.models.enums import UserRole, ElectiveSlot
+from app.models.enums import UserRole, ElectiveSlot, EnrollmentType
 from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from app.core.security import verify_password, create_access_token, hash_password, DUMMY_PASSWORD_HASH
 from app.core.logging import get_logger
@@ -179,7 +179,11 @@ async def register(
                 if subject.code == elective_ii_code:
                     elective_ii_subject = subject
             else:
-                db.add(StudentEnrollment(user_id=user.id, subject_id=subject.id))
+                db.add(StudentEnrollment(
+                    user_id=user.id,
+                    subject_id=subject.id,
+                    enrollment_type=EnrollmentType.COMPULSORY,
+                ))
 
         if elective_i_subject is None or elective_ii_subject is None:
             # The chosen codes are validated by the Pydantic model, but the
@@ -190,8 +194,8 @@ async def register(
                 detail="The selected elective subjects are not configured for the active semester",
             )
 
-        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_i_subject.id))
-        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_ii_subject.id))
+        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_i_subject.id, enrollment_type=EnrollmentType.ELECTIVE))
+        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_ii_subject.id, enrollment_type=EnrollmentType.ELECTIVE))
         db.add(StudentElectiveChoice(
             user_id=user.id,
             elective_slot=ElectiveSlot.ELECTIVE_I,

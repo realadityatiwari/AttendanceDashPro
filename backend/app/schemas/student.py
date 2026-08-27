@@ -18,6 +18,14 @@ class StudentProfile(BaseModel):
     display_name: str
     roll_number: Optional[str] = None
     section_name: Optional[str] = None
+    # Phase 23.3 (Student Academic Assignment): the student's subsection within
+    # their section (part of academic placement). NULL = UNKNOWN/UNASSIGNED.
+    subsection_name: Optional[str] = None
+    # Phase 23.3: the student's authoritative Department Elective selection as
+    # concrete subject codes (DE-I / DE-II). NULL = not assigned for that slot.
+    # The authoritative resolver remains ElectiveResolver (Phase 22.4).
+    elective_i: Optional[str] = None
+    elective_ii: Optional[str] = None
     # Academic context (read-only, resolved on demand from the user's
     # section -> semester -> academic session chain and quiz schedules).
     # `program` (Phase 10B) is populated from the stored `sections.program`

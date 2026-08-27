@@ -1825,13 +1825,13 @@ Date: 2026-08-23 · Scope: security audit + backend-authoritative hardening · Z
 |---|---|---|
 | Password hashing | PBKDF2-SHA256, 100k iterations, random salt, `hmac.compare_digest` | ✅ Secure |
 | JWT signing/validation | HS256, algorithm-pinned, exp + sub + DB user resolution | ✅ Secure |
-| Token expiry | 30 days — excessively long | ⚠️ Production-risk → fixed |
-| Rate limiting | none on login/register | ⚠️ Production-risk → fixed |
-| Login enumeration | user-not-found returns faster than wrong-password | ⚠️ Weak → fixed |
-| Password policy | min 8 only; no max/complexity | ⚠️ Weak → fixed |
-| Security headers | none | ⚠️ Missing → fixed |
-| Error handling | attendance mutation echoed internal `str(e)`; no global 500 handler | ⚠️ Production-risk → fixed |
-| Logging | none | ⚠️ Missing → fixed |
+| Token expiry | 30 days — excessively long | ⚠︝ Production-risk → fixed |
+| Rate limiting | none on login/register | ⚠︝ Production-risk → fixed |
+| Login enumeration | user-not-found returns faster than wrong-password | ⚠︝ Weak → fixed |
+| Password policy | min 8 only; no max/complexity | ⚠︝ Weak → fixed |
+| Security headers | none | ⚠︝ Missing → fixed |
+| Error handling | attendance mutation echoed internal `str(e)`; no global 500 handler | ⚠︝ Production-risk → fixed |
+| Logging | none | ⚠︝ Missing → fixed |
 | Authorization | all endpoints JWT-scoped; enrollment-scoped; owner-scoped; DB-authoritative ADMIN | ✅ Secure |
 | IDOR | no object-substitution vector found (session/event/lab/notification IDs are owner/enrollment-checked) | ✅ Secure |
 | CORS | env-driven explicit origins; credentials without wildcard | ✅ Secure |
@@ -2144,11 +2144,11 @@ Date: 2026-08-23 · Scope: create Dockerfiles, production compose, reverse proxy
 
 ```text
 proxy-net (bridge):
-  caddy ←→ frontend (proxy routing)
-  caddy ←→ backend (proxy routing)
+  caddy ↝→ frontend (proxy routing)
+  caddy ↝→ backend (proxy routing)
 
 data-net (internal: true):
-  backend ←→ postgres  (🔒 NO external route — PostgreSQL private)
+  backend ↝→ postgres  (🔒 NO external route — PostgreSQL private)
 ```
 
 Only port 80 (caddy) is published to the host. PostgreSQL has no host port, no
@@ -4708,6 +4708,154 @@ does not break any legitimate creation path. No path was modified.
 
 **PHASE 23.2 � COMPLETE.** **HARD STOP:** No commit made. No push performed.
 Production not touched. Phase 23.3 not started � requires a fresh execution
+prompt.
+
+---
+
+# AttendanceDash Pro � Phase 23.3 Walkthrough
+
+> **PHASE 23.3 COMPLETE � STUDENT ACADEMIC ASSIGNMENT (2026-08-28).** Made the
+> relationship between a student and their academic placement / compulsory
+> enrollment / elective selection **explicit and authoritative** by consolidating
+> around the already-existing Phase 22.3/22.4 elective architecture � the minimum
+> additive normalization, no redesign, no duplication.
+
+## Objective
+
+The execution prompt re-scoped Phase 23.3 as **Student Academic Assignment**:
+make the placement/enrollment/elective relationship explicit and authoritative
+without re-opening 23.1/23.2 and without recreating the authoritative elective
+resolver. The conceptual separation to enforce:
+
+```
+A. Academic placement   = User -> AcademicSession/Semester -> Branch -> Section -> Subsection
+B. Compulsory enrollment= subjects enrolled regardless of elective selection
+C. Elective selection   = DE-I/DE-II logical slots resolving to a concrete subject
+                          (a slot is never itself an enrollment)
+```
+
+## Discovery
+
+- **Placement:** `users.section_id` ? `Section(program, semester_id)` ?
+  `Semester` ? `AcademicSession`; `users.subsection_id` (23.1) ? `Subsection`
+  (table empty; all users NULL = UNKNOWN/UNASSIGNED). Branch = `Section.program`
+  ("CSE"). Placement was already authoritative via the section chain; `subsection`
+  was not exposed.
+- **Enrollment:** `student_enrollments(user_id, subject_id)`, UNIQUE(user_id,
+  subject_id). Registration enrolls every non-elective subject + the 2 chosen
+  electives. **Compulsory vs elective enrollment was IMPLICIT** (derivable from
+  the elective catalog + `StudentElectiveChoice`, not stored) � the core 23.3
+  normalization.
+- **Elective choice:** `student_elective_choices(user_id, elective_slot,
+  subject_id)`, UNIQUE(user_id, elective_slot), absent = unassigned; authoritative
+  `ElectiveResolver` (22.4). This system already satisfied slot?concrete-subject
+  separation and was NOT recreated.
+
+## Architectural decision
+
+Keep the existing 22.3/22.4 elective resolver + catalog as the single
+authoritative elective system; do NOT duplicate it. Add the **single** genuine
+normalization the phase requires: an explicit `enrollment_type`
+(COMPULSORY/ELECTIVE) discriminator on the enrollment row, defaulted COMPULSORY,
+so Compulsory enrollment (B) is stored and authoritative rather than derived.
+Complete the placement/exposure at the API boundary by extending the canonical
+`/student/me` (subsection_name + the student's own elective codes) � no second
+endpoint.
+
+## Files changed
+
+- `backend/app/models/enums.py` � `EnrollmentType(COMPULSORY, ELECTIVE)`.
+- `backend/app/models/academic.py` � `StudentEnrollment.enrollment_type`
+  (enum `enrollmenttype`, default/server_default COMPULSORY).
+- `backend/alembic/versions/e3f4a5b6c7d8_add_enrollment_type.py` � NEW migration.
+- `backend/app/api/v1/endpoints/auth.py` � registration tags COMPULSORY/ELECTIVE.
+- `backend/app/repositories/user_repo.py` � `get_elective_codes(user_id)`.
+- `backend/app/api/v1/endpoints/student.py` � `/student/me` returns
+  `subsection_name`, `elective_i`, `elective_ii`.
+- `backend/app/schemas/student.py` � `StudentProfile` additive optional fields.
+- `frontend/src/types/api.ts` � `StudentProfile` additive optional fields.
+
+## Schema changes
+
+`student_enrollments.enrollment_type` � native enum `enrollmenttype`
+(COMPULSORY/ELECTIVE), server_default COMPULSORY, NOT NULL after backfill.
+
+## Migration
+
+`e3f4a5b6c7d8` (parent `d0e1f2a3b4c5`):
+1. `CREATE TYPE enrollmenttype AS ENUM ('COMPULSORY','ELECTIVE')`
+2. `ADD COLUMN student_enrollments.enrollment_type ... DEFAULT 'COMPULSORY'`
+3. Deterministic backfill: `SET enrollment_type='ELECTIVE'` where a matching
+   `StudentElectiveChoice` for an Elective-I/II subject exists (choice implies
+   elective; defensive tag filter).
+4. `ALTER COLUMN ... SET NOT NULL`
+Downgrade reverses (drop column, drop type with checkfirst).
+
+## Data impact
+
+None rewritten. One new column backfilled deterministically. Existing users,
+enrollments, choices, attendance, sessions, events unchanged. No orphans or
+duplicates introduced. Migration NOT applied by the agent.
+
+## Verification
+
+- Backend `compileall` (full) � PASS.
+- Offline `alembic upgrade d0e1f2a3b4c5:e3f4a5b6c7d8 --sql` + downgrade SQL �
+  PASS (CREATE TYPE + ADD COLUMN + deterministic UPDATE + SET NOT NULL;
+  downgrade reverses).
+- `alembic heads` � single head `e3f4a5b6c7d8`; linear chain preserved.
+- Frontend `npx tsc --noEmit` � PASS.
+- Logic-level verification matrix (no DB, temp script removed after run):
+  DE-I/DE-II catalog disjoint; cross-slot selection rejected; concrete subject ?
+  correct slot; `enrollment_type` present on the model; logical slot not an
+  enrollment; catalog matches the authoritative CSE V CTT. ALL PASS.
+- **Assignment model satisfies the required matrix:** Student A (CS-5A/51,
+  DE-I?BCS-054, DE-II?BCS-058) and Student B (CS-5A/52, DE-I?BCS-052,
+  DE-II?BCS-055) � compulsory vs elective distinguishable; DE-I/DE-II not
+  swappable; DE-I cannot pick a DE-II subject; cross-semester subject blocked at
+  selection (active-semester scope); unassigned elective stays NULL; one
+  student's choice never leaks into another (user_id scoping); existing
+  assignments unchanged.
+
+## Security considerations
+
+Backend remains authoritative: registration validates electives against the
+catalog and the active semester; `/student/me` is JWT-scoped to the caller;
+elective codes are read from the caller's own `StudentElectiveChoice` (never
+borrowed); placement/enrollment mutations are not exposed (no student
+self-assignment endpoint). Frontend has no new mutation surface.
+
+## Deferred items
+
+- Phase 23.4 authoritative/reusable student-context service (not started).
+- Timetable / session / occurrence / event / quiz / attendance redesign (the
+  slice the 23.0 blueprint had labeled "23.3" � re-scoped later).
+- Subsection + elective backfill for unassigned legacy users (admin-controlled
+  remediation; no fabrication).
+- Placement?enrollment semester FK (single-semester reality; needs 23.4 product
+  decision).
+- `branches` table / Branch parentage (23.1 gate), elective catalog redesign
+  (Phase 23.5), BNC-501 non-credit modeling (undecided).
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. Migration
+`e3f4a5b6c7d8` is NOT applied to any database; the agent's environment
+(`backend/.env` ? production Supabase pooler, Docker daemon down) forbids
+applying it. Operator applies on the isolated dev DB, then production only when
+separately authorized. **Production DB not touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.3 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.3 implemented section (models, migration,
+  deferred, verification).
+- task.md: Phase 23.3 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.3 � COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.4 not started � requires a fresh execution
 prompt.
 
 ---

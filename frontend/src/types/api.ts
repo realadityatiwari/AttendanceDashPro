@@ -6,6 +6,9 @@ export interface StudentProfile {
   display_name: string;
   roll_number: string | null;
   section_name: string | null;
+  subsection_name?: string | null;
+  elective_i?: string | null;
+  elective_ii?: string | null;
   program?: string | null;
   semester_name?: string | null;
   academic_session?: string | null;
