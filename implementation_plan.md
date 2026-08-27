@@ -3074,3 +3074,77 @@ resolved subject as before with a cleaner authoritative catalog underneath.
 - **Migration NOT applied to any DB by the agent** — production pooler, Docker
   down. Operator applies on dev DB; production only when separately authorized.
 - Git: no commit, no push, no PR (working tree contains 23.5 changes only).
+
+---
+
+### Phase 23.6 — Actual Occurrence Architecture (implemented 2026-08-28)
+
+**Status: COMPLETE — per-subject occurrence outcomes.** Migration
+`f6a7b8c9d0e1` (parent `f5a6b7c8d9e0`). Offline SQL verified; DB application is
+an operator action (production pooler, Docker down). **Not applied to
+production.**
+
+**Objective:** separate EXPECTED schedule (`timetable_entries`) from ACTUAL
+occurrence (`class_sessions`) and let one occurrence have different effective
+types for different concrete subjects in the same elective slot — no
+per-student infrastructure duplication, no leakage.
+
+**Discovery — gap:** a `class_sessions` row is the canonical actual occurrence
+but its `is_extra`/`is_cancelled` are single-valued. The DE-II divergence
+(BCS-058→quiz, BCS-055→normal, BCS-056→cancelled) was not expressible: a
+subject-specific SURPRISE_QUIZ created an extra (lecture + quiz), and a
+subject-specific CLASS_CANCELLED for a non-anchor subject matched no timetable
+entry (no-op).
+
+**Architectural decision:** additive `occurrence_outcomes` table
+(class_session_id, subject_id, outcome_type; UNIQUE(session, subject)) + enum
+`OccurrenceOutcomeType` (EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/
+SURPRISE_QUIZ/CANCELLED). The session row = anchor (shared default); an outcome
+overrides the effective type for ONE concrete subject. Read path applies the
+outcome for the student's RESOLVED subject; `class_sessions.id` stays the
+stable attendance identity.
+
+**Files changed:**
+- NEW `app/models/occurrence.py` (`OccurrenceOutcome`).
+- `app/models/enums.py` — NEW `OccurrenceOutcomeType`.
+- `app/models/__init__.py` — export.
+- NEW `alembic/versions/f6a7b8c9d0e1_add_occurrence_outcomes.py`.
+- `app/services/event_session_service.py` — synchronizer creates outcomes for
+  subject-specific elective events (`_desired_schedule` returns
+  `desired_outcomes`; `_reconcile_outcomes` state-based create/update/remove).
+- `app/repositories/session_repo.py` — `add_outcome` / `delete_outcome`.
+- `app/repositories/attendance_repo.py` — `_outcome_join_on` + `_apply_outcome_to_row`;
+  outcome LEFT JOIN added to `get_subject_counts_up_to_date`,
+  `get_subject_counts_for_user`, `get_subject_counts_between`,
+  `get_sessions_with_status`, `get_daily_sessions`, `_fetch_history_occurrences`.
+- `app/engines/practical_occurrence.py` — doc update for outcome-cancelled rows.
+
+**Schema/migration:** `occurrence_outcomes` (id, timestamps, class_session_id
+FK, subject_id FK, outcome_type enum, UNIQUE(class_session_id, subject_id),
+index on class_session_id). Empty table (no backfill). Downgrade drops
+index → table → enum.
+
+**Occurrence semantics:** anchor session flags + per-subject outcome override.
+MODIFIED deferred (Phase 23.7). Quiz-day unchanged.
+
+**Elective isolation:** subject-specific event (elective_slot NULL + catalog
+elective subject) with a slot session that date → outcome override (BCS-058→
+SURPRISE_QUIZ, BCS-056→CANCELLED, BCS-055→anchor/normal). No slot session →
+extra fallback (subject-scoped) / cancellation no-op. Outcome join keyed on
+(session, student's resolved subject) → no cross-student leakage.
+
+**Compatibility impact:** zero effect on existing data (empty table; LEFT JOIN
+yields NULL for every existing row). Attendance engine, eligibility, calendar
+engine, event registry, quiz, consumers untouched. No frontend change.
+
+**Verification:**
+- `compileall` (app + alembic + scripts) — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic single head `f6a7b8c9d0e1`; linear chain preserved.
+- Offline upgrade/downgrade SQL — PASS.
+- `_desired_schedule` branch simulations (outcome path, fallback extras, legacy
+  non-elective path) — PASS.
+- Per-subject override logic (A→extra/quiz, B→anchor/normal, C→cancelled) — PASS.
+- Query-build + import checks (no circular imports) — PASS.
+- **Migration NOT applied to any DB by the agent.** Production DB not touched.
+- Git: no commit, no push, no PR (working tree contains 23.6 changes only).

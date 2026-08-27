@@ -7,7 +7,8 @@ from datetime import date
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
 from app.models.academic import StudentElectiveChoice
-from app.models.enums import AttendanceStatus, ClassType
+from app.models.occurrence import OccurrenceOutcome
+from app.models.enums import AttendanceStatus, ClassType, OccurrenceOutcomeType
 from app.engines.practical_occurrence import (
     collapse_count_rows,
     group_practical_occurrences,
@@ -17,6 +18,40 @@ from app.engines.practical_occurrence import (
 class AttendanceRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _outcome_join_on(resolved_subject_id):
+        """ON clause for the Phase 23.6 occurrence-outcome LEFT JOIN.
+
+        Matches a class session to a per-subject occurrence outcome for the
+        student's RESOLVED subject (their elective choice for the slot, else
+        the session's own subject). A student whose subject has no outcome row
+        gets NULL -> the anchor session state (unchanged behavior).
+        """
+        return and_(
+            OccurrenceOutcome.class_session_id == ClassSession.id,
+            OccurrenceOutcome.subject_id == resolved_subject_id,
+        )
+
+    @staticmethod
+    def _apply_outcome_to_row(row: dict) -> dict:
+        """Phase 23.6: apply a per-subject occurrence outcome to a read row.
+
+        CANCELLED -> effective is_cancelled = True (cancelled != absent,
+        excluded from attendance math like any cancelled occurrence);
+        EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/SURPRISE_QUIZ ->
+        effective is_extra = True. Absence (outcome_type None) leaves the
+        anchor session's own flags untouched. The row dict is returned for
+        chaining.
+        """
+        outcome_type = row.get("outcome_type")
+        if outcome_type is None:
+            return row
+        if outcome_type == OccurrenceOutcomeType.CANCELLED:
+            row["is_cancelled"] = True
+        else:
+            row["is_extra"] = True
+        return row
 
     @staticmethod
     def _elective_choice_on(user_id: UUID):
@@ -94,12 +129,18 @@ class AttendanceRepository:
             ClassSession.is_cancelled,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
         ).outerjoin(
             AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(
             StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(
+                func.coalesce(StudentElectiveChoice.subject_id, ClassSession.subject_id)
+            )
         ).filter(
             self._resolved_subject_match(subject_id),
             ClassSession.date <= end_date,
@@ -111,14 +152,17 @@ class AttendanceRepository:
 
         result = await self.db.execute(stmt)
         rows = [
-            {
-                "class_type": row[0],
-                "status": row[1],
-                "date": row[2],
-                "is_cancelled": row[3],
-                "start_time": row[4],
-                "end_time": row[5],
-            }
+            self._apply_outcome_to_row(
+                {
+                    "class_type": row[0],
+                    "status": row[1],
+                    "date": row[2],
+                    "is_cancelled": row[3],
+                    "start_time": row[4],
+                    "end_time": row[5],
+                    "outcome_type": row[6],
+                }
+            )
             for row in result.all()
         ]
         return collapse_count_rows(rows)
@@ -148,10 +192,14 @@ class AttendanceRepository:
             ClassSession.is_cancelled,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(
             StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(resolved_subject_id)
         ).join(
             StudentEnrollment,
             (StudentEnrollment.user_id == user_id)
@@ -168,15 +216,18 @@ class AttendanceRepository:
 
         result = await self.db.execute(stmt)
         rows = [
-            {
-                "subject_id": row[0],
-                "class_type": row[1],
-                "status": row[2],
-                "date": row[3],
-                "is_cancelled": row[4],
-                "start_time": row[5],
-                "end_time": row[6],
-            }
+            self._apply_outcome_to_row(
+                {
+                    "subject_id": row[0],
+                    "class_type": row[1],
+                    "status": row[2],
+                    "date": row[3],
+                    "is_cancelled": row[4],
+                    "start_time": row[5],
+                    "end_time": row[6],
+                    "outcome_type": row[7],
+                }
+            )
             for row in result.all()
         ]
         return collapse_count_rows(rows, include_subject=True)
@@ -233,12 +284,18 @@ class AttendanceRepository:
             ClassSession.is_cancelled,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
         ).outerjoin(
             AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(
             StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(
+                func.coalesce(StudentElectiveChoice.subject_id, ClassSession.subject_id)
+            )
         ).filter(
             self._resolved_subject_match(subject_id),
             ClassSession.date >= start_date,
@@ -258,14 +315,17 @@ class AttendanceRepository:
 
         result = await self.db.execute(stmt)
         rows = [
-            {
-                "class_type": row[0],
-                "status": row[1],
-                "date": row[2],
-                "is_cancelled": row[3],
-                "start_time": row[4],
-                "end_time": row[5],
-            }
+            self._apply_outcome_to_row(
+                {
+                    "class_type": row[0],
+                    "status": row[1],
+                    "date": row[2],
+                    "is_cancelled": row[3],
+                    "start_time": row[4],
+                    "end_time": row[5],
+                    "outcome_type": row[6],
+                }
+            )
             for row in result.all()
         ]
         return collapse_count_rows(rows)
@@ -301,10 +361,14 @@ class AttendanceRepository:
             AttendanceRecord.status,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(
             StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(resolved_subject_id)
         ).join(
             Subject, Subject.id == resolved_subject_id
         ).join(
@@ -325,7 +389,10 @@ class AttendanceRepository:
         )
 
         result = await self.db.execute(stmt)
-        rows = [dict(row._mapping) for row in result.all()]
+        rows = [
+            self._apply_outcome_to_row(dict(row._mapping))
+            for row in result.all()
+        ]
         # Track lab correction: contiguous two-period PRACTICAL blocks are one
         # logical occurrence for dashboard/analytics/calendar consumers (a lab
         # counts once in weekly analytics and calendar session counts).
@@ -349,10 +416,14 @@ class AttendanceRepository:
             AttendanceRecord.status,
             TimetableEntry.start_time,
             TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
         ).outerjoin(
             TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
         ).outerjoin(
             StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(resolved_subject_id)
         ).join(
             Subject, Subject.id == resolved_subject_id
         ).join(
@@ -368,7 +439,10 @@ class AttendanceRepository:
         ).order_by(TimetableEntry.start_time.asc().nulls_last(), ClassSession.id)
 
         result = await self.db.execute(stmt)
-        rows = [dict(row._mapping) for row in result.all()]
+        rows = [
+            self._apply_outcome_to_row(dict(row._mapping))
+            for row in result.all()
+        ]
         # Track lab correction: a two-hour laboratory block (two contiguous
         # timetable PRACTICAL periods) is ONE attendance occurrence. The daily
         # read model collapses the block into a single card with the block
@@ -434,9 +508,14 @@ class AttendanceRepository:
                 AttendanceRecord.updated_at.label('marked_at'),
                 TimetableEntry.start_time,
                 TimetableEntry.end_time,
+                OccurrenceOutcome.outcome_type,
             )
             .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
             .outerjoin(StudentElectiveChoice, self._elective_choice_on(user_id))
+            .outerjoin(
+                # Phase 23.6: per-subject occurrence outcome (student-scoped).
+                OccurrenceOutcome, self._outcome_join_on(resolved_subject_id)
+            )
             .join(Subject, Subject.id == resolved_subject_id)
             .join(
                 # Scope every read to the authenticated student's enrolled subjects
@@ -456,7 +535,10 @@ class AttendanceRepository:
             )
         )
         result = await self.db.execute(stmt)
-        rows = [dict(row._mapping) for row in result.all()]
+        rows = [
+            self._apply_outcome_to_row(dict(row._mapping))
+            for row in result.all()
+        ]
         return group_practical_occurrences(rows)
 
     @staticmethod

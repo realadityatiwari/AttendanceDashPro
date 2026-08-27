@@ -2344,4 +2344,54 @@ Normalize the elective/catalog domain only — make the catalog the authoritative 
 
 - Phase 23.5 catalog redesign is complete. Do not reopen.
 - `ElectiveResolver` is the single authoritative resolver (DB-driven, never recreated as code constants).
-- Phase 23.6+ (next architecture slice) requires a fresh execution prompt.
+
+## PHASE 23.6 - ACTUAL OCCURRENCE ARCHITECTURE (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - per-subject occurrence outcomes.** Migration `f6a7b8c9d0e1` (parent `f5a6b7c8d9e0`). Offline SQL verified; DB application is an operator action. No commit, no push, no PR.
+
+> Scope note: this execution prompt establishes subject-specific occurrence outcomes so one shared elective-slot session can have different effective types per concrete subject (BCS-058?quiz, BCS-055?normal, BCS-056?cancelled) with no leakage.
+
+## Objective
+
+Separate EXPECTED schedule (`timetable_entries`) from ACTUAL occurrence (`class_sessions`) and let one occurrence have different effective types per concrete elective subject - without duplicating infrastructure per student, without a second resolver, without redesigning attendance/eligibility/calendar/quiz.
+
+## Delivered
+
+- [x] `app/models/occurrence.py`: `OccurrenceOutcome` (class_session_id FK, subject_id FK, outcome_type; UNIQUE(session, subject))
+- [x] `app/models/enums.py`: `OccurrenceOutcomeType` (EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/SURPRISE_QUIZ/CANCELLED)
+- [x] Migration `f6a7b8c9d0e1` (parent `f5a6b7c8d9e0`): CREATE TYPE + CREATE TABLE + index; downgrade drops all
+- [x] `EventSessionSynchronizer` extended (NOT replaced): subject-specific elective events produce `desired_outcomes`; `_reconcile_outcomes` state-based create/update/remove (idempotent)
+- [x] `session_repo.py`: `add_outcome` / `delete_outcome`
+- [x] `attendance_repo.py`: `_outcome_join_on` + `_apply_outcome_to_row`; outcome LEFT JOIN added to all 6 read/counting queries (student-resolved-subject key)
+- [x] `practical_occurrence.py`: outcome-cancelled rows documented in `occurrence_is_cancelled`
+- [x] Fallback: no slot session that date -> extra fallback (subject-scoped) / cancellation no-op
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS (no frontend change); alembic single head `f6a7b8c9d0e1`
+- [x] `_desired_schedule` branch simulations PASS (outcome path / fallback / legacy non-elective)
+- [x] Per-subject override logic PASS (A?quiz, B?normal, C?cancelled; no leakage)
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.7 event-scope redesign / MODIFIED outcome
+- [ ] NO Phase 23.8 quiz architecture integration
+- [ ] NO Phase 23.9 attendance-mutation integration (read path only; outcome-cancelled marking rejection deferred)
+- [ ] NO Phase 23.10 read-model / 23.11 API-scope / Phase 24 Admin Portal
+- [ ] NO attendance/eligibility/calendar/quiz/timetable engine changes
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (app + alembic + scripts) PASS; alembic head `f6a7b8c9d0e1` (single head)
+- Offline upgrade/downgrade SQL PASS
+- Frontend `npx tsc --noEmit` PASS (no frontend change)
+- Simulations: subject-specific SURPRISE_QUIZ(BCS-058)?outcome; CLASS_CANCELLED(BCS-056)?outcome (anchor kept); fallback extras; non-elective legacy path - PASS
+- Per-subject override: A?extra(quiz), B?anchor(normal), C?cancelled - no leakage (per-subject join key)
+- Query-build + import checks PASS (no circular imports)
+- **Migration NOT applied to any DB by the agent** - production pooler, Docker down. Operator applies on dev DB; production only when separately authorized. Production DB NOT touched.
+- Git: working tree contains 23.6 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.6 occurrence architecture is complete. Do not reopen.
+- `EventSessionSynchronizer` remains the ONE event?session synchronizer (extended, never duplicated).
+- Phase 23.7 (event scope) requires a fresh execution prompt.

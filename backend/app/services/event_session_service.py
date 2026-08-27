@@ -74,8 +74,9 @@ from app.engines.calendar_engine import (
     get_event_priority,
 )
 from app.models.event import AcademicEvent
-from app.models.enums import EventType, ClassType, SessionDesignation, ElectiveSlot
+from app.models.enums import EventType, ClassType, SessionDesignation, ElectiveSlot, OccurrenceOutcomeType
 from app.models.timetable import ClassSession, TimetableEntry
+from app.models.occurrence import OccurrenceOutcome
 from app.repositories.calendar_repo import CalendarRepository
 from app.repositories.session_repo import SessionRepository
 
@@ -125,6 +126,15 @@ CANCELLATION_TYPES = {
     EventType.LAB_CANCELLED,
 }
 
+# Phase 23.6: event type -> occurrence outcome type for subject-specific
+# elective events. Unused event types are intentionally absent (no mapping).
+EVENT_TO_OUTCOME_TYPE: dict[EventType, OccurrenceOutcomeType] = {
+    EventType.EXTRA_LECTURE: OccurrenceOutcomeType.EXTRA_LECTURE,
+    EventType.EXTRA_TUTORIAL: OccurrenceOutcomeType.EXTRA_TUTORIAL,
+    EventType.EXTRA_PRACTICAL: OccurrenceOutcomeType.EXTRA_PRACTICAL,
+    EventType.SURPRISE_QUIZ: OccurrenceOutcomeType.SURPRISE_QUIZ,
+}
+
 
 class EventSessionSynchronizer:
     """
@@ -162,6 +172,20 @@ class EventSessionSynchronizer:
         for entry in entries:
             entries_by_dow.setdefault(entry.day_of_week, []).append(entry)
 
+        # Phase 23.6: which subjects are Departmental Elective catalog subjects
+        # (subject.elective_slot IS NOT NULL). Subject-specific events targeting
+        # one of these subjects produce occurrence OUTCOMES (per-subject
+        # overrides of a shared slot session) instead of separate sessions.
+        from app.models.academic import Subject as SubjectModel
+        result = await self.db.execute(
+            select(SubjectModel.id, SubjectModel.elective_slot).where(
+                SubjectModel.elective_slot.isnot(None)
+            )
+        )
+        subject_elective_slots: Dict[object, ElectiveSlot] = {
+            row[0]: row[1] for row in result.all()
+        }
+
         if span_override is not None:
             event_start, event_end = span_override
         else:
@@ -190,10 +214,11 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, desired_extras, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed = (
+            desired_scheduled, desired_extras, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed, desired_outcomes = (
                 self._desired_schedule(
                     current, all_active_events, entries_by_dow,
                     by_date.get(current, []), attended_ids,
+                    subject_elective_slots,
                 )
             )
             await self._reconcile_date(
@@ -205,10 +230,12 @@ class EventSessionSynchronizer:
                 desired_quiz_days,
                 quiz_day_slots,
                 cancellation_removed,
+                desired_outcomes,
                 manage_mid_sem,
                 mid_sem_subject,
                 by_date.get(current, []),
                 attended_ids,
+                subject_elective_slots,
             )
             current += timedelta(days=1)
 
@@ -253,7 +280,8 @@ class EventSessionSynchronizer:
         entries_by_dow: Dict[int, list],
         existing: List[ClassSession],
         attended_ids: set,
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set]:
+        subject_elective_slots: Dict[object, ElectiveSlot],
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set, Dict[object, OccurrenceOutcomeType]]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
@@ -288,10 +316,21 @@ class EventSessionSynchronizer:
                              cancelled and exclude it from attendance math).
                              LAB_CANCELLED is deliberately excluded: Phase 9.1
                              froze "attended lab sessions are never cancelled".
+          desired_outcomes:  {subject_id: OccurrenceOutcomeType} — Phase 23.6:
+                             subject-specific elective events (elective_slot
+                             NULL targeting a catalog elective subject) whose
+                             slot HAS a timetable session on this date. These
+                             produce per-subject occurrence OUTCOMES overriding
+                             the shared anchor session (e.g. only Student A's
+                             BCS-058 becomes a Surprise Quiz while Student B's
+                             BCS-055 stays a normal lecture). When the slot has
+                             NO timetable session on the date, the event falls
+                             back to the regular extra path (a subject-scoped
+                             session) and never appears here.
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}, {}, set(), set(), {}, set()
+            return {}, {}, {}, set(), set(), {}, set(), {}
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
@@ -314,11 +353,45 @@ class EventSessionSynchronizer:
         extras_slots: Dict[Tuple[object, object], Optional[ElectiveSlot]] = {}
         cancelled_practical_subjects: set = set()
         cancellation_removed: set = set()
+        # Phase 23.6: per-subject occurrence outcomes for subject-specific
+        # elective events (subject_id -> outcome type). Cancellation wins when
+        # multiple subject-specific events collide on one subject/date; else
+        # the highest-priority extra type (deterministic event ordering).
+        desired_outcomes: Dict[object, OccurrenceOutcomeType] = {}
         for event in ordered:
             if event.event_type in CLOSURE_TYPES:
                 # Unreachable on a working day (closure => non-working), kept
                 # as the legacy guard.
                 continue
+            # Phase 23.6: subject-specific ELECTIVE event (no slot marker, but
+            # the concrete subject is a catalog elective subject). When the
+            # subject's slot has a timetable session on this date, the event
+            # OVERRIDES that shared anchor session for the subject (outcome).
+            # When the slot has no session here, extras fall back to the
+            # regular subject-scoped extra path below (a session only that
+            # subject's students see) and cancellations become no-ops.
+            if (
+                event.elective_slot is None
+                and event.subject_id is not None
+                and event.subject_id in subject_elective_slots
+            ):
+                subject_slot = subject_elective_slots[event.subject_id]
+                slot_has_timetable = any(
+                    entry.elective_slot == subject_slot
+                    for entry in scheduled.values()
+                )
+                if slot_has_timetable:
+                    if event.event_type in CANCELLATION_TYPES:
+                        desired_outcomes[event.subject_id] = OccurrenceOutcomeType.CANCELLED
+                    elif event.event_type in EXTRA_OCCURRENCE_TYPES:
+                        desired_outcomes[event.subject_id] = EVENT_TO_OUTCOME_TYPE.get(
+                            event.event_type, OccurrenceOutcomeType.SURPRISE_QUIZ
+                        )
+                    continue
+                if event.event_type in CANCELLATION_TYPES:
+                    # No session to cancel on this date (nothing matches) —
+                    # a no-op, matching the pre-23.6 behavior.
+                    continue
             if event.event_type in CANCELLATION_TYPES:
                 # Remove ONE matching occurrence (legacy splice semantics).
                 if event.class_type == ClassType.PRACTICAL:
@@ -383,7 +456,7 @@ class EventSessionSynchronizer:
             and event.elective_slot is not None
         }
 
-        return scheduled, extras, extras_slots, mid_sem_active, quiz_day_subjects, quiz_day_slots, cancellation_removed
+        return scheduled, extras, extras_slots, mid_sem_active, quiz_day_subjects, quiz_day_slots, cancellation_removed, desired_outcomes
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -407,10 +480,12 @@ class EventSessionSynchronizer:
         desired_quiz_days: set,
         quiz_day_slots: Dict[object, Optional[ElectiveSlot]],
         cancellation_removed: set,
+        desired_outcomes: Dict[object, OccurrenceOutcomeType],
         manage_mid_sem: bool,
         mid_sem_subject: object,
         existing: List[ClassSession],
         attended_ids: set,
+        subject_elective_slots: Dict[object, ElectiveSlot],
     ) -> None:
         desired_scheduled_ids = set(desired_scheduled.keys())
 
@@ -596,6 +671,106 @@ class EventSessionSynchronizer:
                 await self._designate_mid_sem(target, mid_sem_subject)
             else:
                 await self._clear_mid_sem(target, mid_sem_subject)
+
+        # Phase 23.6: subject-specific elective-event outcomes. After the main
+        # session reconciliation, create/update occurrence_outcomes for the
+        # desired subjects and remove stale ones no longer implied by events
+        # (state-based, idempotent — runs even when desired_outcomes is empty
+        # so a deactivated event's outcomes are always removed).
+        await self._reconcile_outcomes(
+            target, desired_scheduled, desired_outcomes,
+            existing, subject_elective_slots,
+        )
+
+    # -- Phase 23.6 occurrence outcomes -----------------------------------------
+
+    async def _reconcile_outcomes(
+        self,
+        target: date,
+        desired_scheduled: Dict[object, object],
+        desired_outcomes: Dict[object, OccurrenceOutcomeType],
+        existing: List[ClassSession],
+        subject_elective_slots: Dict[object, ElectiveSlot],
+    ) -> None:
+        """
+        State-based reconciliation of per-subject occurrence outcomes
+        (Phase 23.6). A subject-specific elective event whose slot has a
+        timetable session on this date overrides that shared anchor session
+        for the subject (e.g. only BCS-058 students see a Surprise Quiz while
+        BCS-055 stays a normal lecture).
+
+        The anchor session is the timetable-bound session for the subject's
+        slot (deterministic: first by timetable start time, then session id).
+        Creating/updating an outcome NEVER modifies the session row or any
+        attendance record. Stale outcomes (subject no longer implied by an
+        active event on this date) are removed; outcomes never hold attendance
+        and are safe to delete.
+        """
+        # Map slot -> anchor timetable entry on this date (desired_scheduled).
+        anchor_entry_by_slot: Dict[ElectiveSlot, object] = {}
+        for entry in desired_scheduled.values():
+            if entry.elective_slot is not None:
+                anchor_entry_by_slot.setdefault(entry.elective_slot, entry)
+
+        # Anchor sessions already materialized for the date.
+        anchor_session_by_slot: Dict[ElectiveSlot, ClassSession] = {}
+        for session in existing:
+            if session.timetable_entry_id is None:
+                continue
+            slot = None
+            for entry in anchor_entry_by_slot.values():
+                if entry.id == session.timetable_entry_id:
+                    slot = entry.elective_slot
+                    break
+            if slot is not None:
+                # Deterministic: keep the earliest by id (start time ordering
+                # is not available on the session row here; id is stable).
+                anchor_session_by_slot.setdefault(slot, session)
+
+        # Build the desired (session, subject) -> outcome_type set.
+        desired_rows: Dict[Tuple[object, object], OccurrenceOutcomeType] = {}
+        for subject_id, outcome_type in desired_outcomes.items():
+            slot = subject_elective_slots.get(subject_id)
+            if slot is None or slot not in anchor_session_by_slot:
+                # No anchor session for this subject's slot on this date —
+                # nothing to override (the event fell back to the extra path).
+                continue
+            session = anchor_session_by_slot[slot]
+            desired_rows[(session.id, subject_id)] = outcome_type
+
+        # Load the date's existing outcomes for these sessions.
+        session_ids = list(anchor_session_by_slot[s].id for s in anchor_session_by_slot)
+        existing_outcomes = await self._load_outcomes_for_sessions(session_ids)
+        existing_key_to_row = {
+            (o.class_session_id, o.subject_id): o for o in existing_outcomes
+        }
+
+        # Create / update the desired rows.
+        for key, outcome_type in desired_rows.items():
+            row = existing_key_to_row.get(key)
+            if row is None:
+                self.session_repo.add_outcome(
+                    class_session_id=key[0],
+                    subject_id=key[1],
+                    outcome_type=outcome_type,
+                )
+            elif row.outcome_type != outcome_type:
+                row.outcome_type = outcome_type
+
+        # Remove stale outcomes (subject no longer implied on this date).
+        for key, row in existing_key_to_row.items():
+            if key not in desired_rows:
+                await self.session_repo.delete_outcome(row)
+
+    async def _load_outcomes_for_sessions(self, session_ids: List[object]) -> List[OccurrenceOutcome]:
+        if not session_ids:
+            return []
+        result = await self.db.execute(
+            select(OccurrenceOutcome).where(
+                OccurrenceOutcome.class_session_id.in_(session_ids)
+            )
+        )
+        return list(result.scalars().all())
 
     # -- Phase 9.1 mid-sem designation ------------------------------------------
 

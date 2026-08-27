@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · **Phase 23.6 (Actual Occurrence Architecture) COMPLETE (2026-08-28)** — subject-specific per-subject occurrence outcomes (`occurrence_outcomes` table + `OccurrenceOutcomeType` enum; migration `f6a7b8c9d0e1`); `EventSessionSynchronizer` extended to create outcomes for subject-specific elective events; `attendance_repo` read queries apply outcome per student (elective isolation: DE-II BCS-058→quiz, BCS-055→normal, BCS-056→cancelled, no leakage); `occurrence_is_cancelled` engine function extended. Not applied to production (operator boundary). · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -72,7 +72,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
-| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary). Phase 23.6+ pending. |
+| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary). Phase 23.7+ pending. |
 
 ---
 
@@ -2541,6 +2541,130 @@ before, with a cleaner authoritative catalog underneath.
 
 ---
 
+# 🟢 Phase 23.6 — Actual Occurrence Architecture (COMPLETE, 2026-08-28)
+
+**Status: COMPLETE — per-subject occurrence outcomes.** Migration
+`f6a7b8c9d0e1` (chain: `f5a6b7c8d9e0` → `f6a7b8c9d0e1`). Offline SQL verified;
+live DB application is an operator action (same environment constraint as prior
+23.x — `backend/.env` → production pooler, Docker down). No commit, no push, no
+PR.
+
+## Objective
+
+Establish a clear separation between the EXPECTED schedule
+(`timetable_entries`) and the ACTUAL occurrence (`class_sessions`), and let one
+actual occurrence have DIFFERENT effective types for different concrete
+subjects in the same Departmental Elective slot — without duplicating
+timetable/session/event infrastructure per student and without exposing one
+student's occurrence to another.
+
+## Discovery — gap
+
+A `class_sessions` row is the canonical actual occurrence (normal / extra /
+cancelled / quiz-day / surprise quiz via `is_extra` + `is_cancelled`;
+modified/substitution is calendar-engine-level). It is complete for SHARED
+occurrences, but its `is_extra`/`is_cancelled` flags are single-valued — the
+DE-II divergence (`BCS-058→Surprise Quiz`, `BCS-055→Normal Lecture`,
+`BCS-056→Cancelled`) could not be expressed. A subject-specific SURPRISE_QUIZ
+created an *extra* (Student A saw lecture + quiz), and a subject-specific
+CLASS_CANCELLED for a non-anchor subject (BCS-056) matched no timetable entry
+(no-op).
+
+## Architectural decision
+
+New additive table `occurrence_outcomes` (class_session_id, subject_id,
+outcome_type; UNIQUE(session, subject)) + enum `OccurrenceOutcomeType`
+(EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/SURPRISE_QUIZ/CANCELLED). The
+session row remains the ANCHOR (shared default); an outcome *overrides* the
+occurrence's effective type for ONE concrete subject. Read path applies the
+outcome for the student's resolved elective subject; absence = anchor. No
+per-student session/event duplication; `class_sessions.id` remains the stable
+attendance identity.
+
+```
+Timetable entry (expected) --timetable_entry_id--> ClassSession (anchor occurrence)
+                                                        |  + occurrence_outcomes (per-subject override)
+                                                        v
+                                   resolve(COALESCE(choice.subject_id, ClassSession.subject_id))
+                                                        v
+                                        student-specific effective occurrence
+```
+
+## Files changed
+
+- `app/models/occurrence.py` — NEW `OccurrenceOutcome` model.
+- `app/models/enums.py` — NEW `OccurrenceOutcomeType`.
+- `app/models/__init__.py` — exports the model.
+- `alembic/versions/f6a7b8c9d0e1_add_occurrence_outcomes.py` — NEW migration.
+- `app/services/event_session_service.py` — synchronizer creates outcomes for
+  subject-specific elective events (extended, not replaced; state-based +
+  idempotent).
+- `app/repositories/session_repo.py` — outcome add/delete helpers.
+- `app/repositories/attendance_repo.py` — read queries carry an additive
+  outcome LEFT JOIN (student-scoped) + `_apply_outcome_to_row` per-student
+  post-processing.
+- `app/engines/practical_occurrence.py` — `occurrence_is_cancelled` doc updated
+  (outcome-cancelled rows are already `is_cancelled=True` at the read layer).
+
+## Schema/migration
+
+`occurrence_outcomes`: id, created_at, updated_at, class_session_id FK,
+subject_id FK, outcome_type enum, UNIQUE(class_session_id, subject_id) +
+index on class_session_id. Empty table (no backfill). Downgrade drops index →
+table → enum.
+
+## Occurrence semantics
+
+Normal/Extra/Cancelled/Quiz/Surprise Quiz = anchor session flags (+ outcome
+override for a subject). Modified/substitution = deferred (Phase 23.7
+event-scope). Quiz-day = existing separate occurrence (unchanged).
+
+## Elective-isolation semantics
+
+A subject-specific event (elective_slot NULL + catalog elective subject) whose
+slot has a timetable session on the date produces an OUTCOME overriding the
+anchor session (BCS-058→SURPRISE_QUIZ, BCS-056→CANCELLED; BCS-055 has none →
+anchor = normal). When the slot has no session that date, extras fall back to a
+subject-scoped extra session and cancellations become no-ops. The outcome join
+is keyed on (session, the student's RESOLVED subject) — Student A's outcome can
+never appear on Student B's rows.
+
+## Compatibility impact
+
+Zero effect on existing data (the table starts empty; the LEFT JOIN yields NULL
+outcome for every existing row). Attendance engine, eligibility, calendar
+engine, event registry, quiz, dashboard/calendar/analytics/history/track
+consumers untouched. Registration untouched. No frontend change.
+
+## Verification
+
+- Backend `compileall` (app + alembic + scripts) — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic single head `f6a7b8c9d0e1`; linear chain preserved.
+- Offline upgrade SQL (CREATE TYPE + CREATE TABLE + index) and downgrade SQL
+  (DROP index/table/type) — PASS.
+- `_desired_schedule` branch simulations — PASS: subject-specific
+  SURPRISE_QUIZ(BCS-058)→outcome; CLASS_CANCELLED(BCS-056)→outcome (anchor kept
+  in schedule); fallback extras; non-elective legacy path unchanged.
+- Per-subject override logic — PASS: A→extra(quiz), B→anchor(normal),
+  C→cancelled; no leakage (per-subject join key).
+- Query-build + import checks — PASS (no circular imports).
+- Idempotency: state-based reconciliation (outcome create/update + stale
+  removal) is deterministic; running twice converges (same design as the
+  existing synchronizer).
+- **Production DB not touched.** Migration NOT applied by the agent.
+
+## Deferred (documented, NOT implemented)
+
+- Phase 23.7 event-scope redesign + `OccurrenceOutcomeType.MODIFIED`.
+- Phase 23.8 quiz architecture integration with outcomes.
+- Phase 23.9 attendance MUTATION integration (reject marking on an
+  outcome-cancelled occurrence for the affected subject) — read path only here.
+- Phase 23.10 canonical read models; 23.11 API scope/authorization.
+- Phase 24 Admin Portal.
+
+---
+
 # 🔗 Critical Dependency Path
 
 ```text
@@ -2592,7 +2716,7 @@ PHASE 21  ← COMPLETE & FROZEN
    ↓
 PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
    ↓
-PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0); 23.6+ pending
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1); 23.7+ pending
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2828,7 +2952,7 @@ PHASE 10 ████████████████████  COMPLETE 
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
-Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0); 23.6+ pending
+Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1); 23.7+ pending
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -2846,8 +2970,12 @@ Phase 23 ████████████████████  23.0 DISC
 > verified. **23.5 COMPLETE (2026-08-28)** — Elective/Catalog Redesign
 > (migration `f5a6b7c8d9e0`: DB-backed `subjects.elective_slot`; `ElectiveResolver`
 > DB-driven, no hardcoded catalog constants; registration validates against the
-> DB catalog); **not applied to production** (operator boundary). Phase 23.6+
-> pending. Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
+> DB catalog); **not applied to production** (operator boundary). **23.6
+> COMPLETE (2026-08-28)** — Actual Occurrence Architecture (migration
+> `f6a7b8c9d0e1`: `occurrence_outcomes` per-subject overrides; synchronizer +
+> read-path integration; elective isolation, no leakage); **not applied to
+> production** (operator boundary). Phase 23.7+ pending.
+> Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

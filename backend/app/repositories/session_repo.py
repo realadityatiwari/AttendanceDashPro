@@ -22,7 +22,8 @@ from sqlalchemy import func, select
 
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import ClassSession, TimetableEntry
-from app.models.enums import ClassType, ElectiveSlot
+from app.models.occurrence import OccurrenceOutcome
+from app.models.enums import ClassType, ElectiveSlot, OccurrenceOutcomeType
 
 
 class SessionRepository:
@@ -107,6 +108,28 @@ class SessionRepository:
 
     async def delete_session(self, session: ClassSession) -> None:
         await self.db.delete(session)
+
+    # Phase 23.6: occurrence-outcome persistence (subject-specific overrides
+    # of a shared elective-slot session). Outcomes never touch the session row
+    # or attendance records.
+
+    def add_outcome(
+        self,
+        *,
+        class_session_id: UUID,
+        subject_id: UUID,
+        outcome_type: OccurrenceOutcomeType,
+    ) -> OccurrenceOutcome:
+        outcome = OccurrenceOutcome(
+            class_session_id=class_session_id,
+            subject_id=subject_id,
+            outcome_type=outcome_type,
+        )
+        self.db.add(outcome)
+        return outcome
+
+    async def delete_outcome(self, outcome: OccurrenceOutcome) -> None:
+        await self.db.delete(outcome)
 
     async def flush(self) -> None:
         await self.db.flush()

@@ -71,6 +71,10 @@ def occurrence_is_cancelled(occ: Dict[str, Any]) -> bool:
       CLASS_CANCELLED class-reality propagates over stale marks (a mark
       entered before the cancellation was known), so a cancelled theory class
       never counts as an absence anywhere.
+    - Phase 23.6: an ``occurrence_outcome`` of type CANCELLED for the
+      student's subject is treated identically to a direct is_cancelled flag
+      (the outcome is applied at the read layer, so the row's is_cancelled
+      is already True when the student's subject has a CANCELLED outcome).
     """
     if not occ.get("is_cancelled"):
         return False

@@ -2,6 +2,7 @@
 from .user import User, Section, Subsection
 from .academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from .timetable import TimetableEntry, ClassSession
+from .occurrence import OccurrenceOutcome
 from .attendance import AttendanceRecord
 from .event import AcademicEvent
 from .quiz import QuizCycle, EligibilityPolicy, QuizSchedule

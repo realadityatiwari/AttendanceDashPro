@@ -5240,3 +5240,200 @@ Production not touched. Phase 23.6 not started — requires a fresh execution
 prompt.
 
 ---
+
+# AttendanceDash Pro — Phase 23.6 Walkthrough
+
+> **PHASE 23.6 COMPLETE — ACTUAL OCCURRENCE ARCHITECTURE (2026-08-28).**
+> Established the separation between the EXPECTED schedule
+> (`timetable_entries`) and the ACTUAL occurrence (`class_sessions`) and added
+> per-subject occurrence outcomes so one shared elective-slot session can have
+> different effective types per concrete subject with no cross-student leakage.
+
+## Objective
+
+Make the actual-occurrence layer capable of representing:
+```
+DE-II (same logical timetable slot, same date)
+  Student A (BCS-058) -> Surprise Quiz
+  Student B (BCS-055) -> Normal Lecture
+  Student C (BCS-056) -> Cancelled
+```
+without duplicating timetable/session/event infrastructure per student, without
+a second elective resolver, and without redesigning the attendance engine,
+eligibility mathematics, the frozen calendar/event subsystem, or student-facing
+surfaces.
+
+## Discovery
+
+Current model:
+- `timetable_entries` = expected recurring schedule (anchor subject for
+  electives + `elective_slot` marker).
+- `class_sessions` = actual occurrences (subject_id, date, class_type,
+  `is_extra`, `is_cancelled`, `timetable_entry_id`, `elective_slot`,
+  `designation`).
+- `academic_events` = event_type + dates + subject_id/elective_slot + active.
+- Occurrence semantics: Normal (timetable-bound), Extra (`is_extra`), Cancelled
+  (`is_cancelled`), Quiz-day (QUIZ_DAY session), Surprise quiz (`is_extra`),
+  Modified/substitution (calendar-engine level, not session level).
+- Elective resolution: read path uses
+  `COALESCE(choice.subject_id, ClassSession.subject_id)`; the session's
+  subject_id is the slot anchor.
+
+Gap: a session row has single-valued `is_extra`/`is_cancelled`, so the DE-II
+divergence was not expressible. Traced behavior:
+- Subject-specific SURPRISE_QUIZ(BCS-058, no slot) ? extra session ? Student A
+  saw normal DE-II lecture + quiz (two sessions — wrong).
+- Subject-specific CLASS_CANCELLED(BCS-056, no slot) ? `_cancellation_match`
+  found no timetable entry for BCS-056 (timetable uses the anchor BCS-058) ?
+  no-op (wrong).
+
+## Architectural decision
+
+Additive `occurrence_outcomes` table
+(`class_session_id` FK, `subject_id` FK, `outcome_type` enum,
+UNIQUE(class_session_id, subject_id)) + enum `OccurrenceOutcomeType`
+(EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/SURPRISE_QUIZ/CANCELLED).
+
+- The `class_sessions` row is the **anchor** occurrence (shared default:
+  `is_extra`/`is_cancelled`).
+- An outcome row **overrides** the effective type for ONE concrete subject
+  (EXTRA_*/SURPRISE_QUIZ ? effective `is_extra=True`; CANCELLED ? effective
+  `is_cancelled=True`).
+- Absence of an outcome row = follow the anchor (normal lecture for BCS-055).
+- `class_sessions.id` remains the stable attendance identity; outcomes never
+  touch the session row, attendance records, or the timetable.
+- `OccurrenceOutcomeType.MODIFIED` intentionally absent (Phase 23.7
+  event-scope design owns it).
+
+## Files changed
+
+- NEW `backend/app/models/occurrence.py` — `OccurrenceOutcome`.
+- `backend/app/models/enums.py` — `OccurrenceOutcomeType`.
+- `backend/app/models/__init__.py` — export.
+- NEW `backend/alembic/versions/f6a7b8c9d0e1_add_occurrence_outcomes.py`.
+- `backend/app/services/event_session_service.py` — `_desired_schedule` returns
+  `desired_outcomes` (subject-specific elective events); `_reconcile_outcomes`
+  state-based create/update/remove; `sync_event`/`_reconcile_date` wired.
+- `backend/app/repositories/session_repo.py` — `add_outcome`/`delete_outcome`.
+- `backend/app/repositories/attendance_repo.py` — `_outcome_join_on` +
+  `_apply_outcome_to_row`; outcome LEFT JOIN added to all six read/counting
+  queries (keyed on the student's RESOLVED subject).
+- `backend/app/engines/practical_occurrence.py` — `occurrence_is_cancelled`
+  doc updated (outcome-cancelled rows already carry `is_cancelled=True`).
+
+## Migration
+
+`f6a7b8c9d0e1` (parent `f5a6b7c8d9e0`): CREATE TYPE `occurrenceoutcometype` +
+CREATE TABLE `occurrence_outcomes` (FKs, UNIQUE(session, subject), index on
+class_session_id). The table starts EMPTY (no backfill). Downgrade drops
+index ? table ? enum. Additive; no existing data touched.
+
+## Synchronizer interaction
+
+Extended (NOT replaced — still the one event?session synchronizer):
+- Subject-specific elective events (`elective_slot` NULL + a catalog elective
+  subject per `subjects.elective_slot`) whose slot HAS a timetable session on
+  the date produce `desired_outcomes` (SURPRISE_QUIZ/EXTRA_* ? extra-type
+  outcome; CLASS_CANCELLED/LAB_CANCELLED ? CANCELLED outcome) and the anchor
+  timetable entry stays in the schedule.
+- No slot session that date ? SURPRISE_QUIZ/EXTRA_* falls back to a
+  subject-scoped extra session (only that subject's students see it, via the
+  enrollment-scoped reads); cancellations become no-ops.
+- Non-elective subject events keep the legacy extra/cancellation path exactly.
+- Reconciliation is state-based and idempotent: desired outcomes are created/
+  updated; outcomes no longer implied by active events are removed (event
+  deactivation/movement restores the anchor state).
+
+## Elective-isolation semantics
+
+The outcome LEFT JOIN in the read queries is keyed on
+`(class_session_id, resolved_subject_id)` where `resolved_subject_id =
+COALESCE(choice.subject_id, ClassSession.subject_id)`. Therefore:
+- Student A (BCS-058): joins the (session, BCS-058, SURPRISE_QUIZ) outcome ?
+  effective extra/quiz.
+- Student B (BCS-055): no outcome for (session, BCS-055) ? anchor (normal).
+- Student C (BCS-056): joins the (session, BCS-056, CANCELLED) outcome ?
+  effective cancelled.
+- A's outcome row can never match B's query (different subject key) — no
+  leakage in either direction.
+
+## Compatibility impact
+
+Zero effect on existing data: the table starts empty, so the LEFT JOIN yields a
+NULL outcome for every existing session and `_apply_outcome_to_row` is a no-op.
+Attendance engine, eligibility mathematics, calendar engine, event registry,
+quiz, dashboard/calendar/analytics/history/track consumers, and registration
+are untouched. No frontend change.
+
+## Verification
+
+- Backend `compileall` (app + alembic + scripts) — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic single head `f6a7b8c9d0e1`; linear chain preserved.
+- Offline upgrade SQL (CREATE TYPE + CREATE TABLE + index) and downgrade SQL
+  (DROP index/table/type) — PASS.
+- `_desired_schedule` branch simulations (temp script, removed):
+  - subject-specific SURPRISE_QUIZ(BCS-058) ? `desired_outcomes[SURPRISE_QUIZ]`,
+    NO extra, anchor entry kept in schedule — PASS;
+  - subject-specific CLASS_CANCELLED(BCS-056) ? `desired_outcomes[CANCELLED]`,
+    anchor entry kept — PASS;
+  - no slot session ? SURPRISE_QUIZ falls back to a subject-scoped extra; no
+    session ? cancellation is a no-op — PASS;
+  - non-elective subject event ? legacy extra path unchanged — PASS.
+- Per-subject override logic: A?extra(quiz), B?anchor(normal), C?cancelled —
+  PASS (no leakage; per-subject join key).
+- Query-build + import checks — PASS (no circular imports; the ON clause
+  compiles to `occurrence_outcomes.class_session_id = class_sessions.id AND
+  occurrence_outcomes.subject_id = coalesce(choice.subject_id, ...)`).
+- Idempotency: state-based outcome reconciliation converges on the same state
+  across repeated syncs (same design as the existing synchronizer).
+
+## Security considerations
+
+- The outcome join is scoped to the authenticated student's RESOLVED subject —
+  a student can never observe another student's outcome (join key includes the
+  user's own `StudentElectiveChoice.subject_id`; enrollment scoping applies).
+- Outcomes are created only by the synchronizer from active events (admin or
+  enrolled-student authorized); no client-supplied outcome mutation surface.
+- Backend remains authoritative; frontend restrictions are never security
+  boundaries.
+
+## Database mutation status
+
+No production migration applied. No student assignments, elective choices,
+enrollments, attendance records, sessions, events, or historical data modified.
+The `occurrence_outcomes` table was NOT created in any database (migration is an
+operator action). **Production DB not touched.**
+
+## Deferred items
+
+- Phase 23.7: event-scope redesign + `OccurrenceOutcomeType.MODIFIED`
+  (substitution/modified session-level semantics).
+- Phase 23.8: quiz architecture integration with outcomes.
+- Phase 23.9: attendance MUTATION integration — reject marking attendance on an
+  occurrence that has a CANCELLED outcome for the student's subject (read path
+  is complete in 23.6; the mutation gate belongs to 23.9).
+- Phase 23.10: canonical read models; Phase 23.11: API scope/authorization.
+- Phase 24: Admin Portal (authoritative event/outcome configuration).
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. Migration
+`f6a7b8c9d0e1` NOT applied to any database; operator applies on the isolated dev
+DB, then production only when separately authorized. **Production DB not
+touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.6 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.6 implemented section (decision, files,
+  verification).
+- task.md: Phase 23.6 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.6 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.7 not started — requires a fresh execution
+prompt.
+
+---

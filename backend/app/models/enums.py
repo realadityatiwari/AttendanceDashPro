@@ -75,6 +75,29 @@ class ElectiveSlot(str, Enum):
     ELECTIVE_I = "ELECTIVE_I"
     ELECTIVE_II = "ELECTIVE_II"
 
+class OccurrenceOutcomeType(str, Enum):
+    """Subject-specific outcome override for a class session (Phase 23.6).
+
+    A single actual occurrence (``class_sessions`` row) may have different
+    outcomes for different concrete subjects in the same elective slot. The
+    session row represents the anchor (shared default) state; an
+    ``occurrence_outcomes`` row overrides the effective type for one subject.
+
+    - EXTRA_LECTURE / EXTRA_TUTORIAL / EXTRA_PRACTICAL / SURPRISE_QUIZ:
+      the subject sees the session as an extra occurrence (effective
+      ``is_extra`` = True).
+    - CANCELLED: the subject sees the session as cancelled (effective
+      ``is_cancelled`` = True).
+
+    Subjects with no outcome row follow the anchor session's own
+    ``is_extra`` / ``is_cancelled`` flags.
+    """
+    EXTRA_LECTURE = "EXTRA_LECTURE"
+    EXTRA_TUTORIAL = "EXTRA_TUTORIAL"
+    EXTRA_PRACTICAL = "EXTRA_PRACTICAL"
+    SURPRISE_QUIZ = "SURPRISE_QUIZ"
+    CANCELLED = "CANCELLED"
+
 class EnrollmentType(str, Enum):
     """Whether a student's subject enrollment is a program requirement or an
     elective selection (Phase 23.3 — Student Academic Assignment).
