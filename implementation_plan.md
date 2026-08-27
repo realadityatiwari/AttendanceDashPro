@@ -2743,3 +2743,103 @@ a3b4c5d6e7f8`.
 **Phase status: 22.4 implementation COMPLETE; production migration pending
 operator action.**
 
+
+---
+
+## PHASE 23.0 - ARCHITECTURE DISCOVERY & IMPLEMENTATION BLUEPRINT (RECONCILED)
+
+Status: **COMPLETE - DISCOVERY PHASE + BLUEPRINT RECONCILIATION (2026-08-27) - READ-ONLY.** No code, no schema, no migration, no seed, no UI, no auth, no production data touched. No commit, no push, no PR.
+
+### Objective
+
+Eliminate architectural ambiguity BEFORE implementation. The system must evolve from its current single-section model (1 session -> 1 semester -> 1 section CSE-51) to represent the real academic structure - the **TARGET** hierarchy Branch -> Semester -> Section (<=60) -> Subsection (~30) - with the full B.Tech CSE elective catalog (Elective-I: BCS-052/053/054; Elective-II: BCS-055/056/058), subsection-variable timetables, per-cohort outcomes/overrides, and the eventual Admin Portal as the authoritative control plane. **Branch parentage is a 23.1 DECISION GATE, NOT finalized** - the CURRENT model is AcademicSession -> Semester -> Section(program), with no Branch entity.
+
+### Deliverable
+
+`docs/phase_23/phase_23_0_architecture_discovery.md` - the authoritative discovery report (report section 0 records the correction matrix; sections updated per the ten corrections).
+
+### Reconciliation (2026-08-27) - the ten corrections applied
+
+1. **Academic model separated from admin authorization.** `admin_scopes`/role schema moved OUT of 23.1 and fully into 23.9. 23.1 documents the future dependency but does NOT implement it.
+2. **Per-phase migration lifecycle.** Each schema-changing phase owns discovery -> offline validation -> local/dev migration -> verification -> operator boundary -> production migration only when separately authorized -> read-only post-production verification. 23.10 is the final reconciliation/rollout/closure, NOT the first production migration point.
+3. **OCCURRENCE vs OUTCOME separated.** Three-layer model: EXPECTED TIMETABLE -> CLASS SESSION/OCCURRENCE -> COHORT/SUBJECT-SPECIFIC OUTCOME OR OVERRIDE -> resolved student-facing reality. The critical example (BCS-058 -> Surprise Quiz; BCS-055 -> Normal Lecture; BCS-056 -> Cancelled on same date/time/slot) is representable WITHOUT per-student timetable/session duplication. `occurrence_outcomes` is a candidate, NOT finalized until 23.4 designs it.
+4. **`CLASS` event scope removed.** Ambiguous term dropped; event-scope enum NOT implemented until the 23.1 hierarchy defines semantics. Admin role renamed to explicit SECTION_ADMIN.
+5. **Hypothetical examples marked hypothetical.** Subsection examples (CS-5A -> 51/52) are conceptual only; the CTT is authoritative only for B.Tech III Year (V Semester), CSE-51.
+6. **AcademicSession / Academic Year (Correction 6)** - Repository evidence strongly establishes `AcademicSession` as the existing academic-year/session entity ("2026-27", start/end, is_active), with `Semester.session_id` referencing it. No second year/session entity is proposed. 23.1 must confirm this interpretation before schema implementation; absent contradictory evidence, `AcademicSession` remains canonical.
+7. **Branch parentage NOT assumed (Correction 7).** CURRENT MODEL: no Branch entity (`Section.program` string only) - AcademicSession -> Semester -> Section(program). TARGET and final FK relationships are a 23.1 DECISION GATE.
+8. **`student_enrollments` uniqueness unresolved.** Key (student+semester / student+subject / student+semester+subject) chosen in a 23.1 gate; must preserve multi-semester history. No blind constraint.
+9. **Legacy unknown state preserved.** Existing students without authoritative subsection/elective/branch placement remain UNASSIGNED/UNKNOWN; backfill is a future controlled operation.
+10. **23.1 hard boundary.** 23.1 is schema/data-model foundation ONLY - no consumer wiring (timetable, synchronizer, attendance, Track, History, Dashboard, quiz, events, registration, UI, admin auth).
+
+### Key findings (evidence-based, from repository inspection)
+
+1. **Three-layer model partially representable (critical).** EXPECTED TIMETABLE (`timetable_entries`) / CLASS SESSION / OCCURRENCE (`class_sessions`) / STUDENT'S RESOLVED SUBJECT (`student_elective_choices` + `ElectiveResolver`) ARE separated by Phase 22.3/22.4; but COHORT/SUBJECT-SPECIFIC OUTCOME OR OVERRIDE is NOT. A SURPRISE_QUIZ on an elective slot applies to the whole slot; `class_sessions` cannot express per-cohort outcomes (Surprise Quiz vs Normal Lecture vs Cancelled) on the same date/time. Recommended minimal fix: additive `occurrence_outcomes` candidate (report section 25, Option 1 - NOT finalized until 23.4).
+2. **No Subsection concept.** No `subsections` table; no `users.subsection_id`; no subsection on `timetable_entries`/`class_sessions`/`academic_events`. `sections.name` is globally unique.
+3. **Single-section/semester assumptions** concentrated in: registration auto-assign (`auth.py`), seed/verifier constants (2026-07-15 -> 2026-12-31, "CSE-51", "V Semester"), and the synchronizer building `entries_by_dow` from ALL timetable entries (no section filter - cross-section collision risk). ORM core is already session-scoped.
+4. **Elective catalog hardcoded in code** (`elective_resolver.py`); four elective subjects (BCS-052/053/055/056) have no quiz dates (data gap - nothing invented).
+5. **No admin hierarchy.** Single `UserRole` (STUDENT/ADMIN).
+6. **No canonical student-context read model.** `/student/me` is partial; subsection + electives resolved per-request.
+
+### Recommended Phase 23.x sequence (reconciled)
+
+- **23.1 - Academic hierarchy / data foundation (SCHEMA ONLY) — COMPLETE (2026-08-27, migration `c8d9e0f1a2b3`)**: `subsections` table, `users.subsection_id` (nullable, no backfill), `sections` composite-unique `(semester_id, name)`, `student_enrollments` `UNIQUE(user_id, subject_id)`. Four gates resolved: AcademicSession/Academic-Year CONFIRMED, Branch parentage REMAINS UNRESOLVED (no Branch entity; `Section.program` only), enrollment-uniqueness CONFIRMED, event-scope semantics deferred to 23.7. **Does NOT wire** any consumer, engine, registration, UI, or admin authorization (admin schema is 23.9). **Does NOT introduce `timetable_entries.subsection_id` / `class_sessions.subsection_id`** - those are 23.3 scheduling columns. **Does NOT fabricate/backfill subsections.**
+- **23.2 - Curriculum / subject model — COMPLETE (2026-08-27, migration `d0e1f2a3b4c5`)**: added `UNIQUE(code, semester_id)` on `subjects` (constraint `uq_subjects_code_semester`). Invariant: a subject code may appear in different semesters, but the same code may not occur twice within the same semester. Existing single-column `ix_subjects_code` index preserved (independent consumer: `SubjectRepository.get_by_code`). Discovery report `docs/phase_23/phase_23_2_curriculum_discovery.md`. **Only the confirmed REQUIRED change was implemented.** Deferred (documented, not implemented): BNC-501 non-credit modeling (undecided), elective catalog redesign (Phase 23.5), cross-semester subject identity, curriculum versioning, enrollment redesign.
+- **23.3 - Timetable + subsection scheduling**: introduce `timetable_entries.subsection_id` + `class_sessions.subsection_id` schema AND wire them into resolution + synchronizer scoping (fixes X8 cross-section collision). 23.3 owns ALL timetable/session behavioral wiring; 23.1 does not change timetable resolution, synchronizer behavior, or session generation.
+- **23.4 - Outcome/override model**: design + implement the outcome model (`occurrence_outcomes` candidate finalized here) + `class_sessions.event_id`; synchronizer writes outcomes; per-cohort read resolution.
+- **23.5 - Elective subject resolution (config-driven)**: `elective_catalog` table; resolver reads DB with code fallback.
+- **23.6 - Quiz architecture**: subsection-scoped quiz events/dates; keep authoritative dates + cycles.
+- **23.7 - Event architecture**: section/subsection event scoping (scope terms finalized from 23.1 hierarchy) + per-cohort outcomes.
+- **23.8 - Attendance/engine integration**: thread subsection through attendance reads; formulas byte-identical.
+- **23.9 - Admin authorization foundation**: role enum extension + `admin_scopes` + `require_*` deps + admin config APIs (no Admin Portal UI).
+- **23.10 - Migration reconciliation / rollout / closure**: reconcile the linear Alembic chain, confirm each operator-run production migration + read-only post-production verification, backfill/remediation (operator-authorized), downgrade paths, governance closure. NOT the first production migration point.
+
+### Phase 23.1 — implemented (2026-08-27)
+
+**Status: COMPLETE — schema/data-model foundation only.** Migration `c8d9e0f1a2b3` (chain: `b7c8d9e0f1a2` → `c8d9e0f1a2b3`). Dev DB migration + offline SQL verified; production migration is a separate operator action.
+
+**Models changed:**
+- `app/models/user.py` — new `Subsection` model (id, name, section_id FK, max_strength nullable, UNIQUE(section_id, name)); `Section` gains `uq_sections_semester_name` composite unique (global name index removed) + `subsections` relationship; `User` gains nullable `subsection_id` FK + `subsection` relationship.
+- `app/models/academic.py` — `StudentEnrollment` gains `UNIQUE(user_id, subject_id)` (`uq_student_enrollments_user_subject`).
+- `app/models/__init__.py` — exports `Subsection`.
+
+**Migration `c8d9e0f1a2b3`:**
+1. Creates `subsections` (no rows — nothing fabricated).
+2. Adds `users.subsection_id` (nullable FK, no backfill; NULL = UNKNOWN/UNASSIGNED).
+3. Drops `ix_sections_name` global unique; adds `UNIQUE(semester_id, name)` (guarded).
+4. Adds `UNIQUE(user_id, subject_id)` on `student_enrollments` (guarded).
+
+**Decision gates (evidence-based):**
+- AcademicSession = academic-year entity: **CONFIRMED** (name "2026-27", start/end, is_active; `Semester.session_id`).
+- Branch parentage: **REMAINS UNRESOLVED** — no Branch entity; `Section.program` string only; no `branches` table created (23.1 gate preserved).
+- Section semantics: **CONFIRMED** — semester-scoped class group; names unique per semester now.
+- Enrollment uniqueness: **CONFIRMED** — `(user_id, subject_id)` preserves multi-semester history.
+- Subsection: **CONFIRMED NULL-preserving** — no fabrication/backfill.
+
+**Non-changes (23.1 boundary):** no `timetable_entries.subsection_id` / `class_sessions.subsection_id` (23.3), no occurrence/event-scope model (23.4/23.7), no `admin_scopes`/SECTION_ADMIN (23.9), no Branch entity, no AcademicSession duplicate, no attendance/timetable/registration/frontend/auth behavior change, no subsection fabrication/backfill, no production rollout.
+
+### Phase 23.2 — implemented (2026-08-27)
+
+**Status: COMPLETE — schema-hardening change only.** Migration `d0e1f2a3b4c5` (chain: `c8d9e0f1a2b3` → `d0e1f2a3b4c5`). Offline SQL verified; DB application is an operator action (same environment constraint as Phase 23.1 — `backend/.env` → production pooler, Docker down).
+
+**Objective:** the ONLY authorized change — add `UNIQUE(code, semester_id)` on `subjects`. Invariant: a subject code may appear in different semesters, but the same code may not occur twice within the same semester. Enforced at the DATABASE level.
+
+**Models changed:**
+- `app/models/academic.py` — `Subject` gains `__table_args__` `UniqueConstraint("code", "semester_id", name="uq_subjects_code_semester")`. Existing `code` column `index=True` (`ix_subjects_code`) PRESERVED — independent consumer `SubjectRepository.get_by_code` (quiz endpoint, registration, elective-resolver anchors).
+
+**Migration `d0e1f2a3b4c5`:**
+1. Preflight duplicate check (online mode): `GROUP BY code, semester_id HAVING COUNT(*) > 1` → refuses if any duplicates exist.
+2. `CREATE UNIQUE CONSTRAINT uq_subjects_code_semester UNIQUE (code, semester_id)`.
+3. Downgrade: drop the constraint. No data rewritten.
+
+**Preflight duplicate check:** could NOT be executed against a live DB by the agent (no reachable dev DB; `backend/.env` → production pooler — forbidden). Repository evidence indicates zero duplicates: the seed script (`filter_by(code=...)`, creates only if absent) and the Phase 22.3 migration (`WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE code = v.code)`) are per-code idempotent, and the Phase 17/21D.3 integrity audits found zero duplicate subjects. The migration's own guarded preflight re-checks at operator apply time.
+
+**Regression inspection:** all Subject creation paths are `seed_academic_baseline.py` (idempotent per-code) and the Phase 22.3 migration (idempotent per-code) — neither depends on duplicate `(code, semester_id)` rows. No application code constructs `Subject` directly. No path modified.
+
+**Deferred (documented, NOT implemented):** BNC-501 non-credit modeling (undecided — operator decision), elective catalog redesign (Phase 23.5), cross-semester subject identity (not required now), curriculum versioning (not required), enrollment redesign (Phase 23.1 confirmed correct), attendance/quiz/event/timetable/registration/frontend behavior (unchanged).
+
+### Verification / mutation status
+
+- **Phase 23.0 (discovery/reconciliation):** repository inspection only; no application/migration/seed/frontend file modified. New file `docs/phase_23/phase_23_0_architecture_discovery.md`. DB not touched.
+- **Phase 23.1 (implementation):** models changed (`user.py`, `academic.py`, `models/__init__.py`), migration `c8d9e0f1a2b3` created. Verified: `compileall` PASS · `alembic heads` → single head `c8d9e0f1a2b3` · offline `upgrade head --sql` + `downgrade` SQL PASS (correct DDL, guarded constraints). **Migration NOT applied to any database by the agent** — `backend/.env` points at the production Supabase pooler (Phase 22.2 documented state) and the local Docker daemon is down; applying `alembic upgrade` here could touch production, which is forbidden. Dev-DB application is an OPERATOR action (run on the isolated dev container with a dev `DATABASE_URI`), followed by production migration only when separately authorized. **Production DB not touched.**
+- **Phase 23.2 (implementation):** `Subject` model updated (`academic.py`), migration `d0e1f2a3b4c5` created. Verified: `compileall` PASS · `alembic heads` → single head `d0e1f2a3b4c5` · offline `upgrade --sql` + `downgrade` SQL PASS (single ALTER: `UNIQUE (code, semester_id)`) · `ix_subjects_code` preserved. Same DB-application constraint as 23.1 — migration NOT applied by the agent (would touch production); operator applies on the dev DB, and the migration's guarded preflight re-checks duplicates at apply time. **Production DB not touched.**
+- Git: clean working tree; no commit, no push, no PR.

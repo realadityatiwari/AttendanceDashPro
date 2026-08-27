@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** (production migration pending operator) · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** (production migration pending operator) — then: monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve the mobile experience, handle semester rollover. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -71,7 +71,8 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 19 | CI/CD | ✅ **COMPLETE & FROZEN** — GitHub Actions quality gate (`.github/workflows/ci.yml`): integrity, backend, frontend, docker, compose, migrations, config-contract, backup-infra jobs; deployment gate disabled (`if: false`); all checks verified locally; migration validated on disposable postgres:16 to head `e1f2a3b4c5d6`; no deployment, no secrets |
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
-| 22 | Post-Launch | 🟢 **ACTIVE** — next project phase. Monitor errors, collect feedback, identify calculation discrepancies, improve UX, fix production bugs, optimize expensive queries, improve mobile experience, handle semester rollover. |
+| 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
+| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects). Phase 23.3+ pending. |
 
 ---
 
@@ -2083,6 +2084,189 @@ Phase 22.4. Downgrade: `alembic downgrade a3b4c5d6e7f8`.
 
 ---
 
+# 🟢 Phase 23 — Academic Architecture Evolution (DISCOVERY COMPLETE, BLUEPRINT RECONCILED, GOVERNANCE CONSISTENT)
+
+## Phase 23.0 — Architecture Discovery & Implementation Blueprint (COMPLETE — DISCOVERY PHASE, 2026-08-27)
+
+**Status: READ-ONLY DISCOVERY COMPLETE.** No code, no schema, no migration, no
+seed, no UI, no auth, no production data touched. No commit, no push, no PR.
+Authoritative report: `docs/phase_23/phase_23_0_architecture_discovery.md`.
+
+**Blueprint reconciliation (2026-08-27):** the core findings were accepted;
+ten corrections applied to the blueprint. See report §0 for the full
+correction matrix. Key reconciled constraints:
+
+- **23.1 is schema/data-model foundation ONLY** — no admin-authorization schema
+  (deferred to 23.9), no consumer wiring (timetable, synchronizer, attendance,
+  Track, History, Dashboard, quiz, events, registration, UI, admin auth).
+- **Each schema-changing phase owns its own migration lifecycle** with explicit
+  operator boundary; 23.10 is final reconciliation/closure, NOT the first
+  production migration point.
+- **Three-layer model:** EXPECTED TIMETABLE → CLASS SESSION/OCCURRENCE →
+  COHORT/SUBJECT-SPECIFIC OUTCOME OR OVERRIDE. The critical example (BCS-058 →
+  Surprise Quiz, BCS-055 → Normal Lecture, BCS-056 → Cancelled on same
+  date/time/slot) must be representable without per-student duplication.
+- **`occurrence_outcomes` is a candidate**, not finalized until 23.4 designs it.
+- **No `CLASS` event scope** — ambiguous term removed; scope enumeration
+  deferred until 23.1 hierarchy defines semantics.
+- **Branch parentage is UNRESOLVED** — current model has no Branch entity
+  (`Section.program` is a string); the correct relationship is a 23.1 gate.
+  (CURRENT MODEL: AcademicSession → Semester → Section(program). TARGET model
+  and final FKs are a 23.1 DECISION GATE, NOT finalized.)
+- **AcademicSession / Academic Year (Correction 6):** Repository evidence
+  strongly establishes `AcademicSession` as the existing academic-year/session
+  entity (`name`, start/end, is_active), with `Semester.session_id` referencing
+  it. No second year/session entity is proposed. 23.1 must confirm this
+  interpretation before schema implementation; absent contradictory evidence,
+  `AcademicSession` remains canonical.
+- **`student_enrollments` uniqueness is unresolved** — key chosen in 23.1 gate,
+  not blindly added.
+- **Legacy unknown state is preserved** — no fabrication of subsection/elective/
+  branch for existing users; backfill is a future controlled operation.
+- **Subsection examples** (CS-5A → 51/52) are conceptual only — not established
+  academic facts.
+
+### Objective
+
+Eliminate architectural ambiguity BEFORE implementation. Determine exactly what
+must change so the system can represent the real academic structure of a B.Tech
+CSE class — the **TARGET** hierarchy Branch → Semester → Section (≤60) →
+Subsection (≈30) — with the full elective catalog (Elective-I: BCS-052/053/054;
+Elective-II: BCS-055/056/058), subsection-variable timetables, per-cohort
+outcomes/overrides, and the eventual Admin Portal as the authoritative control
+plane. **Branch parentage is a 23.1 DECISION GATE, NOT finalized** — the
+CURRENT model is AcademicSession → Semester → Section(program), with no Branch
+entity.
+
+### Key findings (evidence-based)
+
+1. **The three-layer model is partially representable.** EXPECTED TIMETABLE
+   (`timetable_entries`) / CLASS SESSION / OCCURRENCE (`class_sessions`) /
+   STUDENT'S RESOLVED SUBJECT (`student_elective_choices` + `ElectiveResolver`)
+   are separated; but **COHORT/SUBJECT-SPECIFIC OUTCOME OR OVERRIDE is NOT** —
+   a SURPRISE_QUIZ on an elective slot applies to the whole slot; `class_sessions`
+   cannot express "BCS-058 cohort → Surprise Quiz, BCS-055 cohort → Normal
+   Lecture" on the same date/time. The recommended minimal fix is an additive
+   `occurrence_outcomes` candidate (report §25, Option 1 — NOT finalized until
+   23.4).
+2. **No Subsection concept exists.** No `subsections` table, no
+   `users.subsection_id`, no subsection on `timetable_entries`/`class_sessions`/
+   `academic_events`. `sections.name` is globally unique.
+3. **Single-section/single-semester assumptions** are concentrated in
+   registration (`auth.py` auto-assigns exactly one section), seed/verifier
+   constants (2026-07-15 → 2026-12-31, "CSE-51", "V Semester"), and the
+   synchronizer building `entries_by_dow` from ALL timetable entries (no
+   section filter — a cross-section collision risk once a second section
+   exists). The ORM core is already session-scoped.
+4. **Elective catalog is hardcoded in code** (`elective_resolver.py`), not
+   DB-driven; four elective subjects (BCS-052/053/055/056) have no quiz dates
+   (data gap — nothing invented).
+5. **No admin hierarchy.** Single `UserRole` (STUDENT/ADMIN), no
+   HEAD/SECTION/SUBSECTION/ELECTIVE admin scoping.
+6. **No canonical student-context read model.** `/student/me` returns partial
+   context; subsection + electives are resolved per-request elsewhere.
+
+### Recommended Phase 23.x sequence (reconciled)
+
+23.1 Academic hierarchy/data foundation (SCHEMA ONLY — subsections,
+users.subsection_id, gates; **no timetable/session columns** → 23.3) →
+23.2 Student academic context → 23.3 Timetable + subsection scheduling
+(schema + wiring for `timetable_entries.subsection_id` /
+`class_sessions.subsection_id`) → 23.4 Outcome/override model →
+23.5 Elective resolution (config-driven) → 23.6 Quiz architecture →
+23.7 Event architecture → 23.8 Attendance/engine integration →
+23.9 Admin authorization foundation → 23.10 Migration reconciliation/closure.
+
+### Governance
+
+- Phase 23.0 is a **discovery phase** — it records findings and a blueprint.
+  No implementation tasks are marked complete; no future phase is marked
+  COMPLETE. Phase 23.1 onward requires a fresh execution prompt.
+- **Each schema-changing phase** owns its own migration lifecycle (discovery →
+  offline validation → local/dev migration → verification → operator boundary →
+  production migration only when separately authorized). 23.10 is the final
+  reconciliation/closure, not the first production migration point.
+- **Final governance consistency correction (2026-08-27):** the four governance
+  documents were scanned for contradictions involving Branch parentage
+  (CURRENT vs TARGET vs 23.1 DECISION GATE), AcademicSession/Academic Year
+  (evidence-strong + 23.1 confirmation), CLASS_ADMIN (replaced by SECTION_ADMIN),
+  subsection backfill (no fabrication, no deterministic default), admin_scopes
+  in 23.1 (deferred to 23.9), event scope, occurrence_outcomes, the 23.1
+  schema-only boundary, and old Phase 23 numbering. All documents now agree;
+  there is exactly ONE authoritative Phase 23 breakdown (23.0…23.10).
+
+---
+
+# 🟢 Phase 23.1 — Academic Hierarchy & Enrollment Schema Foundation (COMPLETE, 2026-08-27)
+
+**Status: COMPLETE — schema/data-model foundation only.** Migration
+`c8d9e0f1a2b3` (offline SQL verified; dev-DB application is an OPERATOR
+action — `backend/.env` points at the production Supabase pooler, so the
+agent cannot safely run `alembic upgrade`). No consumer/engine/registration/
+UI/admin wiring. No commit, no push, no PR.
+
+## Decision gates (resolved from repository evidence)
+
+| Gate | Result | Evidence |
+|---|---|---|
+| AcademicSession = academic-year entity | **CONFIRMED** | `AcademicSession` (name unique "2026-27", start/end, is_active); `Semester.session_id` FK → it. No second academic-year entity. |
+| Branch parentage | **REMAINS UNRESOLVED (gate preserved)** | No Branch entity exists; `Section.program` (string) is the only program representation. No evidence supports a target FK parentage; `branches` table NOT created. |
+| Section/program semantics | **CONFIRMED (preserved)** | Section remains a semester-scoped class group with a stored `program` attribute; names now unique per semester (not globally). |
+| Enrollment uniqueness | **CONFIRMED** | `UNIQUE(user_id, subject_id)` — subject_id is semester-scoped, so multi-semester history coexists (same subject code in a later semester = different Subject row). No global section lock. |
+| Subsection semantics | **CONFIRMED (NULL-preserving)** | New `subsections` table + `users.subsection_id` nullable; NULL = UNKNOWN/UNASSIGNED. No fabrication, no auto-assignment. `max_strength` nullable (open value). |
+
+## Schema changes delivered
+
+1. **`subsections`** table (id, name, `section_id` FK → sections, `max_strength`
+   nullable, timestamps) + `UNIQUE(section_id, name)` — no rows created.
+2. **`users.subsection_id`** (nullable FK → subsections) — no backfill.
+3. **`sections.name`** global-unique index → composite `UNIQUE(semester_id, name)`
+   (guarded; 1 section today → safe).
+4. **`student_enrollments`** `UNIQUE(user_id, subject_id)` (guarded; none
+   duplicated per Phase 17/21D.3 audits).
+
+## Deliberately NOT in 23.1
+
+- `timetable_entries.subsection_id` / `class_sessions.subsection_id` (→ 23.3)
+- occurrence/outcome model + event-scope enum (→ 23.4/23.7)
+- `admin_scopes` / SECTION_ADMIN role (→ 23.9)
+- Branch entity, AcademicSession duplicate, subsection fabrication/backfill
+- No attendance/timetable/registration/frontend/auth behavior changes
+
+## Phase 23.2 — Curriculum Model Implementation (COMPLETE, 2026-08-27)
+
+**Status: COMPLETE — schema-hardening change only.** Migration
+`d0e1f2a3b4c5` (chain: `c8d9e0f1a2b3` → `d0e1f2a3b4c5`). The ONLY authorized
+schema change: `UNIQUE(code, semester_id)` on `subjects`. Invariant: a subject
+code may appear in different semesters, but the same code may not occur twice
+within the same semester. Offline SQL verified; live DB application is an
+operator action (same environment constraint as Phase 23.1 — `backend/.env`
+→ production pooler, Docker down). No commit, no push, no PR.
+
+> Discovery context: `docs/phase_23/phase_23_2_curriculum_discovery.md` —
+> `Subject.code` was NOT unique even within a semester; `UNIQUE(code,
+> semester_id)` was the single confirmed REQUIRED change. Elective catalog
+> is hardcoded in code (Phase 23.5 concern); no non-credit distinction for
+> BNC-501 (requires operator decision — NOT implemented).
+
+### Changes delivered
+
+1. **`subjects`** — `UNIQUE(code, semester_id)` (`uq_subjects_code_semester`).
+   Existing `ix_subjects_code` single-column index PRESERVED (independent
+   consumer: `SubjectRepository.get_by_code` used by the quiz endpoint,
+   registration, elective-resolver anchors).
+2. **Migration guard** — preflight duplicate check (`GROUP BY code, semester_id
+   HAVING COUNT(*) > 1`) in online mode; refuses if duplicates exist.
+
+### Deferred (documented, NOT implemented)
+
+- BNC-501 non-credit modeling (undecided — operator decision).
+- Elective catalog redesign (Phase 23.5).
+- Cross-semester subject identity, curriculum versioning, enrollment redesign.
+- No attendance/quiz/event/timetable/registration/frontend/auth changes.
+
+---
+
 # 🔗 Critical Dependency Path
 
 ```text
@@ -2132,7 +2316,9 @@ PHASE 20
    ↓
 PHASE 21  ← COMPLETE & FROZEN
    ↓
-PHASE 22  ← ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
+PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
+   ↓
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5); 23.3+ pending
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2367,12 +2553,16 @@ PHASE 10 ████████████████████  COMPLETE 
 ...
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
-Phase 22 ██████████░░░░░░░░░░  ACTIVE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
+Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
+Phase 23 ██████████░░░░░░░░░░  23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5); 23.3+ pending
 
-> **Next phase:** Phase 22 — Post-Launch **ACTIVE** — the production system is
-> live. The next work items are: monitor errors, collect feedback, identify
-> calculation discrepancies, improve UX, fix production bugs, optimize
-> expensive queries, improve the mobile experience, handle semester rollover.
+> **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
+> + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
+> Academic Hierarchy & Enrollment Schema Foundation (migration `c8d9e0f1a2b3`).
+> **23.2 COMPLETE (2026-08-27)** — Curriculum Model (migration `d0e1f2a3b4c5`,
+> UNIQUE(code, semester_id) on subjects). Phase 23.3 (Timetable + subsection
+> scheduling) is the next implementation slice. Blueprint:
+> `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

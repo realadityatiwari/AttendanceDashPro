@@ -29,7 +29,19 @@ class Semester(Base):
 
 
 class Subject(Base):
+    """A subject belonging to a semester.
+
+    Phase 23.2 (Curriculum model): UNIQUE(code, semester_id) ensures the same
+    subject code may appear in different semesters (different rows, different
+    UUIDs), but the same code may not occur twice within the same semester.
+    This is a schema-hardening constraint — the seed/migration pipelines
+    already prevent duplicates via application-level guards, but the database
+    is now the authoritative enforcement point.
+    """
     __tablename__ = "subjects"
+    __table_args__ = (
+        UniqueConstraint("code", "semester_id", name="uq_subjects_code_semester"),
+    )
     code: Mapped[str] = mapped_column(String, index=True)
     name: Mapped[str] = mapped_column(String)
     tag: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -47,7 +59,21 @@ class Subject(Base):
 
 
 class StudentEnrollment(Base):
+    """A student's enrollment in a subject of a semester.
+
+    Uniqueness (Phase 23.1, Correction 8 gate): UNIQUE(user_id, subject_id) is
+    the correct enrollment key. `Subject` is scoped to a semester
+    (subjects.semester_id NOT NULL), so `subject_id` already encodes the
+    semester: a student can be enrolled once per subject row (duplicate current
+    enrollment is prevented), while the SAME subject CODE across different
+    semesters is a DIFFERENT subject row, so multi-semester historical
+    enrollment coexists. This does NOT make a student globally unique to one
+    section. Duplicate prevention was previously service-layer only.
+    """
     __tablename__ = "student_enrollments"
+    __table_args__ = (
+        UniqueConstraint("user_id", "subject_id", name="uq_student_enrollments_user_subject"),
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"))
 
