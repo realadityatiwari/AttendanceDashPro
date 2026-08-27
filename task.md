@@ -2248,4 +2248,53 @@ Make the relationship between a student and their academic placement / enrollmen
 
 - Phase 23.3 assignment consolidation is complete. Do not reopen for further assignment schema changes.
 - Phase 22.3/22.4 elective resolver + catalog remain the single authoritative elective system (do not recreate).
-- Phase 23.4 (authoritative student-context) is the next implementation slice - requires a fresh execution prompt.
+
+## PHASE 23.4 - AUTHORITATIVE STUDENT CONTEXT SERVICE (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - service-layer consolidation; NO schema/migration change.** Alembic head unchanged (`e3f4a5b6c7d8`). One reusable read-only authority for student academic context (placement / enrollments / elective choices). No commit, no push, no PR.
+
+> Scope note: this execution prompt scopes Phase 23.4 as the authoritative student-context service (the blueprint label for 23.2 was re-scoped earlier; the roadmap's 23.4 is this service layer).
+
+## Objective
+
+Create one reusable backend authority for resolving a student's current academic context so downstream services do not independently reconstruct the `User -> Section -> Semester -> AcademicSession` chain. Migrate only the consumers that genuinely duplicated context resolution; keep every external response contract identical.
+
+## Delivered
+
+- [x] `app/schemas/student_context.py`: `StudentContext` + `ContextSubject` read models (stable service-level representation, not ORM objects)
+- [x] `app/services/student_context_service.py`: `StudentContextService` with `get_placement(user)` (4 fixed lookups) + `get_context(user)` (adds exactly 3 queries: enrollments, elective choices, first quiz date) - no N+1
+- [x] Consumes the authoritative `StudentElectiveChoice` + `ElectiveResolver` catalog (no second resolver); validates stored elective choices against the catalog (records `inconsistencies`, never repairs)
+- [x] `/student/me` migrated to `get_context` (contract unchanged: section_name, subsection_name, program, semester_name, academic_session, semester_start/end, first_quiz_date, elective_i/ii, role)
+- [x] Dashboard migrated to `get_placement` (removes inline `Section->Semester` duplication)
+- [x] Quiz eligibility endpoint migrated to `get_placement` (removes inline `Section->Semester` duplication; same `today` fallback)
+- [x] Calendar migrated to `get_placement` (same semester bounds)
+- [x] Analytics migrated to `get_placement` (same semester bounds)
+- [x] Attendance History migrated to `get_placement` (same semester bounds)
+- [x] Timetable + Registration intentionally NOT migrated (documented: trivial placement / provisioning is a different concern)
+- [x] Equivalence verified (code-path: identical chain, NULL handling, fallbacks)
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic head unchanged
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.5 elective/catalog redesign
+- [ ] NO timetable / session / occurrence / event / quiz / attendance redesign
+- [ ] NO admin portal / frontend redesign / new context-fetching endpoint
+- [ ] NO schema migration (Phase 23.4 requires none; `e3f4a5b6c7d8` untouched)
+- [ ] NO student assignment mutations (no subsection/elective/enrollment creation or repair)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (full backend) PASS; alembic head unchanged (`e3f4a5b6c7d8`)
+- Frontend `npx tsc --noEmit` PASS (no frontend change)
+- Logic-level checks (no DB, temp script removed): three concepts distinct; cross-slot/non-catalog elective detection; Context A/B isolation; bounded query design - ALL PASS
+- Failure-state matrix (code review): valid placement / missing subsection / missing elective / invalid elective / missing section / missing enrollment - explicit honest states, no fabrication
+- **Production DB not touched.** No migration applied.
+- Git: working tree contains 23.4 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.4 context service is the authoritative read-only resolver for the migrated consumers. Do not revert to inline reconstruction.
+- Phase 22.3/22.4 elective resolver + catalog remain the single authoritative elective system (the context service consumes them).
+- Phase 23.5 (elective/catalog redesign) is the next implementation slice - requires a fresh execution prompt.

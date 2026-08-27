@@ -3,17 +3,16 @@ from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.engines.calendar_engine import get_academic_day, AcademicDay, DEFAULT_WEEKENDS
 from app.repositories.calendar_repo import CalendarRepository
-from app.repositories.user_repo import UserRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from app.models.user import User
 from app.schemas.calendar import CalendarMonthResponse, CalendarDayItem, AcademicEventResponse
 from app.services.elective_resolver import ElectiveResolver
+from app.services.student_context_service import StudentContextService
 
 class CalendarService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = CalendarRepository(db)
-        self.user_repo = UserRepository(db)
         self.attendance_repo = AttendanceRepository(db)
 
     async def get_day_schedule(self, target_date: date) -> AcademicDay:
@@ -68,9 +67,11 @@ class CalendarService:
           (Phase 6.1) — one query for the whole range, grouped by date.
           No attendance/quiz mathematics are computed here.
         """
-        context = await self.user_repo.get_academic_context(user)
-        semester_start: Optional[date] = context.get("semester_start")
-        semester_end: Optional[date] = context.get("semester_end")
+        # Phase 23.4: authoritative academic placement from the student-context
+        # service (same semester bounds the Profile, Track and History use).
+        ctx = await StudentContextService(self.db).get_placement(user)
+        semester_start: Optional[date] = ctx.semester_start
+        semester_end: Optional[date] = ctx.semester_end
 
         month_start, month_end = self._month_bounds(year, month)
 

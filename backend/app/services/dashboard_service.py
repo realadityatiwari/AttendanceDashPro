@@ -28,10 +28,10 @@ from app.schemas.dashboard import (
     AttentionItem,
     UpcomingEventItem,
 )
-from app.models.academic import Semester, Subject
-from app.models.user import Section
+from app.models.academic import Subject
 from app.models.enums import AttendanceStatus
 from app.services.elective_resolver import ElectiveResolver
+from app.services.student_context_service import StudentContextService
 
 # DAY_LABELS + banding constants/functions now live in the canonical
 # attendance engine (single definition; dashboard + analytics + subject
@@ -63,13 +63,10 @@ class DashboardService:
         today = date.today()
         subjects = await self.user_repo.get_enrolled_subjects(user.id)
 
-        semester_start = None
-        if user.section_id is not None:
-            section = await self.db.get(Section, user.section_id)
-            if section is not None and section.semester_id is not None:
-                semester = await self.db.get(Semester, section.semester_id)
-                if semester is not None:
-                    semester_start = semester.start_date
+        # Phase 23.4: authoritative placement from the student-context service
+        # (replaces the inline section -> semester reconstruction).
+        ctx = await StudentContextService(self.db).get_placement(user)
+        semester_start = ctx.semester_start
 
         # Phase 8.1 N+1 fix: ONE enrollment-scoped range scan feeds the Today /
         # Overall / Weekly sections (previously up to four overlapping scans).

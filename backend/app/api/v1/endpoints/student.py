@@ -3,8 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
+from app.models.enums import ElectiveSlot
 from app.schemas.student import StudentProfile, StudentSyncRequest
-from app.repositories.user_repo import UserRepository
+from app.services.student_context_service import StudentContextService
 
 router = APIRouter()
 
@@ -46,22 +47,25 @@ async def get_student_profile(
 ):
     """
     Returns the authenticated student's profile, including read-only
-    academic context resolved from the section -> semester -> session
-    chain, the student's quiz schedules, and the student's authoritative
-    academic assignment (subsection, elective choices — Phase 23.3).
+    academic context resolved from the authoritative student-context service
+    (Phase 23.4): placement (section -> semester -> academic session,
+    subsection), the student's quiz schedules, and the student's elective
+    choices.
     """
-    repo = UserRepository(db)
-    academic_context = await repo.get_academic_context(current_user)
-    elective_codes = await repo.get_elective_codes(current_user.id)
-    section_name = current_user.section.name if current_user.section else None
-    subsection_name = current_user.subsection.name if current_user.subsection else None
+    ctx = await StudentContextService(db).get_context(current_user)
     return StudentProfile(
         id=current_user.id,
         role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
         display_name=current_user.name,
         roll_number=current_user.roll_number,
-        section_name=section_name,
-        subsection_name=subsection_name,
-        **academic_context,
-        **elective_codes,
+        section_name=ctx.section_name,
+        subsection_name=ctx.subsection_name,
+        program=ctx.program,
+        semester_name=ctx.semester_name,
+        academic_session=ctx.academic_session_name,
+        semester_start=ctx.semester_start,
+        semester_end=ctx.semester_end,
+        first_quiz_date=ctx.first_quiz_date,
+        elective_i=ctx.elective_choices.get(ElectiveSlot.ELECTIVE_I),
+        elective_ii=ctx.elective_choices.get(ElectiveSlot.ELECTIVE_II),
     )

@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import classify_attendance_status
 from app.engines.practical_occurrence import occurrence_is_cancelled
+from app.services.student_context_service import StudentContextService
 
 # Monday-start week bucketing for the weekly read model. A structure, not a
 # product "trend" definition (Phase 8.0 contract §I/§J/§15).
@@ -41,9 +42,10 @@ class AnalyticsService:
 
     async def get_overview(self, user: User) -> AnalyticsOverviewResponse:
         today = date.today()
-        context = await self.user_repo.get_academic_context(user)
-        semester_start: Optional[date] = context.get("semester_start")
-        semester_end: Optional[date] = context.get("semester_end")
+        # Phase 23.4: authoritative placement from the student-context service.
+        ctx = await StudentContextService(self.db).get_placement(user)
+        semester_start: Optional[date] = ctx.semester_start
+        semester_end: Optional[date] = ctx.semester_end
 
         start = semester_start if semester_start is not None else today
 

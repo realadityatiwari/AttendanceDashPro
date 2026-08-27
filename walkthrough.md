@@ -4859,3 +4859,196 @@ Production not touched. Phase 23.4 not started — requires a fresh execution
 prompt.
 
 ---
+
+# AttendanceDash Pro — Phase 23.4 Walkthrough
+
+> **PHASE 23.4 COMPLETE — AUTHORITATIVE STUDENT CONTEXT SERVICE (2026-08-28).**
+> One reusable read-only backend authority for a student's current academic
+> context (placement ? enrollment ? elective choice). Service-layer only — no
+> schema, no migration.
+
+## Objective
+
+Create a single reusable authority so downstream services do not independently
+reconstruct the `User ? Section ? Semester ? AcademicSession` chain, enrollments,
+or elective choices. Migrate only the consumers that genuinely duplicated
+context resolution; keep every external response contract identical. Do NOT
+create a second elective resolver and do NOT mutate any student assignment.
+
+## Discovery
+
+Existing context resolvers found:
+
+- `UserRepository.get_academic_context(user)` — the de-facto centralized
+  resolver (section ? semester ? session + first quiz date), used by
+  `/student/me`, Calendar, Analytics, Attendance History.
+- `UserRepository.get_elective_codes(user_id)` (Phase 23.3) — used by
+  `/student/me`.
+- `UserRepository.get_enrolled_subjects(user_id)` — used by Dashboard,
+  Analytics, Subjects, Eligibility, Notifications.
+- `ElectiveResolver` (Phase 22.3/22.4) — the authoritative elective resolver.
+
+**Duplicated logic found (independent reconstruction of the hierarchy):**
+- `dashboard_service.get_summary` — inline `Section ? Semester` for
+  `semester_start`.
+- `quiz.py get_quiz_eligibility` — inline `Section ? Semester` for
+  `semester_start`.
+
+**Conflicting logic:** none — all resolvers agree on the same chain and
+semantics.
+
+**Authoritative sources selected:** `users.section_id`/`subsection_id` ?
+`sections`/`subsections` ? `semesters` ? `academic_sessions` (placement);
+`student_enrollments.enrollment_type` (Phase 23.3) (enrollment);
+`student_elective_choices` + `ElectiveResolver` catalog (Phase 22.3/22.4)
+(elective selection).
+
+## Existing resolver map
+
+| Consumer | Previous resolver | Migrated |
+|---|---|---|
+| `/student/me` | `get_academic_context` + `get_elective_codes` | ? `get_context` |
+| Dashboard | inline `Section?Semester` | ? `get_placement` |
+| Quiz eligibility | inline `Section?Semester` | ? `get_placement` |
+| Calendar | `get_academic_context` | ? `get_placement` |
+| Analytics | `get_academic_context` | ? `get_placement` |
+| Attendance History | `get_academic_context` | ? `get_placement` |
+| Timetable | `user.section_id` (placement only) | ? unchanged |
+| Registration | authoritative provisioning | ? unchanged |
+
+## Context contract
+
+```
+StudentContext (read-only, stable service-level representation)
+??? user_id, role
+??? placement        section_id/name, program (branch), semester_id/name/start/end,
+?                    academic_session_id/name, subsection_id/name, is_placed
+??? enrollments      enrollments[] (ContextSubject: id/code/name/enrollment_type)
+?                    ??? compulsory_subjects[]
+?                    ??? elective_subjects[]
+??? elective_choices {DE-I: code, DE-II: code}   (slot -> concrete subject)
+    + first_quiz_date, inconsistencies[]
+```
+
+`ContextSubject` is a read model, not the ORM `Subject`. `get_placement(user)`
+resolves placement only (4 fixed lookups); `get_context(user)` adds exactly
+three queries (enrollments, elective choices, first quiz date) — bounded, no
+N+1, no cross-join, no duplicate enrollment rows, no per-student
+multiplication.
+
+## Architecture
+
+`StudentContextService` (service layer) owns composition/interpretation; it
+consumes `StudentElectiveChoice` + `ElectiveResolver` (authoritative, not
+recreated), `student_enrollments.enrollment_type`, and focused repository data
+access. API ? Service ? Repository ? DB boundaries preserved; no business logic
+in endpoints/React/Pydantic validators/models.
+
+## Consumers migrated
+
+- `/student/me` ? `get_context` (contract unchanged: section_name,
+  subsection_name, program, semester_name, academic_session, semester_start,
+  semester_end, first_quiz_date, elective_i, elective_ii, role).
+- Dashboard ? `get_placement` (semester_start).
+- Quiz eligibility ? `get_placement` (semester_start, same `today` fallback).
+- Calendar ? `get_placement` (semester_start/end).
+- Analytics ? `get_placement` (semester_start/end).
+- Attendance History ? `get_placement` (semester_start/end).
+
+## Consumers intentionally not migrated
+
+- **Timetable** — uses only `user.section_id` for section scoping (placement
+  access, not chain reconstruction); no duplication; changing it adds risk with
+  no gain.
+- **Registration** — authoritative *provisioning* (creates the placement,
+  enrollments, and choices), not read-only resolution; making it depend on the
+  read-only context service would mix provisioning with resolution and risk a
+  circular architecture. Documented decision: left unchanged.
+
+## Files changed
+
+- NEW `backend/app/services/student_context_service.py`
+- NEW `backend/app/schemas/student_context.py`
+- `backend/app/api/v1/endpoints/student.py`
+- `backend/app/api/v1/endpoints/quiz.py`
+- `backend/app/services/dashboard_service.py`
+- `backend/app/services/calendar_service.py`
+- `backend/app/services/analytics_service.py`
+- `backend/app/services/attendance_service.py`
+
+## Verification
+
+- Backend `compileall` (full) — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic head unchanged (`e3f4a5b6c7d8`); no new migration.
+- Equivalence: every migrated consumer's old academic context == new
+  authoritative context (identical chain, NULL handling, fallbacks).
+- Logic-level checks (no DB): three concepts distinct; cross-slot / non-catalog
+  elective codes detected (recorded, not repaired); Context A (CS-5A/51,
+  BCS-054/BCS-058) vs Context B (CS-5A/52, BCS-052/BCS-055) isolated; bounded
+  query design — ALL PASS.
+- Failure-state matrix: valid placement ? `is_placed=True`; missing subsection
+  ? NULL (never invented); missing elective ? empty choices; invalid elective ?
+  `inconsistencies` (never repaired); missing section ? `is_placed=False` +
+  NULLs; missing semester/session ? impossible (FK NOT NULL); missing enrollment
+  ? empty list (read-only, nothing created).
+
+## Performance / SQL findings
+
+- `get_placement`: 4 fixed lookups (section, semester, session, subsection) —
+  no N+1.
+- `get_context`: +1 enrollments query (JOIN subject, no duplication), +1
+  elective-choices query (JOIN subject, no multiplication), +1 first-quiz-date
+  aggregate. Total ? 7 bounded queries; no cross-joins; per-student scoping via
+  `user_id` in every query (Student A can never receive Student B's rows).
+
+## Security considerations
+
+- Context is always resolved for the authenticated `current_user` supplied by
+  the caller (JWT-scoped `get_current_user`); the service never accepts
+  `section_id`/`semester_id`/`student_id`/`elective_i`/`elective_ii` from
+  request data as authoritative context.
+- No mutation surface added; the service is read-only.
+- Registration provisioning (the only assignment mutation path) is unchanged and
+  remains backend-authoritative.
+
+## Regression
+
+- Attendance engines — **unchanged** (no formula/engine file touched).
+- Eligibility mathematics — **unchanged** (thresholds/windows/optimizer intact;
+  only the `semester_start` resolver source changed, with identical output).
+- Calendar semantics — **unchanged** (only the semester-bounds source swapped).
+- Event semantics — **unchanged**.
+- Timetable behavior — **unchanged**.
+- Frontend behavior — **unchanged** (no frontend file changed).
+- Registration provisioning — **unchanged**.
+
+## Deferred items
+
+- Phase 23.5 elective/catalog redesign (resolver remains authoritative).
+- Timetable / class-session / event / quiz / attendance redesign (later slices).
+- Context-service adoption by registration provisioning (documented decision —
+  requires a deliberate phase with provisioning/remediation semantics).
+- `branches` table / Branch parentage (23.1 gate); BNC-501 non-credit modeling
+  (undecided).
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. No schema
+migration applied (Phase 23.4 requires none). Phase 23.3 migration
+`e3f4a5b6c7d8` untouched and NOT applied. **Production DB not touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.4 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.4 implemented section (consumer map, files,
+  equivalence, verification).
+- task.md: Phase 23.4 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.4 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.5 not started — requires a fresh execution
+prompt.
+
+---

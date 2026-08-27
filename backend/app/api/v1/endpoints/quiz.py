@@ -4,8 +4,9 @@ from sqlalchemy.future import select
 from datetime import date
 from app.api.dependencies.deps import get_db, get_current_user
 from app.models.user import User
-from app.models.academic import StudentEnrollment, Semester
+from app.models.academic import StudentEnrollment
 from app.services.eligibility_service import EligibilityService
+from app.services.student_context_service import StudentContextService
 from app.schemas.attendance import EligibilityResult, CurrentQuizCycle
 from app.repositories.subject_repo import SubjectRepository
 
@@ -48,13 +49,11 @@ async def get_quiz_eligibility(
     if not enrollment.scalars().first():
         raise HTTPException(status_code=404, detail="Subject not found")
         
-    # Resolve the attendance-window start from the active semester (section -> semester).
-    # Falls back to today when the section has no semester assignment.
-    semester_start = date.today()
-    if current_user.section_id:
-        semester = await db.get(Semester, current_user.section.semester_id)
-        if semester:
-            semester_start = semester.start_date
+    # Resolve the attendance-window start from the authoritative student
+    # context (Phase 23.4). Falls back to today when the student has no
+    # section/semester placement (identical to the previous behavior).
+    ctx = await StudentContextService(db).get_placement(current_user)
+    semester_start = ctx.semester_start if ctx.semester_start is not None else date.today()
         
     service = EligibilityService(db)
     result = await service.get_quiz_eligibility(

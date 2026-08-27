@@ -2936,3 +2936,72 @@ table (Branch gate open); enrollment redesign, elective catalog redesign
   pooler, Docker daemon down. Operator applies on dev DB; then production only
   when separately authorized. **Production DB not touched.**
 - Git: no commit, no push, no PR (working tree contains the 23.3 changes only).
+
+---
+
+### Phase 23.4 — Authoritative Student Context Service (implemented 2026-08-28)
+
+**Status: COMPLETE — service-layer consolidation; NO schema/migration change.**
+Alembic head unchanged (`e3f4a5b6c7d8`). No commit, no push, no PR.
+
+**Objective:** create one reusable read-only backend authority for resolving a
+student's current academic context (placement → enrollment → elective choices),
+so downstream services do not independently reconstruct the `User → Section →
+Semester → AcademicSession` chain. Migrate only the consumers that genuinely
+duplicated context resolution; every external response contract remains
+identical.
+
+**Discovery — consumer map:**
+
+| Consumer | Previous resolver | Problem | Migrated |
+|---|---|---|---|
+| Dashboard | inline `Section→Semester` (dashboard_service) | DUPLICATED | ✅ → `get_placement` |
+| Quiz eligibility | inline `Section→Semester` (quiz.py) | DUPLICATED | ✅ → `get_placement` |
+| `/student/me` | `UserRepository.get_academic_context` | centralized but not service | ✅ → `get_context` |
+| Calendar | `UserRepository.get_academic_context` | already centralized | ✅ → `get_placement` |
+| Analytics | `UserRepository.get_academic_context` | already centralized | ✅ → `get_placement` |
+| Attendance History | `UserRepository.get_academic_context` | already centralized | ✅ → `get_placement` |
+| Timetable | `user.section_id` direct | trivial | ⛔ not changed |
+| Registration | authoritative provisioning | different concern | ⛔ not changed |
+
+**New files:**
+- `app/services/student_context_service.py` — `StudentContextService` (exposes
+  `get_placement(user)` and `get_context(user)`; bounded query set; no N+1).
+- `app/schemas/student_context.py` — `StudentContext` + `ContextSubject` read
+  models (stable service-level representation, not ORM objects).
+
+**Files modified (6):**
+- `app/api/v1/endpoints/student.py` — `/student/me` consumes `get_context` (full
+  context). Removed unused `UserRepository` import.
+- `app/services/dashboard_service.py` — inline `Section→Semester` replaced by
+  `get_placement`. Removed unused `Semester`, `Section` imports.
+- `app/api/v1/endpoints/quiz.py` — inline `Section→Semester` replaced by
+  `get_placement`. Removed unused `Semester` import.
+- `app/services/calendar_service.py` — `get_academic_context` replaced by
+  `get_placement`. Removed unused `UserRepository` import/attribute.
+- `app/services/analytics_service.py` — `get_academic_context` replaced by
+  `get_placement`. Added `StudentContextService` import.
+- `app/services/attendance_service.py` — `get_academic_context` replaced by
+  `get_placement`. Removed unused `UserRepository` import.
+
+**Equivalence:** For every migrated consumer, `old academic context == new
+authoritative context` for the same student — identical resolution chain,
+identical NULL handling, identical fallbacks.
+
+**No schema change:** Phase 23.4 required no migration. Phase 23.3 migration
+`e3f4a5b6c7d8` untouched, not applied.
+
+**Verification:**
+- `compileall` (full backend) — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic head unchanged (`e3f4a5b6c7d8`); no new migration.
+- Logic-level checks (no DB, temp script removed): three concepts distinct;
+  cross-slot detection; Context A/B isolation; bounded query design — ALL PASS.
+- Failure-state: valid placement → `is_placed=True`; missing subsection → NULL;
+  missing elective → empty; invalid elective → `inconsistencies` recorded;
+  missing section → `is_placed=False`; missing enrollment → empty list.
+- **Production DB not touched.** No migration applied.
+
+**Deferred:** Phase 23.5 (elective/catalog redesign); timetable redesign;
+registration context adoption (provisioning kept separate); `branches` table;
+BNC-501 non-credit modeling.

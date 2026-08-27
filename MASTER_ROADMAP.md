@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -72,7 +72,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
-| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary). Phase 23.4+ pending. |
+| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. Phase 23.5+ pending. |
 
 ---
 
@@ -2344,6 +2344,101 @@ consolidating around the already-existing Phase 22.3/22.4 elective architecture
 
 ---
 
+# 🟢 Phase 23.4 — Authoritative Student Context Service (COMPLETE, 2026-08-28)
+
+**Status: COMPLETE — service-layer consolidation; NO schema/migration change.**
+Alembic head unchanged (`e3f4a5b6c7d8` from Phase 23.3; no new migration).
+No commit, no push, no PR.
+
+## Objective
+
+Create **one reusable backend authority** for resolving a student's current
+academic context (placement → enrollment → elective choice), so downstream
+services do not independently reconstruct the `User → Section → Semester →
+AcademicSession` chain. Migrate only the consumers that genuinely duplicated
+context resolution; keep every external response contract identical.
+
+## Discovery — context-consumer map
+
+| Consumer | Previous resolver | Placement | Enrollments | Electives | Migrated |
+|---|---|---|---|---|---|
+| `/student/me` | `UserRepository.get_academic_context` + `get_elective_codes` | Y | N | Y | ✅ → `get_context` |
+| Dashboard | **inline `Section→Semester`** (dashboard_service) | Y | Y (repo) | Y (resolver) | ✅ → `get_placement` |
+| Quiz eligibility | **inline `Section→Semester`** (quiz.py) | Y | Y (check) | N | ✅ → `get_placement` |
+| Calendar | `UserRepository.get_academic_context` | Y | N | Y (resolver) | ✅ → `get_placement` |
+| Analytics | `UserRepository.get_academic_context` | Y | Y (repo) | N | ✅ → `get_placement` |
+| Attendance History | `UserRepository.get_academic_context` | Y | N | N | ✅ → `get_placement` |
+| Timetable | `user.section_id` direct (placement only) | Y | N | Y (resolver) | ⛔ intentionally unchanged (trivial placement) |
+| Registration | authoritative provisioning (auth.py) | Y | Y | Y | ⛔ intentionally unchanged (provisioning ≠ resolution; circular-dependency risk) |
+
+**Duplicated logic found:** Dashboard and the Quiz endpoint each independently
+reconstructed the `Section → Semester` chain. Calendar/Analytics/Attendance were
+already centralized via `UserRepository.get_academic_context`.
+
+**Conflicting logic:** none found. **Authoritative sources selected:**
+`users.section_id`/`subsection_id` → `sections`/`subsections` → `semesters` →
+`academic_sessions` (placement); `student_enrollments` + `enrollment_type`
+(Phase 23.3) (enrollment); `student_elective_choices` + `ElectiveResolver`
+catalog (Phase 22.3/22.4) (elective selection — NOT recreated).
+
+## Architecture
+
+```
+StudentContextService (service layer, read-only)
+  ├── get_placement(user)   → section → semester → academic session → subsection
+  ├── get_context(user)     → placement + enrollments + elective choices + first quiz date
+  └── consumes:
+        StudentElectiveChoice + ElectiveResolver (authoritative elective system)
+        student_enrollments.enrollment_type (Phase 23.3)
+```
+
+New files: `backend/app/services/student_context_service.py`,
+`backend/app/schemas/student_context.py` (`StudentContext` + `ContextSubject`
+read models — stable service-level representation, not ORM objects).
+
+Query efficiency: `get_placement` = 4 fixed lookups; `get_context` adds exactly
+3 queries (enrollments, elective choices, first quiz date) — no N+1, no
+cross-join, no duplicate enrollments, no per-student row multiplication.
+
+## Equivalence (all migrated consumers)
+
+`old academic context == new authoritative context` for the same student,
+verified by code-path equivalence: identical resolution chain, identical NULL
+handling, identical fallbacks (Quiz/History default to `today` when unplaced;
+Calendar returns empty month when unplaced). `/student/me` contract unchanged
+(section_name, subsection_name, program, semester_name, academic_session,
+semester_start, semester_end, first_quiz_date, elective_i, elective_ii, role).
+
+## No schema change
+
+Phase 23.4 required **no migration**. The Phase 23.3 migration
+(`e3f4a5b6c7d8`) is untouched and remains NOT applied to production.
+
+## Verification
+
+- Backend `compileall` — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic head unchanged (`e3f4a5b6c7d8`); no new migration.
+- Logic-level checks (no DB): three concepts distinct; cross-slot / non-catalog
+  elective codes detected (recorded as inconsistency, not repaired); Context A
+  vs Context B isolation; bounded query design — ALL PASS.
+- Failure-state behavior (code review): valid placement → `is_placed=True`;
+  missing subsection → NULL (never invented); missing elective → empty choices;
+  invalid elective → `inconsistencies` recorded (not repaired); missing section
+  → `is_placed=False` + NULLs; missing semester/session → impossible (FK NOT
+  NULL); missing enrollment → empty list (read-only, nothing created).
+
+## Deferred (documented, NOT implemented)
+
+- Phase 23.5 elective/catalog redesign (resolver remains authoritative).
+- Timetable / class-session / event / quiz / attendance redesign (later slices).
+- Reusable context consumption for registration provisioning (kept separate —
+  documented decision).
+- `branches` table / Branch parentage (23.1 gate); BNC-501 non-credit modeling
+  (undecided).
+
+---
+
 # 🔗 Critical Dependency Path
 
 ```text
@@ -2395,7 +2490,7 @@ PHASE 21  ← COMPLETE & FROZEN
    ↓
 PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
    ↓
-PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5) · 23.3 COMPLETE (e3f4a5b6c7d8); 23.4+ pending
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5) · 23.3 COMPLETE (e3f4a5b6c7d8) · 23.4 COMPLETE (service); 23.5+ pending
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -2631,7 +2726,7 @@ PHASE 10 ████████████████████  COMPLETE 
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
-Phase 23 ██████████████░░░░░░  23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5) · 23.3 COMPLETE (e3f4a5b6c7d8); 23.4+ pending
+Phase 23 ██████████████████░░  23.0 DISCOVERY + RECONCILED · 23.1 COMPLETE (c8d9e0f1a2b3) · 23.2 COMPLETE (d0e1f2a3b4c5) · 23.3 COMPLETE (e3f4a5b6c7d8) · 23.4 COMPLETE (StudentContextService); 23.5+ pending
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -2642,8 +2737,12 @@ Phase 23 ██████████████░░░░░░  23.0 DISC
 > `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me`
 > exposes subsection + elective_i/elective_ii) — consolidated around the
 > existing 22.3/22.4 elective architecture; **not applied to production**
-> (operator boundary). Phase 23.4 (authoritative student-context) is next.
-> Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
+> (operator boundary). **23.4 COMPLETE (2026-08-28)** — Authoritative Student
+> Context Service (`StudentContextService` + `StudentContext` read model —
+> service-layer, no migration); consumers migrated: `/student/me`, Dashboard,
+> Quiz eligibility, Calendar, Analytics, Attendance History; equivalence
+> verified. Phase 23.5 (elective/catalog redesign) is the next implementation
+> slice. Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
 Phase 6.5 is **COMPLETE** (2026-08-14):

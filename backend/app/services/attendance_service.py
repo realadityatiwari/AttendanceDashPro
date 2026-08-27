@@ -6,7 +6,6 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.attendance_repo import AttendanceRepository
-from app.repositories.user_repo import UserRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import TimetableEntry
@@ -21,6 +20,7 @@ from app.engines.attendance_engine import (
     classify_attendance_health,
 )
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
+from app.services.student_context_service import StudentContextService
 
 # Institutional timezone (settings.INSTITUTION_TIMEZONE, Asia/Kolkata) is the
 # canonical local clock for "today". Attendance mutation is rejected for any
@@ -234,9 +234,11 @@ class AttendanceService:
         bounded by their real academic semester (semester_start -> today).
         Same canonical records Track consumes; no attendance rows created.
         """
-        context = await UserRepository(self.db).get_academic_context(user)
-        semester_start = context.get("semester_start")
-        semester_end = context.get("semester_end")
+        # Phase 23.4: authoritative placement from the student-context service
+        # (same semester bounds Track, Calendar and /student/me use).
+        ctx = await StudentContextService(self.db).get_placement(user)
+        semester_start = ctx.semester_start
+        semester_end = ctx.semester_end
         today = date.today()
 
         # Effective query range: clamped to the student's semester and today.
