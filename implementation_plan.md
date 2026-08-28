@@ -3162,6 +3162,13 @@ engine, event registry, quiz, consumers untouched. No frontend change.
 DB application is an operator action (production pooler, Docker down). **Not
 applied to production.**
 
+> **Corrective migration `f8a9b0c1d2e3` (2026-08-29):** the Phase 23.9 live
+> verifier exposed that Phase 23.7 introduced `EventType.CLASS_MODIFIED` in the
+> application layer but omitted the PostgreSQL `eventtype` enum value.
+> Additive migration `f8a9b0c1d2e3` (parent `f7a8b9c0d1e2`):
+> `ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'CLASS_MODIFIED'`.
+> Applied to the local dev DB only; not applied to production.
+
 **Objective:** represent event scope correctly when an event applies to a
 concrete subject within a shared elective occurrence, and introduce `MODIFIED`
 as an event-scope-level occurrence outcome (deferred from 23.6). Preserve
@@ -3336,9 +3343,11 @@ attendance safety / deactivation-reversal / idempotency / authorization
 (401/403/200) / attendance-safety assertions.
 
 **Verification status:** `compileall` PASS · frontend `npx tsc --noEmit` PASS
-(no frontend change) · alembic head unchanged `f7a8b9c0d1e2` · verifier written
-for operator run. **Independent review PASS (safe to freeze); live DB verifier
-NOT RUN.** **Production DB not touched. No migration applied.**
+(no frontend change) · alembic head `f8a9b0c1d2e3` (corrective migration for
+the Phase 23.7 `eventtype.CLASS_MODIFIED` gap). **Independent review PASS.
+Live `verify_phase_23_9.py` PASS 26/26** against `127.0.0.1:55432/attendancedash`
+after the Phase 23.7 corrective migration `f8a9b0c1d2e3` was applied locally.
+**Production DB not touched. No production migration applied.**
 
 **Non-blocking verifier coverage observations (review):** (1) EXTRA outcome ?
 allowed is not explicitly exercised (code is trivially correct: only CANCELLED
@@ -3349,3 +3358,60 @@ manufacture a green result.
 **Deferred (documented, NOT implemented):** Phase 23.10 canonical read models;
 23.11 API scope/authorization; Phase 24 Admin Portal. No attendance UI/history/
 quiz/calendar/event-registry/event-session-architecture redesign.
+
+---
+
+### Phase 23.10 — Student-Facing Read Models (implemented 2026-08-29)
+
+**Status: COMPLETE.** No migration (schema already carries the data). Alembic
+head unchanged (`f8a9b0c1d2e3`). No commit, no push, no PR.
+
+**Objective:** make the student-facing read layer consume the canonical
+architecture consistently (EXPECTED timetable ? class session ? subject-specific
+outcome ? student effective subject ? student-facing read model).
+
+**Discovery — audit:** every student-facing surface (`/student/me`, timetable,
+subjects, Track/daily sessions, history, calendar, events, quiz schedule, quiz
+eligibility, dashboard, notifications, analytics) already consumes the
+canonical architecture (StudentContextService 23.4 + ElectiveResolver +
+outcome-aware `attendance_repo` read path 23.6/23.7) with no anchor/slot
+leakage. **Genuine gap:** the schedule read responses (daily sessions + history)
+dropped `outcome_type` (effective occurrence type) and `elective_slot`, so a
+MODIFIED occurrence was indistinguishable from normal to the client.
+
+**Architectural decision:** reuse the existing canonical path; expose the
+effective occurrence state additively on the existing daily-sessions and history
+contracts (`outcome_type` + `elective_slot`, None when inapplicable). No new
+endpoint, no new resolver, no new context service.
+
+**Files changed:**
+- `app/repositories/attendance_repo.py` — `ClassSession.elective_slot` added to
+  the SELECT of `get_sessions_with_status`, `get_daily_sessions`,
+  `_fetch_history_occurrences`.
+- `app/schemas/attendance.py` — `outcome_type` + `elective_slot` (additive
+  optional) on `DailySessionResponse` and `AttendanceHistoryItem`.
+- `app/services/attendance_service.py` — pass-through in `get_daily_sessions`
+  and `get_history`.
+- `frontend/src/types/api.ts` — `OccurrenceOutcomeType` enum + additive fields.
+- NEW `scripts/verify_phase_23_10.py` — DB-based, self-cleaning isolation-matrix
+  verifier.
+
+**API contract:** additive only — `GET /attendance/daily/{date}` and `GET
+/attendance/history` now return `outcome_type` + `elective_slot` per session.
+Student-scoped; never accepted from the client.
+
+**Verification:**
+- `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic head
+  `f8a9b0c1d2e3` (single head, no migration).
+- `verify_phase_23_10.py` PASS 26/26 against `127.0.0.1:55432/attendancedash`
+  (A?BCS-058, B?BCS-055 on shared DE occurrence; elective_slot exposed; no
+  outcome ? None; CANCELLED and MODIFIED affect only BCS-058; history exposes
+  effective state; common/practical identical; historical attendance
+  untouched; baseline restored). The verifier retains the pre-existing
+  `check()` argument-order bug (one BCS-501 assertion artifact — data issue,
+  not a code defect).
+- **Production DB not touched.**
+
+**Deferred:** Phase 23.11 API scope/authorization; Phase 24 Admin Portal;
+subsection-scoped reads (needs `timetable_entries.subsection_id` scheduling
+decision; no data).

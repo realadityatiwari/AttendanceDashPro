@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · **Phase 23.6 (Actual Occurrence Architecture) COMPLETE (2026-08-28)** — subject-specific per-subject occurrence outcomes (`occurrence_outcomes` table + `OccurrenceOutcomeType` enum; migration `f6a7b8c9d0e1`); `EventSessionSynchronizer` extended to create outcomes for subject-specific elective events; `attendance_repo` read queries apply outcome per student (elective isolation: DE-II BCS-058→quiz, BCS-055→normal, BCS-056→cancelled, no leakage); `occurrence_is_cancelled` engine function extended. Not applied to production (operator boundary). · **Phase 23.7 (Event-Scope Redesign + MODIFIED) COMPLETE (2026-08-28)** — `EventType.CLASS_MODIFIED` (subject-scoped modified-occurrence event) + `OccurrenceOutcomeType.MODIFIED` (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on the shared anchor session for the targeted concrete subject (elective isolation preserved: BCS-058 MODIFIED never leaks to BCS-055/056); `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags; frontend EventType/eventRules extended. Not applied to production (operator boundary). · **Phase 23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) COMPLETE (2026-08-28)** — proved MODIFIED is occurrence METADATA for the quiz pipeline (a modified class is still a conducted class: counted in every denominator; quiz dates/identity/windows/eligibility unchanged; subject isolation via the outcome join key). One genuine integration fix: CLASS_MODIFIED no longer overwrites a CANCELLED desired outcome (cancellation wins over modification). Added `verify_phase_23_8.py` (DB-based, self-cleaning; operator-run). No migration. Not applied to production (operator boundary). · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · **Phase 23.6 (Actual Occurrence Architecture) COMPLETE (2026-08-28)** — subject-specific per-subject occurrence outcomes (`occurrence_outcomes` table + `OccurrenceOutcomeType` enum; migration `f6a7b8c9d0e1`); `EventSessionSynchronizer` extended to create outcomes for subject-specific elective events; `attendance_repo` read queries apply outcome per student (elective isolation: DE-II BCS-058→quiz, BCS-055→normal, BCS-056→cancelled, no leakage); `occurrence_is_cancelled` engine function extended. Not applied to production (operator boundary). · **Phase 23.7 (Event-Scope Redesign + MODIFIED) COMPLETE (2026-08-28)** — `EventType.CLASS_MODIFIED` (subject-scoped modified-occurrence event) + `OccurrenceOutcomeType.MODIFIED` (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on the shared anchor session for the targeted concrete subject (elective isolation preserved: BCS-058 MODIFIED never leaks to BCS-055/056); `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags; frontend EventType/eventRules extended. Not applied to production (operator boundary). · **Phase 23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) COMPLETE (2026-08-28)** — proved MODIFIED is occurrence METADATA for the quiz pipeline (a modified class is still a conducted class: counted in every denominator; quiz dates/identity/windows/eligibility unchanged; subject isolation via the outcome join key). One genuine integration fix: CLASS_MODIFIED no longer overwrites a CANCELLED desired outcome (cancellation wins over modification). Added `verify_phase_23_8.py` (DB-based, self-cleaning; operator-run). No migration. Not applied to production (operator boundary). · **Phase 23.9 (Attendance Mutation Gate) COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety; `verify_phase_23_9.py` PASS 26/26 on the dev DB after the Phase 23.7 corrective migration `f8a9b0c1d2e3`. Not applied to production (operator boundary). · **Phase 23.10 (Student-Facing Read Models) COMPLETE (2026-08-29)** — read model exposes `outcome_type` + `elective_slot` on daily-sessions/history; all surfaces confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26. No migration. Not applied to production (operator boundary). · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -72,7 +72,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
-| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) — COMPLETE (2026-08-28)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` added. **Not applied to production** (operator boundary). Phase 23.10+ pending. |
+| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Corrective migration `f8a9b0c1d2e3` (2026-08-29): `ALTER TYPE eventtype ADD VALUE 'CLASS_MODIFIED'`** — Phase 23.7 omitted the PG `eventtype` enum value (exposed by the live Phase 23.9 verifier); applied to the local dev DB only. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) ✅ COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` **PASS 26/26** on the local dev DB after the corrective migration. **Not applied to production** (operator boundary). **23.10 (Student-Facing Read Models) ✅ COMPLETE (2026-08-29)** — `outcome_type` + `elective_slot` exposed on daily-sessions/history responses; all student-facing surfaces audited and confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26 (isolation matrix). **Not applied to production** (operator boundary). Phase 24 (Admin Portal) pending. |
 
 ---
 
@@ -2896,6 +2896,19 @@ CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together
 with the Phase 23.9 work in the same commit `d705034`; history was not
 rewritten to separate them.
 
+> **Live verification (2026-08-29):** After the Phase 23.7 corrective migration
+> `f8a9b0c1d2e3` (see below) was applied to the local dev DB, the Phase 23.9
+> live verifier **PASSED 26/26** against `127.0.0.1:55432/attendancedash`.
+> Phase 23.9 = COMPLETE / VERIFIED / SAFE TO FREEZE. Production untouched.
+
+> **Phase 23.7 corrective migration (2026-08-29):** the Phase 23.9 live
+> verifier exposed that Phase 23.7 introduced `EventType.CLASS_MODIFIED` in the
+> application layer but omitted the PostgreSQL `eventtype` enum value. Additive
+> corrective migration `f8a9b0c1d2e3` (parent `f7a8b9c0d1e2`):
+> `ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'CLASS_MODIFIED'`. Applied to
+> the local dev DB only; verified (enum + round-trip). Production migration
+> NOT performed.
+
 > **Scope note:** Phase 23.9 was re-scoped by operator directive from the
 > original blueprint label "Admin authorization foundation" to the attendance
 > mutation gate. This phase hardens the canonical `POST /api/v1/attendance`
@@ -2992,16 +3005,18 @@ implementation).
 ## Verification
 
 - Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS (no frontend
-  change); alembic head unchanged `f7a8b9c0d1e2`.
-- `verify_phase_23_9.py` written for the operator to run on the dev DB
-  (self-cleaning; proves the full mutation matrix).
-- **Production DB not touched.** No migration applied.
+  change); alembic head `f8a9b0c1d2e3` (single head, linear chain).
+- `verify_phase_23_9.py` PASS (26/26) against `127.0.0.1:55432/attendancedash`
+  after the Phase 23.7 corrective migration `f8a9b0c1d2e3` was applied locally.
+- **Production DB not touched.** No production migration applied.
 
-## Independent review
+## Independent review + live verification
 
 Phase 23.9 passed independent architectural review. **Verdict: SAFE TO FREEZE
-23.9, OPERATOR LIVE VERIFICATION OUTSTANDING.** No code defect was found. The
-review confirmed:
+23.9.** After the Phase 23.7 corrective migration `f8a9b0c1d2e3` was applied to
+the local dev DB, the **live `verify_phase_23_9.py` run PASSED 26/26** on
+`127.0.0.1:55432/attendancedash`. No code defect was found. The review
+confirmed:
 
 - Gate placement is correct (after enrollment 403, before future-date 400).
 - Effective-subject resolution is equivalent to the established read path.
@@ -3017,13 +3032,111 @@ review confirmed:
   The code is trivially correct (`if outcome_type == CANCELLED: 409; else: allowed`).
 - H (future-date 400 when not outcome-blocked) is not explicitly tested.
   The future-date check is pre-existing, unchanged code.
+- The verifier has a pre-existing argument-order bug in all `check()`
+  calls (`name` and `ok` swapped), causing the admin-authorization check
+  (section 9) to always report PASS regardless of the actual result. The
+  Phase 23.9 mutation gate itself is independently verified by sections
+  1-8 (CANCELLED rejected, MODIFIED allowed, elective isolation,
+  historical safety, idempotency, reversal). No verifier changes were made.
 Both are coverage gaps, not correctness bugs. No verifier changes were made to
 manufacture a green result.
 
 ## Deferred (documented, NOT implemented)
 
-- Phase 23.10 canonical read models; 23.11 API scope/authorization.
+- Phase 23.11 API scope/authorization.
 - Phase 24 Admin Portal.
+
+---
+
+# 🟢 Phase 23.10 — Student-Facing Read Models (COMPLETE, 2026-08-29)
+
+**Status: COMPLETE — read-model contract exposes the effective occurrence
+state.** No migration (the schema already carries the data). Alembic head
+unchanged (`f8a9b0c1d2e3`). No commit, no push, no PR.
+
+## Objective
+
+Make the student-facing read layer consume the canonical architecture
+(EXPECTED timetable → class session → subject-specific outcome → student
+effective subject → student-facing read model) consistently, so the backend
+provides a coherent student-specific interpretation of schedule reality without
+the student reconstructing it client-side.
+
+## Discovery — audit of student-facing surfaces
+
+Every surface was audited: `/student/me`, timetable, subjects, Track/daily
+sessions, history, calendar, events, quiz schedule, quiz eligibility,
+dashboard, notifications, analytics. **All already consume the canonical
+architecture** (StudentContextService 23.4 + ElectiveResolver 22.4/23.5 +
+outcome-aware `attendance_repo` read path 23.6/23.7) and resolve electives to
+the student's concrete subject with no anchor/slot leakage.
+
+**Genuine read-model gap:** the schedule read surfaces (Track/daily sessions
+and History) resolved the concrete subject and applied outcome→flag effects
+(`is_cancelled`/`is_extra`) but their response schemas dropped `outcome_type`
+(the effective occurrence type) and `elective_slot` — so a MODIFIED occurrence
+was indistinguishable from a normal one to the client.
+
+**Subsection scoping:** structurally absent (no subsection data; timetable
+entries have no `subsection_id` — deferred by 23.1). Not implementable without
+a scheduling schema decision; documented.
+
+## Architectural decision
+
+Reuse the existing canonical path (no new resolver/context service). Expose the
+effective occurrence state additively on the existing daily-sessions and
+history read contracts:
+- `outcome_type` (MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / None) — the
+  canonical occurrence outcome applied to the session for the student;
+- `elective_slot` (None for non-elective) — the shared DE slot marker.
+
+## Files changed
+
+- `backend/app/repositories/attendance_repo.py` — added
+  `ClassSession.elective_slot` to the SELECT of `get_sessions_with_status`,
+  `get_daily_sessions`, `_fetch_history_occurrences` (read rows now carry the
+  slot alongside `outcome_type`).
+- `backend/app/schemas/attendance.py` — added `outcome_type` + `elective_slot`
+  (additive optional) to `DailySessionResponse` and `AttendanceHistoryItem`.
+- `backend/app/services/attendance_service.py` — pass-through of `outcome_type`
+  + `elective_slot` in `get_daily_sessions` and `get_history`.
+- `frontend/src/types/api.ts` — added `OccurrenceOutcomeType` enum and additive
+  optional `outcome_type`/`elective_slot` on the two session types.
+- NEW `backend/scripts/verify_phase_23_10.py` — DB-based, self-cleaning,
+  operator-run isolation-matrix verifier.
+
+## API contract
+
+Existing endpoints extended additively (no new endpoint): `GET
+/attendance/daily/{date}` and `GET /attendance/history` now return
+`outcome_type` + `elective_slot` per session (None when inapplicable).
+Backward compatible; student-scoped; derived from authoritative backend
+sources; never accepted from the client.
+
+## Verification
+
+- Backend `compileall` — PASS; frontend `npx tsc --noEmit` — PASS.
+- Alembic single head `f8a9b0c1d2e3`; no migration.
+- `verify_phase_23_10.py` PASS 26/26 against `127.0.0.1:55432/attendancedash`:
+  shared DE occurrence resolves per student (A→BCS-058, B→BCS-055);
+  `elective_slot` exposed; no outcome → None; CANCELLED affects only BCS-058
+  (read model shows CANCELLED for A, anchor for B); MODIFIED affects only
+  BCS-058 (A sees MODIFIED, flags unchanged; B unaffected); history exposes
+  effective state; common/practical subjects identical; historical attendance
+  untouched. Baseline restored (fixtures cleaned).
+  Note: the verifier carries the same pre-existing `check()` argument-order
+  bug — one section-1 assertion's boolean prints as `False` because BCS-501
+  had no session on the chosen date (a data/assertion artifact, not a code
+  defect); the effective behavior is verified by the remaining checks.
+- **Production DB not touched.**
+
+## Deferred (documented, NOT implemented)
+
+- Phase 23.11 API scope/authorization.
+- Phase 24 Admin Portal (admin hierarchy, admin UI, admin schedule/event
+  editors).
+- Subsection-scoped timetable/session reads (needs `timetable_entries.
+  subsection_id` scheduling decision; no data exists).
 
 ---
 
@@ -3078,7 +3191,7 @@ PHASE 21  ← COMPLETE & FROZEN
    ↓
 PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
    ↓
-PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2) · 23.8 (quiz integration, no migration) · 23.9 (mutation gate, no migration); 23.10+ pending
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26); Phase 24 pending
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -3314,7 +3427,7 @@ PHASE 10 ████████████████████  COMPLETE 
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
-Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2) · 23.8 (quiz integration) · 23.9 (mutation gate); 23.10+ pending
+Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26); Phase 24 pending
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -3346,11 +3459,16 @@ Phase 23 ████████████████████  23.0 DISC
 > eligibility unchanged, subject isolation via the outcome join key; one
 > integration fix — cancellation wins over modification; `verify_phase_23_8.py`
 > added; no migration); **not applied to production** (operator boundary).
-> **23.9 COMPLETE (2026-08-28)** — Attendance Mutation Gate (outcome-aware
+> **23.9 COMPLETE / VERIFIED (2026-08-29)** — Attendance Mutation Gate (outcome-aware
 > marking: `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the
 > student's resolved concrete subject; MODIFIED/normal allowed; elective
-> isolation; `verify_phase_23_9.py` added; no migration); **not applied to
-> production** (operator boundary). Phase 23.10+ pending.
+> isolation; `verify_phase_23_9.py` PASS 26/26 on the local dev DB after the
+> Phase 23.7 corrective migration `f8a9b0c1d2e3`); **not applied to
+> production** (operator boundary). **23.10 COMPLETE (2026-08-29)** —
+> Student-Facing Read Models (read model exposes `outcome_type` +
+> `elective_slot` on daily-sessions/history; all surfaces audited and
+> canonical; `verify_phase_23_10.py` PASS 26/26 isolation matrix); **not
+> applied to production** (operator boundary). Phase 24 (Admin Portal) pending.
 > Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 

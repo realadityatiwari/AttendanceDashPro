@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date, datetime
 from enum import Enum
-from app.models.enums import ClassType, AttendanceStatus
+from app.models.enums import ClassType, AttendanceStatus, ElectiveSlot, OccurrenceOutcomeType
 
 class AttendanceRecord(BaseModel):
     date: date
@@ -28,6 +28,16 @@ class AttendanceHistoryItem(BaseModel):
     # sessions. Never used in any attendance calculation.
     designation: Optional[str] = None
     marked_at: Optional[datetime] = None
+    # Phase 23.10: effective occurrence state for the student's resolved
+    # concrete subject. `outcome_type` is the canonical occurrence outcome
+    # (MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / None) applied to this
+    # session for this student; `elective_slot` marks which shared
+    # Departmental Elective slot the session belongs to (None for non-elective
+    # sessions). Both are additive presentation fields derived from the
+    # authoritative occurrence/outcome architecture — never used in any
+    # attendance/eligibility calculation.
+    outcome_type: Optional[OccurrenceOutcomeType] = None
+    elective_slot: Optional[ElectiveSlot] = None
 
 class HistorySummary(BaseModel):
     """Counts over the filtered history result set (same canonical semantics
@@ -226,6 +236,16 @@ class DailySessionResponse(BaseModel):
     # is unchanged: a covered subject/date keeps its single attendance-bearing
     # session, which Track simply labels with its quiz-day context.
     is_quiz_day: bool = False
+    # Phase 23.10: effective occurrence state for the student's resolved
+    # concrete subject. `outcome_type` is the canonical occurrence outcome
+    # (MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / None) applied to this
+    # session for this student; `elective_slot` marks which shared
+    # Departmental Elective slot the session belongs to (None for non-elective
+    # sessions). Both are additive presentation fields derived from the
+    # authoritative occurrence/outcome architecture — never used in any
+    # attendance/eligibility calculation.
+    outcome_type: Optional[OccurrenceOutcomeType] = None
+    elective_slot: Optional[ElectiveSlot] = None
 
 class DailySessionsResponse(BaseModel):
     date: date

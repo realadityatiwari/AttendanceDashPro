@@ -65,6 +65,17 @@ export enum ElectiveSlot {
   ELECTIVE_II = "ELECTIVE_II",
 }
 
+/** Phase 23.6/23.7: subject-specific occurrence outcome types.
+    MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / null. */
+export enum OccurrenceOutcomeType {
+  EXTRA_LECTURE = "EXTRA_LECTURE",
+  EXTRA_TUTORIAL = "EXTRA_TUTORIAL",
+  EXTRA_PRACTICAL = "EXTRA_PRACTICAL",
+  SURPRISE_QUIZ = "SURPRISE_QUIZ",
+  CANCELLED = "CANCELLED",
+  MODIFIED = "MODIFIED",
+}
+
 export enum ClassType {
   LECTURE = "L",
   TUTORIAL = "T",
@@ -110,6 +121,12 @@ export interface AttendanceHistoryItem {
   // presentation field; never used in any attendance calculation.
   designation: string | null;
   marked_at: string | null;
+  // Phase 23.10: effective occurrence state for the student's resolved
+  // concrete subject. outcome_type is the canonical occurrence outcome
+  // (MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / null); elective_slot
+  // marks the shared DE slot (null for non-elective). Presentation-only.
+  outcome_type?: OccurrenceOutcomeType | null;
+  elective_slot?: ElectiveSlot | null;
 }
 
 export interface HistorySummary {
@@ -161,6 +178,12 @@ export interface DailySessionResponse {
   // Option-C quiz-day context: True when the subject has an ACTIVE QUIZ_DAY
   // event on this date. Presentation-only — never an attendance calculation.
   is_quiz_day: boolean;
+  // Phase 23.10: effective occurrence state for the student's resolved
+  // concrete subject. outcome_type is the canonical occurrence outcome
+  // (MODIFIED / SURPRISE_QUIZ / EXTRA_* / CANCELLED / null); elective_slot
+  // marks the shared DE slot (null for non-elective). Presentation-only.
+  outcome_type?: OccurrenceOutcomeType | null;
+  elective_slot?: ElectiveSlot | null;
 }
 
 export interface DailySessionsResponse {

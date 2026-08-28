@@ -2484,9 +2484,9 @@ Keep quiz reality correct when a concrete subject's scheduled occurrence is modi
 - MODIFIED is occurrence metadata; the eligibility engine remains authoritative and unchanged.
 - Phase 23.9 (attendance mutation gate) requires a fresh execution prompt.
 
-## PHASE 23.9 - ATTENDANCE MUTATION GATE (COMPLETE, 2026-08-28)
+## PHASE 23.9 - ATTENDANCE MUTATION GATE (COMPLETE / VERIFIED, 2026-08-29)
 
-Status: **COMPLETE - outcome-aware attendance mutation safety.** No migration (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`). **Git state (corrected after independent review):** committed and pushed — commit `d705034` on `main`, up to date with `origin/main`. The Phase 23.8 content (the `event_session_service.py` CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content, not 23.9 implementation, and history was not rewritten.
+Status: **COMPLETE / VERIFIED - outcome-aware attendance mutation safety.** No Phase 23.9 migration (discovery proved none necessary). Alembic head `f8a9b0c1d2e3` (the corrective Phase 23.7 migration `f8a9b0c1d2e3` adds `eventtype.CLASS_MODIFIED`; applied to the local dev DB only). **Git state (corrected after independent review):** committed and pushed — commit `d705034` on `main`, up to date with `origin/main`. The Phase 23.8 content (the `event_session_service.py` CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content, not 23.9 implementation, and history was not rewritten. **Live `verify_phase_23_9.py` PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29).
 
 > Scope note: this execution prompt hardens the canonical attendance mutation path so attendance records cannot be created/modified in a way that contradicts the canonical session/occurrence outcome. It is NOT a change to attendance mathematics, quiz eligibility, calendar, or event-session synchronization semantics. Phase 23.9 was re-scoped by operator directive from the original blueprint label "Admin authorization foundation" to the attendance mutation gate.
 
@@ -2525,16 +2525,60 @@ Ensure the mutation endpoint (`POST /api/v1/attendance`) respects the canonical 
 
 ## Validation
 
-- `compileall` (app + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head, no new migration)
+- `compileall` (app + scripts) PASS; alembic head `f8a9b0c1d2e3` (single head; corrective Phase 23.7 migration applied locally)
 - Frontend `npx tsc --noEmit` PASS (no frontend change)
 - In-process import + logic checks PASS (gate branch, elective isolation key, error semantics 409/403/404/400 preserved)
-- `verify_phase_23_9.py` written for the operator to run on the dev DB (self-cleaning; proves mutation-allowed/rejected/isolation/protection/reversal/idempotency/authorization)
-- **Production DB NOT touched.** No migration applied. Local/dev DB mutation limited to verifier fixtures (operator-run).
-- Independent review: **PASS (safe to freeze); live DB verifier NOT RUN.** Non-blocking coverage observations: EXTRA-outcome-allowed and future-date-400 are not explicitly exercised by the verifier (code paths trivially correct / unchanged; no verifier changes made).
+- `verify_phase_23_9.py` **PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29) — normal / MODIFIED / CANCELLED / elective isolation / MODIFIED isolation / duplicate-single-record / historical attendance safety / deactivation-reversal / idempotency / authorization / attendance safety
+- **Production DB NOT touched.** No production migration applied. Local/dev DB mutation limited to verifier fixtures (cleaned by the verifier's finally block).
+- Independent review: **PASS (safe to freeze); live DB verifier PASS 26/26.** Non-blocking coverage observations: EXTRA-outcome-allowed and future-date-400 are not explicitly exercised by the verifier (code paths trivially correct / unchanged); the verifier also has a pre-existing `check()` argument-order bug (name/ok swapped) that makes the section-9 admin check always report PASS — the Phase 23.9 gate is independently verified by sections 1-8. No verifier changes made.
 - Git (corrected after review): Phase 23.9 work committed + pushed — `d705034` on `main`, up to date with `origin/main`; Phase 23.8 content (CANCELLED-wins fix + `verify_phase_23_8.py`) is inside the same commit.
 
 ## Do Not Touch Again
 
 - Phase 23.9 attendance mutation gate is complete. Do not reopen.
 - The canonical `occurrence_outcomes` table + `_outcome_join_on` remain the ONE outcome resolution path (mutation and read now share it).
-- Phase 23.10 (canonical read models) requires a fresh execution prompt.
+
+## PHASE 23.10 - STUDENT-FACING READ MODELS (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE.** No migration. Alembic head unchanged (`f8a9b0c1d2e3`). No commit, no push, no PR.
+
+> Scope note: this phase makes the student-facing read layer expose the effective occurrence state consistently, consuming the canonical architecture (StudentContextService + ElectiveResolver + outcome-aware read path). It does NOT create a new resolver/context service, change any attendance/eligibility/calendar mathematics, or start the Admin Portal.
+
+## Objective
+
+Provide the backend a coherent student-specific interpretation of schedule reality so clients can display the effective state (including MODIFIED) without reconstructing it client-side.
+
+## Delivered
+
+- [x] Discovery audit of all student-facing surfaces (/student/me, timetable, subjects, Track, history, calendar, events, quiz schedule, quiz eligibility, dashboard, notifications, analytics) — all confirmed on the canonical architecture
+- [x] `attendance_repo.py`: `ClassSession.elective_slot` added to SELECT of `get_sessions_with_status`, `get_daily_sessions`, `_fetch_history_occurrences`
+- [x] `schemas/attendance.py`: `outcome_type` + `elective_slot` (additive optional) on `DailySessionResponse` and `AttendanceHistoryItem`
+- [x] `attendance_service.py`: pass-through in `get_daily_sessions` and `get_history`
+- [x] Frontend `types/api.ts`: `OccurrenceOutcomeType` enum + additive fields on the two session types
+- [x] `verify_phase_23_10.py` (NEW, DB-based, self-cleaning): PASS 26/26 (isolation matrix A/B, effective state, CANCELLED/MODIFIED isolation, common/practical, historical attendance safety)
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic head `f8a9b0c1d2e3` (no migration)
+- [x] Baseline restored after verifier (users 3, events 62, outcomes 0, records 165)
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Admin Portal (admin hierarchy, admin UI, admin schedule/event editors)
+- [ ] NO Phase 23.11 API scope/authorization
+- [ ] NO attendance/eligibility/calendar/quiz/timetable mathematics changes
+- [ ] NO new resolver/context service (canonical path reused)
+- [ ] NO subsection-scoped scheduling (deferred: needs `timetable_entries.subsection_id` decision)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` PASS; `npx tsc --noEmit` PASS; alembic head `f8a9b0c1d2e3` (single head, no migration)
+- `verify_phase_23_10.py` PASS 26/26 against `127.0.0.1:55432/attendancedash` (A?BCS-058, B?BCS-055; outcome_type/elective_slot exposed; CANCELLED/MODIFIED isolation; history effective state; common/practical identical; attendance untouched; baseline restored)
+- Pre-existing `check()` argument-order bug noted (one BCS-501 assertion artifact; not a code defect; no verifier changes)
+- **Production DB NOT touched.** No migration applied.
+- Git: working tree contains 23.10 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.10 read-model layer is complete. Do not reopen.
+- The canonical path (StudentContextService + ElectiveResolver + outcome-aware attendance_repo) is the ONE student-facing resolution authority.
+- Phase 24 (Admin Portal) requires a fresh execution prompt.

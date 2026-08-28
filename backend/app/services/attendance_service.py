@@ -306,6 +306,9 @@ class AttendanceService:
                 "is_extra": r["is_extra"],
                 "designation": r["designation"].value if r["designation"] else None,
                 "marked_at": r["marked_at"],
+                # Phase 23.10: effective occurrence state (additive).
+                "outcome_type": r.get("outcome_type"),
+                "elective_slot": r.get("elective_slot"),
             })
 
         # Summary over the FULL filtered result set (not the loaded page).
@@ -404,6 +407,11 @@ class AttendanceService:
                 is_extra=r["is_extra"],
                 designation=r["designation"].value if r["designation"] else None,
                 is_quiz_day=r["id"] in quiz_day_session_ids,
+                # Phase 23.10: effective occurrence state (additive, backward
+                # compatible). The repo rows carry outcome_type + elective_slot
+                # from the canonical occurrence_outcomes + ClassSession.
+                outcome_type=r.get("outcome_type"),
+                elective_slot=r.get("elective_slot"),
             ))
             
         return DailySessionsResponse(date=target_date, sessions=sessions)
