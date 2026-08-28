@@ -386,7 +386,16 @@ class EventSessionSynchronizer:
                             for entry in scheduled.values()
                         )
                     if slot_has_timetable:
-                        desired_outcomes[event.subject_id] = OccurrenceOutcomeType.MODIFIED
+                        # Phase 23.8 (quiz reality): cancellation wins over
+                        # modification — a CLASS_CANCELLED for the same
+                        # subject/date (processed earlier: higher priority) must
+                        # never be overwritten by a MODIFIED outcome, or a
+                        # cancelled class would incorrectly read as conducted.
+                        if (
+                            desired_outcomes.get(event.subject_id)
+                            != OccurrenceOutcomeType.CANCELLED
+                        ):
+                            desired_outcomes[event.subject_id] = OccurrenceOutcomeType.MODIFIED
                 continue
             # Phase 23.6: subject-specific ELECTIVE event (no slot marker, but
             # the concrete subject is a catalog elective subject). When the

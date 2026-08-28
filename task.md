@@ -2440,4 +2440,100 @@ Represent event scope correctly when an event applies to a concrete subject with
 
 - Phase 23.7 event-scope + MODIFIED is complete. Do not reopen.
 - `EventSessionSynchronizer` remains the ONE event?session synchronizer (extended, never duplicated).
-- Phase 23.8 (quiz architecture integration) requires a fresh execution prompt.
+
+## PHASE 23.8 - QUIZ INTEGRATION (MODIFIED + SUBJECT-SCOPED QUIZ REALITY) (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - MODIFIED is occurrence metadata for the quiz pipeline.** No migration (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`). No commit, no push, no PR.
+
+> Scope note: this execution prompt integrated the Phase 23.7 MODIFIED architecture with the quiz pipeline. Discovery proved the quiz pipeline is already outcome-aware (Phase 23.6 read path): a modified class is a conducted class (counted in every denominator); quiz dates/identity/windows/eligibility unchanged; subject isolation via the outcome join key. One genuine defect was fixed (cancellation wins over modification).
+
+## Objective
+
+Keep quiz reality correct when a concrete subject's scheduled occurrence is modified — no quiz rebuild, no eligibility-engine change, no leakage to other subjects, no frontend quiz calculations.
+
+## Delivered
+
+- [x] Discovery: quiz pipeline traced (quiz_schedules projection + QUIZ_DAY-event dates + outcome-aware eligibility counts + elective scope)
+- [x] Semantic decision: MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged)
+- [x] Integration fix: `event_session_service.py` CLASS_MODIFIED branch no longer overwrites a CANCELLED desired outcome (cancellation wins over modification)
+- [x] `verify_phase_23_8.py` (NEW, DB-based, self-cleaning, operator-run): outcome isolation (BCS-058 vs BCS-055/056), read-path isolation per student, eligibility invariance, no-op without a session, idempotency, CANCELLED-wins, deactivation reversal, attendance safety
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS (no frontend change); alembic head unchanged `f7a8b9c0d1e2`
+- [x] In-process checks: CANCELLED-wins fix; MODIFIED alone ? MODIFIED; no leakage; MODIFIED counts as conducted; SURPRISE_QUIZ/EXTRA/CANCELLED regression; QUIZ_DAY source uncoupled from outcomes — ALL PASS
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.9 attendance mutation gate
+- [ ] NO Phase 23.10 read models / 23.11 API scope / Phase 24 Admin Portal
+- [ ] NO quiz admin UI / frontend redesign / React quiz calculations
+- [ ] NO migration (none required)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (app + alembic + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head, no new migration)
+- Frontend `npx tsc --noEmit` PASS
+- In-process logic checks — ALL PASS (see Delivered)
+- `verify_phase_23_8.py` written for the operator to run on the dev DB (self-cleaning)
+- **Production DB NOT touched.** No migration applied.
+- Git: working tree contains 23.8 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.8 quiz integration is complete. Do not reopen.
+- MODIFIED is occurrence metadata; the eligibility engine remains authoritative and unchanged.
+- Phase 23.9 (attendance mutation gate) requires a fresh execution prompt.
+
+## PHASE 23.9 - ATTENDANCE MUTATION GATE (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE - outcome-aware attendance mutation safety.** No migration (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`). No commit, no push, no PR.
+
+> Scope note: this execution prompt hardens the canonical attendance mutation path so attendance records cannot be created/modified in a way that contradicts the canonical session/occurrence outcome. It is NOT a change to attendance mathematics, quiz eligibility, calendar, or event-session synchronization semantics. Phase 23.9 was re-scoped by operator directive from the original blueprint label "Admin authorization foundation" to the attendance mutation gate.
+
+## Objective
+
+Ensure the mutation endpoint (`POST /api/v1/attendance`) respects the canonical occurrence state for the student's RESOLVED concrete subject:
+- NORMAL -> mutation allowed
+- MODIFIED -> mutation allowed (conducted class)
+- CANCELLED -> mutation rejected (409, existing cancelled-session convention)
+- elective isolation: a CANCELLED/MODIFIED outcome for BCS-058 never affects BCS-055/BCS-056
+- enrollment authorization preserved; backend authoritative; no React authorization
+
+## Discovery findings
+
+- Mutation authority before this phase: session existence (404) -> anchor `session.is_cancelled` (409) -> elective-slot resolution -> enrollment (403) -> future date (400) -> upsert. The per-subject `occurrence_outcomes` row was NOT consulted: if the anchor session was normal but a student's subject had a CANCELLED outcome, mutation was incorrectly allowed. This was the genuine gap.
+- Outcome visibility: the canonical `occurrence_outcomes` table is resolved by the read path via `_outcome_join_on(resolved_subject_id)` keyed on `(class_session_id, COALESCE(choice.subject_id, ClassSession.subject_id))`. The mutation path already computes the same `effective_subject_id`, so reusing the same table/key is a direct lookup, NOT a second resolver.
+- Session identity: `attendance_record.class_session_id -> class_sessions.id -> outcome` resolved by `(class_session_id, effective_subject_id)` (the established key).
+- Historical attendance: unchanged. The invariant "historical attendance is never silently mutated by event synchronization" is preserved; sync never deletes/rewrites records.
+- Concurrency/TOCTOU: the outcome check and the insert happen in the same request transaction against the same DB connection; the canonical `uq_user_class_session` unique constraint already guards duplicate rows. No separate locking added (documented limitation).
+
+## Delivered
+
+- [x] `attendance_repo.py`: additive `get_occurrence_outcome_type(class_session_id, subject_id)` - canonical read of `occurrence_outcomes` for the resolved subject
+- [x] `attendance_service.py`: Phase 23.9 outcome-aware mutation gate in `record_attendance` (after enrollment 403, before future-date 400): CANCELLED outcome -> 409 "Cannot mark attendance for a cancelled class session" (same convention as the anchor flag)
+- [x] `verify_phase_23_9.py` (NEW, DB-based, self-cleaning, operator-run): normal mutation, MODIFIED allowed, CANCELLED rejected, elective isolation (CANCELLED BCS-058 vs BCS-055/056), MODIFIED isolation, duplicate-mutation single record, historical attendance safety, deactivation/reversal, idempotency, authorization regression (401/403/200), attendance safety assertions
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS (no frontend change); alembic head unchanged `f7a8b9c0d1e2`
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.10 read models / 23.11 API scope / Phase 24 Admin Portal
+- [ ] NO attendance UI / history redesign, quiz, calendar, event-registry redesign, event-session architecture redesign
+- [ ] NO new roles / notifications / analytics redesign / production deployment / production migration
+- [ ] NO migration (none required)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (app + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head, no new migration)
+- Frontend `npx tsc --noEmit` PASS (no frontend change)
+- In-process import + logic checks PASS (gate branch, elective isolation key, error semantics 409/403/404/400 preserved)
+- `verify_phase_23_9.py` written for the operator to run on the dev DB (self-cleaning; proves mutation-allowed/rejected/isolation/protection/reversal/idempotency/authorization)
+- **Production DB NOT touched.** No migration applied. Local/dev DB mutation limited to verifier fixtures (operator-run).
+- Git: working tree contains 23.9 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.9 attendance mutation gate is complete. Do not reopen.
+- The canonical `occurrence_outcomes` table + `_outcome_join_on` remain the ONE outcome resolution path (mutation and read now share it).
+- Phase 23.10 (canonical read models) requires a fresh execution prompt.

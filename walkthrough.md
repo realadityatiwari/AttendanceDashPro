@@ -5625,3 +5625,270 @@ Production not touched. Phase 23.8 not started — requires a fresh execution
 prompt.
 
 ---
+
+# AttendanceDash Pro — Phase 23.8 Walkthrough
+
+> **PHASE 23.8 COMPLETE — QUIZ INTEGRATION (2026-08-28).** Integrated the Phase
+> 23.7 MODIFIED occurrence architecture with the existing quiz architecture.
+> Discovery proved the quiz pipeline is already outcome-aware; MODIFIED is
+> occurrence metadata for the quiz pipeline; one genuine defect (cancellation
+> winning over modification) was fixed.
+
+## Objective
+
+Integrate the Phase 23.7 event-scope / MODIFIED occurrence architecture with
+the existing quiz architecture so quiz reality remains correct when a concrete
+subject's scheduled occurrence is modified — without rebuilding the quiz
+architecture, without leaking MODIFIED to other subjects, without touching the
+eligibility engine, and without React-side quiz calculations.
+
+## Discovery findings
+
+- **Quiz identity**: `quiz_schedules` (subject + cycle, seed-time projection)
+  + canonical quiz dates from active `QUIZ_DAY` AcademicEvents
+  (`get_effective_quiz_dates_for_subjects`, ranked chronologically ? cycles).
+  Eligibility uses the event-authoritative dates.
+- **Elective resolution**: `ElectiveResolver.chosen_elective_map(user_id)` ?
+  the student's selected subject's slot; elective quiz dates resolve the
+  slot's QUIZ_DAY events.
+- **Occurrence relationship**: quiz date ? attendance window (calendar engine)
+  ? `get_subject_counts_between(exclude_quiz_day=True)` ? eligibility engine.
+  This counting query is outcome-aware since Phase 23.6 (outcome LEFT JOIN +
+  `_apply_outcome_to_row`).
+- **MODIFIED semantics**: occurrence metadata only — a modified class is still
+  a conducted class (`is_cancelled=False`, no flag change), counted in every
+  attendance denominator; quiz dates, quiz occurrence identity, eligibility
+  windows, and eligibility results are unchanged.
+- **Subject isolation**: the outcome join key
+  `(class_session_id, COALESCE(choice.subject_id, ClassSession.subject_id))`
+  guarantees BCS-058's MODIFIED outcome never appears on BCS-055/056 rows.
+
+## Architectural decision
+
+No schema change, no quiz rebuild, no eligibility-engine change. MODIFIED is
+integrated through the already-outcome-aware attendance read path: quiz
+eligibility consumes counts in which a modified class counts as conducted, and
+quiz dates/cycles/identity come from QUIZ_DAY events (uncoupled from
+occurrence outcomes).
+
+## Genuine integration defect found + fixed
+
+A subject-specific CLASS_MODIFIED (priority 10, processed after CLASS_CANCELLED
+at 30) could overwrite a CANCELLED desired outcome for the same subject/date —
+a cancelled occurrence would then read as MODIFIED (conducted) in the quiz/
+attendance counts. Fixed in `event_session_service._desired_schedule`: the
+CLASS_MODIFIED branch now guards against overwriting an existing CANCELLED
+outcome (cancellation wins over modification — the documented Phase 6.6
+invariant). This was the smallest possible change to the frozen Phase 23.7 code
+and is recorded here per the frozen-code rule.
+
+## Exact files changed
+
+- `backend/app/services/event_session_service.py` — the CANCELLED-wins guard in
+  the CLASS_MODIFIED branch (only production-code change).
+- NEW `backend/scripts/verify_phase_23_8.py` — DB-based, self-cleaning verifier
+  (operator-run on the dev DB).
+
+## Schema/Migration changes
+
+**None.** Discovery proved the existing schema (occurrence_outcomes + the
+occurrenceoutcometype enum from 23.6/23.7) can represent the required quiz
+integration. Alembic head unchanged (`f7a8b9c0d1e2`). No migration created, none
+applied locally, production untouched.
+
+## Quiz integration semantics
+
+- MODIFIED does not affect quiz dates, quiz occurrence identity, eligibility
+  windows, attendance counting shape, or eligibility results.
+- A modified class counts as conducted in eligibility L/T windows and subject
+  attendance — never attended/absent/cancelled.
+- QUIZ_DAY (quiz dates + quiz-day occurrence) unchanged; SURPRISE_QUIZ
+  (extra/outcome) unchanged; CLASS_CANCELLED unchanged; CLASS_MODIFIED produces
+  MODIFIED only where its subject-scoped event applies.
+
+## Elective isolation
+
+BCS-058 MODIFIED ? MODIFIED outcome keyed (anchor session, BCS-058); BCS-055/
+BCS-056 have no outcome ? anchor state. Read-path rows are keyed per resolved
+subject, so Student A (DE-II=BCS-058) sees the MODIFIED occurrence and Student B
+(DE-II=BCS-055) sees the unchanged occurrence — no anchor-subject or
+cross-student leakage.
+
+## Verification results
+
+- Backend `compileall` — PASS.
+- Frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic single head `f7a8b9c0d1e2`; no new migration.
+- In-process logic checks (temp script removed):
+  1. CLASS_CANCELLED + CLASS_MODIFIED same subject/date ? CANCELLED wins (the
+     Phase 23.8 fix) — PASS;
+  2. CLASS_MODIFIED alone ? MODIFIED outcome — PASS;
+  3. BCS-058 MODIFIED ? no outcome for BCS-056 — PASS (isolation);
+  4. MODIFIED row: `occurrence_is_cancelled` = False ? counted as conducted —
+     PASS;
+  5. SURPRISE_QUIZ ? SURPRISE_QUIZ, EXTRA_LECTURE ? EXTRA_LECTURE, CANCELLED ?
+     cancelled (23.6/23.7 regression, no collapse) — PASS;
+  6. `get_effective_quiz_dates_for_subjects` reads QUIZ_DAY events only, no
+     outcome coupling — PASS.
+- `verify_phase_23_8.py` (operator-run, dev DB): proves outcome isolation
+  (BCS-058 vs BCS-055/056), read-path isolation per student, eligibility
+  invariance, deterministic no-op without a session, idempotency (second sync ?
+  no duplicate rows), CANCELLED-wins, deactivation reversal (outcome removed),
+  attendance safety (no records created/altered), and self-cleanup.
+- **Production DB not touched.** No migration applied.
+
+## Database mutation status
+
+No production migration. No data modified by the agent. The verifier creates
+temporary fixture students/events/outcomes and removes them in its finally
+block (operator-run); the agent did not run any DB mutation.
+
+## Governance updates
+
+- MASTER_ROADMAP.md: Phase 23.8 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.8 implemented section.
+- task.md: Phase 23.8 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+## Deferred items
+
+- Phase 23.9: attendance MUTATION gate (outcome-aware marking).
+- Phase 23.10: canonical read models; Phase 23.11: API scope/authorization.
+- Phase 24: Admin Portal.
+- Exposing `outcome_type` on the daily-sessions API surface (display-only; not
+  required for quiz correctness — deferred to a UI phase).
+
+## Final git state
+
+Working tree contains only Phase 23.8 changes + governance docs
+(`event_session_service.py`, NEW `verify_phase_23_8.py`, four governance docs).
+**No commit · No push · No PR · No merge · No production mutation.**
+
+**PHASE 23.8 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.9 not started — requires a fresh execution
+prompt.
+
+---
+# AttendanceDash Pro — Phase 23.9 Walkthrough
+
+Date: 2026-08-28 · Scope: Attendance Mutation Gate (outcome-aware mutation safety)
+
+> **PHASE 23.9 COMPLETE.** Hardened the canonical `POST /api/v1/attendance`
+> path so attendance records cannot be created/modified in a way that
+> contradicts the canonical session/occurrence outcome. No migration, no
+> attendance-math, quiz, calendar, or event-session-synchronization changes.
+> No commit, no push, no PR.
+
+## Objective
+
+```
+class_sessions
+      +
+occurrence_outcomes
+      +
+authenticated student enrollment
+      ?
+authoritative mutation eligibility
+      ?
+attendance_records
+```
+
+NORMAL ? allowed; MODIFIED ? allowed (conducted class); CANCELLED ? rejected
+(409); elective isolation (a BCS-058 outcome never affects BCS-055/056);
+enrollment authorization preserved; backend authoritative; no React auth.
+
+## Discovery findings
+
+- **Current mutation architecture (before):**
+  `session existence (404) ? anchor session.is_cancelled (409) ? elective-slot
+  resolution ? enrollment (403) ? future date (400) ? upsert`.
+- **Genuine gap:** the per-subject `occurrence_outcomes` row was NOT consulted.
+  When the anchor session was normal but a student's concrete subject had a
+  CANCELLED outcome (subject-scoped elective cancellation), mutation was
+  incorrectly allowed. The read path already resolved outcomes via
+  `_outcome_join_on(resolved_subject_id)` keyed on
+  `(class_session_id, COALESCE(choice.subject_id, ClassSession.subject_id))`.
+- **Outcome resolution reused (no second resolver):** the mutation path already
+  computes the same `effective_subject_id`; a direct lookup of the canonical
+  `occurrence_outcomes` row with that key is added as a repository method.
+
+## Implementation
+
+1. `backend/app/repositories/attendance_repo.py` — additive
+   `get_occurrence_outcome_type(class_session_id, subject_id)`.
+2. `backend/app/services/attendance_service.py` — Phase 23.9 gate in
+   `record_attendance` (after enrollment 403, before future-date 400): a
+   CANCELLED outcome for the student's resolved subject ? 409 (same convention
+   as the anchor flag). MODIFIED / EXTRA_* / no outcome ? allowed.
+3. NEW `backend/scripts/verify_phase_23_9.py` — self-cleaning, operator-run.
+
+## Outcome-resolution path
+
+`class_session_id ? class_sessions.id`; the student's effective subject =
+`COALESCE(choice.subject_id, ClassSession.subject_id)` (elective slot via the
+timetable entry or the session's own `elective_slot` marker); outcome =
+`occurrence_outcomes` row keyed `(class_session_id, effective_subject_id)`.
+
+## Elective isolation
+
+A CANCELLED outcome keyed (anchor session, BCS-058) rejects only the BCS-058
+student (409); BCS-055/BCS-056 students (no outcome) are unaffected and allowed.
+A MODIFIED outcome for BCS-058 likewise never touches BCS-055/056.
+
+## Error semantics (preserved)
+
+Nonexistent session ? 404. Unenrolled subject ? 403. Cancelled (anchor flag or
+outcome) ? 409. Future date ? 400. No new error protocol; no success when
+rejected; no client-side fake success.
+
+## Concurrency findings
+
+The outcome check and the attendance upsert run in the same request transaction
+on the same DB connection; `uq_user_class_session` prevents duplicate rows. No
+separate locking added (a broader isolation redesign was not justified —
+documented limitation).
+
+## Verification
+
+- `compileall` (app + scripts) PASS · `npx tsc --noEmit` PASS (no frontend
+  change) · alembic head unchanged `f7a8b9c0d1e2` (no migration).
+- `verify_phase_23_9.py` written for the operator to run on the dev DB
+  (self-cleaning: normal / MODIFIED / CANCELLED / elective isolation /
+  MODIFIED isolation / duplicate-single-record / historical attendance safety /
+  deactivation-reversal / idempotency / authorization 401-403-200 / attendance
+  safety). Operator/user owns running it; no browser/E2E testing performed.
+
+## Database mutation status
+
+- **Production DB: zero mutation.** No migration, no seed, no data write.
+- Local/dev DB mutation limited to verifier fixtures (operator-run), removed by
+  the verifier's finally block.
+
+## Deferred work
+
+- Phase 23.10 canonical read models; 23.11 API scope/authorization.
+- Phase 24 Admin Portal.
+- No attendance UI/history redesign, quiz, calendar, event-registry redesign,
+  event-session architecture redesign, new roles, notifications, analytics
+  redesign, production deployment/migration.
+
+## Frozen-code rule
+
+No Phase 23.7/23.8 frozen file was modified. `event_session_service.py` is
+untouched by this phase (its uncommitted diff is the pre-existing Phase 23.8
+CANCELLED-wins fix).
+
+## Final git state
+
+- Modified: `backend/app/services/attendance_service.py`,
+  `backend/app/repositories/attendance_repo.py`, plus the four governance docs.
+- NEW: `backend/scripts/verify_phase_23_9.py`.
+- `event_session_service.py` diff = pre-existing Phase 23.8 fix (not from this phase).
+- No commit, no push, no PR.
+
+**PHASE 23.9 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.10 not started — requires a fresh execution
+prompt.
+
+---

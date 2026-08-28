@@ -2780,18 +2780,22 @@ Eliminate architectural ambiguity BEFORE implementation. The system must evolve 
 5. **No admin hierarchy.** Single `UserRole` (STUDENT/ADMIN).
 6. **No canonical student-context read model.** `/student/me` is partial; subsection + electives resolved per-request.
 
-### Recommended Phase 23.x sequence (reconciled)
+### Recommended Phase 23.x sequence (actual, reconciled)
 
-- **23.1 - Academic hierarchy / data foundation (SCHEMA ONLY) — COMPLETE (2026-08-27, migration `c8d9e0f1a2b3`)**: `subsections` table, `users.subsection_id` (nullable, no backfill), `sections` composite-unique `(semester_id, name)`, `student_enrollments` `UNIQUE(user_id, subject_id)`. Four gates resolved: AcademicSession/Academic-Year CONFIRMED, Branch parentage REMAINS UNRESOLVED (no Branch entity; `Section.program` only), enrollment-uniqueness CONFIRMED, event-scope semantics deferred to 23.7. **Does NOT wire** any consumer, engine, registration, UI, or admin authorization (admin schema is 23.9). **Does NOT introduce `timetable_entries.subsection_id` / `class_sessions.subsection_id`** - those are 23.3 scheduling columns. **Does NOT fabricate/backfill subsections.**
-- **23.2 - Curriculum / subject model — COMPLETE (2026-08-27, migration `d0e1f2a3b4c5`)**: added `UNIQUE(code, semester_id)` on `subjects` (constraint `uq_subjects_code_semester`). Invariant: a subject code may appear in different semesters, but the same code may not occur twice within the same semester. Existing single-column `ix_subjects_code` index preserved (independent consumer: `SubjectRepository.get_by_code`). Discovery report `docs/phase_23/phase_23_2_curriculum_discovery.md`. **Only the confirmed REQUIRED change was implemented.** Deferred (documented, not implemented): BNC-501 non-credit modeling (undecided), elective catalog redesign (Phase 23.5), cross-semester subject identity, curriculum versioning, enrollment redesign.
-- **23.3 - Timetable + subsection scheduling**: introduce `timetable_entries.subsection_id` + `class_sessions.subsection_id` schema AND wire them into resolution + synchronizer scoping (fixes X8 cross-section collision). 23.3 owns ALL timetable/session behavioral wiring; 23.1 does not change timetable resolution, synchronizer behavior, or session generation.
-- **23.4 - Outcome/override model**: design + implement the outcome model (`occurrence_outcomes` candidate finalized here) + `class_sessions.event_id`; synchronizer writes outcomes; per-cohort read resolution.
-- **23.5 - Elective subject resolution (config-driven)**: `elective_catalog` table; resolver reads DB with code fallback.
-- **23.6 - Quiz architecture**: subsection-scoped quiz events/dates; keep authoritative dates + cycles.
-- **23.7 - Event architecture**: section/subsection event scoping (scope terms finalized from 23.1 hierarchy) + per-cohort outcomes.
-- **23.8 - Attendance/engine integration**: thread subsection through attendance reads; formulas byte-identical.
-- **23.9 - Admin authorization foundation**: role enum extension + `admin_scopes` + `require_*` deps + admin config APIs (no Admin Portal UI).
-- **23.10 - Migration reconciliation / rollout / closure**: reconcile the linear Alembic chain, confirm each operator-run production migration + read-only post-production verification, backfill/remediation (operator-authorized), downgrade paths, governance closure. NOT the first production migration point.
+> **Note:** The original blueprint labels for 23.3–23.9 were re-scoped by
+> operator directives during execution. This block reflects the ACTUAL
+> implemented phases.
+
+- **23.1 — Academic hierarchy / data foundation (SCHEMA ONLY) — COMPLETE (2026-08-27, migration `c8d9e0f1a2b3`)**: `subsections` table, `users.subsection_id` (nullable, no backfill), `sections` composite-unique `(semester_id, name)`, `student_enrollments` `UNIQUE(user_id, subject_id)`. Four gates resolved: AcademicSession/Academic-Year CONFIRMED, Branch parentage REMAINS UNRESOLVED (no Branch entity; `Section.program` only), enrollment-uniqueness CONFIRMED, event-scope semantics deferred to 23.7. **Does NOT wire** any consumer, engine, registration, UI, or admin authorization (admin schema is 23.9). **Does NOT introduce `timetable_entries.subsection_id` / `class_sessions.subsection_id`** — those are 23.3 scheduling columns. **Does NOT fabricate/backfill subsections.**
+- **23.2 — Curriculum / subject model — COMPLETE (2026-08-27, migration `d0e1f2a3b4c5`)**: `UNIQUE(code, semester_id)` on `subjects`. Existing `ix_subjects_code` index preserved. Discovery report `docs/phase_23/phase_23_2_curriculum_discovery.md`. Only the confirmed REQUIRED change implemented.
+- **23.3 — Student Academic Assignment — COMPLETE (2026-08-28, migration `e3f4a5b6c7d8`)**: additive `enrollment_type` discriminator (COMPULSORY/ELECTIVE) on `student_enrollments`; deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii. (Operator re-scoped from original blueprint "Timetable + subsection scheduling".)
+- **23.4 — Authoritative Student Context Service — COMPLETE (2026-08-28, service only)**: `StudentContextService` + `StudentContext` read model; consumers migrated (`/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History); equivalence verified. No migration.
+- **23.5 — Elective/Catalog Redesign — COMPLETE (2026-08-28, migration `f5a6b7c8d9e0`)**: DB-backed catalog (`subjects.elective_slot` nullable enum); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog.
+- **23.6 — Actual Occurrence Architecture — COMPLETE (2026-08-28, migration `f6a7b8c9d0e1`)**: per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage).
+- **23.7 — Event-Scope + MODIFIED — COMPLETE (2026-08-28, migration `f7a8b9c0d1e2`)**: `CLASS_MODIFIED` event type + `MODIFIED` outcome; event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags.
+- **23.8 — Quiz Integration — COMPLETE (2026-08-28, no migration)**: MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added.
+- **23.9 — Attendance Mutation Gate — COMPLETE (2026-08-28, no migration)**: outcome-aware mutation safety (reject marking on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; reuses canonical `occurrence_outcomes` lookup key; `verify_phase_23_9.py` added). (Operator re-scoped from original blueprint "Admin authorization foundation".)
+- **23.10 — Migration reconciliation / rollout / closure**: reconcile the linear Alembic chain, confirm each operator-run production migration + read-only post-production verification, backfill/remediation (operator-authorized), downgrade paths, governance closure. NOT the first production migration point.
 
 ### Phase 23.1 — implemented (2026-08-27)
 
@@ -3226,3 +3230,110 @@ frontend additive.
   behavior — ALL PASS.
 - **Migration NOT applied to any DB by the agent.** Production DB not touched.
 - Git: no commit, no push, no PR (working tree contains 23.7 changes only).
+
+---
+
+### Phase 23.8 — Quiz Integration (implemented 2026-08-28)
+
+**Status: COMPLETE — MODIFIED is occurrence metadata for the quiz pipeline.**
+No migration (discovery proved none necessary). Alembic head unchanged
+(`f7a8b9c0d1e2`). No commit, no push, no PR.
+
+**Objective:** integrate the Phase 23.7 MODIFIED occurrence architecture with
+the existing quiz architecture so quiz reality remains correct when a concrete
+subject's scheduled occurrence is modified — no quiz rebuild, no leakage, no
+eligibility-engine change.
+
+**Discovery — quiz pipeline:**
+- Quiz identity: `quiz_schedules` (seed projection) + canonical dates from
+  active QUIZ_DAY events (ranked → cycles).
+- Elective resolution: `chosen_elective_map(user_id)` → slot's QUIZ_DAY events.
+- Occurrence relationship: quiz date → attendance window → `get_subject_counts_between`
+  (outcome-aware since 23.6) → eligibility engine.
+- MODIFIED = occurrence metadata: a modified class is a conducted class
+  (counted in every denominator); quiz dates/identity/windows/eligibility
+  unchanged; subject isolation via the outcome join key.
+
+**Genuine integration defect found + fixed:** a subject-specific
+CLASS_MODIFIED (priority 10, processed after CLASS_CANCELLED at 30) could
+overwrite a CANCELLED desired outcome for the same subject/date → a cancelled
+occurrence would read as MODIFIED (conducted). Fixed in
+`event_session_service._desired_schedule`: the CLASS_MODIFIED branch no longer
+overwrites an existing CANCELLED outcome (cancellation wins over modification —
+the documented Phase 6.6 invariant). Smallest possible change to the Phase 23.7
+code, documented per the frozen-code rule.
+
+**Files changed:**
+- `app/services/event_session_service.py` — the CANCELLED-wins guard in the
+  CLASS_MODIFIED branch (only production-code change).
+- NEW `scripts/verify_phase_23_8.py` — DB-based, self-cleaning verifier
+  (operator-run): outcome isolation (BCS-058 vs BCS-055/056), read-path
+  isolation per student, eligibility invariance, no-op without a session,
+  idempotency, CANCELLED-wins, deactivation reversal, attendance safety.
+
+**Schema/migration:** none. Alembic head unchanged.
+
+**Quiz integration semantics:** MODIFIED does not affect quiz dates, quiz
+occurrence identity, eligibility windows, attendance counting shape, or
+eligibility results; a modified class counts as conducted. QUIZ_DAY /
+SURPRISE_QUIZ / CLASS_CANCELLED unchanged.
+
+**Verification:**
+- `compileall` — PASS; frontend `npx tsc --noEmit` — PASS (no frontend change).
+- Alembic single head `f7a8b9c0d1e2`; no new migration.
+- In-process logic checks (temp script removed): CANCELLED-wins fix;
+  MODIFIED alone → MODIFIED; no leakage; MODIFIED counts as conducted; 23.6/23.7
+  regression (SURPRISE_QUIZ/EXTRA/CANCELLED); quiz-date source (QUIZ_DAY) has
+  no outcome coupling — ALL PASS.
+- `verify_phase_23_8.py` written for the operator (dev DB).
+- **Production DB not touched.** No migration applied.
+- Git: no commit, no push, no PR (working tree contains 23.8 changes only).
+
+### Phase 23.9 � Attendance Mutation Gate (COMPLETE, 2026-08-28)
+
+**Status: COMPLETE � outcome-aware attendance mutation safety. No migration.**
+Alembic head unchanged (`f7a8b9c0d1e2`). No commit, no push, no PR.
+
+**Scope re-scope (operator directive):** Phase 23.9 was re-scoped from the
+original blueprint label "Admin authorization foundation" to the attendance
+mutation gate. Admin-authorization foundation remains future work.
+
+**Objective:** the mutation endpoint (`POST /api/v1/attendance`) must respect
+the canonical occurrence outcome for the student's RESOLVED concrete subject:
+NORMAL ? allowed; MODIFIED ? allowed (conducted class); CANCELLED ? rejected
+(409, existing cancelled-session convention). Elective isolation: a BCS-058
+outcome never affects BCS-055/056. Enrollment authorization preserved;
+backend authoritative; no React authorization.
+
+**Discovery finding (genuine gap):** the pre-change mutation path checked the
+anchor `session.is_cancelled` flag but NOT the per-subject `occurrence_outcomes`
+row. If the anchor was normal but a student's subject had a CANCELLED outcome,
+mutation was incorrectly allowed. The read path already resolves outcomes via
+`_outcome_join_on(resolved_subject_id)` keyed on
+`(class_session_id, COALESCE(choice.subject_id, ClassSession.subject_id))`; the
+mutation path already computes the same `effective_subject_id`, so reusing the
+same table/key is a direct lookup � no second resolver.
+
+**Models changed:**
+- `app/repositories/attendance_repo.py` � additive
+  `get_occurrence_outcome_type(class_session_id, subject_id)` (canonical
+  `occurrence_outcomes` read for the resolved subject).
+- `app/services/attendance_service.py` � Phase 23.9 gate in
+  `record_attendance` (after enrollment 403, before future-date 400): a
+  CANCELLED outcome for the student's resolved subject ? 409 "Cannot mark
+  attendance for a cancelled class session". MODIFIED / EXTRA_* / no outcome ?
+  mutation allowed.
+
+**Verifier:** NEW `backend/scripts/verify_phase_23_9.py` (DB-based,
+self-cleaning, operator-run) covering normal / MODIFIED / CANCELLED /
+elective isolation / MODIFIED isolation / duplicate-single-record / historical
+attendance safety / deactivation-reversal / idempotency / authorization
+(401/403/200) / attendance-safety assertions.
+
+**Verification status:** `compileall` PASS � frontend `npx tsc --noEmit` PASS
+(no frontend change) � alembic head unchanged `f7a8b9c0d1e2` � verifier written
+for operator run. **Production DB not touched. No migration applied.**
+
+**Deferred (documented, NOT implemented):** Phase 23.10 canonical read models;
+23.11 API scope/authorization; Phase 24 Admin Portal. No attendance UI/history/
+quiz/calendar/event-registry/event-session-architecture redesign.

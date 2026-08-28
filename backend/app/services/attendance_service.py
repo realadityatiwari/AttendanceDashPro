@@ -10,7 +10,7 @@ from app.models.user import User
 from app.models.attendance import AttendanceRecord
 from app.models.timetable import TimetableEntry
 from app.models.academic import StudentElectiveChoice
-from app.models.enums import AttendanceStatus, ElectiveSlot
+from app.models.enums import AttendanceStatus, ElectiveSlot, OccurrenceOutcomeType
 from app.core.config import settings
 from app.engines.attendance_engine import (
     compute_subject_stats,
@@ -194,6 +194,27 @@ class AttendanceService:
         enrolled = await self.repo.is_enrolled(user_id, effective_subject_id)
         if not enrolled:
             raise HTTPException(status_code=403, detail="Not enrolled in this subject")
+
+        # Phase 23.9 — outcome-aware mutation gate. The canonical occurrence
+        # outcome for the student's RESOLVED concrete subject is authoritative
+        # for whether this occurrence is markable:
+        #   - CANCELLED outcome  -> mutation rejected (cancelled != absent, the
+        #     occurrence never receives an attendance record);
+        #   - MODIFIED / EXTRA_* / no outcome -> mutation allowed (conducted
+        #     class semantics unchanged).
+        # This reuses the SAME canonical occurrence_outcomes row the read path
+        # resolves (same (class_session_id, effective subject) key), so a write
+        # can never contradict the canonical read. Elective isolation is
+        # inherent: a CANCELLED outcome for BCS-058 never blocks a BCS-055
+        # student, because the lookup is keyed on their own resolved subject.
+        outcome_type = await self.repo.get_occurrence_outcome_type(
+            class_session_id, effective_subject_id
+        )
+        if outcome_type == OccurrenceOutcomeType.CANCELLED:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot mark attendance for a cancelled class session",
+            )
 
         # Future dates are view-only: scheduled (and event-created) sessions stay
         # visible in Track as Upcoming, but attendance cannot be recorded before

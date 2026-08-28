@@ -102,6 +102,22 @@ class AttendanceRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    async def get_occurrence_outcome_type(
+        self, class_session_id: UUID, subject_id: UUID
+    ) -> Optional[OccurrenceOutcomeType]:
+        """Phase 23.9: the canonical occurrence outcome for a concrete subject on
+        a class session — the SAME canonical table and the SAME
+        (class_session_id, subject_id) key the read path uses (Phase 23.6
+        ``_outcome_join_on``). Reused for the mutation gate so a write can never
+        contradict the canonical read. Absence (None) = the anchor session's own
+        flags apply (normal / MODIFIED outcomes leave mutation allowed)."""
+        stmt = select(OccurrenceOutcome.outcome_type).where(
+            OccurrenceOutcome.class_session_id == class_session_id,
+            OccurrenceOutcome.subject_id == subject_id,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
         
     async def get_session_by_id(self, class_session_id: UUID) -> Optional[ClassSession]:
         stmt = select(ClassSession).filter(ClassSession.id == class_session_id)
