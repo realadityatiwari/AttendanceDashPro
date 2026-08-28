@@ -40,6 +40,14 @@ class EventType(str, Enum):
     # semantics to CLASS_CANCELLED but restricted to practical subjects.
     MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL"
     LAB_CANCELLED = "LAB_CANCELLED"
+    # Phase 23.7: subject-scoped event representing a MODIFIED actual
+    # occurrence — the scheduled class happened but was modified (time/room/
+    # delivery). It is subject-scoped ONLY (never a whole elective slot) and
+    # resolves to an OccurrenceOutcomeType.MODIFIED occurrence outcome on the
+    # shared anchor session for the concrete subject. It is NOT an extra, NOT a
+    # cancellation, NOT a quiz: the occurrence still counts as a conducted
+    # class in every attendance/eligibility read.
+    CLASS_MODIFIED = "CLASS_MODIFIED"
 
 class UserRole(str, Enum):
     STUDENT = "STUDENT"
@@ -88,6 +96,11 @@ class OccurrenceOutcomeType(str, Enum):
       ``is_extra`` = True).
     - CANCELLED: the subject sees the session as cancelled (effective
       ``is_cancelled`` = True).
+    - MODIFIED (Phase 23.7): the subject sees the session as modified
+      (the scheduled class happened but was modified). It is NOT extra or
+      cancelled — the occurrence still counts as a conducted class in every
+      attendance/eligibility read. The effective ``is_extra`` / ``is_cancelled``
+      flags are UNCHANGED; the ``outcome_type`` value is exposed to consumers.
 
     Subjects with no outcome row follow the anchor session's own
     ``is_extra`` / ``is_cancelled`` flags.
@@ -97,6 +110,9 @@ class OccurrenceOutcomeType(str, Enum):
     EXTRA_PRACTICAL = "EXTRA_PRACTICAL"
     SURPRISE_QUIZ = "SURPRISE_QUIZ"
     CANCELLED = "CANCELLED"
+    # Phase 23.7: the scheduled occurrence was modified for this subject
+    # (e.g. time, room, or delivery changed). Not extra, not cancelled.
+    MODIFIED = "MODIFIED"
 
 class EnrollmentType(str, Enum):
     """Whether a student's subject enrollment is a program requirement or an

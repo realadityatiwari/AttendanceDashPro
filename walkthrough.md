@@ -5437,3 +5437,191 @@ Production not touched. Phase 23.7 not started — requires a fresh execution
 prompt.
 
 ---
+
+# AttendanceDash Pro — Phase 23.7 Walkthrough
+
+> **PHASE 23.7 COMPLETE — EVENT-SCOPE REDESIGN + MODIFIED (2026-08-28).**
+> Introduced `EventType.CLASS_MODIFIED` and `OccurrenceOutcomeType.MODIFIED`,
+> and formalized how a subject-scoped event identifies the concrete subject
+> within a shared elective occurrence.
+
+## Objective
+
+Represent event scope correctly when an academic event applies to a concrete
+subject within a shared elective slot, and introduce `MODIFIED` as an
+event-scope-level occurrence outcome (deferred from 23.6). Preserve the
+distinction EVENT ? event scope ? occurrence/session effect ? attendance
+identity (`class_sessions.id`). Do NOT touch the attendance/eligibility/
+calendar/quiz engines, quiz integration, or attendance mutation gating.
+
+## Discovery
+
+The architectural question — "How does an event identify the concrete
+occurrence/subject scope it modifies when multiple concrete subjects share one
+timetable occurrence?" — is answered by the existing 23.6 architecture: a
+subject-scoped event carries `subject_id` (the concrete subject); the shared
+occurrence is the anchor session for that subject's slot (derived from
+`subject.elective_slot`, Phase 23.5) on the date. This already works for
+EXTRA_*/SURPRISE_QUIZ/CANCELLED outcomes. The genuine 23.7 gap: `MODIFIED` was
+deferred from 23.6 (its docstring says so), and no event type produced it. The
+synchronizer's subject-specific branch would silently skip an unhandled
+"modified" event type, and `_apply_outcome_to_row` would wrongly set
+`is_extra=True` for any unknown outcome type.
+
+## Architectural decision
+
+1. **`EventType.CLASS_MODIFIED`** — subject-scoped "the scheduled class was
+   modified" event (time/room/delivery). Registry rule requires subject +
+   class type (LECTURE/TUTORIAL/PRACTICAL). **Subject-scoped only**: a
+   whole-slot modified event (elective_slot set) is rejected — a slot-wide
+   "modified" cannot be represented as a single per-subject occurrence outcome.
+   Student-creatable for own enrolled subjects (mirrors CLASS_CANCELLED).
+2. **`OccurrenceOutcomeType.MODIFIED`** — the scheduled occurrence happened but
+   was modified for ONE concrete subject. It is NOT extra, NOT cancelled, NOT a
+   quiz; it changes no attendance/eligibility/calendar mathematics and no
+   `class_session` flag. The read path exposes `outcome_type` and changes
+   neither `is_extra` nor `is_cancelled` (the occurrence still counts as
+   conducted).
+3. **Synchronizer** — a subject-scoped CLASS_MODIFIED whose subject has a
+   timetable session on the date produces a `MODIFIED` outcome on the shared
+   anchor session (elective subject ? the slot's anchor session; non-elective
+   subject ? the subject's own session). No session on the date ? no-op.
+   `_reconcile_outcomes` was generalized to locate anchor sessions by slot
+   (elective) OR by subject_id (non-elective); it remains state-based,
+   idempotent, deterministic, and attendance-safe.
+4. **No second occurrence table, no student-level rows, no per-student session
+   duplication, no `class_session` boolean.** MODIFIED resolves through the
+   same canonical `occurrence_outcomes` architecture established in 23.6.
+
+## Files changed
+
+- `backend/app/models/enums.py` — `EventType.CLASS_MODIFIED`,
+  `OccurrenceOutcomeType.MODIFIED`.
+- `backend/alembic/versions/f7a8b9c0d1e2_add_occurrenceoutcometype_modified.py`
+  — NEW (ALTER TYPE ADD VALUE 'MODIFIED').
+- `backend/app/services/event_registry.py` — CLASS_MODIFIED rule +
+  subject-scoped-only rejection.
+- `backend/app/services/event_service.py` — CLASS_MODIFIED added to
+  `STUDENT_CREATABLE_EVENT_TYPES`.
+- `backend/app/services/event_session_service.py` — CLASS_MODIFIED branch in
+  `_desired_schedule`; `_reconcile_outcomes` generalization;
+  `EVENT_TO_OUTCOME_TYPE` entry.
+- `backend/app/repositories/attendance_repo.py` — `_apply_outcome_to_row`
+  MODIFIED handling.
+- `frontend/src/types/api.ts`, `frontend/src/components/events/eventRules.ts`
+  — additive CLASS_MODIFIED contract sync.
+
+## Schema / migration
+
+Migration `f7a8b9c0d1e2` (parent `f6a7b8c9d0e1`): a single
+`ALTER TYPE occurrenceoutcometype ADD VALUE 'MODIFIED'`. No table changes, no
+data changes. Downgrade is a documented no-op — PostgreSQL cannot remove an
+enum value (the value remains unused after an application downgrade).
+
+## Event-scope semantics
+
+- **Slot-wide**: `elective_slot` set (+ anchor subject) — unchanged (23.6).
+- **Subject-scoped**: `subject_id` set, `elective_slot` NULL — the concrete
+  subject is the scope. For elective catalog subjects the shared occurrence is
+  the subject's slot anchor session (23.5/23.6); for non-elective subjects it
+  is the subject's own timetable session.
+- **Global**: no subject/scope — unchanged.
+- A subject-scoped event can never accidentally affect every student merely
+  because they share a timetable slot: the outcome is keyed by the concrete
+  subject.
+
+## MODIFIED semantics
+
+MODIFIED is an event-scope-level occurrence outcome produced by a
+`CLASS_MODIFIED` event for one concrete subject. It is resolved through the
+same canonical occurrence/outcome architecture (no second table, no
+student-level rows, no duplication, no `class_session` boolean, no
+`is_extra`/`is_cancelled` overloading). With no CLASS_MODIFIED events present,
+no outcomes are created and existing 23.6 behavior is a no-op.
+
+## Elective isolation
+
+CLASS_MODIFIED for BCS-058 on the shared DE-II slot ? MODIFIED outcome keyed
+(anchor session, BCS-058). BCS-055/BCS-056 have no outcome ? anchor (normal
+lecture). The read-path outcome join is keyed on
+`(class_session_id, COALESCE(choice.subject_id, ClassSession.subject_id))`, so
+the BCS-058 outcome can never appear on a BCS-055/056 row and vice versa.
+
+## Compatibility impact
+
+Zero effect on existing data (no CLASS_MODIFIED events exist; the new outcome
+type is unused until such events are created). Attendance engine, eligibility,
+calendar engine, quiz, registration, and the dashboard/calendar/analytics/
+history/track consumers are untouched. Frontend changes are additive contract
+syncs (EventType enum + eventRules mirror).
+
+## Verification
+
+- Backend `compileall` — PASS.
+- Frontend `npx tsc --noEmit` — PASS.
+- Alembic single head `f7a8b9c0d1e2`; linear chain preserved.
+- Offline upgrade SQL — PASS (`ALTER TYPE occurrenceoutcometype ADD VALUE
+  'MODIFIED'`).
+- In-process simulations (temp script removed):
+  - CLASS_MODIFIED on an elective subject (BCS-058) with a slot session ?
+    MODIFIED outcome — PASS;
+  - CLASS_MODIFIED on a non-elective subject (BCS-501) with a session ?
+    MODIFIED outcome — PASS;
+  - CLASS_MODIFIED with no session on the date ? no-op (nothing to modify) —
+    PASS (elective and non-elective);
+  - Phase 23.6 SURPRISE_QUIZ behavior unchanged — PASS;
+  - `EVENT_TO_OUTCOME_TYPE[CLASS_MODIFIED] == MODIFIED` — PASS;
+  - `_apply_outcome_to_row`: MODIFIED changes no flag; CANCELLED still sets
+    `is_cancelled=True` — PASS.
+- Failure matrix: valid subject-scoped CLASS_MODIFIED ? MODIFIED outcome; no
+  session ? no-op; no cross-student leakage (per-subject join key); existing
+  23.6 outcome rows resolve identically (no schema change to their
+  representation).
+- **Production DB not touched.** Migration NOT applied by the agent.
+
+## Security considerations
+
+- CLASS_MODIFIED is subject-scoped and enrollment-checked for students (the
+  backend remains authoritative); ADMIN may target any subject.
+- The outcome join is scoped to the authenticated student's RESOLVED subject —
+  a student can never observe another student's outcome.
+- No client-supplied outcome mutation surface; outcomes are created only by the
+  synchronizer from active, authorized events.
+
+## Database mutation status
+
+No production migration applied. No student assignments, elective choices,
+enrollments, attendance records, sessions, events, or historical data modified.
+The enum value was NOT added in any database (migration is an operator action).
+**Production DB not touched.**
+
+## Deferred items
+
+- Phase 23.8: quiz architecture integration with outcomes.
+- Phase 23.9: attendance MUTATION gate for outcome-cancelled occurrences.
+- Phase 23.10: canonical read models; Phase 23.11: API scope/authorization.
+- Phase 24: Admin Portal.
+- Whole-slot "modified" event (rejected as subject-scoped-only) — future
+  product decision.
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. Migration
+`f7a8b9c0d1e2` NOT applied to any database; operator applies on the isolated
+dev DB, then production only when separately authorized. **Production DB not
+touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.7 status COMPLETE; status table, operating state,
+  dependency path, header, progress bar, "next phase" updated.
+- implementation_plan.md: Phase 23.7 implemented section (decision, files,
+  verification).
+- task.md: Phase 23.7 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.7 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
+Production not touched. Phase 23.8 not started — requires a fresh execution
+prompt.
+
+---

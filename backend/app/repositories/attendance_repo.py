@@ -35,21 +35,30 @@ class AttendanceRepository:
 
     @staticmethod
     def _apply_outcome_to_row(row: dict) -> dict:
-        """Phase 23.6: apply a per-subject occurrence outcome to a read row.
+        """Phase 23.6/23.7: apply a per-subject occurrence outcome to a read row.
 
         CANCELLED -> effective is_cancelled = True (cancelled != absent,
         excluded from attendance math like any cancelled occurrence);
         EXTRA_LECTURE/EXTRA_TUTORIAL/EXTRA_PRACTICAL/SURPRISE_QUIZ ->
-        effective is_extra = True. Absence (outcome_type None) leaves the
-        anchor session's own flags untouched. The row dict is returned for
-        chaining.
+        effective is_extra = True;
+        MODIFIED (Phase 23.7) -> NO flag change (the scheduled class happened,
+        just modified — it still counts as a conducted class in every
+        attendance/eligibility read); the row's ``outcome_type`` exposes it.
+
+        Absence (outcome_type None) leaves the anchor session's own flags
+        untouched. The row dict is returned for chaining.
         """
         outcome_type = row.get("outcome_type")
         if outcome_type is None:
             return row
         if outcome_type == OccurrenceOutcomeType.CANCELLED:
             row["is_cancelled"] = True
-        else:
+        elif outcome_type in (
+            OccurrenceOutcomeType.EXTRA_LECTURE,
+            OccurrenceOutcomeType.EXTRA_TUTORIAL,
+            OccurrenceOutcomeType.EXTRA_PRACTICAL,
+            OccurrenceOutcomeType.SURPRISE_QUIZ,
+        ):
             row["is_extra"] = True
         return row
 

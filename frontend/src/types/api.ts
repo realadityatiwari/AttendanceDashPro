@@ -360,7 +360,10 @@ export enum EventType {
   MID_SEMESTER_BREAK = "MID_SEMESTER_BREAK",
   // Phase 9.1 laboratory events (event-driven, canonical pipeline):
   MID_SEM_PRACTICAL = "MID_SEM_PRACTICAL",
-  LAB_CANCELLED = "LAB_CANCELLED"
+  LAB_CANCELLED = "LAB_CANCELLED",
+  /** Phase 23.7: subject-scoped modified occurrence. The scheduled class
+      happened but was modified (time/room/delivery). Not extra, not cancelled. */
+  CLASS_MODIFIED = "CLASS_MODIFIED",
 }
 
 export interface AcademicEventResponse {

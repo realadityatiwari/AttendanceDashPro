@@ -2394,4 +2394,50 @@ Separate EXPECTED schedule (`timetable_entries`) from ACTUAL occurrence (`class_
 
 - Phase 23.6 occurrence architecture is complete. Do not reopen.
 - `EventSessionSynchronizer` remains the ONE event?session synchronizer (extended, never duplicated).
-- Phase 23.7 (event scope) requires a fresh execution prompt.
+
+## PHASE 23.7 - EVENT-SCOPE REDESIGN + MODIFIED (COMPLETE, 2026-08-28)
+
+Status: **COMPLETE.** Migration `f7a8b9c0d1e2` (parent `f6a7b8c9d0e1`; ALTER TYPE ADD VALUE 'MODIFIED'). Offline SQL verified; DB application is an operator action. No commit, no push, no PR.
+
+> Scope note: this execution prompt adds `EventType.CLASS_MODIFIED` (subject-scoped "class was modified" event) + `OccurrenceOutcomeType.MODIFIED` (outcome on the shared anchor session for the targeted concrete subject). The event-scope redesign formalizes how a subject-scoped event identifies its concrete subject within a shared elective slot. No attendance/eligibility/calendar/quiz engine changes.
+
+## Objective
+
+Represent event scope correctly when an event applies to a concrete subject within a shared elective occurrence, and introduce MODIFIED as an event-scope-level occurrence outcome (deferred from 23.6). Preserve the EVENT ? event scope ? occurrence effect ? attendance identity distinction.
+
+## Delivered
+
+- [x] `app/models/enums.py`: `EventType.CLASS_MODIFIED` + `OccurrenceOutcomeType.MODIFIED`
+- [x] Migration `f7a8b9c0d1e2` (parent `f6a7b8c9d0e1`): `ALTER TYPE occurrenceoutcometype ADD VALUE 'MODIFIED'`; downgrade documented no-op (PG cannot remove enum values)
+- [x] `event_registry.py`: rule for CLASS_MODIFIED (requires subject + class type L/T/P); CLASS_MODIFIED + elective_slot rejected (subject-scoped only)
+- [x] `event_service.py`: CLASS_MODIFIED in STUDENT_CREATABLE_EVENT_TYPES
+- [x] `event_session_service.py`: CLASS_MODIFIED ? MODIFIED outcome on anchor session (elective ? slot anchor; non-elective ? subject's own session); no session ? no-op; `_reconcile_outcomes` generalized for non-elective subject anchors
+- [x] `attendance_repo.py`: `_apply_outcome_to_row` only sets is_extra for EXTRA_*/SURPRISE_QUIZ; MODIFIED changes no flag
+- [x] Frontend `types/api.ts` + `eventRules.ts`: additive CLASS_MODIFIED contract sync
+- [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic single head `f7a8b9c0d1e2`
+- [x] In-process simulations: CLASS_MODIFIED elective/non-elective with session ? MODIFIED outcome; no session ? no-op; 23.6 SURPRISE_QUIZ unchanged; EVENT_TO_OUTCOME_TYPE mapping; row flag behavior — ALL PASS
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 23.8 quiz architecture integration
+- [ ] NO Phase 23.9 attendance mutation gate
+- [ ] NO Phase 23.10 read models / 23.11 API scope / Phase 24 Admin Portal
+- [ ] NO attendance/eligibility/calendar/quiz engine changes
+- [ ] NO whole-slot "modified" event (subject-scoped only)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` (app + alembic + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head)
+- Offline upgrade SQL PASS (ALTER TYPE ADD VALUE)
+- Frontend `npx tsc --noEmit` PASS
+- Simulations: CLASS_MODIFIED elective + non-elective ? MODIFIED outcome; no session ? no-op; 23.6 intact; row flag behavior — ALL PASS
+- **Migration NOT applied to any DB by the agent** - production pooler, Docker down. Operator applies on dev DB; production only when separately authorized. Production DB NOT touched.
+- Git: working tree contains 23.7 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.7 event-scope + MODIFIED is complete. Do not reopen.
+- `EventSessionSynchronizer` remains the ONE event?session synchronizer (extended, never duplicated).
+- Phase 23.8 (quiz architecture integration) requires a fresh execution prompt.

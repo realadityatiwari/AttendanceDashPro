@@ -91,6 +91,13 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
     eventType: EventType.WORKING_SATURDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
   },
+  // Phase 23.7: subject-scoped modified occurrence. The scheduled class
+  // happened but was modified (time/room/delivery). Not extra, not cancelled.
+  [EventType.CLASS_MODIFIED]: {
+    eventType: EventType.CLASS_MODIFIED, requiresSubject: true, requiresClassType: true,
+    allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
+    isClosure: false, isGlobal: false,
+  },
 };
 
 // Event types students may create/update/deactivate for their OWN enrolled
@@ -108,6 +115,9 @@ export const STUDENT_CREATABLE_EVENT_TYPES: EventType[] = [
   // cancelled lab) for their own enrolled practical subjects.
   EventType.MID_SEM_PRACTICAL,
   EventType.LAB_CANCELLED,
+  // Phase 23.7: students may report a scheduled class was modified
+  // (subject-scoped, enrollment-checked by the backend).
+  EventType.CLASS_MODIFIED,
 ];
 
 export function canStudentMutateEventType(eventType: EventType): boolean {
@@ -132,6 +142,7 @@ export const DEFAULT_DURATION_MODE: Record<EventType, DurationMode> = {
   [EventType.QUIZ_DAY]: "single",
   [EventType.MID_SEM_PRACTICAL]: "single",
   [EventType.LAB_CANCELLED]: "single",
+  [EventType.CLASS_MODIFIED]: "single",
   // Naturally multi-day: breaks and the holiday/closure/working-day family
   // (still able to represent a single day by collapsing to one date).
   [EventType.HOLIDAY]: "range",

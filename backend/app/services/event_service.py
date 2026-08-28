@@ -45,6 +45,10 @@ STUDENT_CREATABLE_EVENT_TYPES = {
     # canonical synchronizer (no separate lab attendance system).
     EventType.MID_SEM_PRACTICAL,
     EventType.LAB_CANCELLED,
+    # Phase 23.7: students may report that a scheduled class was modified
+    # (subject-scoped, enrollment-checked, resolved into a MODIFIED outcome
+    # by the canonical synchronizer).
+    EventType.CLASS_MODIFIED,
 }
 
 

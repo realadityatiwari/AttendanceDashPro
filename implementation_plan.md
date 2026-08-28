@@ -3148,3 +3148,81 @@ engine, event registry, quiz, consumers untouched. No frontend change.
 - Query-build + import checks (no circular imports) — PASS.
 - **Migration NOT applied to any DB by the agent.** Production DB not touched.
 - Git: no commit, no push, no PR (working tree contains 23.6 changes only).
+
+---
+
+### Phase 23.7 — Event-Scope Redesign + MODIFIED (implemented 2026-08-28)
+
+**Status: COMPLETE.** Migration `f7a8b9c0d1e2` (parent `f6a7b8c9d0e1`; a single
+`ALTER TYPE occurrenceoutcometype ADD VALUE 'MODIFIED'`). Offline SQL verified;
+DB application is an operator action (production pooler, Docker down). **Not
+applied to production.**
+
+**Objective:** represent event scope correctly when an event applies to a
+concrete subject within a shared elective occurrence, and introduce `MODIFIED`
+as an event-scope-level occurrence outcome (deferred from 23.6). Preserve
+EVENT → event scope → occurrence effect → attendance identity
+(`class_sessions.id`).
+
+**Discovery — architectural question:** "How does an event identify the
+concrete occurrence/subject scope it modifies when multiple concrete subjects
+share one timetable occurrence?" Answer in the current architecture: the event
+carries `subject_id` (concrete subject); the shared occurrence is the anchor
+session for that subject's slot (derived from the Phase 23.5 catalog) on the
+date. This already works for EXTRA_*/SURPRISE_QUIZ/CANCELLED. The genuine gap:
+`MODIFIED` was deferred from 23.6 and no event type produced it.
+
+**Architectural decision:**
+- New subject-scoped `EventType.CLASS_MODIFIED` (registry rule: requires
+  subject + class type L/T/P; **elective_slot + CLASS_MODIFIED rejected** —
+  whole-slot "modified" cannot be a single occurrence outcome; student-
+  creatable for own enrolled subjects).
+- New `OccurrenceOutcomeType.MODIFIED`: the scheduled occurrence happened but
+  was modified for one concrete subject. Not extra, not cancelled; read path
+  changes no flag (outcome_type exposed); attendance/eligibility/calendar math
+  untouched.
+- Synchronizer: CLASS_MODIFIED → MODIFIED outcome on the anchor session when
+  the subject has a timetable session that date (elective subject → slot anchor
+  session; non-elective subject → its own session); no session → no-op.
+- `_reconcile_outcomes` generalized to locate anchor sessions by slot
+  (elective) OR by subject_id (non-elective); state-based, idempotent,
+  deterministic, attendance-safe.
+
+**Files changed:**
+- `app/models/enums.py` — `EventType.CLASS_MODIFIED`, `OccurrenceOutcomeType.MODIFIED`.
+- NEW `alembic/versions/f7a8b9c0d1e2_add_occurrenceoutcometype_modified.py`.
+- `app/services/event_registry.py` — CLASS_MODIFIED rule + subject-scoped-only rejection.
+- `app/services/event_service.py` — CLASS_MODIFIED in STUDENT_CREATABLE_EVENT_TYPES.
+- `app/services/event_session_service.py` — CLASS_MODIFIED branch;
+  `_reconcile_outcomes` generalization; EVENT_TO_OUTCOME_TYPE entry.
+- `app/repositories/attendance_repo.py` — `_apply_outcome_to_row` MODIFIED
+  handling (no flag change).
+- `frontend/src/types/api.ts` + `frontend/src/components/events/eventRules.ts`
+  — additive CLASS_MODIFIED contract sync.
+
+**Schema/migration:** ALTER TYPE ADD VALUE 'MODIFIED'. No table changes.
+Downgrade documented no-op (PG cannot remove enum values).
+
+**Event-scope semantics:** slot-wide (`elective_slot` set) unchanged;
+subject-scoped (`subject_id` set) is the concrete-subject scope, resolved
+against the shared slot anchor (elective) or the subject's own session
+(non-elective); global events unchanged.
+
+**Elective isolation:** CLASS_MODIFIED for BCS-058 → MODIFIED outcome keyed
+(anchor session, BCS-058); BCS-055/056 keep the anchor state; the read-path
+join key (session, resolved subject) prevents leakage.
+
+**Compatibility impact:** zero effect on existing data (no CLASS_MODIFIED
+events exist). Attendance/eligibility/calendar/quiz engines untouched;
+frontend additive.
+
+**Verification:**
+- `compileall` — PASS; frontend `npx tsc --noEmit` — PASS.
+- Alembic single head `f7a8b9c0d1e2`; offline upgrade SQL — PASS.
+- In-process simulations (temp script removed): CLASS_MODIFIED elective +
+  non-elective with session → MODIFIED outcome; no session → no-op; 23.6
+  SURPRISE_QUIZ unchanged; EVENT_TO_OUTCOME_TYPE maps CLASS_MODIFIED → MODIFIED;
+  `_apply_outcome_to_row` leaves MODIFIED flags unchanged and keeps CANCELLED
+  behavior — ALL PASS.
+- **Migration NOT applied to any DB by the agent.** Production DB not touched.
+- Git: no commit, no push, no PR (working tree contains 23.7 changes only).

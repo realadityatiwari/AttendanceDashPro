@@ -133,6 +133,7 @@ EVENT_TO_OUTCOME_TYPE: dict[EventType, OccurrenceOutcomeType] = {
     EventType.EXTRA_TUTORIAL: OccurrenceOutcomeType.EXTRA_TUTORIAL,
     EventType.EXTRA_PRACTICAL: OccurrenceOutcomeType.EXTRA_PRACTICAL,
     EventType.SURPRISE_QUIZ: OccurrenceOutcomeType.SURPRISE_QUIZ,
+    EventType.CLASS_MODIFIED: OccurrenceOutcomeType.MODIFIED,
 }
 
 
@@ -362,6 +363,30 @@ class EventSessionSynchronizer:
             if event.event_type in CLOSURE_TYPES:
                 # Unreachable on a working day (closure => non-working), kept
                 # as the legacy guard.
+                continue
+            # Phase 23.7: subject-scoped MODIFIED event. The scheduled
+            # occurrence for this concrete subject was modified (time/room/
+            # delivery) — an occurrence OUTCOME, NOT an extra/cancellation.
+            # Subject-scoped only (the registry rejects elective_slot). When
+            # the subject has a timetable session on this date (as an elective
+            # slot member or as a regular subject), the shared anchor session
+            # gets a MODIFIED outcome for that subject; otherwise no-op
+            # (nothing exists to modify).
+            if event.event_type == EventType.CLASS_MODIFIED:
+                if event.subject_id is not None:
+                    if event.subject_id in subject_elective_slots:
+                        subject_slot = subject_elective_slots[event.subject_id]
+                        slot_has_timetable = any(
+                            entry.elective_slot == subject_slot
+                            for entry in scheduled.values()
+                        )
+                    else:
+                        slot_has_timetable = any(
+                            entry.subject_id == event.subject_id
+                            for entry in scheduled.values()
+                        )
+                    if slot_has_timetable:
+                        desired_outcomes[event.subject_id] = OccurrenceOutcomeType.MODIFIED
                 continue
             # Phase 23.6: subject-specific ELECTIVE event (no slot marker, but
             # the concrete subject is a catalog elective subject). When the
@@ -701,45 +726,62 @@ class EventSessionSynchronizer:
 
         The anchor session is the timetable-bound session for the subject's
         slot (deterministic: first by timetable start time, then session id).
+        For non-elective subjects the anchor session is the timetable-bound
+        session whose subject matches the event's subject_id.
         Creating/updating an outcome NEVER modifies the session row or any
         attendance record. Stale outcomes (subject no longer implied by an
         active event on this date) are removed; outcomes never hold attendance
         and are safe to delete.
         """
-        # Map slot -> anchor timetable entry on this date (desired_scheduled).
+        # Build anchor entry lookups: by slot (elective) and by subject
+        # (non-elective). An entry may appear in both maps (elective slot
+        # entries also have a subject_id — the anchor subject).
         anchor_entry_by_slot: Dict[ElectiveSlot, object] = {}
+        anchor_entry_by_subject: Dict[object, object] = {}
         for entry in desired_scheduled.values():
             if entry.elective_slot is not None:
                 anchor_entry_by_slot.setdefault(entry.elective_slot, entry)
+            if entry.subject_id is not None:
+                anchor_entry_by_subject.setdefault(entry.subject_id, entry)
 
-        # Anchor sessions already materialized for the date.
-        anchor_session_by_slot: Dict[ElectiveSlot, ClassSession] = {}
+        # Anchor sessions already materialized for the date, keyed by their
+        # timetable_entry_id.
+        session_by_entry_id: Dict[object, ClassSession] = {}
         for session in existing:
-            if session.timetable_entry_id is None:
-                continue
-            slot = None
-            for entry in anchor_entry_by_slot.values():
-                if entry.id == session.timetable_entry_id:
-                    slot = entry.elective_slot
-                    break
-            if slot is not None:
-                # Deterministic: keep the earliest by id (start time ordering
-                # is not available on the session row here; id is stable).
-                anchor_session_by_slot.setdefault(slot, session)
+            if session.timetable_entry_id is not None:
+                # Deterministic: keep the earliest by id (stable ordering).
+                session_by_entry_id.setdefault(session.timetable_entry_id, session)
 
         # Build the desired (session, subject) -> outcome_type set.
         desired_rows: Dict[Tuple[object, object], OccurrenceOutcomeType] = {}
         for subject_id, outcome_type in desired_outcomes.items():
             slot = subject_elective_slots.get(subject_id)
-            if slot is None or slot not in anchor_session_by_slot:
-                # No anchor session for this subject's slot on this date —
-                # nothing to override (the event fell back to the extra path).
+            if slot is not None and slot in anchor_entry_by_slot:
+                # Elective subject: anchor session is the slot's timetable session.
+                entry = anchor_entry_by_slot[slot]
+            elif slot is None and subject_id in anchor_entry_by_subject:
+                # Non-elective subject: anchor session is the subject's timetable session.
+                entry = anchor_entry_by_subject[subject_id]
+            else:
+                # No anchor entry for this subject on this date — nothing to override.
                 continue
-            session = anchor_session_by_slot[slot]
+            session = session_by_entry_id.get(entry.id)
+            if session is None:
+                continue
             desired_rows[(session.id, subject_id)] = outcome_type
 
-        # Load the date's existing outcomes for these sessions.
-        session_ids = list(anchor_session_by_slot[s].id for s in anchor_session_by_slot)
+        # Collect all anchor sessions that are outcome targets.
+        target_session_ids = set(k[0] for k in desired_rows)
+        # Also include sessions whose timetable_entry_id is in any anchor entry
+        # (so stale outcomes on those sessions are cleaned up).
+        all_anchor_entry_ids = set(anchor_entry_by_slot[s].id for s in anchor_entry_by_slot) | set(
+            anchor_entry_by_subject[s].id for s in anchor_entry_by_subject
+        )
+        for entry_id, session in session_by_entry_id.items():
+            if entry_id in all_anchor_entry_ids:
+                target_session_ids.add(session.id)
+
+        session_ids = list(target_session_ids)
         existing_outcomes = await self._load_outcomes_for_sessions(session_ids)
         existing_key_to_row = {
             (o.class_session_id, o.subject_id): o for o in existing_outcomes

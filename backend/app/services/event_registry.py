@@ -118,6 +118,15 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[ClassType.LECTURE, ClassType.TUTORIAL],
     ),
+    # Phase 23.7: subject-scoped modified occurrence event. The scheduled
+    # class happened but was modified — never slot-wide (elective_slot must
+    # be NULL). The effect is an OccurrenceOutcomeType.MODIFIED outcome on
+    # the shared anchor session for the concrete subject.
+    EventType.CLASS_MODIFIED: _rule(
+        EventType.CLASS_MODIFIED, "Class Modified",
+        requires_subject=True, requires_class_type=True,
+        allowed_class_types=[ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
+    ),
     EventType.QUIZ_DAY: _rule(
         EventType.QUIZ_DAY, "Quiz Day",
         requires_subject=True, requires_class_type=False,
@@ -225,6 +234,16 @@ def validate_event(
         raise EventValidationError(
             f"{rule.display_name} is a practical/lab event; "
             "Departmental Elective slots are theory subjects and cannot host it"
+        )
+
+    # Phase 23.7: CLASS_MODIFIED is subject-scoped only — it must never target
+    # a whole elective slot (elective_slot set). It represents a modified
+    # occurrence for one concrete subject; a slot-wide "modified" cannot be
+    # represented as a single occurrence outcome and is out of scope.
+    if event_type == EventType.CLASS_MODIFIED and elective_slot is not None:
+        raise EventValidationError(
+            f"{rule.display_name} is subject-scoped and cannot target "
+            "a whole Departmental Elective slot"
         )
 
     if rule.requires_subject and subject_id is None:
