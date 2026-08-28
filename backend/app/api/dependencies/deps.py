@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.enums import UserRole
+from app.services.authorization_service import AuthorizationService
 from app.core.config import settings
 import uuid
 
@@ -66,4 +67,83 @@ async def require_admin(current_user: User = Depends(get_current_user)):
             detail="Admin privileges required",
         )
     return current_user
+
+
+async def require_head_admin(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 23.11: global administrative authority.
+
+    Authorized for the legacy ``users.role == ADMIN`` account (resolved as
+    HEAD_ADMIN) and for any user with an ACTIVE ``admin_scopes`` row of role
+    HEAD_ADMIN. Role/scope are resolved from the DB on every request — never
+    from the JWT, body, query, or frontend.
+    """
+    authz = AuthorizationService(db)
+    if not await authz.is_head_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+    return current_user
+
+
+def require_class_scope(section_id):
+    """Phase 23.11 dependency factory: HEAD_ADMIN or an active CLASS_ADMIN
+    scope for the exact section_id. Denies other roles and out-of-scope
+    sections server-side."""
+    async def _dependency(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        authz = AuthorizationService(db)
+        if not await authz.can_access_section(current_user, section_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this section",
+            )
+        return current_user
+    return _dependency
+
+
+def require_subsection_scope(subsection_id):
+    """Phase 23.11 dependency factory: HEAD_ADMIN or an active SUBSECTION_ADMIN
+    scope for the exact subsection_id.
+
+    NOTE: structurally inert today — no authoritative subsection data exists,
+    so no resource can be proven inside a subsection scope. The check remains
+    conservative (denies non-HEAD_ADMIN) until a subsection scheduling schema
+    decision lands.
+    """
+    async def _dependency(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        authz = AuthorizationService(db)
+        if not await authz.can_access_subsection(current_user, subsection_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this subsection",
+            )
+        return current_user
+    return _dependency
+
+
+def require_elective_subject_scope(subject_id):
+    """Phase 23.11 dependency factory: HEAD_ADMIN or an active ELECTIVE_ADMIN
+    scope for the exact concrete subject_id. One subject per scope row — never
+    a collapsed elective scope. Denies other subjects server-side."""
+    async def _dependency(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        authz = AuthorizationService(db)
+        if not await authz.can_access_subject(current_user, subject_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this subject",
+            )
+        return current_user
+    return _dependency
 

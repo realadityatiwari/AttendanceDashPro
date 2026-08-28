@@ -8,6 +8,7 @@ from app.models.enums import EventType, ClassType, UserRole, ElectiveSlot
 from app.models.user import User
 from app.repositories.event_repo import EventRepository, EventNotFound, EventConflict
 from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
+from app.services.authorization_service import AuthorizationService
 from app.services.elective_resolver import ElectiveResolver
 from app.services.event_registry import (
     EventValidationError,
@@ -87,7 +88,20 @@ class EventService:
         mutation path — a student can never touch another student's or an
         unrelated subject's schedule).
         """
-        if user.role == UserRole.ADMIN:
+        # Phase 23.11: effective admin role (legacy ADMIN + admin_scopes).
+        authz = AuthorizationService(self.db)
+        roles = await authz.effective_admin_roles(user)
+        if roles:
+            decision = await authz.can_mutate_event(
+                user,
+                subject_id=subject_id,
+                elective_slot_is_set=False,
+                student_creatable=event_type in STUDENT_CREATABLE_EVENT_TYPES,
+            )
+            if decision != "authorized":
+                raise EventForbidden(
+                    "You are not authorized to perform this event mutation"
+                )
             return
         if event_type not in STUDENT_CREATABLE_EVENT_TYPES:
             raise EventForbidden(
@@ -127,7 +141,10 @@ class EventService:
         unchanged; `elective_slot` marks the slot for per-student resolution.
         """
         if elective_slot is not None:
-            if user.role != UserRole.ADMIN:
+            # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN
+            # (legacy ADMIN or an active HEAD_ADMIN scope) — resolved from the
+            # DB per request, never from client/JWT state.
+            if not await AuthorizationService(self.db).is_head_admin(user):
                 raise EventForbidden(
                     "Elective-slot events are restricted to administrators."
                 )
@@ -280,7 +297,8 @@ class EventService:
         # subject. ADMIN-only (same rule as creation); the final state may
         # never carry both a concrete subject and a slot, nor a mismatch.
         if event.elective_slot is not None:
-            if user.role != UserRole.ADMIN:
+            # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN.
+            if not await AuthorizationService(self.db).is_head_admin(user):
                 raise EventForbidden(
                     "Elective-slot events are restricted to administrators."
                 )

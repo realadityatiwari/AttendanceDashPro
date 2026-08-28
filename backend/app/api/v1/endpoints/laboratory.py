@@ -1,9 +1,9 @@
-from typing import List, Optional
+﻿from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.api.dependencies.deps import get_db, get_current_user, require_admin
+from app.api.dependencies.deps import get_db, get_current_user, require_head_admin
 from app.models.user import User
 from app.models.academic import StudentEnrollment
 from app.repositories.subject_repo import SubjectRepository
@@ -48,7 +48,7 @@ async def get_lab_summary(
     """
     Phase 9.2.1: practical attendance (canonical attendance math), the
     designated mid-semester practical status, and the experiment advisory.
-    The advisory is null when no experiment catalog exists — there is no
+    The advisory is null when no experiment catalog exists â€” there is no
     fabricated "0/10". Enrollment-scoped (404 for unenrolled students).
     """
     return await LaboratoryService(db).get_summary(current_user, subject_code)
@@ -88,7 +88,7 @@ async def get_lab_activity(
 ):
     """
     Phase 9.2.1: truthful chronological list of the subject's PRACTICAL
-    sessions — cancelled and extra included — with the user's attendance
+    sessions â€” cancelled and extra included â€” with the user's attendance
     state and any experiment record linked to the session. A session without
     an experiment stays a plain practical session; nothing is inferred.
     """
@@ -105,9 +105,9 @@ async def create_lab_record(
     """
     Student self-tracking (Phase 9.2.1): creates a PENDING record for an
     ACTIVE experiment of the subject. The signature status is forced to
-    PENDING server-side — a record can never be created as SIGNED. Optional
+    PENDING server-side â€” a record can never be created as SIGNED. Optional
     class_session_id must be a non-cancelled PRACTICAL session of the subject.
-    Unenrolled students get 403; duplicate (user, experiment) → 409.
+    Unenrolled students get 403; duplicate (user, experiment) â†’ 409.
     """
     return await LaboratoryService(db).create_record(current_user, subject_code, payload)
 
@@ -124,7 +124,7 @@ async def update_lab_record(
     Phase 9.2.1 record update:
     - Student: edit an OWN PENDING record (date/session/remarks). Signed
       records are off-limits (403); signature status can never be set (403).
-    - ADMIN: sign a record with {"signature_status": "signed"} — the backend
+    - ADMIN: sign a record with {"signature_status": "signed"} â€” the backend
       sets signed_by = current admin and signed_on = now. Admins may also
       correct date/session/remarks of SIGNED records.
     """
@@ -149,7 +149,7 @@ async def delete_lab_record(
 async def create_lab_experiment(
     subject_code: str,
     payload: LaboratoryExperimentCreate,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_head_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -165,7 +165,7 @@ async def update_lab_experiment(
     subject_code: str,
     experiment_id: UUID,
     payload: LaboratoryExperimentUpdate,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_head_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -178,7 +178,7 @@ async def update_lab_experiment(
 async def deactivate_lab_experiment(
     subject_code: str,
     experiment_id: UUID,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_head_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -190,7 +190,7 @@ async def deactivate_lab_experiment(
 
 
 # ----------------------------------------------------------------------
-# Mid-sem designation (Phase 8.2 — FROZEN, unchanged)
+# Mid-sem designation (Phase 8.2 â€” FROZEN, unchanged)
 # ----------------------------------------------------------------------
 
 @router.get("/{subject_code}/mid-sem", response_model=Optional[MidSemDesignationResponse])
@@ -222,7 +222,7 @@ async def get_mid_sem_designation(
 async def designate_mid_sem(
     subject_code: str,
     payload: MidSemDesignationPayload,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_head_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -244,7 +244,7 @@ async def designate_mid_sem(
 @router.delete("/{subject_code}/mid-sem", response_model=MidSemDesignationResponse)
 async def clear_mid_sem(
     subject_code: str,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_head_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """

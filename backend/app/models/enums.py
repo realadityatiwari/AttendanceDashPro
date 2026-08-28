@@ -53,6 +53,32 @@ class UserRole(str, Enum):
     STUDENT = "STUDENT"
     ADMIN = "ADMIN"
 
+class AdminRole(str, Enum):
+    """Scoped administrative roles (Phase 23.11 — API Scope & Authorization).
+
+    The effective administrative authority of a user is the union of:
+      - the legacy ``users.role == ADMIN`` (resolves as HEAD_ADMIN), and
+      - the active rows in ``admin_scopes``.
+
+    Role semantics (enforced server-side by AuthorizationService):
+      - HEAD_ADMIN:      global authority over all academic resources covered
+                         by the authorization layer.
+      - CLASS_ADMIN:     authorized only for the assigned section(s) — cannot
+                         access unrelated sections.
+      - SUBSECTION_ADMIN: authorized only for the assigned subsection(s) —
+                         must NOT automatically gain the whole section. This
+                         scope is currently INERT: no authoritative subsection
+                         data exists (subsections table is empty and
+                         ``users.subsection_id`` is NULL for every user).
+      - ELECTIVE_ADMIN:  authorized only for the assigned concrete elective
+                         subject — one subject per scope row; never collapses
+                         the six elective subjects into one unrestricted scope.
+    """
+    HEAD_ADMIN = "HEAD_ADMIN"
+    CLASS_ADMIN = "CLASS_ADMIN"
+    SUBSECTION_ADMIN = "SUBSECTION_ADMIN"
+    ELECTIVE_ADMIN = "ELECTIVE_ADMIN"
+
 class SubjectCategory(str, Enum):
     THEORY = "theory"
     LAB = "lab"

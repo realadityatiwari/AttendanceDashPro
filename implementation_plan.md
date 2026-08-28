@@ -3415,3 +3415,61 @@ Student-scoped; never accepted from the client.
 **Deferred:** Phase 23.11 API scope/authorization; Phase 24 Admin Portal;
 subsection-scoped reads (needs `timetable_entries.subsection_id` scheduling
 decision; no data).
+
+---
+
+### Phase 23.11 — API Scope & Authorization (implemented 2026-08-29)
+
+**Status: COMPLETE.** Migration `f9a0b1c2d3e4` (parent `f8a9b0c1d2e3`).
+Applied to the local dev DB only. No commit, no push, no PR.
+
+**Objective:** establish the backend-authoritative scoped-admin authorization
+foundation (Who? What? Which semester/section/subsection/subject/role?) that
+Phase 24 Admin Portal will depend on. Role and scope are resolved from
+PostgreSQL per request — never JWT/body/query/frontend.
+
+**Discovery — current authorization matrix:** authentication JWT?DB user
+(role DB-authoritative); roles {STUDENT, ADMIN} with no scoped roles or
+assignment structure; admin gates = `require_admin` (laboratory ×5, feedback
+×2) + EventService `user.role == ADMIN` checks; student surfaces already
+owner/enrollment/effective-subject scoped (no genuine student defect found);
+subsections structurally absent (no authoritative data).
+
+**Architectural decision:** new `adminrole` enum + `admin_scopes` table
+(user_id, role, section_id, subsection_id, subject_id, active, CHECK
+role-scope consistency) — a genuine schema addition (no existing structure
+could represent scoped admin assignments). `AuthorizationService` resolves the
+effective role (legacy ADMIN ? HEAD_ADMIN + active scopes) and provides
+composable scope checks. No duplicate academic resolver introduced.
+
+**Files changed:**
+- `app/models/enums.py` — `AdminRole` enum.
+- NEW `app/models/admin_scope.py` — `AdminScope` model (+ User relationship).
+- NEW `app/services/authorization_service.py` — the authorization service.
+- `app/api/dependencies/deps.py` — `require_head_admin`, `require_class_scope`,
+  `require_subsection_scope`, `require_elective_subject_scope`.
+- `app/api/v1/endpoints/laboratory.py`, `feedback.py` — `require_admin` ?
+  `require_head_admin`.
+- `app/services/event_service.py` — admin gates via AuthorizationService
+  (scoped subject check for admin mutations; elective-slot events HEAD_ADMIN).
+- NEW `alembic/versions/f9a0b1c2d3e4_add_admin_scopes.py`.
+- NEW `scripts/verify_phase_23_11.py` — self-cleaning authorization verifier.
+
+**Role semantics:** HEAD_ADMIN global; CLASS_ADMIN section-scoped (subject in
+section's semester); SUBSECTION_ADMIN subsection-scoped (INERT — no
+authoritative subsection data; conservative denial; DB FK prevents fabricated
+scopes); ELECTIVE_ADMIN concrete-subject-scoped (one subject per row, never a
+collapsed elective scope); legacy ADMIN ? HEAD_ADMIN (no privilege reduction).
+
+**Verification:**
+- `compileall` PASS; alembic single head `f9a0b1c2d3e4`; offline upgrade/
+  downgrade SQL validated; applied to local dev DB only.
+- `verify_phase_23_11.py` PASS **23/23** (unauthenticated 401; HEAD_ADMIN
+  global legacy+scope; CLASS_ADMIN in/out of section; SUBSECTION_ADMIN
+  conservative + FK; ELECTIVE_ADMIN allowed/denied + no section authority;
+  inactive scope denied; re-activation restores; no client role/scope;
+  student elective isolation; attendance unchanged; baseline restored).
+- **Production DB not touched.**
+
+**Deferred:** Phase 24 Admin Portal; full SUBSECTION_ADMIN enforcement (needs
+subsection scheduling data); admin-scope provisioning API/UI (Phase 24).

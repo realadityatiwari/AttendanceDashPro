@@ -79,6 +79,8 @@ class User(Base):
     enrollments: Mapped[List["StudentEnrollment"]] = relationship(back_populates="user")
     elective_choices: Mapped[List["StudentElectiveChoice"]] = relationship(back_populates="user")
     attendance_records: Mapped[List["AttendanceRecord"]] = relationship(back_populates="user")
+    # Phase 23.11: scoped administrative assignments (admin_scopes rows).
+    admin_scopes: Mapped[List["AdminScope"]] = relationship(back_populates="user")
     # foreign_keys: laboratory_records has four FKs to users (user_id,
     # signed_by, created_by, updated_by) — explicit join required.
     lab_records: Mapped[List[LaboratoryRecord]] = relationship(

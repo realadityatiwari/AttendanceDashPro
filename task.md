@@ -2581,4 +2581,46 @@ Provide the backend a coherent student-specific interpretation of schedule reali
 
 - Phase 23.10 read-model layer is complete. Do not reopen.
 - The canonical path (StudentContextService + ElectiveResolver + outcome-aware attendance_repo) is the ONE student-facing resolution authority.
+
+## PHASE 23.11 - API SCOPE & AUTHORIZATION (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - backend-authoritative scoped-admin authorization.** Migration `f9a0b1c2d3e4` (parent `f8a9b0c1d2e3`; `adminrole` enum + `admin_scopes` table). Applied to local dev DB only. No commit, no push, no PR.
+
+> Scope note: this phase establishes the authorization/scope foundation Phase 24 depends on. Role/scope resolved from DB per request (never JWT/body/query/frontend). No Admin Portal UI, no admin management, no attendance/eligibility/calendar/event/occurrence math changes.
+
+## Delivered
+
+- [x] Discovery: full current-state authorization matrix (authn JWT?DB, roles {STUDENT,ADMIN}, admin gates, student surfaces, subsection limitation)
+- [x] `AdminRole` enum (HEAD_ADMIN/CLASS_ADMIN/SUBSECTION_ADMIN/ELECTIVE_ADMIN) in `enums.py`
+- [x] `AdminScope` model (`admin_scope.py`) + User relationship + models export
+- [x] Migration `f9a0b1c2d3e4`: `adminrole` enum + `admin_scopes` table (FKs, role-scope CHECK, active flag)
+- [x] `AuthorizationService`: effective_admin_roles (legacy ADMIN?HEAD_ADMIN + active scopes), is_head_admin, can_access_section/subsection/subject, can_mutate_event
+- [x] deps.py: `require_head_admin` + `require_class_scope` / `require_subsection_scope` / `require_elective_subject_scope` factories
+- [x] laboratory.py + feedback.py admin endpoints: `require_admin` ? `require_head_admin`
+- [x] event_service.py admin gates via AuthorizationService (scoped subject check; elective-slot HEAD_ADMIN)
+- [x] `verify_phase_23_11.py` (NEW, self-cleaning): PASS 23/23
+- [x] Backend `compileall` PASS; alembic single head `f9a0b1c2d3e4`; offline SQL validated; applied local-only
+- [x] Baseline restored after verifier (users 3, admin_scopes 0, records 165, events 62)
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO Phase 24 Admin Portal (UI, admin hierarchy UI, admin management UI)
+- [ ] NO admin-scope provisioning API/UI (Phase 24)
+- [ ] NO attendance/eligibility/calendar/event/occurrence math changes
+- [ ] NO subsection data fabrication (SUBSECTION_ADMIN conservative/inert)
+- [ ] NO production mutation
+
+## Validation
+
+- `compileall` PASS; alembic head `f9a0b1c2d3e4` (single head)
+- Offline upgrade/downgrade SQL PASS; applied to `127.0.0.1:55432/attendancedash` only
+- `verify_phase_23_11.py` PASS 23/23 (A unauthenticated, O/G HEAD_ADMIN legacy+scope, H/I CLASS_ADMIN, J/K SUBSECTION_ADMIN conservative+FK, L/M ELECTIVE_ADMIN, N inactive revoked, P no client role/scope, S student elective isolation, U attendance unchanged)
+- **Production DB NOT touched.** No production migration.
+- Git: working tree contains 23.11 changes; no commit, no push, no PR
+
+## Do Not Touch Again
+
+- Phase 23.11 authorization infrastructure is complete. Do not reopen.
+- `AuthorizationService` is the ONE backend authorization authority (roles + scopes from DB).
 - Phase 24 (Admin Portal) requires a fresh execution prompt.

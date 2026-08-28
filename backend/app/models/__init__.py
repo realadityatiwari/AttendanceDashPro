@@ -1,5 +1,6 @@
 # Expose all models here so Alembic can easily import them via Base
 from .user import User, Section, Subsection
+from .admin_scope import AdminScope
 from .academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from .timetable import TimetableEntry, ClassSession
 from .occurrence import OccurrenceOutcome

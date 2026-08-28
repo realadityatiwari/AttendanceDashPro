@@ -6081,3 +6081,215 @@ unchanged (`f8a9b0c1d2e3`). **Production DB not touched.**
 fresh execution prompt. Production not touched.
 
 ---
+
+# AttendanceDash Pro — Phase 23.11 Walkthrough
+
+> **PHASE 23.11 COMPLETE — API SCOPE & AUTHORIZATION (2026-08-29).**
+> Established the backend-authoritative scoped-admin authorization foundation
+> (roles + academic scopes resolved from PostgreSQL per request) that the
+> future Admin Portal depends on. No Admin Portal work was started.
+
+## Objective
+
+Every academic resource enforced at the backend boundary per the
+authenticated user's identity, role, and academic scope (Who? What? Which
+semester/section/subsection/subject/role?). Never rely on frontend
+restrictions, JWT claims, or client-supplied scope. The frontend must never be
+the authorization boundary.
+
+## Discovery
+
+- **Authentication**: JWT (`sub` = user UUID) ? `get_current_user` loads the
+  User from the DB. Role is DB-authoritative per request (already correct).
+- **Roles**: `UserRole` {STUDENT, ADMIN}. No scoped roles; no admin assignment
+  structure existed anywhere in the repository.
+- **Admin gates**: `require_admin` dependency (laboratory ×5, feedback ×2
+  endpoints) and EventService internal `user.role == ADMIN` checks
+  (elective-slot events; global/closure/quiz-schedule events).
+- **Student surfaces**: every student-facing endpoint is owner-scoped from
+  `current_user` with enrollment/effective-subject scoping in the read path
+  (verified through 23.9/23.10). No genuine student-scoping defect was found —
+  no student endpoint accepts a client-supplied user/section/subject scope.
+- **Subsection**: structurally absent — `subsections` table empty,
+  `users.subsection_id` NULL for every user. Subsection scoping cannot be
+  enforced on authoritative data; documented, not fabricated.
+
+## Authorization architecture
+
+New `adminrole` enum (HEAD_ADMIN / CLASS_ADMIN / SUBSECTION_ADMIN /
+ELECTIVE_ADMIN) + `admin_scopes` table:
+
+```
+admin_scopes(user_id, role, section_id?, subsection_id?, subject_id?, active)
+  CHECK ck_admin_scopes_role_scope:
+    HEAD_ADMIN        -> no scope columns
+    CLASS_ADMIN       -> section_id set
+    SUBSECTION_ADMIN  -> subsection_id set
+    ELECTIVE_ADMIN    -> subject_id set
+```
+
+`AuthorizationService` (reusable, DB-backed per request):
+- `effective_admin_roles(user)` — legacy `users.role == ADMIN` ? HEAD_ADMIN,
+  plus all ACTIVE scope rows.
+- `is_head_admin` — legacy ADMIN or HEAD_ADMIN scope.
+- `can_access_section` — HEAD_ADMIN or active CLASS_ADMIN scope for the exact
+  section.
+- `can_access_subsection` — HEAD_ADMIN or active SUBSECTION_ADMIN scope
+  (conservative: no authoritative subsection data ? non-head denies).
+- `can_access_subject` — HEAD_ADMIN, active ELECTIVE_ADMIN scope for the exact
+  concrete subject, or CLASS_ADMIN whose section's semester matches the
+  subject's semester.
+- `can_mutate_event` — event-mutation decision for the EventService gate.
+
+Composable FastAPI dependencies: `require_head_admin`, and the factories
+`require_class_scope(section_id)`, `require_subsection_scope(subsection_id)`,
+`require_elective_subject_scope(subject_id)`.
+
+## Role model
+
+- HEAD_ADMIN: global authority (legacy ADMIN account included — no privilege
+  reduction).
+- CLASS_ADMIN: only the assigned section(s); a subject is in scope iff it
+  belongs to the assigned section's semester; cannot escape to another
+  section/subject.
+- SUBSECTION_ADMIN: only the assigned subsection(s) — INERT today (no
+  authoritative subsection data; the DB FK itself rejects a scope referencing
+  a nonexistent subsection); never auto-grants whole-section authority.
+- ELECTIVE_ADMIN: only the assigned concrete elective subject(s) — one subject
+  per scope row; never a collapsed "all electives" scope.
+- STUDENT: only own resources (unchanged, audited).
+
+## Scope model
+
+One row per (user, role, scope-target); multiple rows per user allowed
+(e.g. CLASS_ADMIN for two sections, or ELECTIVE_ADMIN for BCS-054 + BCS-058).
+`active` is the DB-level deprovisioning toggle — inactive scopes are treated
+as nonexistent by every gate.
+
+## Student API authorization
+
+Audited endpoints: `/student/me`, `/student/sync`, `/timetable`,
+`/attendance/daily/{date}`, `/attendance/history`, `/attendance/summary/{subject}`,
+`POST /attendance`, `/dashboard/summary`, `/calendar*`, `/events`,
+`/quiz-eligibility*`, laboratory student paths, analytics, notifications,
+subjects. All derive scope from the authenticated principal (user id from JWT
+? DB; enrollment/effective-subject scoping in the repository read path;
+elective resolution via StudentElectiveChoice). No client-supplied scope is
+accepted anywhere. No changes required — confirmed correct.
+
+## Admin API authorization
+
+- Laboratory + feedback admin endpoints: `require_admin` ? `require_head_admin`
+  (legacy ADMIN preserved via the effective-role resolution; HEAD_ADMIN scope
+  added).
+- EventService: admin gates now resolve the effective role via the
+  AuthorizationService — subject-scoped event mutations are checked against
+  the admin's scope (ELECTIVE_ADMIN subject match / CLASS_ADMIN section-semester
+  match / HEAD_ADMIN anything); elective-slot (slot-wide) events require
+  HEAD_ADMIN; the student path (enrollment check) is unchanged.
+- Authorization always precedes mutation; no resource-existence leakage through
+  scope checks (uniform 403).
+
+## Subsection limitation
+
+`require_subsection_scope` and `can_access_subsection` exist and are
+conservative: with no authoritative subsection data, only HEAD_ADMIN passes.
+The verifier proves the DB FK rejects a SUBSECTION_ADMIN scope referencing a
+nonexistent subsection (no fabrication). Full enforcement requires the
+`timetable_entries.subsection_id` scheduling schema decision (future phase).
+
+## Files changed
+
+- `backend/app/models/enums.py` — `AdminRole`.
+- NEW `backend/app/models/admin_scope.py` — `AdminScope` (+ User relationship;
+  models/__init__.py export).
+- NEW `backend/app/services/authorization_service.py`.
+- `backend/app/api/dependencies/deps.py` — `require_head_admin` + scope
+  factories.
+- `backend/app/api/v1/endpoints/laboratory.py`, `feedback.py` —
+  `require_admin` ? `require_head_admin`.
+- `backend/app/services/event_service.py` — admin gates via the authorization
+  service.
+- NEW `backend/alembic/versions/f9a0b1c2d3e4_add_admin_scopes.py`.
+- NEW `backend/scripts/verify_phase_23_11.py`.
+
+## Schema / Migration
+
+Migration `f9a0b1c2d3e4` (parent `f8a9b0c1d2e3`): `adminrole` enum +
+`admin_scopes` table (FKs to users/sections/subsections/subjects, CHECK
+role-scope consistency, `active` default true, index on user_id). Additive;
+no existing table/row changed; existing ADMIN account untouched. Offline
+upgrade/downgrade SQL validated; applied to the local dev DB only. Alembic
+single head `f9a0b1c2d3e4`.
+
+## Verification
+
+- Backend `compileall` — PASS.
+- Alembic single head `f9a0b1c2d3e4`; linear chain preserved.
+- `verify_phase_23_11.py` PASS **23/23** against
+  `127.0.0.1:55432/attendancedash`:
+  A unauthenticated 401 · O legacy ADMIN ? HEAD_ADMIN · G HEAD_ADMIN global
+  (legacy + scope) · H CLASS_ADMIN in assigned section · I CLASS_ADMIN denied
+  elsewhere (incl. unrelated section id) · J/K SUBSECTION_ADMIN conservative +
+  DB FK integrity · L ELECTIVE_ADMIN allowed for assigned subject · M denied
+  for another elective/non-elective subject + no section authority · N
+  inactive scope denied, re-activation restores · P no client-supplied
+  role/scope · S student elective isolation intact · U attendance records
+  unchanged.
+- Fixtures cleaned; baseline restored (users 3, admin_scopes 0, attendance
+  records 165, academic events 62).
+- **Production DB not touched.** No production migration.
+
+## Security / isolation matrix (attack classes)
+
+1. Student A ? B's resource: denied (owner-scoped; no client user id accepted).
+2. Student A uses B's subject code: denied (enrollment scope).
+3. Student A uses B's session id: denied (enrollment/effective-subject scope).
+4. Student A uses B's event id: denied (event ownership/scope checks).
+5-8. Arbitrary section/subsection/subject ids: no student endpoint accepts
+   them as scope; admin scope checks deny out-of-scope.
+9. Student ? admin endpoints: 403 (require_head_admin).
+10. CLASS_ADMIN ? another section: denied.
+11. SUBSECTION_ADMIN ? another subsection / whole section: denied (inert +
+    conservative).
+12. ELECTIVE_ADMIN ? another elective subject: denied (exact subject).
+13. List endpoints: admin list surfaces not introduced; scope checks deny
+    out-of-scope reads.
+14. Indirect-ID traversal: every scope check validates the exact target.
+15. Inactive/revoked scope: denied (active flag).
+16. Legacy ADMIN: preserved as HEAD_ADMIN (no privilege reduction).
+17. Role changes without stale JWT: role resolved from DB per request.
+18. Client-supplied role/scope: never accepted (DB-resolved).
+
+## Database mutation status
+
+Local dev DB: migration `f9a0b1c2d3e4` applied; verifier fixtures created and
+removed; baseline restored. **Production: zero contact, zero mutation.**
+
+## Deferred items
+
+- Phase 24 Admin Portal (admin management UI, admin hierarchy UI,
+  admin-scope provisioning API/UI).
+- Full SUBSECTION_ADMIN enforcement (needs authoritative subsection data /
+  `timetable_entries.subsection_id` scheduling decision).
+- Pre-existing verifier `check()` argument-order bug (documented in earlier
+  phases; not a Phase 23.11 defect).
+
+## Production boundary
+
+No commit. No push. No PR. No merge. No production mutation. Migration
+`f9a0b1c2d3e4` applied to the local dev DB only; production migration is an
+operator action. **Production DB not touched.**
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.11 status COMPLETE; status table, dependency
+  path, progress bar, next-phase paragraph updated.
+- implementation_plan.md: Phase 23.11 implemented section.
+- task.md: Phase 23.11 delivered/not-in-scope checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.11 — COMPLETE.** **HARD STOP:** Phase 24 not started — requires a
+fresh execution prompt. Production not touched.
+
+---
