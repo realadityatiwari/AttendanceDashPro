@@ -5778,7 +5778,10 @@ Date: 2026-08-28 · Scope: Attendance Mutation Gate (outcome-aware mutation safet
 > path so attendance records cannot be created/modified in a way that
 > contradicts the canonical session/occurrence outcome. No migration, no
 > attendance-math, quiz, calendar, or event-session-synchronization changes.
-> No commit, no push, no PR.
+> **Git state (corrected after independent review):** Phase 23.9 work is
+> committed and pushed — commit `d705034` on `main`, up to date with
+> `origin/main`; the Phase 23.8 content was committed/pushed together with it
+> in the same commit (see Final git state).
 
 ## Objective
 
@@ -5858,6 +5861,12 @@ documented limitation).
   MODIFIED isolation / duplicate-single-record / historical attendance safety /
   deactivation-reversal / idempotency / authorization 401-403-200 / attendance
   safety). Operator/user owns running it; no browser/E2E testing performed.
+- **Independent review: PASS (safe to freeze). Live `verify_phase_23_9.py` DB
+  run = NOT RUN.** Non-blocking verifier coverage observations (not defects):
+  (1) EXTRA outcome ? allowed is not explicitly exercised (code is trivially
+  correct — only `CANCELLED` blocks); (2) future-date 400 when not
+  outcome-blocked is not explicitly tested (pre-existing unchanged code). No
+  verifier changes were made to manufacture a green result.
 
 ## Database mutation status
 
@@ -5875,20 +5884,30 @@ documented limitation).
 
 ## Frozen-code rule
 
-No Phase 23.7/23.8 frozen file was modified. `event_session_service.py` is
-untouched by this phase (its uncommitted diff is the pre-existing Phase 23.8
-CANCELLED-wins fix).
+No Phase 23.7/23.8 frozen file was modified by Phase 23.9. `event_session_service.py`
+is untouched by this phase — its only diff is the pre-existing Phase 23.8
+CANCELLED-wins fix, which was committed/pushed together with the Phase 23.9
+work in commit `d705034` (Phase 23.8 content, not Phase 23.9 implementation).
 
 ## Final git state
 
-- Modified: `backend/app/services/attendance_service.py`,
-  `backend/app/repositories/attendance_repo.py`, plus the four governance docs.
-- NEW: `backend/scripts/verify_phase_23_9.py`.
-- `event_session_service.py` diff = pre-existing Phase 23.8 fix (not from this phase).
-- No commit, no push, no PR.
+- Phase 23.9 code changes: `backend/app/services/attendance_service.py`,
+  `backend/app/repositories/attendance_repo.py`.
+- NEW (Phase 23.9): `backend/scripts/verify_phase_23_9.py`.
+- Phase 23.8 content committed in the same commit: the
+  `event_session_service.py` CANCELLED-wins fix and
+  `backend/scripts/verify_phase_23_8.py` (Phase 23.8 artifacts, not Phase 23.9
+  implementation; history was not rewritten to separate them).
+- **Git state: committed and pushed — commit `d705034` on `main`, up to date
+  with `origin/main`.**
+- Independent review: **PASS (safe to freeze); live DB verifier NOT RUN.**
+- Non-blocking verifier coverage observations: EXTRA-outcome-allowed and
+  future-date-400 are not explicitly exercised (code trivially correct /
+  unchanged); no verifier changes made.
+- No production mutation.
 
-**PHASE 23.9 — COMPLETE.** **HARD STOP:** No commit made. No push performed.
-Production not touched. Phase 23.10 not started — requires a fresh execution
-prompt.
+**PHASE 23.9 — COMPLETE.** **HARD STOP:** Phase 23.10 not started — requires a
+fresh execution prompt. Production not touched. Operator live DB verification
+(`verify_phase_23_9.py` against the isolated dev DB) remains outstanding.
 
 ---

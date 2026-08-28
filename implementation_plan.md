@@ -1861,7 +1861,7 @@ added (`deploy/backup/*`, compose service, env example, docs).
 
 **Objective:** deploy and verify the production infrastructure built in 18A‚Äì18C.
 
-**‚ö†Ô∏è Production deployment BLOCKED on missing infrastructure** ‚Äî no VPS/cloud
+**‚ö†Ô∏ù Production deployment BLOCKED on missing infrastructure** ‚Äî no VPS/cloud
 host, no domain/DNS/TLS, no production credentials, no off-host destination
 exist. The deployment mechanism was proven via a **local rehearsal deployment**
 (disposable, torn down).
@@ -3292,7 +3292,12 @@ SURPRISE_QUIZ / CLASS_CANCELLED unchanged.
 ### Phase 23.9 ó Attendance Mutation Gate (COMPLETE, 2026-08-28)
 
 **Status: COMPLETE ó outcome-aware attendance mutation safety. No migration.**
-Alembic head unchanged (`f7a8b9c0d1e2`). No commit, no push, no PR.
+Alembic head unchanged (`f7a8b9c0d1e2`). **Git state (corrected after
+independent review):** committed and pushed ó commit `d705034` on `main`, up to
+date with `origin/main`. The Phase 23.8 content (the `event_session_service.py`
+CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together
+with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content,
+not Phase 23.9 implementation, and history was not rewritten.
 
 **Scope re-scope (operator directive):** Phase 23.9 was re-scoped from the
 original blueprint label "Admin authorization foundation" to the attendance
@@ -3332,7 +3337,14 @@ attendance safety / deactivation-reversal / idempotency / authorization
 
 **Verification status:** `compileall` PASS ∑ frontend `npx tsc --noEmit` PASS
 (no frontend change) ∑ alembic head unchanged `f7a8b9c0d1e2` ∑ verifier written
-for operator run. **Production DB not touched. No migration applied.**
+for operator run. **Independent review PASS (safe to freeze); live DB verifier
+NOT RUN.** **Production DB not touched. No migration applied.**
+
+**Non-blocking verifier coverage observations (review):** (1) EXTRA outcome ?
+allowed is not explicitly exercised (code is trivially correct: only CANCELLED
+blocks); (2) future-date 400 when not outcome-blocked is not explicitly tested
+(pre-existing unchanged code). Coverage gaps only ó no verifier changes to
+manufacture a green result.
 
 **Deferred (documented, NOT implemented):** Phase 23.10 canonical read models;
 23.11 API scope/authorization; Phase 24 Admin Portal. No attendance UI/history/

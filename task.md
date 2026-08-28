@@ -2486,7 +2486,7 @@ Keep quiz reality correct when a concrete subject's scheduled occurrence is modi
 
 ## PHASE 23.9 - ATTENDANCE MUTATION GATE (COMPLETE, 2026-08-28)
 
-Status: **COMPLETE - outcome-aware attendance mutation safety.** No migration (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`). No commit, no push, no PR.
+Status: **COMPLETE - outcome-aware attendance mutation safety.** No migration (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`). **Git state (corrected after independent review):** committed and pushed — commit `d705034` on `main`, up to date with `origin/main`. The Phase 23.8 content (the `event_session_service.py` CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content, not 23.9 implementation, and history was not rewritten.
 
 > Scope note: this execution prompt hardens the canonical attendance mutation path so attendance records cannot be created/modified in a way that contradicts the canonical session/occurrence outcome. It is NOT a change to attendance mathematics, quiz eligibility, calendar, or event-session synchronization semantics. Phase 23.9 was re-scoped by operator directive from the original blueprint label "Admin authorization foundation" to the attendance mutation gate.
 
@@ -2530,7 +2530,8 @@ Ensure the mutation endpoint (`POST /api/v1/attendance`) respects the canonical 
 - In-process import + logic checks PASS (gate branch, elective isolation key, error semantics 409/403/404/400 preserved)
 - `verify_phase_23_9.py` written for the operator to run on the dev DB (self-cleaning; proves mutation-allowed/rejected/isolation/protection/reversal/idempotency/authorization)
 - **Production DB NOT touched.** No migration applied. Local/dev DB mutation limited to verifier fixtures (operator-run).
-- Git: working tree contains 23.9 changes; no commit, no push, no PR
+- Independent review: **PASS (safe to freeze); live DB verifier NOT RUN.** Non-blocking coverage observations: EXTRA-outcome-allowed and future-date-400 are not explicitly exercised by the verifier (code paths trivially correct / unchanged; no verifier changes made).
+- Git (corrected after review): Phase 23.9 work committed + pushed — `d705034` on `main`, up to date with `origin/main`; Phase 23.8 content (CANCELLED-wins fix + `verify_phase_23_8.py`) is inside the same commit.
 
 ## Do Not Touch Again
 

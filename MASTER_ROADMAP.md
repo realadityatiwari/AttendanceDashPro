@@ -2889,7 +2889,12 @@ represent the required quiz integration. Alembic head unchanged (`f7a8b9c0d1e2`)
 
 **Status: COMPLETE — outcome-aware attendance mutation safety.** No migration
 (discovery proved none necessary). Alembic head unchanged (`f7a8b9c0d1e2`).
-No commit, no push, no PR.
+**Git state (corrected after independent review):** Phase 23.9 work is
+committed and pushed — commit `d705034` on `main`, up to date with
+`origin/main`. The Phase 23.8 content (the `event_session_service.py`
+CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together
+with the Phase 23.9 work in the same commit `d705034`; history was not
+rewritten to separate them.
 
 > **Scope note:** Phase 23.9 was re-scoped by operator directive from the
 > original blueprint label "Admin authorization foundation" to the attendance
@@ -2978,9 +2983,11 @@ cancelled per canonical semantics, but the record is never deleted/rewritten.
 
 ## Frozen-code rule
 
-No Phase 23.7/23.8 frozen file was modified. `event_session_service.py` is
-untouched by this phase (its uncommitted diff is the pre-existing Phase 23.8
-CANCELLED-wins fix).
+No Phase 23.7/23.8 frozen file was modified by Phase 23.9.
+`event_session_service.py` is untouched by this phase — its only diff is the
+pre-existing Phase 23.8 CANCELLED-wins fix (committed/pushed together with the
+Phase 23.9 work in commit `d705034`; it is Phase 23.8 content, not Phase 23.9
+implementation).
 
 ## Verification
 
@@ -2989,6 +2996,29 @@ CANCELLED-wins fix).
 - `verify_phase_23_9.py` written for the operator to run on the dev DB
   (self-cleaning; proves the full mutation matrix).
 - **Production DB not touched.** No migration applied.
+
+## Independent review
+
+Phase 23.9 passed independent architectural review. **Verdict: SAFE TO FREEZE
+23.9, OPERATOR LIVE VERIFICATION OUTSTANDING.** No code defect was found. The
+review confirmed:
+
+- Gate placement is correct (after enrollment 403, before future-date 400).
+- Effective-subject resolution is equivalent to the established read path.
+- Outcome lookup uses the canonical key `(class_session_id, effective_subject_id)`.
+- Enrollment check precedes outcome lookup (no authorization leak).
+- Elective isolation is inherent (each student's lookup keyed by their own
+  resolved subject).
+- Historical attendance is never rewritten.
+- No migration, no schema change, no engine change.
+
+**Non-blocking verifier coverage observations (not defects):**
+- E (EXTRA outcome → allowed) is not explicitly exercised in the verifier.
+  The code is trivially correct (`if outcome_type == CANCELLED: 409; else: allowed`).
+- H (future-date 400 when not outcome-blocked) is not explicitly tested.
+  The future-date check is pre-existing, unchanged code.
+Both are coverage gaps, not correctness bugs. No verifier changes were made to
+manufacture a green result.
 
 ## Deferred (documented, NOT implemented)
 
