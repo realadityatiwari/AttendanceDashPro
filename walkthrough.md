@@ -7274,3 +7274,134 @@ alembic head.
 API) NOT STARTED - requires a fresh execution prompt. No production system was
 intentionally contacted or modified. No commit/push/PR made during
 implementation.
+
+---
+
+# Phase 24.7-B - Timetable Repository, Service & Conflict Validation (IN PROGRESS - 24.7-B COMPLETE, 2026-08-29)
+
+## Scope
+
+The authoritative backend timetable management layer — repository, service,
+and deterministic conflict detection. The backend owns ALL timetable
+validation and conflict detection (never the frontend). NO HTTP CRUD
+endpoints, NO frontend. Local development only. No schema change, NO new
+migration (alembic head `c4d5e6f7a8b9` unchanged). Git state: implemented but
+NOT committed (no commit made during implementation, per operator
+instruction).
+
+## What was implemented and why
+
+### Backend (additive)
+
+- `repositories/admin_timetable_repo.py` (NEW): bounded, scope-aware queries —
+  `list_entries` (server-derived section/subject filters; deterministic
+  ordering day → sort_order NULLS LAST → start_time → id), `get_entry`,
+  `list_active_conflict_candidates` (bounded: active same-section/same-day
+  only, so conflict detection materializes a section's small weekly timetable
+  rather than scanning globally), counts, and academic-context lookups.
+- `services/admin_timetable_service.py` (NEW): authoritative validation and
+  conflict detection:
+  - academic-context validation (section exists; subject exists; subject MUST
+    belong to the section's semester → INVALID_SUBJECT);
+  - subsection validation (exists AND belongs to the entry's section →
+    INVALID_SUBSECTION);
+  - elective-slot validation (marker must match the subject's catalog slot;
+    elective subjects must carry their slot marker → INVALID_ELECTIVE_SLOT);
+  - time validation (end > start → INVALID_TIME_RANGE);
+  - deterministic conflict detection (semantics below);
+  - active/inactive semantics (inactive never blocks; scheduling edits on a
+    dormant entry require reactivation → INACTIVE_PARENT; reactivation
+    re-runs conflict detection);
+  - server-side scope resolution via `AuthorizationService` (HEAD
+    unrestricted; CLASS assigned sections; SUBSECTION assigned subsections'
+    sections — inert today; ELECTIVE exact concrete subject) — no client
+    trust;
+  - domain-error hierarchy (`TimetableNotFoundError`, `InvalidScope`,
+    `InvalidSubject`, `InvalidSubsection`, `InvalidElectiveSlot`,
+    `InvalidTimeRange`, `TimeConflict`, `InactiveParent`) — 24.7-C maps to
+    the project's HTTP conventions (404/403/400/409).
+- `schemas/admin_timetable.py` (extended): `CreateTimetableEntryRequest`,
+  `UpdateTimetableEntryRequest` (explicit-PATCH semantics),
+  `TimetableEntryMutationResponse`.
+
+### Verifier
+
+- `scripts/verify_phase_24_7b.py` (NEW): PASS 29/29 (×2 runs, idempotent);
+  hard locality guard; isolated fixtures (fixture session/semester/sections/
+  subsections/subjects + scoped admins); cleanup in `finally`; baseline
+  counts restored; original active session unchanged.
+
+## Conflict semantics (recorded verbatim)
+
+Two timetable entries CONFLICT when ALL of the following hold:
+
+1. both ACTIVE (inactive entries never block);
+2. SAME day of week;
+3. SAME section;
+4. time ranges OVERLAP: `existing.start_time < new.end_time AND
+   existing.end_time > new.start_time` — adjacent entries
+   (09:00–10:00 / 10:00–11:00) are NOT a conflict;
+5. same effective scheduling scope:
+   - section-wide (subsection_id NULL) vs section-wide → CONFLICT;
+   - section-wide vs subsection-specific (same section) → CONFLICT (the
+     subsection is a partition of the section — overlapping classes
+     double-book those students);
+   - subsection-specific vs SAME subsection → CONFLICT;
+   - subsection-specific vs DIFFERENT subsection → NO CONFLICT (parallel
+     schedules for disjoint groups are allowed);
+   - DIFFERENT sections → NO CONFLICT.
+
+ELECTIVE-SLOT RULE: a logical elective slot resolves to different concrete
+subjects for different students. Two entries BOTH carrying the SAME
+`elective_slot` (both ELECTIVE_I or both ELECTIVE_II) do NOT conflict merely
+because they share the slot — each student follows only the one concrete
+subject their choice resolves to. Different slots (ELECTIVE_I vs
+ELECTIVE_II) DO conflict, as does an elective-slot entry vs a regular
+(non-elective) entry — a student attends both. This is compatible with the
+existing `ElectiveResolver` anchor model; no student-specific timetable rows
+are created.
+
+## Verification performed
+
+- `verify_phase_24_7b.py` PASS **29/29** (×2 runs, idempotent): 1
+  non-overlapping allowed · 2 adjacent allowed · 3 overlapping same-subsection
+  rejected · 4 section-wide×subsection rejected · 5 different sections allowed
+  · 6 different subsections allowed · 7 inactive does not block · 8 invalid
+  time range · 9 incompatible subject · 10/10b/10c elective-slot validation ·
+  E1 same-slot parallel allowed · E2 cross-slot rejected · E3 elective×regular
+  rejected · 11a-11e scope matrix (CLASS/ELECTIVE/SUBSECTION/STUDENT +
+  cross-section create denied) · 12 NOT_FOUND · 13 INVALID_SCOPE detail ·
+  14 INACTIVE_PARENT · 15/15b/16 reactivation conflict re-run · 17 repository
+  scoped list · Z1 baseline restored · Z2 original active session unchanged.
+- Regression: `verify_phase_24_3.py` PASS 40/40 · `verify_phase_24_5.py` PASS
+  46/46 · `verify_phase_24_6.py` PASS 46/46 · `verify_phase_24_7a.py` PASS.
+- `compileall` PASS · `git diff --check` clean · alembic single head
+  `c4d5e6f7a8b9` unchanged (no new migration).
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
+
+## Known limitations
+
+- Existing data cross-check: the 28 production-baseline timetable entries have
+  ZERO intra-section overlapping pairs (adjacent or disjoint by construction),
+  so the new conflict predicate flags nothing in the current schedule.
+- `verify_phase_22_1.py` still reports its PRE-EXISTING "response fields
+  match" failure (its expected-field set predates the Phase 22.3
+  `elective_slot` field) — unrelated to 24.7-A/B; flagged for a future
+  correction prompt.
+- Domain errors are mapped to HTTP status codes in 24.7-C; this slice raises
+  the domain hierarchy only.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-B COMPLETE, verifier 29/29, git state), Phase
+  24.7-B record appended with the recorded conflict semantics.
+- implementation_plan.md: Phase 24.7-B section (executed).
+- task.md: Phase 24.7-B checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-B COMPLETE. HARD STOP:** Phase 24.7-C (HTTP
+CRUD API) NOT STARTED - requires a fresh execution prompt. No production
+system was intentionally contacted or modified. No commit/push/PR made during
+implementation.

@@ -4014,5 +4014,55 @@ unchanged (response keys verified). Schema serialization validated.
 Downgrade/upgrade cycle clean. No browser/E2E run (operator responsibility).
 Production untouched; `.env` unchanged (local dev target).
 
-**Next:** Phase 24.7-B (CRUD API) — NOT STARTED; requires fresh execution
+**Next:** Phase 24.7-B (repository/service/conflict) **COMPLETE (2026-08-29 —
+see the Phase 24.7-B section below)**; Phase 24.7-C (HTTP CRUD API) NOT
+STARTED — requires fresh execution prompts. All 12 Phase 24.0 decision gates
+remain open.
+
+## Phase 24.7-B - Timetable Repository, Service & Conflict Validation (CURRENT PLAN - EXECUTED, 2026-08-29)
+
+**Status: 24.7 IN PROGRESS: 24.7-B COMPLETE; 24.7-C (HTTP CRUD API) NOT
+STARTED.** Local development only. No schema change, NO new migration (alembic
+head `c4d5e6f7a8b9` unchanged). Git state: implemented but NOT committed.
+
+**Objective:** the authoritative backend timetable management layer —
+repository, service, deterministic conflict detection. The backend owns ALL
+timetable validation and conflict detection (never the frontend). No HTTP CRUD
+endpoints, no frontend.
+
+**Implementation plan (executed as specified):**
+
+- `repositories/admin_timetable_repo.py` (NEW): scope-aware `list_entries`
+  (deterministic ordering day → sort_order NULLS LAST → start_time → id),
+  `get_entry`, `list_active_conflict_candidates` (bounded: active
+  same-section/same-day), counts, academic-context lookups.
+- `services/admin_timetable_service.py` (NEW): academic-context validation
+  (subject must belong to the section's semester), subsection validation
+  (belongs to the entry's section), elective-slot validation (marker matches
+  subject's catalog slot), time validation (end > start), deterministic
+  conflict detection, active/inactive semantics (inactive never blocks;
+  scheduling edits on inactive entries require reactivation), server-side
+  scope resolution via AuthorizationService (no client trust), domain-error
+  hierarchy mapped to 404/403/400/409 in 24.7-C.
+- `schemas/admin_timetable.py` (extended): create/update request schemas +
+  mutation response.
+- `scripts/verify_phase_24_7b.py` (NEW): PASS 29/29 (×2, idempotent).
+
+**Conflict semantics (recorded verbatim):** two entries CONFLICT when all hold
+— both active; same day; same section; time overlap
+(`existing.start < new.end AND existing.end > new.start`, adjacent allowed);
+same effective scope (section-wide×section-wide conflict; section-wide×
+subsection conflict; same subsection conflict; different subsections parallel
+allowed; different sections never conflict). Elective rule: same elective_slot
+(both ELECTIVE_I or both ELECTIVE_II) never auto-conflicts (per-student
+resolution); different slots or elective×regular conflict.
+
+**Verification performed:** `verify_phase_24_7b.py` PASS 29/29 (all 16
+functional conflict/validation/isolation checks + scope matrix + baseline
+restored + original active session unchanged). Regression: 24.3 40/40 · 24.5
+46/46 · 24.6 46/46 · 24.7a PASS. `compileall` PASS · `git diff --check` clean
+· alembic single head `c4d5e6f7a8b9` unchanged. No browser/E2E run (operator
+responsibility). Production untouched; `.env` unchanged (local dev target).
+
+**Next:** Phase 24.7-C (HTTP CRUD API) — NOT STARTED; requires fresh execution
 prompts. All 12 Phase 24.0 decision gates remain open.

@@ -3038,4 +3038,55 @@ frontend timetable UI, no student timetable integration.
 ## Do Not Touch Again
 - Phase 24.7-A schema/model changes are reviewed and frozen (additive columns + integrity guards + migration `c4d5e6f7a8b9`)
 - `verify_phase_24_7a.py` is the Phase 24.7-A verifier
-- Phase 24.7-B (CRUD API) and Phase 24.8+ require fresh execution prompts
+- Phase 24.7-C (HTTP CRUD API) and Phase 24.8+ require fresh execution prompts
+
+## PHASE 24.7-B - TIMETABLE REPOSITORY, SERVICE & CONFLICT VALIDATION (IN PROGRESS - 24.7-B COMPLETE, 2026-08-29)
+
+Status: **24.7 IN PROGRESS: 24.7-B COMPLETE; 24.7-C (HTTP CRUD API) NOT
+STARTED.** Local development only. No schema change, NO new migration (alembic
+head `c4d5e6f7a8b9` unchanged). Git state: implemented but NOT committed (no
+commit made during implementation, per operator instruction).
+
+## Objective
+
+The authoritative backend timetable management layer — repository, service,
+and deterministic conflict detection. The backend owns ALL timetable
+validation and conflict detection (never the frontend). No HTTP CRUD
+endpoints, no frontend.
+
+## Delivered
+
+### Backend (additive)
+- [x] `repositories/admin_timetable_repo.py` (NEW): scope-aware `list_entries` (deterministic ordering day → sort_order NULLS LAST → start_time → id), `get_entry`, `list_active_conflict_candidates` (bounded: active same-section/same-day), counts, academic-context lookups
+- [x] `services/admin_timetable_service.py` (NEW): academic-context validation (subject belongs to the section's semester), subsection validation (belongs to the entry's section), elective-slot validation (marker matches subject's catalog slot), time validation (end > start), deterministic conflict detection, active/inactive semantics (inactive never blocks; scheduling edits on inactive entries require reactivation), server-side scope resolution via AuthorizationService (no client trust), domain-error hierarchy
+- [x] `schemas/admin_timetable.py` (extended): create/update request schemas + mutation response
+
+### Verifier
+- [x] `scripts/verify_phase_24_7b.py` (NEW): PASS 29/29 (×2, idempotent); locality-guarded; isolated fixtures (fixture session/semester/sections/subsections/subjects + scoped admins); cleanup in `finally`; baseline counts restored
+
+## Conflict semantics (recorded verbatim)
+- [x] Both active required (inactive entries never block)
+- [x] Same day + same section + time overlap (`existing.start < new.end AND existing.end > new.start`; adjacent allowed)
+- [x] Section-wide × section-wide → conflict; section-wide × subsection → conflict; same subsection × same subsection → conflict
+- [x] Different subsections → parallel allowed; different sections → never conflict
+- [x] Elective rule: same elective_slot (both ELECTIVE_I or both ELECTIVE_II) → no auto-conflict (per-student resolution); different slots or elective × regular → conflict
+
+## Hard scope (respected)
+- [x] NO HTTP CRUD endpoints / admin timetable editor (24.7-C)
+- [x] NO frontend changes
+- [x] NO schema change / migration (24.7-A migration `c4d5e6f7a8b9` reused)
+- [x] NO duplicate timetable data per student; NO student-specific timetable rows
+- [x] NO attendance/quiz/elective engine changes; existing elective architecture (ElectiveResolver) untouched
+- [x] NO client-supplied role/scope trusted — AuthorizationService is the only scope authority
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_7b.py` PASS **29/29** (×2 runs, idempotent): non-overlapping allowed; adjacent allowed; overlapping same-subsection rejected; section-wide×subsection rejected; different sections allowed; different subsections allowed; inactive does not block new active; invalid time range rejected; incompatible subject rejected; mismatched elective slot rejected; non-elective + elective marker rejected; valid elective + matching slot allowed; same-slot overlap allowed; ELECTIVE_I×ELECTIVE_II rejected; elective×regular rejected; CLASS_ADMIN own-section; ELECTIVE_ADMIN own-subject; SUBSECTION_ADMIN own-section; STUDENT nothing; CLASS_ADMIN cross-section create → INVALID_SCOPE; not-found → NOT_FOUND; out-of-scope detail → INVALID_SCOPE; inactive scheduling edit → INACTIVE_PARENT; reactivation re-runs conflict detection; reactivation allowed once slot free; reactivated entry blocks overlap; repository scoped list; baseline restored; original active session unchanged
+- [x] Regression: `verify_phase_24_3.py` PASS 40/40; `verify_phase_24_5.py` PASS 46/46; `verify_phase_24_6.py` PASS 46/46; `verify_phase_24_7a.py` PASS
+- [x] `python -m compileall backend/app backend/scripts` PASS; `git diff --check` clean; alembic single head `c4d5e6f7a8b9` unchanged (no new migration)
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.7-B repository/service/conflict logic is reviewed and frozen
+- `verify_phase_24_7b.py` is the Phase 24.7-B verifier
+- Phase 24.7-C (HTTP CRUD API) and Phase 24.8+ require fresh execution prompts

@@ -1,13 +1,13 @@
 """
-Phase 24.7-A — Admin Timetable Domain schemas.
+Phase 24.7-A/B — Admin Timetable schemas.
 
 The timetable is the EXPECTED academic schedule (per Section, optionally per
 Subsection) — distinct from actual ``class_sessions`` occurrences.  These
 schemas let the admin API layer represent the full timetable domain contract
-so later slices (24.7-B CRUD) can serialize without inventing a second style.
+so later slices can serialize without inventing a second style.
 
-This slice defines the READ REPRESENTATION ONLY.  Create/update request
-schemas and the CRUD endpoints belong to Phase 24.7-B.
+24.7-A: READ REPRESENTATION (TimetableEntryAdminResponse).
+24.7-B: Create/update request schemas + mutation response.
 """
 
 from datetime import time
@@ -19,15 +19,11 @@ from pydantic import BaseModel, Field
 from app.models.enums import ClassType, ElectiveSlot
 
 
-class TimetableEntryAdminResponse(BaseModel):
-    """A single expected-schedule entry (Phase 24.7 contract).
+# ---------------------------------------------------------------------------
+# Read response (24.7-A)
+# ---------------------------------------------------------------------------
 
-    Fields mirror the authoritative TimetableEntry model.  ``subsection_id``
-    is NULL for section-wide entries; ``elective_slot`` marks the shared
-    Departmental Elective slot (never resolved per student here — resolution
-    stays in the student-facing layer).  ``sort_order`` is a nullable
-    deterministic ordering hint.
-    """
+class TimetableEntryAdminResponse(BaseModel):
     id: UUID
     section_id: UUID
     section_name: str
@@ -51,3 +47,49 @@ class TimetableEntryAdminResponse(BaseModel):
 class TimetableEntryAdminListResponse(BaseModel):
     items: List[TimetableEntryAdminResponse] = Field(default_factory=list)
     total: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Create / Update (24.7-B)
+# ---------------------------------------------------------------------------
+
+class CreateTimetableEntryRequest(BaseModel):
+    section_id: UUID
+    subject_id: UUID
+    day_of_week: int = Field(..., ge=0, le=6)
+    start_time: time
+    end_time: time
+    class_type: ClassType
+    room: Optional[str] = Field(None, max_length=100)
+    subsection_id: Optional[UUID] = None
+    elective_slot: Optional[ElectiveSlot] = None
+    is_active: bool = True
+    sort_order: Optional[int] = None
+
+
+class UpdateTimetableEntryRequest(BaseModel):
+    """Patch a timetable entry (explicit-PATCH semantics).
+
+    ``section_id``, ``subject_id``, ``elective_slot``, ``day_of_week``,
+    ``start_time``, ``end_time``, ``class_type``, and ``subsection_id`` are
+    scheduling-critical fields.  Changing them on an INACTIVE entry is
+    refused (INACTIVE_PARENT) — the entry must be reactivated first so
+    conflict detection runs against the live context.
+
+    Use ``model_fields_set`` to distinguish absent from explicit-null.
+    """
+    section_id: Optional[UUID] = None
+    subject_id: Optional[UUID] = None
+    day_of_week: Optional[int] = Field(None, ge=0, le=6)
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    class_type: Optional[ClassType] = None
+    room: Optional[str] = Field(None, max_length=100)
+    subsection_id: Optional[UUID] = None
+    elective_slot: Optional[ElectiveSlot] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class TimetableEntryMutationResponse(BaseModel):
+    entry: TimetableEntryAdminResponse
