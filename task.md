@@ -2721,3 +2721,50 @@ the frozen Phase 23 Academic Core and the Phase 23.11 authorization foundation.
 - Phase 23 Academic Core (23.0-23.12) is frozen; Phase 23.11 authorization semantics are final
 - The event pipeline is the canonical occurrence-control path - no direct session/outcome writes
 - Phase 24 implementation requires fresh execution prompts per sub-phase, after decision-gate review
+
+---
+
+## PHASE 24.1 - ADMIN PORTAL IDENTITY + SHELL (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - local development only.** No migration, no schema change
+(head unchanged `f9a0b1c2d3e4`), no production contact. No commit, no push, no PR.
+
+## Objective
+
+Foundational authenticated admin experience on the Phase 23.11 authorization
+architecture: admin authentication -> DB-authoritative identity -> roles +
+scopes -> authorization-aware shell -> scope-aware navigation. No feature domains.
+
+## Delivered
+
+### Backend (additive)
+- [x] `app/schemas/admin.py` (NEW): `AdminIdentity` + `AdminScopeDescriptor` read-only presentation contracts
+- [x] `AuthorizationService.get_admin_identity()` (additive method): DB-resolved effective roles + active scope descriptors; existing authorization methods untouched
+- [x] `deps.require_any_admin` (additive composable dependency): 403 when no effective admin role; legacy `require_admin` untouched/unused
+- [x] `GET /api/v1/admin/me` (`app/api/v1/endpoints/admin.py`, NEW): read-only; 401/403 handled by the dependency chain; no write behavior; no direct DB access from the endpoint
+- [x] `api/api.py`: `/admin` router wired (live router; legacy `api/v1/router.py` untouched)
+
+### Frontend (additive)
+- [x] `lib/api.ts`: HTTP status preserved on thrown errors (additive; 401 redirect behavior unchanged)
+- [x] `types/api.ts`: `AdminIdentity` / `AdminScopeDescriptor`
+- [x] `hooks/useApi.ts`: `useAdminMe()` SWR hook
+- [x] `(admin)` route group layout: loading / unauthenticated (existing AuthContext redirect) / unauthorized (403) / API-failure (retry) / shell states; no admin content before backend confirmation
+- [x] `components/admin/AdminShell.tsx`: dedicated shell reusing tokens, Button/Badge/Avatar/Skeleton, existing logout, existing responsive conventions; no separate mobile architecture
+- [x] `/admin` overview page: identity card, scope descriptors, truthful availability (Feedback Review for global admins), planned areas marked unavailable, SUBSECTION_ADMIN inert notice
+- [x] Student shell/routes/frozen primitives: UNCHANGED
+
+## Hard scope (respected)
+- [x] NO schema change / migration / production interaction
+- [x] NO second authorization system, no frontend-only authorization boundary, no localStorage role authority, no JWT-claim trust
+- [x] NO hardcoded admin identity; no provisioning UI; no role/scope editing
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+- [x] NO fabricated subsection semantics; scoped admins not presented as global
+
+## Validation
+- `python -m compileall backend/app` PASS; backend app imports cleanly; admin router registered (endpoint `/me`)
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on all changed frontend files
+- No browser/E2E/regression runs (operator tests manually, per phase boundary)
+
+## Do Not Touch Again
+- Phase 24.1 is the portal foundation; Phase 24.2+ requires a fresh execution prompt
+- `/admin/me` + `require_any_admin` are additive Phase 23.11 consumers - extend, never replace, `AuthorizationService`

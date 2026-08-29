@@ -78,7 +78,12 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
     } catch {
       errorMessage = response.statusText;
     }
-    throw new Error(errorMessage);
+    // Phase 24.1: preserve the HTTP status on the thrown error so callers can
+    // distinguish authorization failures (403) from other API failures.
+    // Additive only — existing consumers are unaffected.
+    const error = new Error(errorMessage) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   // Handle empty responses (e.g., 204 No Content)

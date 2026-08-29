@@ -33,7 +33,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, Section
+from app.models.user import User, Section, Subsection
 from app.models.admin_scope import AdminScope
 from app.models.academic import Subject
 from app.models.enums import AdminRole, UserRole
@@ -75,6 +75,62 @@ class AuthorizationService:
 
     async def is_head_admin(self, user: User) -> bool:
         return AdminRole.HEAD_ADMIN in await self.effective_admin_roles(user)
+
+    # ------------------------------------------------------------------
+    # Admin identity read model (Phase 24.1 — presentation only)
+    # ------------------------------------------------------------------
+    async def get_admin_identity(self, user: User) -> dict:
+        """DB-resolved administrative identity for the Admin Portal shell
+        (Phase 24.1). READ-ONLY presentation data — it never authorizes
+        anything by itself; every endpoint keeps its own Phase 23.11 gate.
+
+        Returns the effective role set (legacy ADMIN -> HEAD_ADMIN unioned
+        with the ACTIVE admin_scopes roles) and the active scope rows
+        resolved to human-readable descriptors (section / subsection /
+        subject names via the authoritative academic tables).
+        """
+        roles = await self.effective_admin_roles(user)
+        scopes = (
+            await self.get_active_scopes(user.id)
+            if user is not None and user.id is not None
+            else []
+        )
+
+        section_ids = [s.section_id for s in scopes if s.role == AdminRole.CLASS_ADMIN and s.section_id]
+        subsection_ids = [s.subsection_id for s in scopes if s.role == AdminRole.SUBSECTION_ADMIN and s.subsection_id]
+        subject_ids = [s.subject_id for s in scopes if s.role == AdminRole.ELECTIVE_ADMIN and s.subject_id]
+
+        sections = {}
+        if section_ids:
+            result = await self.db.execute(select(Section).where(Section.id.in_(section_ids)))
+            sections = {row.id: row for row in result.scalars().all()}
+        subsections = {}
+        if subsection_ids:
+            result = await self.db.execute(select(Subsection).where(Subsection.id.in_(subsection_ids)))
+            subsections = {row.id: row for row in result.scalars().all()}
+        subjects = {}
+        if subject_ids:
+            result = await self.db.execute(select(Subject).where(Subject.id.in_(subject_ids)))
+            subjects = {row.id: row for row in result.scalars().all()}
+
+        descriptors = []
+        for s in scopes:
+            section = sections.get(s.section_id)
+            subsection = subsections.get(s.subsection_id)
+            subject = subjects.get(s.subject_id)
+            descriptors.append({
+                "role": s.role.value if hasattr(s.role, "value") else str(s.role),
+                "section_name": section.name if section else None,
+                "subsection_name": subsection.name if subsection else None,
+                "subject_code": subject.code if subject else None,
+                "subject_name": subject.name if subject else None,
+            })
+
+        return {
+            "roles": sorted(r.value for r in roles),
+            "is_global": AdminRole.HEAD_ADMIN in roles,
+            "scopes": descriptors,
+        }
 
     # ------------------------------------------------------------------
     # Scope checks

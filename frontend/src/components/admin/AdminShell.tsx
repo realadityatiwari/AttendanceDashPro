@@ -1,0 +1,139 @@
+"use client";
+
+import { ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Gauge,
+  LogOut,
+  MessageSquareText,
+  ShieldCheck,
+  LayoutDashboard,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AdminIdentity } from "@/types/api";
+
+const ADMIN_NAV_ITEMS = [
+  { label: "Overview", href: "/admin", icon: LayoutDashboard, globalOnly: false },
+  // Existing admin surface (GET /api/v1/feedback/admin is require_head_admin-
+  // gated server-side). Shown for global administrators only — presentation
+  // filtering; the backend remains the boundary.
+  { label: "Feedback Review", href: "/tools/feedback", icon: MessageSquareText, globalOnly: true },
+] as const;
+
+/**
+ * Admin Portal shell (Phase 24.1) — deliberately separate from the student
+ * AppShell. Reuses the existing design tokens, Button/Badge/Avatar primitives,
+ * the existing AuthContext logout, and the same responsive conventions
+ * (nav collapses to a horizontally scrollable row below `md`; no separate
+ * mobile architecture). Identity comes from the backend (/api/v1/admin/me)
+ * and is rendered for context only.
+ */
+export function AdminShell({
+  identity,
+  children,
+}: {
+  identity: AdminIdentity;
+  children: ReactNode;
+}) {
+  const pathname = usePathname();
+  const { logout } = useAuth();
+
+  const displayName = identity.display_name || "Admin";
+  const initials = displayName.trim().charAt(0).toUpperCase() || "?";
+  const navItems = ADMIN_NAV_ITEMS.filter(
+    (item) => !item.globalOnly || identity.is_global
+  );
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b border-border bg-background">
+        <div className="flex h-14 items-center gap-4 px-4 sm:px-6 lg:px-8">
+          <span className="flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
+              <ShieldCheck className="size-4" aria-hidden="true" />
+            </span>
+            <span className="text-[0.95rem] font-semibold tracking-tight text-foreground">
+              AttendanceDash{" "}
+              <span className="font-normal text-muted-foreground">
+                Admin
+              </span>
+            </span>
+          </span>
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/dashboard" />}
+            >
+              <Gauge className="size-4" aria-hidden="true" />
+              Student app
+            </Button>
+            <Avatar className="h-8 w-8 border border-border bg-surface2">
+              <AvatarFallback className="text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-semibold text-foreground sm:block">
+              {displayName}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Sign out"
+              onClick={logout}
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+
+        <nav
+          aria-label="Admin"
+          className="flex items-center gap-1 overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8"
+        >
+          {navItems.map(({ label, href, icon: Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                {label}
+              </Link>
+            );
+          })}
+          {identity.is_global ? (
+            <Badge variant="primary" className="ml-2 hidden sm:inline-flex">
+              Global authority
+            </Badge>
+          ) : (
+            <Badge variant="neutral" className="ml-2 hidden sm:inline-flex">
+              Scoped authority
+            </Badge>
+          )}
+        </nav>
+      </header>
+
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl p-4 md:p-6 lg:p-8">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}

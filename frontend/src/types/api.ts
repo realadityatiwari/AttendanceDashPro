@@ -756,3 +756,23 @@ export interface AdminFeedbackParams {
   page_size?: number;
   feedback_type?: FeedbackType | "";
 }
+
+// --- Phase 24.1 Admin Portal identity (GET /api/v1/admin/me) ---
+// Presentation-only contract: the backend remains the authorization boundary.
+// The frontend renders roles/scopes but never decides authorization from them.
+export interface AdminScopeDescriptor {
+  role: string;
+  section_name?: string | null;
+  subsection_name?: string | null;
+  subject_code?: string | null;
+  subject_name?: string | null;
+}
+
+export interface AdminIdentity {
+  id: string;
+  display_name: string;
+  roll_number: string | null;
+  roles: string[];
+  is_global: boolean;
+  scopes: AdminScopeDescriptor[];
+}

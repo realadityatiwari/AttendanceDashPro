@@ -73,6 +73,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
 | 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Corrective migration `f8a9b0c1d2e3` (2026-08-29): `ALTER TYPE eventtype ADD VALUE 'CLASS_MODIFIED'`** — Phase 23.7 omitted the PG `eventtype` enum value (exposed by the live Phase 23.9 verifier); applied to the local dev DB only. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) ✅ COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` **PASS 26/26** on the local dev DB after the corrective migration. **Not applied to production** (operator boundary). **23.10 (Student-Facing Read Models) ✅ COMPLETE (2026-08-29)** — `outcome_type` + `elective_slot` exposed on daily-sessions/history responses; all student-facing surfaces audited and confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26 (isolation matrix). **Not applied to production** (operator boundary). **23.11 (API Scope & Authorization) ✅ COMPLETE (2026-08-29)** — migration `f9a0b1c2d3e4`: `adminrole` enum + `admin_scopes` table (role-scope CHECK constraint); `AuthorizationService` with composable scope checks; legacy ADMIN → HEAD_ADMIN; wired into laboratory/feedback admin endpoints + EventService; student audit confirmed scoped; `verify_phase_23_11.py` PASS 23/23. **Not applied to production** (operator boundary). **23.12 (Migration Gate) ✅ COMPLETE (2026-08-29)** — Phase 23 migration chain audited: 25 migrations, single linear chain, one head `f9a0b1c2d3e4`; fresh disposable-DB migration to HEAD (25/25) + downgrade/rollback cycle + idempotency verified; drift audited (legacy timestamp-nullable convention only); adminrole/CHECK/FK semantics proven; offline upgrade/downgrade SQL validated; data-integrity baseline unchanged; `verify_phase_23_12.py` PASS 52/52. No migration created. **Not applied to production** (operator boundary). Phase 24 (Admin Portal) pending. |
+| 24 | Admin Portal | 🟡 **24.0 DISCOVERY COMPLETE** (2026-08-29, `docs/phase_24/phase_24_0_admin_portal_discovery.md`) · **24.1 (Admin Identity + Portal Shell) ✅ COMPLETE (2026-08-29)** — additive `GET /api/v1/admin/me` (DB-authoritative identity via `AuthorizationService`; no schema change) + `(admin)` frontend route group, AdminShell, backend-driven loading/unauthorized/failure states, truthful navigation. 24.2+ NOT STARTED. Local development only; production untouched. |
 
 ---
 
@@ -3627,7 +3628,7 @@ Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE 
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
 Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE
-Phase 24 ░░░░░░░░░░░░░░░░░░░░  24.0 ADMIN PORTAL DISCOVERY COMPLETE (2026-08-29) · implementation phases (24.1+) NOT STARTED
+Phase 24 ███░░░░░░░░░░░░░░░  24.0 ADMIN PORTAL DISCOVERY COMPLETE (2026-08-29) · 24.1 ADMIN IDENTITY + PORTAL SHELL COMPLETE (2026-08-29) · 24.2+ NOT STARTED
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -3689,8 +3690,19 @@ Phase 24 ░░░░░░░░░░░░░░░░░░░░  24.0 ADMI
 > 14-sub-phase proposed sequence (24.1–24.14), 12 decision gates.
 > Report: `docs/phase_24/phase_24_0_admin_portal_discovery.md`. No code,
 > schema, migration, or data changes; migration head unchanged `f9a0b1c2d3e4`.
-> Phase 24 implementation phases (24.1+) NOT STARTED — require operator review
-> and fresh execution prompts.
+> **24.1 COMPLETE (2026-08-29)** — Admin Portal Identity + Shell: additive
+> read-only `GET /api/v1/admin/me` (DB-resolved effective roles + scope
+> descriptors via `AuthorizationService`; new composable `require_any_admin`
+> dependency; no schema change, no migration) + Admin Portal frontend shell
+> (`(admin)` route group, `AdminShell`, backend-driven loading/unauthorized
+> (403)/API-failure states, truthful navigation with planned areas shown as
+> unavailable; students cannot access the portal; scoped admins are honestly
+> represented; SUBSECTION_ADMIN shown as inert per Phase 24.0). Student
+> shell/AppShell/TopNav unchanged; no second authorization system; role/scope
+> data is presentation-only. Verification: `compileall` PASS, `tsc --noEmit`
+> PASS, ESLint clean, backend app imports + admin router registration
+> verified. **No migration; production untouched.** Phase 24.2+ NOT STARTED —
+> require operator review and fresh execution prompts.
 > Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
@@ -3815,3 +3827,97 @@ Phase 8.2 is **COMPLETE (2026-08-15) — PASS**. Frontend-only consumption of th
 - **Reference Attendance cards:** header (code · THEORY/LAB · name · canonical status badge), prominent primary %, lecture/tutorial sections with required + must-attend/safe-skip, combined average with formula caption, practical section for labs, expandable Details with real backend forecast/optimizer values. Backend emits `required_pct` (75) and per-subject `status` (SAFE/WATCH/CRITICAL) additively; banding consolidated into the attendance engine (single definition).
 - **Latent fix:** successful attendance mutations previously 500'd (`AttendanceMutationResponse.student_id` → `user_id`) — required for quiz-day attendance to be recordable.
 - **Verification:** `verify_attendance_spec_alignment.py` 15/15; frozen regressions 6.5 (27/27), 6.6 (36/36), 6.7 (31/31), 7.1 (26/26), 7.2 (26/26), 8.1 (22/22) — the 6.5/7.2 student-event 403 assertions and 7.1 check 5 were deliberately re-scoped to the new policy (documented). compileall / `tsc --noEmit` / ESLint / `next build` green. No commit made.
+
+---
+
+# 🟡 Phase 24.1 — Admin Portal Identity + Shell
+
+**Status: COMPLETE (2026-08-29).** Local development only. No migration, no
+schema change (Alembic head unchanged `f9a0b1c2d3e4`), no production contact,
+no commit/push/PR.
+
+## Objective
+
+Establish the foundational authenticated administrative experience on top of
+the frozen Phase 23.11 authorization architecture: admin authentication →
+DB-authoritative identity → admin role + scopes → authorization-aware shell →
+scope-aware navigation. No administrative feature domains implemented.
+
+## Delivered
+
+### Backend (additive only)
+
+- `backend/app/schemas/admin.py` (NEW): `AdminScopeDescriptor` +
+  `AdminIdentity` read-only presentation contracts.
+- `backend/app/services/authorization_service.py`: additive
+  `get_admin_identity(user)` — DB-resolved effective roles (legacy ADMIN →
+  HEAD_ADMIN unioned with ACTIVE admin_scopes) + active scope rows resolved
+  to section/subsection/subject name descriptors. All existing authorization
+  methods untouched.
+- `backend/app/api/dependencies/deps.py`: additive composable
+  `require_any_admin` (403 for any user with no effective administrative
+  role; DB-resolved per request; legacy `require_admin` NOT touched).
+- `backend/app/api/v1/endpoints/admin.py` (NEW): read-only
+  `GET /api/v1/admin/me` (401 unauthenticated / 403 STUDENT). No write
+  behavior, no direct DB access from the endpoint.
+- `backend/app/api/api.py`: admin router wired (live router; legacy
+  `api/v1/router.py` untouched).
+
+### Frontend (additive only)
+
+- `frontend/src/lib/api.ts`: `apiFetch` now preserves the HTTP status on
+  thrown errors (additive; existing consumers unaffected).
+- `frontend/src/types/api.ts`: `AdminIdentity` / `AdminScopeDescriptor`.
+- `frontend/src/hooks/useApi.ts`: `useAdminMe()` SWR hook
+  (`/api/v1/admin/me`).
+- `frontend/src/app/(admin)/layout.tsx` (NEW): admin route-group layout with
+  mutually-exclusive loading / unauthenticated (existing AuthContext redirect)
+  / unauthorized (403) / API-failure (retry) / shell states. Never renders a
+  functional-looking portal without backend-confirmed admin identity.
+- `frontend/src/components/admin/AdminShell.tsx` (NEW): dedicated shell
+  distinct from the student AppShell — reuses design tokens, Button, Badge,
+  Avatar, Skeleton, existing AuthContext logout, existing responsive
+  conventions (no separate mobile architecture).
+- `frontend/src/app/(admin)/admin/page.tsx` (NEW): `/admin` overview —
+  identity card (name, roll, roles, scope descriptors), truthful
+  availability (Feedback Review link for global administrators — an existing
+  `require_head_admin`-gated surface), planned areas listed as explicitly
+  unavailable (no fabricated routes), SUBSECTION_ADMIN shown as inert per
+  Phase 24.0.
+
+## Authorization behavior
+
+- Backend remains authoritative: identity/roles/scopes resolved from
+  PostgreSQL per request by `AuthorizationService`; frontend role/scope data
+  is presentation-only; no localStorage role authority; no JWT-claim trust.
+- Students (no effective admin role) receive 403 from `/admin/me` and see the
+  unauthorized state; they never gain admin content.
+- Scoped administrators (CLASS/ELECTIVE) are honestly labeled "Scoped
+  authority" with their scope descriptors; SUBSECTION_ADMIN gets an explicit
+  "not yet operational" notice and no invented capabilities.
+
+## Boundaries preserved
+
+- No decision gate resolved (all 12 Phase 24.0 gates remain open).
+- No schema change / migration / production interaction.
+- No provisioning UI, no role/scope editing.
+- Student-facing shell, routes, and frozen Phase 1 primitives untouched.
+
+## Verification (lightweight, static)
+
+- `python -m compileall backend/app` PASS; backend app imports cleanly; admin
+  router registered (15th included router, endpoint `/me`).
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on all changed frontend
+  files.
+- No browser/E2E runs, no DB mutation, no regression suites (operator tests
+  manually per the phase boundary).
+
+## Deferred
+
+- All Phase 24.2+ feature domains (dashboard, students, structure,
+  curriculum, timetable, sessions, electives, quizzes, events, admin/scope
+  management, attendance, analytics).
+- All 12 Phase 24.0 decision gates (unchanged, unresolved).
+
+**HARD STOP: Phase 24.1 complete. Phase 24.2 requires a separate execution
+prompt.**

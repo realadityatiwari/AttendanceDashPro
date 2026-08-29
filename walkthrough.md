@@ -6522,3 +6522,124 @@ appendices (exact files, exact routes, CONFIRMED/PROPOSED/DEFERRED/UNKNOWN marke
 **PHASE 24.0 - DISCOVERY COMPLETE. HARD STOP:** Phase 24.1 and all implementation
 phases NOT STARTED - require operator review of the 12 decision gates and fresh
 execution prompts. No source/schema/database/production changes made.
+
+
+---
+
+# Phase 24.1 - Admin Portal Identity + Shell (COMPLETE, 2026-08-29)
+
+## Scope
+
+Implementation of the foundational authenticated administrative experience on
+top of the frozen Phase 23.11 authorization architecture. No administrative
+feature domain was implemented. Local development only: no schema change, no
+migration (head unchanged `f9a0b1c2d3e4`), no production contact, no
+commit/push/PR.
+
+## What was implemented and why
+
+### Backend - admin identity read model
+
+The Phase 24.0 discovery report (section 20) established that
+`/student/me` is a frozen student-oriented contract and the portal needs its
+own additive identity read. Implemented exactly that, backed by the existing
+`AuthorizationService`:
+
+- `app/schemas/admin.py` (NEW): `AdminIdentity` (id, display_name,
+  roll_number, roles[], is_global, scopes[]) and `AdminScopeDescriptor`
+  (role + resolved section/subsection/subject names). Presentation
+  contracts only.
+- `app/services/authorization_service.py`: additive
+  `get_admin_identity(user)` method - reuses `effective_admin_roles` (legacy
+  `users.role == ADMIN` -> HEAD_ADMIN) and `get_active_scopes`
+  (ACTIVE `admin_scopes` rows), then resolves scope targets to human-readable
+  names via one query each against sections/subsections/subjects. No existing
+  method was modified; no new authorization semantics.
+- `app/api/dependencies/deps.py`: additive `require_any_admin` - the portal
+  entry gate. Any authenticated user WITHOUT an effective administrative role
+  (students included) gets 403; resolution is DB-side per request. The
+  legacy unused `require_admin` was deliberately left untouched.
+- `app/api/v1/endpoints/admin.py` (NEW): `GET /api/v1/admin/me` - read-only,
+  no write behavior, no direct DB access (endpoint -> service -> DB).
+- `app/api/api.py`: `/admin` router registered on the live router (the
+  legacy `api/v1/router.py` placeholder remains unwired and untouched).
+
+### Frontend - admin context and portal shell
+
+- `lib/api.ts`: `apiFetch` now attaches the HTTP status to thrown errors
+  (additive one-line change). The portal needs this to distinguish 403
+  (unauthorized) from other API failures; the existing 401 -> clear token ->
+  /login redirect is unchanged.
+- `types/api.ts` + `hooks/useApi.ts`: `AdminIdentity` types and the
+  `useAdminMe()` SWR hook (`/api/v1/admin/me`, standard cache). No role/scope
+  data is stored in localStorage; no second auth context exists.
+- `app/(admin)/layout.tsx` (NEW): the admin route-group layout implements the
+  required state machine - loading (skeletons, no admin content),
+  unauthenticated (delegates to the existing AuthContext /login redirect),
+  unauthorized (backend 403 card with a link back to the student app),
+  API failure (error card with retry via SWR revalidation), and finally the
+  shell once the backend confirms administrative identity. It is
+  structurally impossible to see a functional-looking admin portal after a
+  failed authorization request.
+- `components/admin/AdminShell.tsx` (NEW): a dedicated shell clearly distinct
+  from the student AppShell - admin brand, identity area (avatar, name,
+  sign-out through the existing AuthContext `logout()`), "Student app" link,
+  and a nav row that stays usable on mobile by horizontal scrolling (reusing
+  the established responsive conventions; no separate mobile architecture,
+  no changes to Phase 12 components).
+- `app/(admin)/admin/page.tsx` (NEW): the `/admin` overview. Shows the
+  identity card (name, roll, role badges, scope descriptors such as
+  "CLASS_ADMIN: Section CSE-51" or "ELECTIVE_ADMIN: BCS-058 - ..."), global
+  vs scoped authority labeling, and a truthful availability card: the only
+  linked feature is Feedback Review for global administrators
+  (`/tools/feedback`, already `require_head_admin`-gated server-side).
+  Planned areas (Dashboard, Students, Structure, Curriculum, Timetable,
+  Sessions, Electives, Quizzes, Events, Admin & Scope Management,
+  Attendance, Analytics) are rendered as explicitly-unavailable badges with
+  a "coming in later phases" caption - no fabricated routes or links.
+  SUBSECTION_ADMIN holders get an explicit "not yet operational" notice
+  instead of invented capabilities.
+
+## How the pieces connect
+
+Login (existing `/auth/login` + AuthContext) -> user opens `/admin` ->
+layout renders skeletons while `/api/v1/admin/me` resolves ->
+`require_any_admin` re-resolves authority from PostgreSQL via
+`AuthorizationService` -> shell renders the returned identity for
+presentation (roles, scopes, global/scoped label) -> navigation only links
+routes that genuinely exist. The backend remains the sole authorization
+boundary: every existing and future admin endpoint keeps its Phase 23.11
+gate, and the frontend role/scope data can never grant anything.
+
+## Boundaries kept
+
+- Reuse > extension > new abstraction: no second permission system, no new
+  AdminRole enum, no `is_admin` parallel boolean, no recreated scope
+  matching in React.
+- No decision gate resolved; no schema change; no provisioning UI; student
+  surfaces (AppShell/TopNav/MobileBottomNav/routes) untouched; frozen Phase 1
+  primitives untouched.
+
+## Verification performed (lightweight, static only)
+
+- `python -m compileall backend/app` PASS.
+- Backend import check: `app.api.api` loads with the admin router included
+  (15th included router; endpoint `/me` present).
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on all changed frontend
+  files (the remaining `api.ts` location-assign warning is pre-existing
+  Phase 13 code, untouched).
+- No browser/E2E/Playwright runs, no DB connection, no migration, no
+  production interaction. Manual runtime testing (admin login, student 403,
+  scoped-admin rendering, logout) is left to the operator by design.
+
+## Governance
+
+- MASTER_ROADMAP.md: status table row, operating-state bar, next-phase
+  paragraph, and a Phase 24.1 record appended.
+- implementation_plan.md: Phase 24.1 section (current plan, executed) +
+  Phase 24.0 tail note superseded.
+- task.md: Phase 24.1 checklist added.
+- walkthrough.md: this entry.
+
+**PHASE 24.1 - COMPLETE. HARD STOP:** Phase 24.2+ NOT STARTED - requires a
+fresh execution prompt. No production system was contacted or modified.

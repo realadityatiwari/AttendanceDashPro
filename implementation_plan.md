@@ -3570,5 +3570,64 @@ service/dependency tracing; migration chain walk (25 revisions, single linear ch
 one head); static consistency checks. No DB connection required; no tests run; no
 browser/E2E; production untouched.
 
-**Next:** Phase 24.1 (Admin identity + portal shell) PROPOSED - requires operator
-review and a fresh execution prompt. Phase 24 implementation phases remain NOT STARTED.
+**Next:** Phase 24.1 (Admin identity + portal shell) AUTHORIZED and
+**COMPLETE (2026-08-29 — see the Phase 24.1 section below)**. Phase 24.2+
+remains NOT STARTED and requires fresh execution prompts.
+
+---
+
+## Phase 24.1 - Admin Portal Identity + Shell (CURRENT PLAN - EXECUTED, 2026-08-29)
+
+**Status: COMPLETE.** No migration, no schema change (head unchanged
+`f9a0b1c2d3e4`), no production contact. No commit, no push, no PR.
+
+**Objective:** the minimum backend read contract + frontend shell so the
+Admin Portal has an authenticated, DB-authoritative identity and
+scope-aware navigation - WITHOUT implementing any administrative feature
+domain (24.2+).
+
+**Implementation plan (executed as specified):**
+
+- Backend identity read model: additive read-only `GET /api/v1/admin/me`
+  backed by the EXISTING `AuthorizationService` (no duplicate
+  authorization; no direct DB access from the endpoint):
+  - `app/schemas/admin.py`: `AdminIdentity` (id, display_name, roll_number,
+    roles[], is_global, scopes[]) + `AdminScopeDescriptor`
+    (role + section/subsection/subject name descriptors) - presentation
+    data only.
+  - `AuthorizationService.get_admin_identity(user)`: DB-resolved effective
+    roles (legacy ADMIN -> HEAD_ADMIN union ACTIVE admin_scopes roles) +
+    active scope rows resolved to names via authoritative academic tables.
+  - `deps.require_any_admin`: composable DB-resolved gate (403 when no
+    effective admin role). Legacy `require_admin` left untouched/unused.
+  - `api/api.py`: `/admin` router wired into the live router.
+- Frontend admin context + shell (presentation only, no frontend authority):
+  - `apiFetch` preserves HTTP status on errors (additive) so the portal can
+    distinguish 403 (unauthorized) from other failures.
+  - `types/api.ts` + `useApi.useAdminMe()` (SWR, standard cache).
+  - `(admin)` route group with `layout.tsx` state machine: loading
+    (skeletons) / unauthenticated (existing AuthContext /login redirect; no
+    second auth mechanism) / unauthorized (backend 403) / API failure
+    (retry) / shell. No admin content renders before backend confirmation.
+  - `components/admin/AdminShell.tsx`: dedicated admin shell (distinct from
+    the student AppShell) reusing design tokens, Button/Badge/Avatar/
+    Skeleton, existing AuthContext logout, existing responsive conventions.
+  - `/admin` overview page: identity card (name, roll, roles, scope
+    descriptors), truthful availability (Feedback Review link for global
+    admins - an existing require_head_admin surface), planned Phase 24 areas
+    listed as explicitly UNAVAILABLE (no fabricated routes), SUBSECTION_ADMIN
+    shown as inert per Phase 24.0.
+- Access behavior: STUDENT -> 403 unauthorized state (backend-authoritative,
+  not just hidden navigation); scoped admins honestly labeled; no controls
+  implying unheld authority.
+
+**Explicit non-goals (unchanged):** no schema/migration; no provisioning UI;
+no decision-gate resolution; no student-surface changes; no feature domains.
+
+**Verification performed:** compileall PASS; backend imports + admin router
+registration verified; `tsc --noEmit` PASS; ESLint clean on changed files.
+Manual runtime testing is the operator's responsibility.
+
+**Next:** Phase 24.2 (HEAD dashboard / read-only overview) and beyond -
+NOT STARTED; requires fresh execution prompts. All 12 Phase 24.0 decision
+gates remain open.

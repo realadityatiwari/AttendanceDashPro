@@ -32,7 +32,8 @@ import {
   NotificationItem,
   NotificationUpdate,
   FeedbackAdminListResponse,
-  AdminFeedbackParams
+  AdminFeedbackParams,
+  AdminIdentity
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -458,4 +459,13 @@ export function useAdminFeedback(params: AdminFeedbackParams = {}) {
   const key = qs ? `/api/v1/feedback/admin?${qs}` : "/api/v1/feedback/admin";
   const { data, error, isLoading, mutate } = useSWR<FeedbackAdminListResponse>(key, fetcher, STANDARD_CACHE);
   return { feedback: data, isLoading, isError: error, mutate };
+}
+
+// Phase 24.1 Admin Portal identity (GET /api/v1/admin/me). DB-authoritative
+// roles/scopes for shell/navigation PRESENTATION only — never an
+// authorization boundary. STUDENT (no effective admin role) → 403, surfaced
+// through isError with the preserved status.
+export function useAdminMe() {
+  const { data, error, isLoading, mutate } = useSWR<AdminIdentity>('/api/v1/admin/me', fetcher, STANDARD_CACHE);
+  return { identity: data, isLoading, isError: error, mutate };
 }

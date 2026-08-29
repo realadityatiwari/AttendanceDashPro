@@ -89,6 +89,24 @@ async def require_head_admin(
     return current_user
 
 
+async def require_any_admin(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.1: any effective administrative authority (HEAD_ADMIN,
+    CLASS_ADMIN, SUBSECTION_ADMIN, ELECTIVE_ADMIN). Legacy
+    ``users.role == ADMIN`` resolves as HEAD_ADMIN. Role/scope are resolved
+    from the DB on every request via AuthorizationService — never from the
+    JWT, body, query, or frontend. STUDENT → 403."""
+    authz = AuthorizationService(db)
+    if not await authz.effective_admin_roles(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+    return current_user
+
+
 def require_class_scope(section_id):
     """Phase 23.11 dependency factory: HEAD_ADMIN or an active CLASS_ADMIN
     scope for the exact section_id. Denies other roles and out-of-scope
