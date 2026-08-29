@@ -6,7 +6,8 @@ Section -> Subsection). All mutations are HEAD_ADMIN only — this service
 trusts that the calling endpoint has already enforced require_head_admin.
 
 Key invariants enforced here:
-  - At most one active AcademicSession (OPERATOR DECISION Q2: reject 409
+  - At most one active AcademicSession (Phase 24.5 documented invariant:
+    reject 409
     if activating a session while another is already active).  The caller
     must explicitly deactivate the current active session first.
   - Duplicate name detection before DB flush (avoids unhandled IntegrityError).
@@ -232,7 +233,8 @@ class AdminStructureService:
     async def activate_session(self, session_id: UUID) -> SessionActivationResponse:
         """Explicitly activate a session.
 
-        OPERATOR DECISION Q2: at most one active session.  If another session
+        Phase 24.5 documented invariant: at most one active session.  If
+        another session
         is already active, reject with 409.  The caller must first explicitly
         deactivate the current active session.
         """

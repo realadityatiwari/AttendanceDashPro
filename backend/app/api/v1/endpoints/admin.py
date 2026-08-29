@@ -276,7 +276,7 @@ async def activate_session(
     """
     Phase 24.5: explicitly activate an academic session.
 
-    Invariant (Operator Decision Q2): at most one session may be active.
+    Phase 24.5 documented invariant: at most one session may be active.
     If another session is already active, returns 409 — do NOT automatically
     deactivate the existing active session.  The administrator must first
     explicitly deactivate the current active session.

@@ -2864,7 +2864,78 @@ list/search/detail via `StudentContextService`. No attendance/analytics
 - [x] `verify_phase_24_3.py` (NEW, self-cleaning, locality guard forces+asserts local dev URI) PASS 40/40: 401/403 matrix, HEAD all + search/pagination, HEAD detail + 404, CLASS section-only + out-of-section 404, ELECTIVE roster + exact-subject isolation (BCS-058 vs BCS-055), SUBSECTION inert/empty code path, no client scope params, CLASS+ELECTIVE UNION, counts unchanged after cleanup (users 3, enrollments 35, admin_scopes 0)
 - [x] No browser/E2E/regression runs (operator tests manually, per phase boundary)
 
+## PHASE 24.4 - STUDENT MANAGEMENT (WRITE) (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - local development only.** Schema change + Alembic migration `eb880e108f19_add_user_is_active.py` (`users.is_active`), applied to the local dev DB only; production untouched. Git state: committed + pushed as `84fae06` on `main` (in repository history).
+
+## Objective
+
+Core student record modifications from the admin student detail view: status toggle (active/deactivate), subsection assignment, and elective corrections.
+
+## Delivered
+
+### Backend (additive)
+- [x] `AdminStudentService` mutation methods: `set_student_status`, `assign_subsection`, `correct_elective` (transactional single-commit)
+- [x] `app/api/v1/endpoints/admin.py` PATCH mutation routes: `/admin/students/{id}/status`, `/admin/students/{id}/subsection`, `/admin/students/{id}/electives` + dropdown helpers `/admin/sections/{id}/subsections`, `/admin/semesters/{id}/electives`
+- [x] Migration `eb880e108f19` (additive `users.is_active`, server default true); login gate rejects deactivated accounts (403)
+
+### Frontend (additive)
+- [x] `AssignSubsectionDialog`, `CorrectElectiveDialog`, `SetStudentStatusDialog` integrated into the student detail page
+- [x] SWR cache invalidation after mutations
+
+## Hard scope (respected)
+- [x] NO batch student management / CSV uploads (deferred to a later explicit phase — NOT Phase 24.5)
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] Migration applied to local dev DB; existing data preserved (additive column with server default)
+- [x] Manual/browser testing remains the operator's responsibility
+
 ## Do Not Touch Again
-- Phase 24.3 is the student READ foundation; Phase 24.4+ requires a fresh execution prompt
-- `AdminStudentService/Repository` are read-only consumers - never write student data from them
-- `/admin/dashboard` is HEAD_ADMIN-only; scoped-admin dashboards are later work
+- Phase 24.4 student-write surfaces and the `users.is_active` migration gate
+
+## PHASE 24.5 - ACADEMIC STRUCTURE MANAGEMENT (COMPLETE, 2026-08-29, after independent review + correction pass)
+
+Status: **COMPLETE - local development only.** No schema change, NO new migration (alembic single linear head `eb880e108f19` unchanged). Git state: committed + pushed as `5cae6fb` on `main`; the independent-review correction pass is currently uncommitted (no commit made during the correction pass, per operator instruction).
+
+## Objective
+
+Administrative management of Academic Sessions, Semesters, Sections, and Subsections (list/create/patch; no destructive deletes). Batch student management / CSV import is explicitly NOT part of this phase and remains deferred.
+
+## Delivered
+
+### Backend (additive)
+- [x] `app/schemas/admin_structure.py` (NEW): session/semester/section/subsection read + create + patch schemas; `SessionActivationResponse`; `RegistrationWarning`
+- [x] `app/repositories/admin_structure_repo.py` (NEW): bounded hierarchy queries + duplicate-name guards
+- [x] `app/services/admin_structure_service.py` (NEW): single-active-session invariant (409), duplicate 409, invalid dates 400, registration-ambiguity warnings, no destructive deletes
+- [x] `app/api/v1/endpoints/admin.py`: 14 additive structure endpoints, ALL `require_head_admin` (401 unauth / 403 non-HEAD)
+
+### Frontend (additive, inside existing AdminShell)
+- [x] `types/api.ts` + `hooks/useApi.ts`: structure types + `useAdminSessions()` / `useAdminSemesters()` / `useAdminSections()` / `useAdminSubsectionsStructure()` / `useAdminStructureMutations()`
+- [x] `app/(admin)/admin/structure/page.tsx` (NEW): sessions list + activation controls
+- [x] `app/(admin)/admin/structure/[session_id]/page.tsx` (NEW): hierarchy view (Semesters > Sections > Subsections) + create dialogs
+- [x] `components/admin/AdminShell.tsx`: "Structure" nav entry (globalOnly); `app/(admin)/admin/page.tsx`: moved from "Planned portal areas" to "Available now"
+
+### Correction pass (independent review, 2026-08-29)
+- [x] Stray duplicate root `page.tsx` deleted (real `/admin/structure/[session_id]` route intact)
+- [x] Undocumented "OPERATOR DECISION Q2" citations replaced with factual "Phase 24.5 documented invariant" language (`admin_structure_service.py`, `admin.py`)
+- [x] Structure pages render explicit 403 ("Global administrator required") and API-error-with-retry states (no misleading empty state on failure)
+- [x] Trailing whitespace removed; unused `Settings` import removed
+- [x] `backend/scripts/verify_phase_24_5.py` (NEW, authoritative verifier)
+
+## Hard scope (respected)
+- [x] NO migration/schema change; NO destructive deletes (Gate 7 unresolved)
+- [x] NO curriculum/timetable/sessions/quizzes/admin-scope/attendance domains
+- [x] NO subsection scheduling (Gate 1); SUBSECTION_ADMIN remains inert
+- [x] NO batch/CSV; NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+- [x] NO client scope parameters; backend authorization is the only boundary
+
+## Validation
+- [x] `verify_phase_24_5.py` (NEW, self-cleaning, hard locality guard forces+asserts `127.0.0.1:55432/attendancedash`) PASS **46/46** (×2 runs, idempotent): 401/403 auth matrix (STUDENT/CLASS/ELECTIVE/SUBSECTION all 403, SUBSECTION scope creation rejected by FK), HEAD reads, session create/duplicate-409/invalid-date-400/activation-409 + deactivate→activate cycle with restoration, semester/section/subsection CRUD + duplicate-409 + validation-422 + invalid-parent-404, PATCH semantics (is_active extra ignored), no client scope elevation, arbitrary-UUID non-bypass, MULTI_SEMESTER warning, all 14 baseline table counts restored after fixture cleanup
+- [x] Regression: `verify_phase_24_3.py` PASS 40/40
+- [x] `python -m compileall backend/app backend/scripts` PASS; `npx tsc --noEmit` PASS; ESLint (changed files) PASS; `git diff --check` clean; `next build` PASS (with inline production API URL; plain build fails only on the pre-existing Phase 21D.1 `NEXT_PUBLIC_API_URL` guard)
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.5 structure endpoints/UI are HEAD_ADMIN-only; the 14 endpoints and the single-active-session invariant are reviewed and frozen behavior
+- `verify_phase_24_5.py` is the authoritative Phase 24.5 verifier
