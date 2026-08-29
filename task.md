@@ -2674,7 +2674,9 @@ Prove the Phase 23 migration chain is coherent, reproducible, reversible where a
 
 Status: **DISCOVERY COMPLETE - discovery only.** No implementation, no code/schema/
 migration/data changes, migration head unchanged (`f9a0b1c2d3e4`). No commit, no push,
-no PR. Phase 24 implementation phases (24.1+) remain **NOT STARTED**.
+no PR during discovery. Implementation sub-phases followed thereafter:
+24.1–24.6 COMPLETE (2026-08-29); Phase 24.7 (timetable management) NOT STARTED —
+requires a fresh execution prompt.
 
 ## Objective
 
@@ -2939,3 +2941,49 @@ Administrative management of Academic Sessions, Semesters, Sections, and Subsect
 ## Do Not Touch Again
 - Phase 24.5 structure endpoints/UI are HEAD_ADMIN-only; the 14 endpoints and the single-active-session invariant are reviewed and frozen behavior
 - `verify_phase_24_5.py` is the authoritative Phase 24.5 verifier
+
+## PHASE 24.6 - CURRICULUM & SUBJECT MANAGEMENT (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - local development only.** No schema change, NO migration (alembic single linear head `eb880e108f19` unchanged). Git state: implemented but NOT committed (no commit made during implementation, per operator instruction).
+
+## Objective
+
+Administrative management of subjects (curriculum): subject CRUD, elective catalog management (`subjects.elective_slot`), and reuse of the existing experiment catalog (laboratory endpoints unchanged). NOT timetable (24.7) or quiz management (24.10).
+
+## Delivered
+
+### Backend (additive)
+- [x] `app/schemas/admin_subjects.py` (NEW): admin subject contracts + create/update requests (PATCH rejects `code`/`semester_id`; `elective_slot` explicit-PATCH semantics)
+- [x] `app/repositories/admin_subject_repo.py` (NEW): bounded list/detail + batch dependent counts (enrollments, choices, timetable, class sessions, quiz schedules, lab experiments, attendance records)
+- [x] `app/services/admin_subject_service.py` (NEW): duplicate 409, invalid semester 404, code immutable 409, semester immutable 409, anchor protection 409, slot-change-with-choice 409, no DELETE, active-session warning
+- [x] `app/api/v1/endpoints/admin.py` (additive): `GET/POST/PATCH /api/v1/admin/subjects` — reads `require_any_admin`, writes `require_head_admin`, no DELETE route (405), no client scope params
+
+### Frontend (additive, inside existing AdminShell)
+- [x] `types/api.ts` + `hooks/useApi.ts`: admin subject types + `useAdminSubjects()` / `useAdminSubjectDetail()` / `useAdminSubjectMutations()`
+- [x] `app/(admin)/admin/curriculum/page.tsx` (NEW): scoped subject list with loading/403/error-retry/empty/populated states; anchors visibly "frozen"
+- [x] `app/(admin)/admin/curriculum/components/CreateSubjectDialog.tsx` + `EditSubjectDialog.tsx` (NEW): HEAD-only create/edit flows; code+semester immutable; anchor slot disabled; backend warnings surfaced
+- [x] `components/admin/AdminShell.tsx`: "Curriculum" nav entry (all admins — scoped reads exist; writes HEAD-only server-side)
+- [x] `app/(admin)/admin/page.tsx`: Curriculum moved from "Planned portal areas" to "Available now"
+
+### Verifier
+- [x] `backend/scripts/verify_phase_24_6.py` (NEW): hard locality guard, real app via ASGITransport, isolated fixtures, cleanup in `finally`, pre/post baseline counts, idempotent
+
+## Hard scope (respected)
+- [x] NO migration/schema change; NO subject delete/deactivate
+- [x] NO anchor code/slot changes (BCS-054/BCS-058 frozen)
+- [x] NO `StudentElectiveChoice` mutation; NO enrollment/attendance/quiz mutation
+- [x] NO experiment-catalog endpoint changes (reuse existing lab endpoints)
+- [x] NO quiz/timetable/session management (24.7/24.8/24.10)
+- [x] NO client scope parameters; backend authorization is the only boundary
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_6.py` PASS **46/46** (×2 runs, idempotent): auth matrix (401/403, scoped reads, HEAD writes), create/duplicate-409/invalid-semester-404/invalid-payload-422, PATCH metadata success / code-409 / semester-409 / anchor-code-409 / anchor-slot-409 / slot-with-choice-409 / normal slot change + explicit-null clear, ELECTIVE_ADMIN exact-subject isolation, CLASS_ADMIN own-semester isolation, no client scope elevation, arbitrary-UUID 404, DELETE → 405, active-session warning, baseline counts restored
+- [x] Regression: `verify_phase_24_3.py` PASS 40/40; `verify_phase_24_5.py` PASS 46/46
+- [x] `python -m compileall backend/app backend/scripts` PASS; `npx tsc --noEmit` PASS; ESLint (changed files) PASS; `git diff --check` clean; alembic single head `eb880e108f19` unchanged
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.6 subject endpoints are HEAD-only writes; code/semester immutable; anchors frozen; slot changes guarded by choice-dependents
+- `verify_phase_24_6.py` is the authoritative Phase 24.6 verifier
+- Phase 24.7+ requires a fresh execution prompt

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Users,
   BookOpen,
+  FolderTree,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,9 +23,13 @@ import { AdminIdentity } from "@/types/api";
 const ADMIN_NAV_ITEMS = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard, globalOnly: false },
   { label: "Students", href: "/admin/students", icon: Users, globalOnly: false },
+  // Phase 24.6: Curriculum (scoped reads — any admin; writes HEAD-only,
+  // backend-enforced). Shown for all admins; the page hides write controls
+  // for non-global admins (presentation; backend is authoritative).
+  { label: "Curriculum", href: "/admin/curriculum", icon: BookOpen, globalOnly: false },
   // Phase 24.5: Academic Structure (HEAD_ADMIN only — backend enforces 403).
   // Shown for global administrators only (presentation filter; backend is authoritative).
-  { label: "Structure", href: "/admin/structure", icon: BookOpen, globalOnly: true },
+  { label: "Structure", href: "/admin/structure", icon: FolderTree, globalOnly: true },
   // Existing admin surface (GET /api/v1/feedback/admin is require_head_admin-
   // gated server-side). Shown for global administrators only — presentation
   // filtering; the backend remains the boundary.

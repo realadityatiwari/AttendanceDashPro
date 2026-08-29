@@ -659,3 +659,43 @@ export function useAdminStructureMutations() {
     createSubsection, updateSubsection,
   };
 }
+
+// ===========================================================================
+// Phase 24.6 — Curriculum & Subject Management
+// ===========================================================================
+
+import type {
+  AdminSubjectListResponse,
+  AdminSubjectDetail,
+  CreateSubjectRequest,
+  UpdateSubjectRequest,
+  SubjectMutationResponse,
+} from '@/types/api';
+
+export function useAdminSubjects() {
+  const { data, error, isLoading, mutate } = useSWR<AdminSubjectListResponse>(
+    '/api/v1/admin/subjects',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { subjects: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminSubjectDetail(subjectId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<AdminSubjectDetail>(
+    subjectId ? `/api/v1/admin/subjects/${subjectId}` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { subject: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminSubjectMutations() {
+  const createSubject = async (payload: CreateSubjectRequest): Promise<SubjectMutationResponse> =>
+    apiFetch('/api/v1/admin/subjects', { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSubject = async (subjectId: string, payload: UpdateSubjectRequest): Promise<SubjectMutationResponse> =>
+    apiFetch(`/api/v1/admin/subjects/${subjectId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  return { createSubject, updateSubject };
+}

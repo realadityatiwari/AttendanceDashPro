@@ -1072,3 +1072,71 @@ export interface UpdateSubsectionRequest {
   name?: string;
   max_strength?: number | null;
 }
+
+// ===========================================================================
+// Phase 24.6 — Curriculum & Subject Management
+// ===========================================================================
+
+// GET /api/v1/admin/subjects (scoped list). Read scope is resolved
+// server-side: HEAD all / CLASS own-semester / ELECTIVE exact subject /
+// SUBSECTION inert. Writes (POST/PATCH) are HEAD_ADMIN only.
+export interface AdminSubjectSummary {
+  id: string;
+  code: string;
+  name: string;
+  tag: string | null;
+  elective_slot: ElectiveSlot | null;
+  category: SubjectCategory;
+  quiz_applicable: boolean;
+  attendance_applicable: boolean;
+  semester_id: string;
+  semester_name: string;
+  session_name: string;
+  /** True for the frozen shared elective anchors (BCS-054 / BCS-058). */
+  is_anchor: boolean;
+  enrollment_count: number;
+  elective_choice_count: number;
+}
+
+export interface AdminSubjectListResponse {
+  items: AdminSubjectSummary[];
+  total: number;
+}
+
+export interface AdminSubjectDetail extends AdminSubjectSummary {
+  timetable_entry_count: number;
+  class_session_count: number;
+  quiz_schedule_count: number;
+  lab_experiment_count: number;
+  attendance_record_count: number;
+}
+
+export interface CreateSubjectRequest {
+  code: string;
+  name: string;
+  tag?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  category: SubjectCategory;
+  quiz_applicable: boolean;
+  attendance_applicable: boolean;
+  semester_id: string;
+}
+
+// PATCH payload — `code` and `semester_id` are immutable after creation and
+// are rejected with 409 by the backend if sent. `elective_slot` may be set,
+// cleared (explicit null), or left unchanged (omit the field).
+export interface UpdateSubjectRequest {
+  code?: string;
+  name?: string;
+  tag?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  category?: SubjectCategory;
+  quiz_applicable?: boolean;
+  attendance_applicable?: boolean;
+  semester_id?: string;
+}
+
+export interface SubjectMutationResponse {
+  subject: AdminSubjectDetail;
+  warnings: RegistrationWarning[];
+}

@@ -7060,3 +7060,111 @@ server-gated); arbitrary IDs cannot bypass (non-HEAD 403, HEAD + unknown UUID
 **PHASE 24.5 - COMPLETE. HARD STOP:** Phase 24.6 NOT STARTED - requires a fresh
 execution prompt. No production system was intentionally contacted or modified.
 No commit/push/PR made during the correction pass.
+
+---
+
+# Phase 24.6 - Curriculum & Subject Management (COMPLETE, 2026-08-29)
+
+## Scope
+
+Administrative management of subjects: subject CRUD, elective catalog
+management (`subjects.elective_slot`), and reuse of the existing experiment
+catalog (laboratory endpoints unchanged). NOT timetable (24.7), NOT quiz
+management (24.10). Local development only. No schema change, NO new migration
+(alembic single linear head `eb880e108f19` unchanged). Git state: implemented
+but NOT committed (no commit made during implementation, per operator
+instruction).
+
+## What was implemented and why
+
+### Backend (additive)
+
+- `app/schemas/admin_subjects.py` (NEW): admin subject list/detail/create/
+  update contracts. PATCH explicitly rejects `code` / `semester_id` changes
+  (the service returns 409, not a silent 422). `elective_slot` follows the
+  project's explicit-PATCH convention (absent = unchanged, explicit null =
+  clear), distinguished via `model_fields_set`.
+- `app/repositories/admin_subject_repo.py` (NEW): bounded list/detail +
+  BATCH dependent counts (enrollments and elective choices via one grouped
+  query per count — no per-row N+1); per-subject counts for timetable entries,
+  class sessions, quiz schedules, lab experiments, and attendance records
+  (via the class-session join).
+- `app/services/admin_subject_service.py` (NEW): the locked rules —
+  duplicate `(code, semester_id)` → 409; invalid semester → 404; `code` and
+  `semester_id` immutable after creation → 409; anchor code/slot frozen
+  (BCS-054 / BCS-058) → 409; elective-slot change with existing
+  `StudentElectiveChoice` rows → 409; no deletion/deactivation; invalid
+  combinations rejected (never silently repaired); operational warning
+  `ACTIVE_SESSION_SUBJECT_ADDED` when a subject is created in the active
+  session's semester (future registrations auto-enroll; existing students are
+  NOT auto-enrolled).
+- `app/api/v1/endpoints/admin.py` (additive): `GET /api/v1/admin/subjects`
+  (scoped list), `GET /api/v1/admin/subjects/{subject_id}` (scoped detail),
+  `POST /api/v1/admin/subjects`, `PATCH /api/v1/admin/subjects/{subject_id}`.
+  Reads → `require_any_admin`; writes → `require_head_admin`. No DELETE route
+  (405). No client scope parameters.
+
+### Frontend (additive, inside the existing AdminShell)
+
+- `types/api.ts` + `hooks/useApi.ts`: admin subject contracts + `useAdminSubjects()`
+  / `useAdminSubjectDetail()` / `useAdminSubjectMutations()`.
+- `app/(admin)/admin/curriculum/page.tsx` (NEW): scoped subject list with
+  loading skeleton / 403 / error-with-retry / truthful empty / populated
+  states; anchors visibly marked "Elective anchor · frozen"; dependent counts
+  shown; write controls shown only to global admins (presentation — the
+  backend remains the boundary).
+- `app/(admin)/admin/curriculum/components/CreateSubjectDialog.tsx` +
+  `EditSubjectDialog.tsx` (NEW): HEAD-only create/edit flows; code and
+  semester are not editable; anchor slot selector disabled with an honest
+  explanation; backend warnings surfaced via alert.
+- `components/admin/AdminShell.tsx`: "Curriculum" nav entry (all admins —
+  scoped reads exist; writes stay HEAD-only server-side).
+- `app/(admin)/admin/page.tsx`: Curriculum moved from "Planned portal areas"
+  to "Available now".
+
+## Authorization behavior
+
+`require_any_admin` + server-side scope resolution (Phase 23.11, DB per
+request): HEAD_ADMIN all subjects; CLASS_ADMIN subjects of the assigned
+section's semester (frozen semester-wide semantic); ELECTIVE_ADMIN the exact
+concrete subject only (never slot-collapsed); SUBSECTION_ADMIN inert (403 — a
+SUBSECTION_ADMIN scope row cannot even be created while subsections is empty,
+so the role is structurally unreachable); STUDENT 403. Writes are
+`require_head_admin` only. No client-supplied role/scope; arbitrary IDs cannot
+bypass (non-HEAD 403 / HEAD + unknown UUID 404).
+
+## Verification performed
+
+- `verify_phase_24_6.py` (NEW, self-cleaning, hard locality guard forces +
+  asserts `127.0.0.1:55432/attendancedash`) PASS **46/46** (×2 runs,
+  idempotent): auth matrix (unauth 401, STUDENT 403, CLASS_ADMIN scoped reads
+  + write 403, ELECTIVE_ADMIN exact-subject read + write 403, SUBSECTION_ADMIN
+  inert 403, HEAD full reads/writes), subject create / duplicate-409 /
+  invalid-semester-404 / invalid-payload-422, PATCH metadata success /
+  code-409 / semester-409 / anchor-code-409 / anchor-slot-409 /
+  slot-with-choice-409 / normal slot change + explicit-null clear,
+  ELECTIVE_ADMIN exact-subject isolation (BCS-058 cannot read BCS-055),
+  CLASS_ADMIN own-semester isolation, no client scope elevation, arbitrary-UUID
+  404, DELETE → 405, active-session registration warning surfaced, and all 15
+  baseline table counts restored after fixture cleanup (subjects + all
+  dependent tables). No fixture residue; anchors unchanged.
+- Regression: `verify_phase_24_3.py` PASS **40/40** · `verify_phase_24_5.py`
+  PASS **46/46**.
+- `compileall` PASS · `npx tsc --noEmit` PASS · ESLint (changed files) PASS ·
+  `git diff --check` clean · alembic single head `eb880e108f19` unchanged (no
+  migration created).
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status table row + operating-state bar +
+  next-phase blockquote updated (24.6 COMPLETE, verifier 46/46, git state),
+  Phase 24.6 record appended.
+- implementation_plan.md: Phase 24.6 section (executed).
+- task.md: Phase 24.6 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.6 - COMPLETE. HARD STOP:** Phase 24.7 NOT STARTED - requires a fresh
+execution prompt. No production system was intentionally contacted or modified.
+No commit/push/PR made during implementation.

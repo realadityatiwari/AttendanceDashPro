@@ -29,10 +29,18 @@ from app.schemas.admin_structure import (
     CreateSubsectionRequest,
     UpdateSubsectionRequest,
 )
+from app.schemas.admin_subjects import (
+    AdminSubjectListResponse,
+    AdminSubjectDetail,
+    CreateSubjectRequest,
+    UpdateSubjectRequest,
+    SubjectMutationResponse,
+)
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
 from app.services.admin_student_service import AdminStudentService
 from app.services.admin_structure_service import AdminStructureService
+from app.services.admin_subject_service import AdminSubjectService
 from app.models.user import Subsection
 from app.models.academic import Subject
 from sqlalchemy import select, func
@@ -411,3 +419,84 @@ async def update_subsection(
 ):
     """Phase 24.5: update subsection name / max_strength. Authorization: require_head_admin."""
     return await AdminStructureService(db).update_subsection(subsection_id, request)
+
+
+# ===========================================================================
+# Phase 24.6 — Curriculum & Subject Management
+# ===========================================================================
+
+@router.get("/subjects", response_model=AdminSubjectListResponse)
+async def list_admin_subjects(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.6: scoped, read-only curriculum subject list.
+
+    Authorization: ``require_any_admin`` (Phase 23.11, DB-resolved per
+    request). The visible subjects are derived server-side from the acting
+    admin's ACTIVE scopes:
+      - HEAD_ADMIN        -> all subjects;
+      - CLASS_ADMIN       -> subjects belonging to the assigned section's
+                             semester (frozen semester-wide semantic);
+      - ELECTIVE_ADMIN    -> the exact concrete subject(s) assigned (never
+                             slot-collapsed);
+      - SUBSECTION_ADMIN  -> inert: conservative empty result.
+    An admin holding several scopes sees the union.  NO client-supplied scope
+    parameters are accepted. Read-only — no subject data is mutated.
+    """
+    return await AdminSubjectService(db).list_subjects(current_user)
+
+
+@router.get("/subjects/{subject_id}", response_model=AdminSubjectDetail)
+async def get_admin_subject(
+    subject_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.6: scoped, read-only curriculum subject detail.
+
+    Authorization: ``require_any_admin`` + per-subject scope check in
+    ``AdminSubjectService`` (DB-resolved per request). The target must be
+    INSIDE the acting admin's effective scope — an out-of-scope or nonexistent
+    subject is surfaced as 404 (no existence leak; no cross-section /
+    cross-subject elective access). Read-only.
+    """
+    return await AdminSubjectService(db).get_subject(current_user, subject_id)
+
+
+@router.post("/subjects", response_model=SubjectMutationResponse, status_code=201)
+async def create_admin_subject(
+    request: CreateSubjectRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.6: create a new subject.
+
+    Authorization: ``require_head_admin`` — non-HEAD (CLASS/ELECTIVE/STUDENT)
+    receive 403. No client-supplied scope parameters are accepted.
+    New subjects in the active session's semester surface a registration-impact
+    warning (future registrations auto-enroll; existing students NOT affected).
+    """
+    return await AdminSubjectService(db).create_subject(request)
+
+
+@router.patch("/subjects/{subject_id}", response_model=SubjectMutationResponse)
+async def update_admin_subject(
+    subject_id: UUID,
+    request: UpdateSubjectRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.6: update a subject's metadata.
+
+    ``code`` and ``semester_id`` are immutable — the service rejects attempted
+    changes with 409.  Anchor subjects (BCS-054 / BCS-058) have frozen
+    elective-slot assignments.  Changing a slot that existing student elective
+    choices reference is also refused with 409.
+    Authorization: ``require_head_admin``.
+    """
+    return await AdminSubjectService(db).update_subject(subject_id, request)

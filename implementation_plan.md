@@ -3864,3 +3864,86 @@ deletes; no curriculum (24.6) / timetable (24.7) / sessions (24.8) / quizzes
 
 **Deferred:** batch student management / CSV uploads (later explicit phase);
 all 12 Phase 24.0 decision gates (unchanged, unresolved).
+
+## Phase 24.6 - Curriculum & Subject Management (CURRENT PLAN - EXECUTED, 2026-08-29)
+
+**Status: COMPLETE.** Local development only. No schema change, NO new
+migration (alembic single linear head `eb880e108f19` unchanged — the Phase
+24.4 `users.is_active` revision). Git state: implemented but NOT committed (no
+commit made during implementation, per operator instruction).
+
+**Objective:** administrative management of subjects — subject CRUD, elective
+catalog management (`subjects.elective_slot`), and reuse of the existing
+experiment catalog (laboratory endpoints unchanged). Batch/CSV remains
+deferred; NOT timetable (24.7) or quiz management (24.10).
+
+**Implementation plan (executed as specified):**
+
+- Backend (additive):
+  - `app/schemas/admin_subjects.py` (NEW): `AdminSubjectSummary`,
+    `AdminSubjectListResponse`, `AdminSubjectDetail`, `CreateSubjectRequest`,
+    `UpdateSubjectRequest`, `SubjectMutationResponse`. PATCH explicitly rejects
+    `code` / `semester_id` changes; `elective_slot` uses explicit-PATCH
+    semantics (absent = unchanged, explicit null = clear).
+  - `app/repositories/admin_subject_repo.py` (NEW): bounded list/detail +
+    BATCH dependent counts (one grouped query per count — no per-row N+1) for
+    enrollments and elective choices; per-subject counts for timetable /
+    class sessions / quiz schedules / lab experiments / attendance records
+    (via class-session join).
+  - `app/services/admin_subject_service.py` (NEW): duplicate
+    `(code, semester_id)` → 409; invalid semester → 404; `code` and
+    `semester_id` immutable after creation → 409; anchor code/slot frozen
+    (BCS-054 / BCS-058) → 409; elective-slot change with existing
+    `StudentElectiveChoice` rows → 409; no deletion/deactivation; invalid
+    combinations rejected (never silently repaired); operational warning
+    `ACTIVE_SESSION_SUBJECT_ADDED` for subjects created in the active
+    session's semester (future registrations auto-enroll; existing students
+    NOT auto-enrolled).
+  - `app/api/v1/endpoints/admin.py` (additive): `GET /api/v1/admin/subjects`
+    (scoped), `GET /api/v1/admin/subjects/{subject_id}` (scoped detail),
+    `POST /api/v1/admin/subjects`, `PATCH /api/v1/admin/subjects/{subject_id}`.
+    Reads → `require_any_admin`; writes → `require_head_admin`. No DELETE
+    route (405). No client scope parameters.
+- Frontend (additive, inside the existing AdminShell):
+  - `types/api.ts` + `useApi.ts`: admin subject contracts + `useAdminSubjects()`
+    / `useAdminSubjectDetail()` / `useAdminSubjectMutations()`.
+  - `app/(admin)/admin/curriculum/page.tsx` (NEW) + `components/`
+    `CreateSubjectDialog.tsx` / `EditSubjectDialog.tsx` (NEW): scoped list with
+    loading / 403 / error-with-retry / empty / populated states; anchors
+    visibly marked "frozen"; code+semester not editable; anchor slot selector
+    disabled; backend warnings surfaced. Write controls shown only to global
+    admins (presentation; backend authoritative).
+  - `components/admin/AdminShell.tsx`: "Curriculum" nav entry (all admins —
+    scoped reads exist; writes stay HEAD-only server-side).
+  - `app/(admin)/admin/page.tsx`: Curriculum moved from "Planned portal areas"
+    to "Available now".
+
+**Authorization behavior:** `require_any_admin` + server-side scope
+resolution (Phase 23.11, DB per request): HEAD all; CLASS assigned section's
+semester (frozen semester-wide semantic); ELECTIVE exact concrete subject
+only; SUBSECTION inert (role structurally unreachable while subsections is
+empty); STUDENT 403. Writes `require_head_admin` only. No client-supplied
+role/scope; arbitrary IDs cannot bypass (403/404).
+
+**Explicit non-goals (unchanged):** no migration/schema; no subject
+delete/deactivate; no `StudentElectiveChoice` mutation; no anchor changes; no
+quiz/timetable/session management; no experiment-catalog endpoint changes
+(reuse); no decision-gate resolution.
+
+**Verification performed:** `verify_phase_24_6.py` (NEW, self-cleaning, hard
+locality guard forces `127.0.0.1:55432/attendancedash`) PASS **46/46** (×2
+runs, idempotent): auth matrix (401/403, scoped reads, HEAD writes), create /
+duplicate-409 / invalid-semester-404 / invalid-payload-422, PATCH metadata
+success / code-409 / semester-409 / anchor-code-409 / anchor-slot-409 /
+slot-with-choice-409 / normal slot change + explicit-null clear,
+ELECTIVE_ADMIN exact-subject isolation, CLASS_ADMIN own-semester isolation,
+no client scope elevation, arbitrary-UUID 404, DELETE → 405, active-session
+registration warning, and all 15 baseline table counts restored after fixture
+cleanup. Regression: `verify_phase_24_3.py` PASS 40/40 ·
+`verify_phase_24_5.py` PASS 46/46. `compileall` PASS · `tsc --noEmit` PASS ·
+ESLint (changed files) PASS · `git diff --check` clean · alembic single head
+`eb880e108f19` unchanged. No browser/E2E run (operator responsibility).
+Production untouched; `.env` unchanged (local dev target).
+
+**Next:** Phase 24.7 (timetable management) and beyond - NOT STARTED; requires
+fresh execution prompts. All 12 Phase 24.0 decision gates remain open.
