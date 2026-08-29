@@ -212,7 +212,7 @@ async def main() -> int:
             items = resp.json()
             if isinstance(items, list) and len(items) > 0:
                 first = items[0]
-                expected_fields = {"id", "day_of_week", "class_type", "subject"}
+                expected_fields = {"id", "day_of_week", "class_type", "subject", "elective_slot"}
                 actual_fields = set(first.keys())
                 check(
                     actual_fields == expected_fields,

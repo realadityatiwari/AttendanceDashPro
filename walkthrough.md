@@ -7252,11 +7252,9 @@ alembic head.
 
 ## Known limitations
 
-- `verify_phase_22_1.py` reports a PRE-EXISTING failure on "response fields
-  match" — its `expected_fields` set (`{id, day_of_week, class_type, subject}`)
-  predates the Phase 22.3 `elective_slot` field that the endpoint now
-  legitimately returns. Unrelated to 24.7-A; flagged for a future correction
-  prompt.
+- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
+  its `expected_fields` set now includes the canonical `elective_slot` field;
+  the verifier PASSES 19/19. No application code was changed.
 - Data-integrity guards that are NOT expressible as pure DB CHECKs (e.g.,
   "subject belongs to the section's semester") are enforced at the
   application layer in Phase 24.7-B CRUD, not in this foundation slice.
@@ -7385,10 +7383,10 @@ are created.
 - Existing data cross-check: the 28 production-baseline timetable entries have
   ZERO intra-section overlapping pairs (adjacent or disjoint by construction),
   so the new conflict predicate flags nothing in the current schedule.
-- `verify_phase_22_1.py` still reports its PRE-EXISTING "response fields
-  match" failure (its expected-field set predates the Phase 22.3
-  `elective_slot` field) — unrelated to 24.7-A/B; flagged for a future
-  correction prompt.
+- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
+  its `expected_fields` set now includes the canonical `elective_slot` field;
+  the verifier PASSES 19/19. Unrelated to 24.7-A/B; no application code
+  changed.
 - Domain errors are mapped to HTTP status codes in 24.7-C; this slice raises
   the domain hierarchy only.
 
@@ -7943,10 +7941,9 @@ rows; no attendance/session/quiz/event mutation.
 
 ## Known limitations
 
-- `verify_phase_22_1.py` reports a PRE-EXISTING "response fields match"
-  failure — its `expected_fields` set predates the Phase 22.3 `elective_slot`
-  field; the live student timetable API is correct. A future correction prompt
-  is recommended.
+- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
+  its `expected_fields` set now includes the canonical `elective_slot` field;
+  the verifier PASSES 19/19. No application code was changed.
 - `get_class_sessions_for_subject` in `timetable_repo.py` appears unused
   (pre-existing; not a 24.7 concern).
 
@@ -8072,10 +8069,9 @@ rows; no attendance/session/quiz/event mutation.
 
 ## Known limitations
 
-- `verify_phase_22_1.py` reports a PRE-EXISTING "response fields match"
-  failure — its `expected_fields` set predates the Phase 22.3 `elective_slot`
-  field; the live student timetable API is correct. A correction prompt is
-  recommended for the operator's backlog.
+- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
+  its `expected_fields` set now includes the canonical `elective_slot` field;
+  the verifier PASSES 19/19. No application code was changed.
 - `get_class_sessions_for_subject` in `timetable_repo.py` may be unused;
   pre-existing, not a 24.7 concern.
 - No browser/E2E run performed (operator responsibility).

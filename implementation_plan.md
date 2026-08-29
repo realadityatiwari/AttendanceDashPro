@@ -4078,11 +4078,10 @@ choices; no anchor leakage; common subjects visible.
 
 ## Known limitations
 
-- `verify_phase_22_1.py` reports a PRE-EXISTING failure on "response fields
-  match" — its `expected_fields` set (`{id, day_of_week, class_type, subject}`)
-  predates the Phase 22.3 `elective_slot` field that the endpoint now
-  legitimately returns. The live student timetable API is correct. This
-  deserves a future correction prompt.
+- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
+  its `expected_fields` set now includes the canonical `elective_slot` field
+  (added in Phase 22.3, preserved through Phase 24.7). The verifier now PASSES
+  19/19. No application code was changed.
 - The frontend hook `useAdminTimetableEntryDetail` was defined but unused and
   has been removed (dead code cleanup in 24.7-H).
 - `get_class_sessions_for_subject` in `timetable_repo.py` may be unused;
