@@ -8,7 +8,7 @@
 >
 > **Current position:** Phase 21 — Production Launch **COMPLETE & FROZEN** ✅ — Phase 21A/21A.1 (account audit + approved cleanup) ✅, 21B (feedback admin) ✅, 21C (pre-flight gate closure) ✅, 21D.0 (free beta architecture) ✅, 21D.1 (config hardening) ✅, 21D.2 (provisioning + connection/alembic/Vercel/auth/migration audits) ✅, 21D.3 (controlled localhost→Supabase migration + operator verification) ✅, 21D.4 (production closure & governance reconciliation) ✅. Production is LIVE on **Vercel Hobby (frontend) + Render Free (backend) + Supabase Free PostgreSQL**; operator verified production login, ADMIN account, dashboard, desktop, mobile responsive UI, PWA install/launch, and migrated data (165 attendance — 108 ATTENDED / 57 MISSED). All launch gates A/B/C RESOLVED. Closure: `docs/phase_21/phase_21d4_production_closure.md`.
 >
-> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · **Phase 23.6 (Actual Occurrence Architecture) COMPLETE (2026-08-28)** — subject-specific per-subject occurrence outcomes (`occurrence_outcomes` table + `OccurrenceOutcomeType` enum; migration `f6a7b8c9d0e1`); `EventSessionSynchronizer` extended to create outcomes for subject-specific elective events; `attendance_repo` read queries apply outcome per student (elective isolation: DE-II BCS-058→quiz, BCS-055→normal, BCS-056→cancelled, no leakage); `occurrence_is_cancelled` engine function extended. Not applied to production (operator boundary). · **Phase 23.7 (Event-Scope Redesign + MODIFIED) COMPLETE (2026-08-28)** — `EventType.CLASS_MODIFIED` (subject-scoped modified-occurrence event) + `OccurrenceOutcomeType.MODIFIED` (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on the shared anchor session for the targeted concrete subject (elective isolation preserved: BCS-058 MODIFIED never leaks to BCS-055/056); `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags; frontend EventType/eventRules extended. Not applied to production (operator boundary). · **Phase 23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) COMPLETE (2026-08-28)** — proved MODIFIED is occurrence METADATA for the quiz pipeline (a modified class is still a conducted class: counted in every denominator; quiz dates/identity/windows/eligibility unchanged; subject isolation via the outcome join key). One genuine integration fix: CLASS_MODIFIED no longer overwrites a CANCELLED desired outcome (cancellation wins over modification). Added `verify_phase_23_8.py` (DB-based, self-cleaning; operator-run). No migration. Not applied to production (operator boundary). · **Phase 23.9 (Attendance Mutation Gate) COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety; `verify_phase_23_9.py` PASS 26/26 on the dev DB after the Phase 23.7 corrective migration `f8a9b0c1d2e3`. Not applied to production (operator boundary). · **Phase 23.10 (Student-Facing Read Models) COMPLETE (2026-08-29)** — read model exposes `outcome_type` + `elective_slot` on daily-sessions/history; all surfaces confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26. No migration. Not applied to production (operator boundary). · **Phase 23.11 (API Scope & Authorization) COMPLETE (2026-08-29)** — backend-authoritative scoped-admin authorization foundation: `adminrole` enum + `admin_scopes` table (migration `f9a0b1c2d3e4`); `AuthorizationService` (HEAD_ADMIN global / CLASS_ADMIN section-scoped / SUBSECTION_ADMIN conservative-inert / ELECTIVE_ADMIN concrete-subject-scoped); legacy ADMIN resolves as HEAD_ADMIN; `require_head_admin` + composable scope dependencies wired into laboratory/feedback admin endpoints and the EventService admin gates; student-facing audit confirmed owner/enrollment/effective-subject scoping; `verify_phase_23_11.py` PASS 23/23. Applied to local dev DB only; production untouched. · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
+> **Next phase:** Phase 22 — Post-Launch **COMPLETE** — 22.1 (Timetable Data-Scope Correction) **COMPLETE & VERIFIED IN PRODUCTION** · 22.2 (Production Parity & Mutation Reliability) **COMPLETE** · 22.3 (Student Elective Selection & Timetable Resolution) **COMPLETE** · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) **COMPLETE** — then: Phase 23.0 (Architecture Discovery) **COMPLETE — DISCOVERY PHASE + BLUEPRINT RECONCILED (2026-08-27)** · **Phase 23.1 (Academic Hierarchy & Enrollment Schema Foundation) COMPLETE (2026-08-27)** · **Phase 23.2 (Curriculum model) COMPLETE (2026-08-27)** · **Phase 23.3 (Student Academic Assignment) COMPLETE (2026-08-28)** — consolidated/verified the student assignment relationship (placement / compulsory enrollment / elective selection) around the existing 22.3/22.4 elective architecture; migration `e3f4a5b6c7d8` (additive `student_enrollments.enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` exposes subsection + elective_i/elective_ii). Not applied to production (operator boundary). · **Phase 23.4 (Authoritative Student Context Service) COMPLETE (2026-08-28)** — one reusable read-only backend authority (`StudentContextService` + `StudentContext` read model) for placement/enrollments/elective choices; consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History (equivalence verified; attendance/eligibility/calendar/event/timetable semantics untouched). No schema/migration change. · **Phase 23.5 (Elective/Catalog Redesign) COMPLETE (2026-08-28)** — elective catalog normalized into the DB (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` is now DB-driven (no hardcoded catalog constants); registration validates against the DB catalog; one-slot-per-subject guaranteed; seed + 22.4 verifier updated. Not applied to production (operator boundary). · **Phase 23.6 (Actual Occurrence Architecture) COMPLETE (2026-08-28)** — subject-specific per-subject occurrence outcomes (`occurrence_outcomes` table + `OccurrenceOutcomeType` enum; migration `f6a7b8c9d0e1`); `EventSessionSynchronizer` extended to create outcomes for subject-specific elective events; `attendance_repo` read queries apply outcome per student (elective isolation: DE-II BCS-058→quiz, BCS-055→normal, BCS-056→cancelled, no leakage); `occurrence_is_cancelled` engine function extended. Not applied to production (operator boundary). · **Phase 23.7 (Event-Scope Redesign + MODIFIED) COMPLETE (2026-08-28)** — `EventType.CLASS_MODIFIED` (subject-scoped modified-occurrence event) + `OccurrenceOutcomeType.MODIFIED` (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on the shared anchor session for the targeted concrete subject (elective isolation preserved: BCS-058 MODIFIED never leaks to BCS-055/056); `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags; frontend EventType/eventRules extended. Not applied to production (operator boundary). · **Phase 23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) COMPLETE (2026-08-28)** — proved MODIFIED is occurrence METADATA for the quiz pipeline (a modified class is still a conducted class: counted in every denominator; quiz dates/identity/windows/eligibility unchanged; subject isolation via the outcome join key). One genuine integration fix: CLASS_MODIFIED no longer overwrites a CANCELLED desired outcome (cancellation wins over modification). Added `verify_phase_23_8.py` (DB-based, self-cleaning; operator-run). No migration. Not applied to production (operator boundary). · **Phase 23.9 (Attendance Mutation Gate) COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety; `verify_phase_23_9.py` PASS 26/26 on the dev DB after the Phase 23.7 corrective migration `f8a9b0c1d2e3`. Not applied to production (operator boundary). · **Phase 23.10 (Student-Facing Read Models) COMPLETE (2026-08-29)** — read model exposes `outcome_type` + `elective_slot` on daily-sessions/history; all surfaces confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26. No migration. Not applied to production (operator boundary). · **Phase 23.11 (API Scope & Authorization) COMPLETE (2026-08-29)** — backend-authoritative scoped-admin authorization foundation: `adminrole` enum + `admin_scopes` table (migration `f9a0b1c2d3e4`); `AuthorizationService` (HEAD_ADMIN global / CLASS_ADMIN section-scoped / SUBSECTION_ADMIN conservative-inert / ELECTIVE_ADMIN concrete-subject-scoped); legacy ADMIN resolves as HEAD_ADMIN; `require_head_admin` + composable scope dependencies wired into laboratory/feedback admin endpoints and the EventService admin gates; student-facing audit confirmed owner/enrollment/effective-subject scoping; `verify_phase_23_11.py` PASS 23/23. Applied to local dev DB only; production untouched. · **Phase 23.12 (Migration Gate) COMPLETE (2026-08-29)** — Phase 23 migration chain audited: single linear chain of 25 migrations, exactly one head `f9a0b1c2d3e4`; fresh disposable-DB migration to HEAD (25/25 applied) + downgrade/rollback cycle + idempotency verified; model-vs-DB drift audited (only the documented legacy timestamp-nullable convention remains); adminrole/CHECK/FK semantics proven (invalid combinations rejected); offline upgrade SQL (617 lines, no destructive ops) + dependency-safe downgrade SQL validated; data-integrity baseline unchanged; `verify_phase_23_12.py` PASS 52/52. No migration created; production untouched. · Phase 23.x (Academic Architecture Evolution) **CONTINUING**. Phase 20 (Production QA) **COMPLETE & FROZEN**; Phase 19 (CI/CD) **COMPLETE & FROZEN**; Phase 18 **IN PROGRESS / PARTIAL** — 18.0–18C ✅, 18D ⚠️ PARTIAL (production deployment BLOCKED on missing infrastructure — superseded by the Phase 21D free-beta architecture which is now live). Phase 17 **COMPLETE & FROZEN**; Phase 16 **COMPLETE & FROZEN**; Phase 15 **COMPLETE & FROZEN**; Firebase retirement (14.0–14F) **COMPLETE & FROZEN**; active application = `frontend/` + `backend/` (PostgreSQL + FastAPI + JWT + Next.js).
 >
 > **Authorized bugfixes executed (2026-08-22):**
 > • **Bugfix 1 — CLASS_CANCELLED propagation:** active cancellation events now cancel matching recorded sessions via the canonical synchronizer; consumers aligned on one applicability predicate (`occurrence_is_cancelled`). Verified 26/26 + full regression set.
@@ -72,7 +72,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 20 | Production QA | ✅ **COMPLETE & FROZEN** — in-process/API QA across all surfaces PASS (auth, dashboard, track, history, calendar, events, quiz, lab, profile, security); cross-surface consistency verified (summary 50.0% = DB 12/12/24); frozen verifiers green (6.5 27/27, 6.6 36/36, 6.7 30/31 known, 12E 8/8, 16 34/34, 17 8/8); no critical defects; manual browser QA checklist provided for user; QA temp-user artifact removed; 5 attendance + 62 notification QA-window deltas reported for user review |
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
-| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Corrective migration `f8a9b0c1d2e3` (2026-08-29): `ALTER TYPE eventtype ADD VALUE 'CLASS_MODIFIED'`** — Phase 23.7 omitted the PG `eventtype` enum value (exposed by the live Phase 23.9 verifier); applied to the local dev DB only. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) ✅ COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` **PASS 26/26** on the local dev DB after the corrective migration. **Not applied to production** (operator boundary). **23.10 (Student-Facing Read Models) ✅ COMPLETE (2026-08-29)** — `outcome_type` + `elective_slot` exposed on daily-sessions/history responses; all student-facing surfaces audited and confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26 (isolation matrix). **Not applied to production** (operator boundary). **23.11 (API Scope & Authorization) ✅ COMPLETE (2026-08-29)** — migration `f9a0b1c2d3e4`: `adminrole` enum + `admin_scopes` table (role-scope CHECK constraint); `AuthorizationService` with composable scope checks; legacy ADMIN → HEAD_ADMIN; wired into laboratory/feedback admin endpoints + EventService; student audit confirmed scoped; `verify_phase_23_11.py` PASS 23/23. **Not applied to production** (operator boundary). Phase 24 (Admin Portal) pending. |
+| 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Corrective migration `f8a9b0c1d2e3` (2026-08-29): `ALTER TYPE eventtype ADD VALUE 'CLASS_MODIFIED'`** — Phase 23.7 omitted the PG `eventtype` enum value (exposed by the live Phase 23.9 verifier); applied to the local dev DB only. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) ✅ COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` **PASS 26/26** on the local dev DB after the corrective migration. **Not applied to production** (operator boundary). **23.10 (Student-Facing Read Models) ✅ COMPLETE (2026-08-29)** — `outcome_type` + `elective_slot` exposed on daily-sessions/history responses; all student-facing surfaces audited and confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26 (isolation matrix). **Not applied to production** (operator boundary). **23.11 (API Scope & Authorization) ✅ COMPLETE (2026-08-29)** — migration `f9a0b1c2d3e4`: `adminrole` enum + `admin_scopes` table (role-scope CHECK constraint); `AuthorizationService` with composable scope checks; legacy ADMIN → HEAD_ADMIN; wired into laboratory/feedback admin endpoints + EventService; student audit confirmed scoped; `verify_phase_23_11.py` PASS 23/23. **Not applied to production** (operator boundary). **23.12 (Migration Gate) ✅ COMPLETE (2026-08-29)** — Phase 23 migration chain audited: 25 migrations, single linear chain, one head `f9a0b1c2d3e4`; fresh disposable-DB migration to HEAD (25/25) + downgrade/rollback cycle + idempotency verified; drift audited (legacy timestamp-nullable convention only); adminrole/CHECK/FK semantics proven; offline upgrade/downgrade SQL validated; data-integrity baseline unchanged; `verify_phase_23_12.py` PASS 52/52. No migration created. **Not applied to production** (operator boundary). Phase 24 (Admin Portal) pending. |
 
 ---
 
@@ -3222,6 +3222,121 @@ never auto-granted. Full subsection enforcement requires the
 
 ---
 
+# 🟢 Phase 23.12 — Migration Gate (COMPLETE, 2026-08-29)
+
+**Status: COMPLETE — Phase 23 schema/migration safety gate passed.** No new
+migration created. Alembic head unchanged (`f9a0b1c2d3e4`). No commit, no
+push, no PR.
+
+## Objective
+
+Perform the final schema/migration safety gate for the completed Phase 23
+Academic Core before Phase 24: prove the migration chain is coherent,
+reproducible, reversible where appropriate, and safe to carry into the Admin
+Portal phase.
+
+## Migration discovery + graph
+
+Full chain inspected (alembic.ini, env.py, all version files, DB, model
+metadata): **25 migrations, single linear chain, exactly ONE head
+`f9a0b1c2d3e4`, no branches** — from `7117a007a0da` (initial schema) through
+Phase 22.x, the Phase 23.1/23.2/23.3/23.5/23.6/23.7 migrations, the 23.7
+corrective `f8a9b0c1d2e3`, and 23.11 `f9a0b1c2d3e4`.
+
+## Model vs migration vs DB drift audit
+
+`compare_metadata` against the live local DB: **no unclassified drift**. The
+only difference class is the documented legacy convention — `created_at`/
+`updated_at` declared NOT NULL in the model Base but nullable-with-server-
+default in the Phase 22.3/23.6/23.11 migration convention (server default
+always populates; DB more permissive than the model; no integrity risk).
+Classified B (harmless legacy difference); intentionally NOT silently fixed.
+
+## Migration safety audit (Phase 23 migrations)
+
+All Phase 23 migrations reviewed for upgrade/downgrade symmetry, enum
+creation/deletion ordering, FK/CHECK/index creation, nullable transitions,
+server defaults, backfills, transaction safety:
+- `c8d9e0f1a2b3` (23.1), `d0e1f2a3b4c5` (23.2), `e3f4a5b6c7d8` (23.3, incl.
+  deterministic enrollment_type backfill), `f5a6b7c8d9e0` (23.5, tag→slot
+  backfill), `f6a7b8c9d0e1` (23.6, occurrence_outcomes + 22.3 backfills),
+  `f7a8b9c0d1e2` (23.7 ALTER TYPE ADD VALUE), `f8a9b0c1d2e3` (23.7 corrective),
+  `f9a0b1c2d3e4` (23.11 admin_scopes) — all additive, transactional, with
+  repository-consistent downgrades (PG enum values are never removable; the
+  two ADD VALUE downgrades are documented no-ops).
+
+## Offline SQL validation
+
+- Upgrade base→head: 617 lines generated; correct migration order; all 15
+  enum CREATE TYPEs + 5 ALTER TYPE ADD VALUEs in order; table creation
+  precedes FKs; **no unexpected DROP TABLE / DELETE / TRUNCATE**.
+- Downgrade head→`f8a9b0c1d2e3`: dependency-safe order
+  (`DROP INDEX → DROP TABLE → DROP TYPE`).
+
+## Fresh disposable-DB migration (reproducibility)
+
+Fresh `attendancedash_migtest` database (local container only):
+- `alembic upgrade head` — **25/25 migrations applied in order**, final
+  revision = HEAD.
+- All expected tables (14 checked), enums (`adminrole` exact values,
+  `eventtype` includes CLASS_MODIFIED, `occurrenceoutcometype` includes
+  MODIFIED), 4 FKs with exact targets, role-scope CHECK, user_id index — all
+  present.
+- CHECK semantics proven: valid HEAD/CLASS/ELECTIVE scope rows insert;
+  CLASS_ADMIN-without-section, ELECTIVE_ADMIN-without-subject,
+  HEAD_ADMIN-with-scope, nonexistent-subject FK, invalid enum value — all
+  rejected by PostgreSQL.
+- **Downgrade cycle**: f9a0b1c2d3e4 → f8a9b0c1d2e3 drops admin_scopes (the 3
+  fixture rows are intentionally destroyed — documented destructive downgrade
+  for scope data) while unrelated tables remain intact; upgrade back to HEAD
+  restores the schema; **second `upgrade head` is an idempotent no-op**.
+- Disposable DB dropped afterwards (no residue).
+
+## Existing dev DB + data integrity
+
+`127.0.0.1:55432/attendancedash` verified AT HEAD (`f9a0b1c2d3e4`) — no
+migration operation was needed. Read-only baseline captured:
+users 3 · enrollments 35 · subjects 13 · sections 1 · semesters 1 ·
+academic_sessions 1 · timetable_entries 28 · class_sessions 721 ·
+attendance_records 165 · academic_events 62 · quiz_schedules 18 ·
+admin_scopes 0 · occurrence_outcomes 0. (The prompt's quoted 23.11 snapshot
+differs from the actual seeded dev state; per the roadmap rule the actual
+baseline governs.) The verifier re-proves counts unchanged by verification.
+
+## Application compatibility
+
+`compileall` PASS; FastAPI app + `AuthorizationService` + `AdminRole` import
+cleanly; model metadata loads (22 tables); Phase 23.11 verifier re-run
+**PASS 23/23** (regression confirmed).
+
+## Production operator boundary (documented, NOT executed)
+
+```
+backup → verify backup → verify current production revision → verify target
+revision (f9a0b1c2d3e4) → alembic upgrade head → read-only schema
+verification → application health check
+```
+
+**Production migration executed = NO.** Production contacted = NO.
+
+## Verification
+
+- `verify_phase_23_12.py` — **PASS 52/52** (graph/heads, DB revision, schema,
+  enum, FKs/CHECK/index, CHECK+FK rejection semantics in rollback
+  transactions, metadata drift, imports, offline downgrade SQL, cleanup,
+  counts unchanged).
+- `verify_phase_23_11.py` — PASS 23/23 (regression).
+- **Production DB not touched.**
+
+## Deferred (documented, NOT implemented)
+
+- Production migration (operator action, per the documented procedure).
+- Legacy timestamp-nullable convention alignment (harmless; optional future
+  consistency pass).
+- Phase 24 Admin Portal.
+
+---
+
 # 🔗 Critical Dependency Path
 
 ```text
@@ -3273,7 +3388,7 @@ PHASE 21  ← COMPLETE & FROZEN
    ↓
 PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
    ↓
-PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23); Phase 24 pending
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE; Phase 24 pending
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -3509,7 +3624,7 @@ PHASE 10 ████████████████████  COMPLETE 
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
-Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23); Phase 24 pending
+Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE; Phase 24 pending
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -3556,6 +3671,13 @@ Phase 23 ████████████████████  23.0 DISC
 > legacy ADMIN → HEAD_ADMIN; wired into laboratory/feedback admin endpoints
 > and EventService; student audit confirmed scoped; `verify_phase_23_11.py`
 > PASS 23/23); **not applied to production** (operator boundary).
+> **23.12 COMPLETE (2026-08-29)** — Migration Gate (Phase 23 migration chain
+> audited: 25 migrations, single linear chain, one head `f9a0b1c2d3e4`; fresh
+> disposable-DB migration to HEAD 25/25 + downgrade/rollback cycle +
+> idempotency; drift audit clean; adminrole/CHECK/FK semantics proven; offline
+> upgrade/downgrade SQL validated; data-integrity baseline unchanged;
+> `verify_phase_23_12.py` PASS 52/52); **no migration created, not applied to
+> production** (operator boundary).
 > Phase 24 (Admin Portal) pending.
 > Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)

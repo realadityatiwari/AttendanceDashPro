@@ -6293,3 +6293,158 @@ operator action. **Production DB not touched.**
 fresh execution prompt. Production not touched.
 
 ---
+
+# AttendanceDash Pro — Phase 23.12 Walkthrough
+
+> **PHASE 23.12 COMPLETE — MIGRATION GATE (2026-08-29).** The Phase 23
+> migration chain was audited and validated as coherent, reproducible, and
+> safe to carry into Phase 24. No new migration; no production action.
+
+## Objective
+
+Final schema/migration safety gate for the completed Phase 23 Academic Core:
+prove the migration chain is coherent, reproducible, reversible where
+appropriate, and safe before the Admin Portal phase.
+
+## Migration graph (discovery)
+
+Full read-only audit of `alembic.ini`, `env.py`, all 25 version files, the
+live DB, and the SQLAlchemy metadata:
+
+```
+7117a007a0da (initial) ? 8a2b3c4d5e6f ? c3d4e5f6a7b8 (user role) ? d4e5f6a7b8c9
+  ? e5f6a7b8c9d0 ? a1b2c3d4e5f6 ? f1a2b3c4d5e6f ? f6a5b4c3d2e1f ? a7b8c9d0e1f2
+  ? b1c2d3e4f5a6 ? b1c2d3e4f5a7 ? c1d2e3f4a5b6 ? d1e2f3a4b5c6 (drop firebase_uid)
+  ? e1f2a3b4c5d6 ? f2e3d4c5b6a7 (22.3) ? a3b4c5d6e7f8 (22.4) ? b7c8d9e0f1a2 (23.1)
+  ? c8d9e0f1a2b3 (23.2) ? d0e1f2a3b4c5 (23.3) ? e3f4a5b6c7d8 (23.5)
+  ? f5a6b7c8d9e0 ? f6a7b8c9d0e1 (23.6) ? f7a8b9c0d1e2 (23.7 MODIFIED)
+  ? f8a9b0c1d2e3 (23.7 corrective) ? f9a0b1c2d3e4 (23.11 admin_scopes)  = HEAD
+```
+
+Exactly ONE head, no branches. (23.4 had no migration; 23.9/23.10 had no
+schema change.)
+
+## Model vs migration vs DB drift audit
+
+`alembic.autogenerate.compare_metadata` against the live local DB: no
+unclassified drift. The only difference class: `created_at`/`updated_at` are
+NOT NULL in the model Base but nullable-with-`server_default=now()` in the
+Phase 22.3/23.6/23.11 migration convention — the DB is more permissive than
+the model and the default always populates, so there is no integrity risk.
+Classified **B (harmless legacy difference)**; intentionally not silently
+fixed (repo-wide convention across three migrations).
+
+## Phase 23 migration safety audit
+
+All eight Phase 23 migrations reviewed (revision/down_revision, upgrade/
+downgrade, enum creation/deletion, FK/CHECK/index creation, nullable
+transitions, server defaults, deterministic backfills, transaction safety):
+- All additive and transactional.
+- PostgreSQL enum reality: the two ADD VALUE migrations (`f7a8b9c0d1e2`,
+  `f8a9b0c1d2e3`) have documented no-op downgrades (PG cannot remove enum
+  values) — consistent with the earlier `a1b2c3d4e5f6`/`a7b8c9d0e1f2`
+  convention.
+- `adminrole`: created exactly once (`f9a0b1c2d3e4`); CHECK/FK/index order
+  valid; downgrade drops index ? table ? type (dependency-safe).
+
+## Offline SQL validation
+
+- Upgrade base?head: 617 lines; correct order; all 15 `CREATE TYPE`s + 5
+  `ALTER TYPE ... ADD VALUE`s; **no unexpected DROP TABLE / DELETE /
+  TRUNCATE**.
+- Downgrade head?`f8a9b0c1d2e3`: `DROP INDEX ? DROP TABLE ? DROP TYPE`
+  (dependency-safe).
+
+## Fresh disposable-DB migration (reproducibility test)
+
+A fresh `attendancedash_migtest` database in the local container (only):
+- `alembic upgrade head`: **25/25 migrations applied in order**, final
+  revision = HEAD.
+- Schema verified: 14 key tables; `adminrole` exact values;
+  `eventtype` includes CLASS_MODIFIED; `occurrenceoutcometype` includes
+  MODIFIED; 4 FKs with exact targets; role-scope CHECK; `active` default
+  true; user_id index.
+- CHECK/FK semantics: valid HEAD/CLASS/ELECTIVE scope rows insert; invalid
+  combinations rejected — CLASS_ADMIN-without-section, ELECTIVE_ADMIN-without-
+  subject, HEAD_ADMIN-with-scope, nonexistent-subject FK, invalid enum value.
+- Downgrade cycle: `f9a0b1c2d3e4 ? f8a9b0c1d2e3` drops `admin_scopes` (the 3
+  fixture scope rows are **intentionally destroyed** — the downgrade for
+  admin_scopes is destructive for its own data, documented) while unrelated
+  tables survive; `upgrade head` restores; a second `upgrade head` is an
+  **idempotent no-op** (replay safety).
+- The disposable DB was dropped afterwards (no residue).
+
+## Existing dev database + data integrity
+
+`127.0.0.1:55432/attendancedash` is **AT HEAD** (`f9a0b1c2d3e4`) — no
+migration operation was required. Read-only baseline captured:
+users 3 · student_enrollments 35 · subjects 13 · sections 1 · semesters 1 ·
+academic_sessions 1 · timetable_entries 28 · class_sessions 721 ·
+attendance_records 165 · academic_events 62 · quiz_schedules 18 ·
+admin_scopes 0 · occurrence_outcomes 0.
+
+Note: the Phase 23.11 prompt quoted a different snapshot (users=30,
+class_sessions=684, attendance=89, …); per the roadmap rule the ACTUAL
+current baseline governs, and the verifier proves counts are unchanged by
+verification.
+
+## Application compatibility
+
+- `compileall` PASS.
+- FastAPI app, `AuthorizationService`, `AdminRole` import cleanly; metadata
+  loads (22 tables).
+- `verify_phase_23_11.py` re-run: **PASS 23/23** (regression confirmed).
+
+## Production operator boundary (documented, NOT executed)
+
+```
+backup
+  ? verify backup
+  ? verify current production revision
+  ? verify target revision (f9a0b1c2d3e4)
+  ? alembic upgrade head
+  ? read-only schema verification
+  ? application health check
+```
+
+`Production migration executed = NO.` `Production contacted = NO.`
+
+## Verifier
+
+NEW `backend/scripts/verify_phase_23_12.py` — local-only, explicit DB target
+assertion, self-cleaning (fixtures in rolled-back transactions + explicit
+cleanup). Covers A–T: single head, DB at HEAD, adminrole enum/values,
+admin_scopes columns/FKs/CHECK/active-default, CHECK+FK rejection semantics,
+metadata drift, application imports, offline downgrade SQL (generated, not
+executed), no residue, counts unchanged.
+
+**Result: PASS 52/52.**
+
+## Database mutation status
+
+- Production: zero contact, zero mutation.
+- Local dev DB: no migration applied (already at HEAD); verifier fixtures
+  created inside rolled-back transactions and removed; baseline counts
+  unchanged.
+- Disposable DB: created, migrated, downgraded, re-upgraded, dropped.
+
+## Deferred items
+
+- Production migration (operator action, per the documented procedure).
+- Legacy timestamp-nullable convention alignment (harmless; optional future
+  consistency pass).
+- Phase 24 Admin Portal.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 23.12 COMPLETE; status table, dependency path,
+  progress bar, next-phase paragraph updated ("PHASE 23 CORE COMPLETE").
+- implementation_plan.md: Phase 23.12 section.
+- task.md: Phase 23.12 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 23.12 — COMPLETE. PHASE 23 CORE — COMPLETE.** **HARD STOP:** Phase 24
+not started — requires operator review and a fresh execution prompt.
+Production not touched.
+
+---

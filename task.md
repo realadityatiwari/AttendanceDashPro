@@ -2623,4 +2623,47 @@ Status: **COMPLETE - backend-authoritative scoped-admin authorization.** Migrati
 
 - Phase 23.11 authorization infrastructure is complete. Do not reopen.
 - `AuthorizationService` is the ONE backend authorization authority (roles + scopes from DB).
+
+## PHASE 23.12 - MIGRATION GATE (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - Phase 23 schema/migration safety gate passed.** No new migration. Alembic head unchanged (`f9a0b1c2d3e4`). No commit, no push, no PR.
+
+## Objective
+
+Prove the Phase 23 migration chain is coherent, reproducible, reversible where appropriate, and safe to carry into Phase 24 (Admin Portal).
+
+## Delivered
+
+- [x] Read-only migration discovery: alembic.ini/env.py/all version files/DB/model metadata audited
+- [x] Migration graph: 25 migrations, single linear chain, exactly ONE head `f9a0b1c2d3e4`, no branches
+- [x] Model-vs-migration-vs-DB drift audit: no unclassified drift (only the documented legacy timestamp-nullable convention; classified B, not silently fixed)
+- [x] Phase 23 migration safety audit (8 migrations: upgrade/downgrade symmetry, enum ordering, FKs/CHECK/indexes, backfills, transaction safety)
+- [x] Offline SQL: upgrade base->head (617 lines, no unexpected destructive ops); downgrade head->f8a9b0c1d2e3 (dependency-safe order)
+- [x] Fresh disposable DB (`attendancedash_migtest`, local container only, dropped after): 25/25 migrations to HEAD; tables/enums/FKs/CHECK/index verified; CHECK+FK rejection semantics proven; downgrade cycle (admin_scopes data intentionally destroyed - documented) + re-upgrade + idempotency (second `upgrade head` = no-op)
+- [x] Existing dev DB verified AT HEAD; read-only baseline captured; counts unchanged by verification
+- [x] Application compatibility: compileall PASS; app + AuthorizationService import; metadata loads; `verify_phase_23_11.py` re-run PASS 23/23
+- [x] Production operator migration procedure documented (NOT executed)
+- [x] `verify_phase_23_12.py` (NEW, self-cleaning): PASS 52/52
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO production migration/contact/mutation
+- [ ] NO new migration files
+- [ ] NO migration rewrites (correct migrations untouched)
+- [ ] NO Phase 24 Admin Portal work
+- [ ] NO engine/service/logic changes
+
+## Validation
+
+- `verify_phase_23_12.py` PASS 52/52 against `127.0.0.1:55432/attendancedash` (local target asserted; fixtures rolled back; counts unchanged; no residue)
+- Fresh-DB reproducibility: 25/25 migrations applied; downgrade/rollback cycle + idempotency validated on disposable DB (dropped after)
+- `verify_phase_23_11.py` PASS 23/23 (regression)
+- `compileall` PASS; alembic single head `f9a0b1c2d3e4`
+- **Production DB NOT touched.** No migration created or applied.
+
+## Do Not Touch Again
+
+- The Phase 23 migration chain is validated and frozen. Do not rewrite migrations.
+- `verify_phase_23_12.py` is the migration-gate verifier for future schema work.
 - Phase 24 (Admin Portal) requires a fresh execution prompt.

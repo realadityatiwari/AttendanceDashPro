@@ -3473,3 +3473,53 @@ collapsed elective scope); legacy ADMIN ? HEAD_ADMIN (no privilege reduction).
 
 **Deferred:** Phase 24 Admin Portal; full SUBSECTION_ADMIN enforcement (needs
 subsection scheduling data); admin-scope provisioning API/UI (Phase 24).
+
+---
+
+### Phase 23.12 — Migration Gate (executed 2026-08-29)
+
+**Status: COMPLETE.** No new migration created. Alembic head unchanged
+(`f9a0b1c2d3e4`). No commit, no push, no PR.
+
+**Objective:** final schema/migration safety gate for the Phase 23 Academic
+Core — prove the chain is coherent, reproducible, reversible where
+appropriate, and safe for Phase 24.
+
+**Discovery/graph:** 25 migrations, single linear chain, exactly one head
+`f9a0b1c2d3e4`, no branches (verified from migration files + DB).
+
+**Drift audit:** `compare_metadata` vs live DB — no unclassified drift; only
+the documented legacy timestamp-nullable convention (created_at/updated_at
+NOT NULL in models, nullable+server_default in the 22.3/23.6/23.11 migration
+convention). Classified B (harmless legacy); not silently fixed.
+
+**Offline SQL:** upgrade base?head 617 lines, ordered, no unexpected
+destructive ops; downgrade head?f8a9b0c1d2e3 dependency-safe
+(index?table?type).
+
+**Fresh disposable DB (`attendancedash_migtest`, dropped after):** 25/25
+migrations to HEAD; 14 tables + adminrole/eventtype/occurrenceoutcometype
+enums + 4 FKs + role-scope CHECK + index verified; CHECK semantics proven
+(valid rows insert; CLASS/ELECTIVE-without-target, HEAD-with-scope,
+nonexistent-FK, invalid enum all rejected); downgrade destroys admin_scopes
+data (documented) while unrelated tables survive; re-upgrade restores; second
+`upgrade head` idempotent no-op.
+
+**Existing dev DB:** at HEAD; no migration needed. Read-only baseline
+captured (users 3, enrollments 35, subjects 13, class_sessions 721,
+attendance 165, events 62, quiz 18, admin_scopes 0, occurrence_outcomes 0);
+counts unchanged by verification.
+
+**Application compatibility:** compileall PASS; app + AuthorizationService
+import cleanly; metadata loads; `verify_phase_23_11.py` re-run PASS 23/23.
+
+**Production operator procedure documented (backup ? verify backup ? verify
+current revision ? verify target revision ? upgrade head ? read-only schema
+verification ? health check) but NOT executed.**
+
+**Verification:** `verify_phase_23_12.py` PASS **52/52** (local target
+assertion, graph, revision, schema, enums, FKs/CHECK/index, rejection
+semantics, drift, imports, offline downgrade, cleanup, counts unchanged).
+
+**Deferred:** production migration (operator); legacy timestamp-nullable
+alignment (optional); Phase 24 Admin Portal.
