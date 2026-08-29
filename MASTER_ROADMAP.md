@@ -73,7 +73,7 @@ A page appearing to work is **not** sufficient evidence that the feature works.
 | 21 | Production Launch | ✅ **COMPLETE & FROZEN** — 21A/21A.1 account audit + approved cleanup ✅ · 21B feedback admin ✅ · 21C pre-flight gate closure ✅ (Gates A/B/C all RESOLVED) · 21D.0 free beta architecture ✅ · 21D.1 config hardening ✅ · 21D.2 provisioning + connection/alembic/Vercel/auth/migration audits ✅ · 21D.3 controlled localhost→Supabase migration ✅ (18 tables, counts/UUID/content/FK verified, ADMIN + PBKDF2 hash + 165 attendance 108/57 preserved, operator-verified login/dashboard/desktop/mobile/PWA) · 21D.4 production closure & governance reconciliation ✅. Production LIVE: Vercel + Render + Supabase. Closure: `docs/phase_21/phase_21d4_production_closure.md`. |
 | 22 | Post-Launch | ✅ **COMPLETE** — 22.1 (Timetable Data-Scope Correction) ✅ VERIFIED IN PRODUCTION · 22.2 (Production Parity & Mutation Reliability) ✅ · 22.3 (Student Elective Selection & Timetable Resolution) ✅ · 22.4 (Departmental Elective Resolution Across All Engines & Surfaces) ✅ — next: Phase 23 (Academic Architecture Evolution). |
 | 23 | Academic Architecture Evolution | 🟢 **23.1 COMPLETE** (schema foundation) · **23.2 COMPLETE** (curriculum schema hardening) — 23.0 (Architecture Discovery & Implementation Blueprint) ✅ COMPLETE (read-only, 2026-08-27) + **blueprint reconciled per 10 corrections (2026-08-27)** + **final governance consistency correction (2026-08-27)** · **23.1 (Academic Hierarchy & Enrollment Schema Foundation) ✅ COMPLETE (2026-08-27)** — migration `c8d9e0f1a2b3` · **23.2 (Curriculum model) ✅ COMPLETE (2026-08-27)** — migration `d0e1f2a3b4c5` (UNIQUE(code, semester_id) on subjects) · **23.3 (Student Academic Assignment) ✅ COMPLETE (2026-08-28)** — migration `e3f4a5b6c7d8` (additive `enrollment_type` COMPULSORY/ELECTIVE + deterministic backfill; `/student/me` additive subsection_name + elective_i/elective_ii). **Not applied to production** (operator boundary) · **23.4 (Authoritative Student Context Service) ✅ COMPLETE (2026-08-28)** — `StudentContextService` + `StudentContext` read model (service-layer, read-only, no schema change); consumers migrated: `/student/me`, Dashboard, Quiz eligibility, Calendar, Analytics, Attendance History; equivalence verified. · **23.5 (Elective/Catalog Redesign) ✅ COMPLETE (2026-08-28)** — DB-backed catalog (`subjects.elective_slot` nullable enum; migration `f5a6b7c8d9e0`); `ElectiveResolver` DB-driven (no hardcoded constants); registration validates against DB catalog. **Not applied to production** (operator boundary) · **23.6 (Actual Occurrence Architecture) ✅ COMPLETE (2026-08-28)** — per-subject occurrence outcomes (`occurrence_outcomes` + `OccurrenceOutcomeType`; migration `f6a7b8c9d0e1`); synchronizer creates outcomes for subject-specific elective events; read queries apply them per student (elective isolation, no leakage). **Not applied to production** (operator boundary) · **23.7 (Event-Scope + MODIFIED) ✅ COMPLETE (2026-08-28)** — `CLASS_MODIFIED` event type + `MODIFIED` outcome (migration `f7a8b9c0d1e2` = ALTER TYPE ADD VALUE); event registry rule + subject-scoped-only rejection; synchronizer produces MODIFIED outcomes on anchor session for targeted concrete subject; `_reconcile_outcomes` generalized to non-elective subject anchors; read path exposes MODIFIED without changing extra/cancelled flags. **Corrective migration `f8a9b0c1d2e3` (2026-08-29): `ALTER TYPE eventtype ADD VALUE 'CLASS_MODIFIED'`** — Phase 23.7 omitted the PG `eventtype` enum value (exposed by the live Phase 23.9 verifier); applied to the local dev DB only. **Not applied to production** (operator boundary) · **23.8 (Quiz Integration — MODIFIED + subject-scoped quiz reality) ✅ COMPLETE (2026-08-28)** — MODIFIED = occurrence metadata for the quiz pipeline (conducted class; quiz dates/identity/windows/eligibility unchanged; subject isolation via outcome join key); one integration fix (cancellation wins over modification); `verify_phase_23_8.py` added (DB-based, self-cleaning). **Not applied to production** (operator boundary). **23.9 (Attendance Mutation Gate) ✅ COMPLETE / VERIFIED (2026-08-29)** — outcome-aware mutation safety (no migration): `POST /api/v1/attendance` rejects (409) on CANCELLED outcome for the student's resolved concrete subject; MODIFIED/normal allowed; elective isolation; `verify_phase_23_9.py` **PASS 26/26** on the local dev DB after the corrective migration. **Not applied to production** (operator boundary). **23.10 (Student-Facing Read Models) ✅ COMPLETE (2026-08-29)** — `outcome_type` + `elective_slot` exposed on daily-sessions/history responses; all student-facing surfaces audited and confirmed on the canonical architecture; `verify_phase_23_10.py` PASS 26/26 (isolation matrix). **Not applied to production** (operator boundary). **23.11 (API Scope & Authorization) ✅ COMPLETE (2026-08-29)** — migration `f9a0b1c2d3e4`: `adminrole` enum + `admin_scopes` table (role-scope CHECK constraint); `AuthorizationService` with composable scope checks; legacy ADMIN → HEAD_ADMIN; wired into laboratory/feedback admin endpoints + EventService; student audit confirmed scoped; `verify_phase_23_11.py` PASS 23/23. **Not applied to production** (operator boundary). **23.12 (Migration Gate) ✅ COMPLETE (2026-08-29)** — Phase 23 migration chain audited: 25 migrations, single linear chain, one head `f9a0b1c2d3e4`; fresh disposable-DB migration to HEAD (25/25) + downgrade/rollback cycle + idempotency verified; drift audited (legacy timestamp-nullable convention only); adminrole/CHECK/FK semantics proven; offline upgrade/downgrade SQL validated; data-integrity baseline unchanged; `verify_phase_23_12.py` PASS 52/52. No migration created. **Not applied to production** (operator boundary). Phase 24 (Admin Portal) pending. |
-| 24 | Admin Portal | 🟡 **24.0 DISCOVERY COMPLETE** (2026-08-29, `docs/phase_24/phase_24_0_admin_portal_discovery.md`) · **24.1 (Admin Identity + Portal Shell) ✅ COMPLETE (2026-08-29)** — additive `GET /api/v1/admin/me` (DB-authoritative identity via `AuthorizationService`; no schema change) + `(admin)` frontend route group, AdminShell, backend-driven loading/unauthorized/failure states, truthful navigation. 24.2+ NOT STARTED. Local development only; production untouched. |
+| 24 | Admin Portal | 🟡 **24.0 DISCOVERY COMPLETE** (2026-08-29, `docs/phase_24/phase_24_0_admin_portal_discovery.md`) · **24.1 (Admin Identity + Portal Shell) ✅ COMPLETE (2026-08-29)** — additive `GET /api/v1/admin/me` (DB-authoritative identity via `AuthorizationService`; no schema change) + `(admin)` frontend route group, AdminShell, backend-driven loading/unauthorized/failure states, truthful navigation. · **24.2 (HEAD Admin Dashboard) ✅ COMPLETE (2026-08-29)** — additive read-only `GET /api/v1/admin/dashboard` (require_head_admin; bounded aggregate queries; academic/curriculum/student/schedule/events/quizzes/attendance overviews + factual data-quality warnings; no schema change) + frontend dashboard replacing the 24.1 placeholder inside the existing AdminShell. · **24.3 (Student Management — READ) ✅ COMPLETE (2026-08-29)** — additive scoped read-only `GET /api/v1/admin/students` + `GET /api/v1/admin/students/{id}` (require_any_admin + DB-authoritative scope: HEAD all, CLASS assigned sections, ELECTIVE choice-roster, SUBSECTION inert-empty; no client scope params; detail via `StudentContextService`; no schema change) + Students list/search + detail pages, AdminShell nav, dashboard updates; verifier PASS 40/40 on local dev DB. 24.4+ NOT STARTED. Local development only; production untouched. |
 
 ---
 
@@ -3628,7 +3628,7 @@ Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE 
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
 Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE
-Phase 24 ███░░░░░░░░░░░░░░░  24.0 ADMIN PORTAL DISCOVERY COMPLETE (2026-08-29) · 24.1 ADMIN IDENTITY + PORTAL SHELL COMPLETE (2026-08-29) · 24.2+ NOT STARTED
+Phase 24 █████████░░░░░░░░░  24.0 DISCOVERY COMPLETE · 24.1 ADMIN IDENTITY + SHELL COMPLETE · 24.2 HEAD ADMIN DASHBOARD COMPLETE · 24.3 STUDENT MANAGEMENT (READ) COMPLETE (2026-08-29) · 24.4+ NOT STARTED
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -3701,8 +3701,44 @@ Phase 24 ███░░░░░░░░░░░░░░░  24.0 ADMIN PORT
 > shell/AppShell/TopNav unchanged; no second authorization system; role/scope
 > data is presentation-only. Verification: `compileall` PASS, `tsc --noEmit`
 > PASS, ESLint clean, backend app imports + admin router registration
-> verified. **No migration; production untouched.** Phase 24.2+ NOT STARTED —
-> require operator review and fresh execution prompts.
+> verified. **No migration; production untouched.**
+> **24.2 COMPLETE (2026-08-29)** — HEAD_ADMIN Operational Dashboard: additive
+> read-only `GET /api/v1/admin/dashboard` gated by the existing
+> `require_head_admin` (scoped admins are NOT elevated — 403; backend
+> authoritative). One stable read model (`AdminDashboardResponse`) built by
+> `AdminDashboardService` + `AdminDashboardRepository` from ~18 bounded
+> aggregate COUNT queries (no N+1, no row materialization for counts, no
+> attendance/eligibility/elective mathematics re-implemented; quiz dates from
+> active QUIZ_DAY events). Sections: academic status (active session/semester,
+> sections/programs/subjects/students), curriculum (theory/lab, elective
+> catalog, enrollment distribution), students (placed/unplaced, subsection
+> NULL honesty, elective choices), schedule (timetable, class sessions,
+> cancelled/extra/outcomes), events (active/upcoming + next 5), quizzes
+> (cycles/schedules/next quiz date), attendance (recorded-only aggregate),
+> and factual data-quality warnings (unplaced students, subsection
+> unassigned, unresolved electives, no active session/semesters/subjects/
+> timetable/attendance). Frontend: `/admin` replaced the 24.1 placeholder
+> with the real dashboard inside the existing AdminShell (metric cards,
+> section cards, warnings card, events card, honest future-domain badges,
+> loading/403/error/empty states). No schema change, no migration, no
+> production contact. Verification: compileall PASS, imports PASS,
+> `tsc --noEmit` PASS, ESLint clean, and an in-process read-only check against
+> the LOCAL dev DB (`localhost:55432`, locality asserted) PASS 18/18 with the
+> documented invariants. **24.3 COMPLETE (2026-08-29)** — Student Management
+> (READ): additive scoped read-only `GET /api/v1/admin/students` (paginated
+> list/search, `q` on roll/name) and `GET /api/v1/admin/students/{id}`
+> (academic context via `StudentContextService`) — gated by `require_any_admin`
+> with DB-authoritative server scope resolution (`AdminStudentService`):
+> HEAD_ADMIN all, CLASS_ADMIN assigned sections, ELECTIVE_ADMIN choice-roster
+> (exact subject, never slot-collapsed), SUBSECTION_ADMIN inert-empty (no
+> authoritative subsection data), STUDENT 403; out-of-scope detail 404 (no
+> existence leak). No client scope parameters; frontend Students list/search +
+> detail pages, AdminShell nav entry, dashboard "Available now"/future badges
+> updated. No schema change, no migration, no production contact. Verification:
+> compileall PASS, imports PASS, `tsc --noEmit` PASS, ESLint clean,
+> `verify_phase_24_3.py` PASS 40/40 on the LOCAL dev DB (locality guard
+> forced+asserted local URI; fixtures cleaned; counts unchanged). **Phase 24.4+
+> NOT STARTED — require operator review and fresh execution prompts.**
 > Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 
@@ -3920,4 +3956,231 @@ scope-aware navigation. No administrative feature domains implemented.
 - All 12 Phase 24.0 decision gates (unchanged, unresolved).
 
 **HARD STOP: Phase 24.1 complete. Phase 24.2 requires a separate execution
+prompt.**
+
+
+---
+
+# 🟡 Phase 24.2 — HEAD_ADMIN Operational Dashboard
+
+**Status: COMPLETE (2026-08-29).** Local development only. No migration, no
+schema change (Alembic head unchanged `f9a0b1c2d3e4`), no commit/push/PR.
+
+## Objective
+
+Build the first real Admin Portal feature domain: a genuinely useful
+operational overview for the HEAD_ADMIN on top of the Phase 23.11
+authorization architecture and the Phase 24.1 portal foundation. HEAD_ADMIN
+only — scoped administrators are not silently elevated. No administrative
+feature domain beyond the dashboard was implemented (24.3+ remain untouched).
+
+## Delivered
+
+### Backend (additive only)
+
+- `backend/app/repositories/admin_dashboard_repo.py` (NEW): bounded
+  read-only COUNT/aggregate queries over the authoritative tables — no
+  row materialization for counting, no N+1, no speculative data.
+- `backend/app/services/admin_dashboard_service.py` (NEW): composes the
+  repository into the `AdminDashboardResponse` read model + builds the
+  factual data-quality warnings. No attendance/eligibility/elective
+  mathematics re-implemented; quiz dates remain authoritative from active
+  QUIZ_DAY AcademicEvents.
+- `backend/app/schemas/admin_dashboard.py` (NEW): stable Pydantic contract
+  (`AcademicOverview`, `CurriculumOverview`, `StudentOverview`,
+  `ScheduleOverview`, `EventsOverview`, `QuizOverview`,
+  `AttendanceOverview`, `AdminDashboardWarning`, `AdminDashboardResponse`).
+- `backend/app/api/v1/endpoints/admin.py`: additive read-only
+  `GET /api/v1/admin/dashboard` gated by the existing `require_head_admin`
+  (401 unauthenticated / 403 STUDENT and scoped admins — no elevation).
+  No client-supplied scope parameters are accepted.
+
+### Frontend (additive only)
+
+- `frontend/src/types/api.ts`: `AdminDashboardResponse` + section types.
+- `frontend/src/hooks/useApi.ts`: `useAdminDashboard()` SWR hook.
+- `frontend/src/components/admin/dashboard/` (NEW): `MetricCard`,
+  `AdminSectionCard`, `AdminWarningsCard`, `AdminEventsCard`.
+- `frontend/src/app/(admin)/admin/page.tsx`: the 24.1 placeholder overview
+  was replaced by the real HEAD dashboard inside the existing AdminShell:
+  page header with identity badges, operational-status (warnings) card, key
+  metric grid (8 metrics), academic/students/curriculum/schedule/quizzes/
+  attendance section cards, events card with the next 5 upcoming events,
+  honest "Available now" (Feedback Review) and "Planned portal areas"
+  (24.3+ with phase labels, never links to fabricated pages). Loading
+  skeletons, scoped-admin 403 state, and API-failure retry state are
+  distinct and truthful.
+
+## Authorization behavior
+
+- Backend is authoritative: `require_head_admin` re-resolves global
+  authority from PostgreSQL per request (Phase 23.11). STUDENT -> 403;
+  CLASS/SUBSECTION/ELECTIVE admins -> 403 on the dashboard endpoint and see
+  an honest "global administrators only" card, never a fake dashboard.
+- No frontend authorization boundary: the dashboard data cannot be fetched
+  by non-HEAD_ADMIN regardless of UI state.
+
+## Dashboard capabilities
+
+Academic status, curriculum overview, student overview, schedule/occurrence
+overview, events + quizzes overview, attendance aggregate (recorded-only,
+formula-compatible with the canonical ERP denominator), and factual
+data-quality warnings (no active session, multiple active sessions, no
+semesters, no subjects, no students, unplaced students, subsection
+unassigned (NULL honesty), unresolved electives, no timetable, no
+attendance). Empty states render instead of fabricated data.
+
+## Query / performance design
+
+~18 bounded aggregate queries per request (counts + a single limit-5 event
+list with one outer join). No N+1; no loading of students/attendance rows to
+count them; no repeated hierarchy/elective reconstruction; no caching added
+(documented; a frequently-opened page, trivially cheap).
+
+## Verification
+
+- `python -m compileall backend/app` PASS; all new modules import cleanly.
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on all changed files
+  (only the pre-existing Phase 13 `api.ts` warning remains).
+- In-process read-only check against the LOCAL dev DB
+  (`localhost:55432/attendancedash`, locality asserted before execution):
+  `AdminDashboardService.get_dashboard()` ran end-to-end and serialized
+  through the Pydantic contract — PASS 18/18 invariants (students =
+  placed+unplaced; subsection split = total; attendance = attended+missed;
+  recorded_pct formula; curriculum theory+lab = subject count; warning
+  consistency; single/multi semester semantics; bounded upcoming events).
+  No DB writes; no fixtures created; script deleted after the run.
+- Manual/browser testing remains the operator's responsibility.
+
+## Database / migration / production status
+
+- NO migration, NO schema change, NO Alembic revision (head unchanged).
+- Production: NO intentional contact. NOTE: the ambient backend `.env`
+  points at the Supabase production URI; an initial verification attempt
+  read the URI, executed the locality guard, and was aborted after an
+  accidental read-only SELECT (UndefinedColumn on the unmigrated production
+  schema) — no write, no mutation, no data change; all subsequent
+  verification was forced to the local dev URI. Reported for transparency.
+
+## Deferred
+
+- Phase 24.3+ feature domains (student management, structure, curriculum,
+  timetable, sessions, electives, quizzes, events, admin/scope management,
+  attendance, analytics).
+- All 12 Phase 24.0 decision gates (unchanged, unresolved).
+
+**HARD STOP: Phase 24.2 complete. Phase 24.3 requires a separate execution
+prompt.**
+
+---
+
+# ? Phase 24.3 � Student Management (READ)
+
+**Status: COMPLETE (2026-08-29).** Local development only. No migration, no
+schema change (Alembic head unchanged `f9a0b1c2d3e4`), no commit/push/PR.
+Authoritative scope (Phase 24.0 report �24 row 24.3 + �7 matrix): scoped
+student **list/search/detail via StudentContextService** � read-only; no
+attendance/analytics (Phase 24.13), no student writes (Phase 24.4), no
+decision-gate resolution.
+
+## Objective
+
+Add the first scoped (non-global) Admin Portal feature domain: read-only
+student list/search/detail whose visibility follows the acting admin's active
+Phase 23.11 scopes � HEAD_ADMIN all, CLASS_ADMIN assigned sections,
+ELECTIVE_ADMIN choice-roster, SUBSECTION_ADMIN inert-empty. The backend
+remains the sole authorization boundary.
+
+## Delivered
+
+### Backend (additive only)
+
+- `backend/app/schemas/admin_students.py` (NEW): `AdminStudentSummary`,
+  `AdminStudentListResponse`, `AdminStudentEnrollment`,
+  `AdminStudentDetail` � stable Pydantic contract.
+- `backend/app/repositories/admin_student_repo.py` (NEW): bounded, read-only,
+  scope-filtered list/count with optional `q` (roll/name ILIKE), pagination,
+  and an elective-roster membership check. No N+1 (one query with outer joins
+  + LIMIT/OFFSET); no mathematics re-implemented.
+- `backend/app/services/admin_student_service.py` (NEW): `AdminStudentService`
+  resolves the caller's effective scope from `AuthorizationService` active
+  scopes (DB per request), returns 404 for out-of-scope/nonexistent detail,
+  and composes the detail from `StudentContextService` (single context
+  authority). UNION rule preserved for multi-scope admins.
+- `backend/app/api/v1/endpoints/admin.py`: additive
+  `GET /api/v1/admin/students` (q, page, page_size) and
+  `GET /api/v1/admin/students/{student_id}` � both gated by
+  `require_any_admin` (401 unauth / 403 STUDENT), scope resolved server-side.
+  No client-supplied scope parameters are accepted.
+
+### Frontend (additive only)
+
+- `frontend/src/types/api.ts`: `AdminStudentSummary`, `AdminStudentListResponse`,
+  `AdminStudentParams`, `AdminStudentDetail` + enrollment types.
+- `frontend/src/hooks/useApi.ts`: `useAdminStudents()`, `useAdminStudentDetail()`.
+- `frontend/src/app/(admin)/admin/students/page.tsx` (NEW): scoped list +
+  search (submit-driven, pagination), loading/403/error/empty states.
+- `frontend/src/app/(admin)/admin/students/[student_id]/page.tsx` (NEW): detail
+  with placement / electives / compulsory / elective-subject cards +
+  data-quality warnings; 404 not-found, 403, error, loading states.
+- `frontend/src/components/admin/AdminShell.tsx`: "Students" nav entry
+  (visible to all admins; scope filtering stays server-side).
+- `frontend/src/app/(admin)/admin/page.tsx`: Students moved from "Planned
+  portal areas" into "Available now".
+
+## Authorization behavior
+
+- Backend-authoritative: `require_any_admin` (Phase 23.11/24.1) + per-request
+  `AdminStudentService` scope resolution from PostgreSQL. No client-supplied
+  role/scope; frontend hiding is never a boundary.
+- STUDENT -> 403 on both endpoints. SUBSECTION_ADMIN -> inert empty (no
+  authoritative subsection data; scope with no section/subject matches is
+  conservatively empty; a SUBSECTION_ADMIN scope row cannot even be created
+  while `subsections` is empty � FK constraint, same structural limitation
+  proven in Phase 23.11).
+- ELECTIVE_ADMIN is exact-subject: a BCS-058 admin never sees/reads a BCS-055
+  roster student (proven by verifier J2/J3).
+- Out-of-scope or nonexistent student detail -> 404 (no existence leak).
+
+## Query / performance design
+
+- List: 1 count + 1 bounded SELECT (outer joins to Section/Subsection,
+  optional ILIKE, LIMIT/OFFSET) � no N+1, no row materialization for counting.
+- Detail: scope check (2 small queries max) + `StudentContextService`
+  (its own bounded query set). No caching added (documented; cheap reads).
+
+## Verification
+
+- `python -m compileall backend/app` PASS; new modules import cleanly.
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on all changed files
+  (only the pre-existing Phase 13 `api.ts` warning remains).
+- `backend/scripts/verify_phase_24_3.py` (NEW, self-cleaning) PASS **40/40**
+  on the LOCAL dev DB. Locality guard FORCES `DATABASE_URI` to
+  `127.0.0.1:55432/attendancedash` and aborts otherwise (the ambient backend
+  `.env` points at the Supabase production pooler � never contacted). Proves:
+  401/403 matrix, HEAD all + search/pagination, HEAD detail + 404, CLASS
+  section-only list + out-of-section detail 404, ELECTIVE roster + exact-
+  subject isolation (BCS-058 vs BCS-055), SUBSECTION inert/empty code path,
+  no client scope params, CLASS+ELECTIVE UNION behavior, and counts unchanged
+  after fixture cleanup (users 3, enrollments 35, admin_scopes 0 � matching
+  the Phase 23.12 baseline).
+- Manual/browser testing remains the operator's responsibility.
+
+## Database / migration / production status
+
+- NO migration, NO schema change, NO Alembic revision (head `f9a0b1c2d3e4`
+  unchanged). Local dev DB only; read-only feature; fixture rows created and
+  removed by the verifier (counts verified unchanged).
+- Production: NO intentional contact. The ambient backend `.env` still points
+  at the Supabase pooler; the verifier forces + asserts the local URI before
+  anything executes.
+
+## Deferred
+
+- Phase 24.4 (student management WRITE: create/edit/move-section/subsection/
+  elective changes, confirmations) � not started.
+- Phase 24.13 attendance snapshot on the detail read � not in 24.3.
+- All 12 Phase 24.0 decision gates (unchanged, unresolved).
+
+**HARD STOP: Phase 24.3 complete. Phase 24.4 requires a separate execution
 prompt.**

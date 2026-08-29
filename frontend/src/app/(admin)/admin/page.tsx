@@ -2,169 +2,252 @@
 
 import Link from "next/link";
 import {
-  BadgeCheck,
-  Clock,
+  AlertCircle,
+  BookOpen,
+  CalendarClock,
+  CalendarDays,
+  ClipboardList,
+  GraduationCap,
+  LayoutGrid,
   MessageSquareText,
+  ShieldAlert,
   ShieldCheck,
+  Users,
 } from "lucide-react";
-import { useAdminMe } from "@/hooks/useApi";
+import { useAdminMe, useAdminDashboard } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdminIdentity, AdminScopeDescriptor } from "@/types/api";
+import { MetricCard } from "@/components/admin/dashboard/MetricCard";
+import { AdminSectionCard, StatRow } from "@/components/admin/dashboard/AdminSectionCard";
+import { AdminWarningsCard } from "@/components/admin/dashboard/AdminWarningsCard";
+import { AdminEventsCard } from "@/components/admin/dashboard/AdminEventsCard";
+import { formatPct, formatShortDate } from "@/lib/date";
+import { AdminDashboardResponse } from "@/types/api";
 
-// Planned portal areas (Phase 24.0 sequence). LISTED AS UNAVAILABLE — these
-// are NOT implemented in Phase 24.1 and no route exists for them; the list is
-// presentation text only and must never imply working functionality.
-const PLANNED_AREAS = [
-  "Dashboard",
-  "Students",
-  "Structure",
-  "Curriculum",
-  "Timetable",
-  "Sessions & Occurrences",
-  "Electives",
-  "Quizzes",
-  "Events",
-  "Admin & Scope Management",
-  "Attendance",
-  "Analytics",
+// Planned portal areas (Phase 24.0 sequence). PRESENTATION ONLY — these are
+// NOT implemented and no route exists; the phase hint is the discovery
+// sequence, never a claim of availability.
+const FUTURE_AREAS: { label: string; phase: string }[] = [
+  { label: "Academic Structure", phase: "Phase 24.5" },
+  { label: "Curriculum", phase: "Phase 24.6" },
+  { label: "Timetable", phase: "Phase 24.7" },
+  { label: "Sessions & Occurrences", phase: "Phase 24.8" },
+  { label: "Quiz Management", phase: "Phase 24.10" },
+  { label: "Events", phase: "Phase 24.11" },
+  { label: "Admin & Scope Management", phase: "Phase 24.12" },
+  { label: "Attendance & Analytics", phase: "Phase 24.13" },
 ] as const;
 
 /**
- * Admin Portal overview (Phase 24.1) — identity/context and truthful shell
- * status only. No administrative feature domain is implemented in this
- * phase. All authorization remains server-side; this page renders the
- * backend-provided identity for context.
+ * HEAD_ADMIN operational dashboard (Phase 24.2) — replaces the Phase 24.1
+ * placeholder overview on /admin. All numbers come from the backend read
+ * model (GET /api/v1/admin/dashboard, require_head_admin). Scoped admins
+ * receive the backend 403 and are shown an honest HEAD-only state — never
+ * elevated to a fake global dashboard.
  */
-export default function AdminOverviewPage() {
-  const { identity, isLoading } = useAdminMe();
+export default function AdminDashboardPage() {
+  const { identity } = useAdminMe();
+  const { dashboard, isLoading, isError, mutate } = useAdminDashboard();
 
   return (
     <div>
       <PageHeader
-        title="Admin Portal"
-        description="Administrative control surface for AttendanceDash Pro."
-      />
+        title="Dashboard"
+        description="Current academic and operational state of AttendanceDash Pro."
+      >
+        {identity && (
+          <div className="flex items-center gap-2">
+            {identity.is_global ? (
+              <Badge variant="primary">Global authority</Badge>
+            ) : (
+              <Badge variant="neutral">Scoped authority</Badge>
+            )}
+            <span className="hidden text-sm text-muted-foreground sm:block">
+              {identity.display_name}
+            </span>
+          </div>
+        )}
+      </PageHeader>
 
-      {isLoading || !identity ? (
-        <div className="space-y-4">
-          <Skeleton className="h-36 w-full rounded-xl" />
-          <Skeleton className="h-28 w-full rounded-xl" />
-        </div>
+      {isLoading || !dashboard ? (
+        <DashboardSkeleton />
+      ) : isError ? (
+        <DashboardErrorState status={(isError as Error & { status?: number }).status} onRetry={() => mutate()} />
       ) : (
-        <div className="space-y-4">
-          <IdentityCard identity={identity} />
-          <AvailabilityCard identity={identity} />
-          <PlannedAreasCard />
-        </div>
+        <DashboardContent dashboard={dashboard} />
       )}
     </div>
   );
 }
 
-function IdentityCard({ identity }: { identity: AdminIdentity }) {
+function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) {
+  const { academic, curriculum, students, schedule, events, quizzes, attendance, warnings } = dashboard;
+
+  const academicRows: StatRow[] = [
+    { label: "Active session", value: academic.active_session ?? "None" },
+    { label: "Semesters in session", value: academic.semester_count },
+    ...(academic.semester_name ? [{ label: "Semester", value: academic.semester_name }] : []),
+    { label: "Sections", value: academic.section_count },
+    { label: "Programs", value: academic.program_count },
+    { label: "Subjects", value: academic.subject_count },
+    { label: "Students", value: academic.student_count },
+  ];
+
+  const curriculumRows: StatRow[] = [
+    { label: "Theory subjects", value: curriculum.theory_subjects },
+    { label: "Lab subjects", value: curriculum.lab_subjects },
+    { label: "Elective-I catalog", value: curriculum.elective_i_subjects },
+    { label: "Elective-II catalog", value: curriculum.elective_ii_subjects },
+    { label: "Compulsory enrollments", value: curriculum.compulsory_enrollments },
+    { label: "Elective enrollments", value: curriculum.elective_enrollments },
+  ];
+
+  const studentRows: StatRow[] = [
+    { label: "Total students", value: students.total },
+    { label: "Placed (section assigned)", value: students.placed },
+    { label: "Unplaced", value: students.unplaced },
+    { label: "Subsection assigned", value: students.subsection_assigned },
+    { label: "Subsection unassigned", value: students.subsection_unassigned },
+    { label: "Students with elective choices", value: students.elective_choice_holders },
+    { label: "Elective choice rows", value: students.elective_choices_total },
+  ];
+
+  const scheduleRows: StatRow[] = [
+    { label: "Timetable entries", value: schedule.timetable_entry_count },
+    { label: "Class sessions (total)", value: schedule.class_session_total },
+    { label: "Cancelled (anchor)", value: schedule.class_sessions_cancelled },
+    { label: "Extra", value: schedule.class_sessions_extra },
+    { label: "Sessions today", value: schedule.sessions_today },
+    { label: "Upcoming sessions", value: schedule.upcoming_sessions },
+    { label: "Occurrence outcomes", value: schedule.occurrence_outcomes },
+  ];
+
+  const quizRows: StatRow[] = [
+    { label: "Quiz cycles", value: quizzes.cycle_count },
+    { label: "Schedules (total)", value: quizzes.schedule_total },
+    { label: "Scheduled with date", value: quizzes.scheduled_dated },
+    { label: "Unresolved", value: quizzes.unresolved },
+    { label: "Cancelled", value: quizzes.cancelled },
+    {
+      label: "Next quiz date",
+      value: quizzes.next_quiz_date ? formatShortDate(quizzes.next_quiz_date) : "None",
+    },
+  ];
+
+  const attendanceRows: StatRow[] = [
+    { label: "Attendance records", value: attendance.total_records },
+    { label: "Attended", value: attendance.attended },
+    { label: "Missed", value: attendance.missed },
+    { label: "Recorded percentage", value: formatPct(attendance.recorded_pct) },
+    { label: "Participants", value: attendance.participants },
+  ];
+
   return (
-    <GlassCard className="p-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <ShieldCheck className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-base font-semibold text-foreground">
-              {identity.display_name}
-            </p>
-            <p className="font-mono text-xs text-muted-foreground">
-              {identity.roll_number || "No roll number"}
-            </p>
-          </div>
-          {identity.is_global ? (
-            <Badge variant="primary" className="ml-auto">
-              Global authority
-            </Badge>
-          ) : (
-            <Badge variant="neutral" className="ml-auto">
-              Scoped authority
-            </Badge>
-          )}
-        </div>
+    <div className="space-y-4">
+      <AdminWarningsCard warnings={warnings} />
 
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Administrative roles
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {identity.roles.length > 0 ? (
-              identity.roles.map((role) => (
-                <Badge key={role} variant="secondary">
-                  {role}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-sm text-muted-foreground">None</span>
-            )}
-          </div>
-        </div>
-
-        {identity.scopes.length > 0 && (
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Assigned scopes
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {identity.scopes.map((scope, index) => (
-                <ScopeBadge key={index} scope={scope} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {identity.roles.includes("SUBSECTION_ADMIN") && !identity.is_global && (
-          <div className="rounded-lg border border-border bg-muted/40 p-3">
-            <p className="text-sm text-muted-foreground">
-              Subsection administration is not yet operational. Subsection
-              scopes are recognized but carry no active capabilities until
-              subsection-aware scheduling exists.
-            </p>
-          </div>
-        )}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <MetricCard label="Students" value={students.total} icon={Users} />
+        <MetricCard label="Sections" value={academic.section_count} icon={LayoutGrid} />
+        <MetricCard label="Subjects" value={academic.subject_count} icon={BookOpen} />
+        <MetricCard label="Timetable entries" value={schedule.timetable_entry_count} icon={ClipboardList} />
+        <MetricCard label="Class sessions" value={schedule.class_session_total} icon={CalendarDays} />
+        <MetricCard label="Attendance records" value={attendance.total_records} icon={GraduationCap} />
+        <MetricCard label="Active events" value={events.total_active} icon={CalendarClock} />
+        <MetricCard label="Quiz schedules" value={quizzes.schedule_total} icon={CalendarClock} />
       </div>
-    </GlassCard>
-  );
-}
 
-function ScopeBadge({ scope }: { scope: AdminScopeDescriptor }) {
-  let target = "No target resolved";
-  if (scope.role === "CLASS_ADMIN" && scope.section_name) {
-    target = `Section ${scope.section_name}`;
-  } else if (scope.role === "SUBSECTION_ADMIN" && scope.subsection_name) {
-    target = `Subsection ${scope.subsection_name}`;
-  } else if (scope.role === "ELECTIVE_ADMIN" && scope.subject_code) {
-    target = scope.subject_name
-      ? `${scope.subject_code} — ${scope.subject_name}`
-      : scope.subject_code;
-  }
-  return (
-    <Badge variant="outline">
-      {scope.role}: {target}
-    </Badge>
-  );
-}
-
-function AvailabilityCard({ identity }: { identity: AdminIdentity }) {
-  return (
-    <GlassCard className="p-6">
-      <div className="flex items-center gap-2">
-        <BadgeCheck className="size-4 text-primary" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-foreground">
-          Available now
-        </h2>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AdminSectionCard
+          title="Academic status"
+          icon={LayoutGrid}
+          description={
+            academic.active_session
+              ? `${academic.active_session}${
+                  academic.semester_count > 1
+                    ? ` · ${academic.semester_count} semesters`
+                    : academic.semester_name
+                      ? ` · ${academic.semester_name}`
+                      : ""
+                }`
+              : "No active session configured"
+          }
+          rows={academicRows}
+        />
+        <AdminSectionCard
+          title="Students"
+          icon={Users}
+          description="Registered student accounts and assignment status"
+          rows={studentRows}
+        />
+        <AdminSectionCard
+          title="Curriculum"
+          icon={BookOpen}
+          description="Subject catalog and enrollment distribution"
+          rows={curriculumRows}
+        />
+        <AdminSectionCard
+          title="Schedule"
+          icon={ClipboardList}
+          description="Timetable and class-session counts (read-only)"
+          rows={scheduleRows}
+        />
+        <AdminSectionCard
+          title="Quizzes"
+          icon={CalendarClock}
+          description="Quiz cycles and schedule projection status"
+          rows={quizRows}
+        />
+        <AdminSectionCard
+          title="Attendance"
+          icon={GraduationCap}
+          description={
+            attendance.recorded_pct !== null
+              ? `${formatPct(attendance.recorded_pct)} recorded (Attended / Attended + Missed)`
+              : "No recorded attendance yet"
+          }
+          rows={attendanceRows}
+        />
       </div>
-      {identity.is_global ? (
+
+      <AdminEventsCard events={events} />
+
+      <GlassCard className="p-6">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-foreground">
+            Available now
+          </h2>
+        </div>
         <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Users
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Students
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Scoped student list, search and academic context.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/students" />}
+            >
+              Open
+            </Button>
+          </div>
           <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <MessageSquareText
@@ -190,42 +273,92 @@ function AvailabilityCard({ identity }: { identity: AdminIdentity }) {
               Open
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Event, laboratory, and mid-sem administrative controls remain on
-            their existing surfaces and stay server-gated.
-          </p>
         </div>
-      ) : (
-        <p className="mt-3 text-sm text-muted-foreground">
-          No portal feature areas are available to your assigned scopes yet.
-          Your administrative authority is enforced server-side on the
-          existing authorized surfaces.
+      </GlassCard>
+
+      <GlassCard className="p-6">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="size-4 text-muted-foreground" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-foreground">
+            Planned portal areas
+          </h2>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          These administrative domains are planned for later phases and are
+          not available yet. Nothing here links to fabricated pages.
         </p>
-      )}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {FUTURE_AREAS.map((area) => (
+            <Badge key={area.label} variant="neutral" className="gap-1">
+              {area.label}
+              <span className="text-muted-foreground/70">· {area.phase}</span>
+            </Badge>
+          ))}
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+function DashboardErrorState({ status, onRetry }: { status?: number; onRetry: () => void }) {
+  if (status === 403) {
+    return (
+      <GlassCard className="max-w-2xl">
+        <div className="flex flex-col items-center justify-center text-center p-8">
+          <ShieldAlert className="h-10 w-10 text-warning mb-4" />
+          <h1 className="text-lg font-semibold text-foreground">
+            Global administrator dashboard
+          </h1>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md">
+            The operational dashboard is available to global (HEAD_ADMIN)
+            administrators only. Your scoped administrative authority remains
+            enforced server-side on the existing authorized surfaces.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-6"
+            nativeButton={false}
+            render={<Link href="/dashboard" />}
+          >
+            Go to student app
+          </Button>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+      <div className="flex flex-col items-center justify-center text-center p-8">
+        <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
+        <h1 className="text-lg font-semibold text-red-400">
+          Could not load the dashboard
+        </h1>
+        <p className="text-sm text-red-400/80 mt-2 max-w-md">
+          The server could not provide the administrative dashboard.
+        </p>
+        <Button variant="outline" size="sm" className="mt-6" onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
     </GlassCard>
   );
 }
 
-function PlannedAreasCard() {
+function DashboardSkeleton() {
   return (
-    <GlassCard className="p-6">
-      <div className="flex items-center gap-2">
-        <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-foreground">
-          Coming in later phases
-        </h2>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        The following administrative areas are planned for later phases of the
-        Admin Portal and are not available yet.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {PLANNED_AREAS.map((area) => (
-          <Badge key={area} variant="neutral">
-            {area}
-          </Badge>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
-    </GlassCard>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-64 rounded-xl" />
+        ))}
+      </div>
+    </div>
   );
 }

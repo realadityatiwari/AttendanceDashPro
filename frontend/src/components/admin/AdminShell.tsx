@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   ShieldCheck,
   LayoutDashboard,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +20,7 @@ import { AdminIdentity } from "@/types/api";
 
 const ADMIN_NAV_ITEMS = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard, globalOnly: false },
+  { label: "Students", href: "/admin/students", icon: Users, globalOnly: false },
   // Existing admin surface (GET /api/v1/feedback/admin is require_head_admin-
   // gated server-side). Shown for global administrators only — presentation
   // filtering; the backend remains the boundary.

@@ -33,7 +33,11 @@ import {
   NotificationUpdate,
   FeedbackAdminListResponse,
   AdminFeedbackParams,
-  AdminIdentity
+  AdminIdentity,
+  AdminDashboardResponse,
+  AdminStudentListResponse,
+  AdminStudentDetail,
+  AdminStudentParams
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -468,4 +472,40 @@ export function useAdminFeedback(params: AdminFeedbackParams = {}) {
 export function useAdminMe() {
   const { data, error, isLoading, mutate } = useSWR<AdminIdentity>('/api/v1/admin/me', fetcher, STANDARD_CACHE);
   return { identity: data, isLoading, isError: error, mutate };
+}
+
+// Phase 24.2 HEAD_ADMIN dashboard (GET /api/v1/admin/dashboard). Read-only
+// operational overview; require_head_admin server-side — scoped admins
+// receive 403 (isError.status === 403) and are never silently elevated.
+export function useAdminDashboard() {
+  const { data, error, isLoading, mutate } = useSWR<AdminDashboardResponse>('/api/v1/admin/dashboard', fetcher, STANDARD_CACHE);
+  return { dashboard: data, isLoading, isError: error, mutate };
+}
+
+// Phase 24.3 scoped student list/search (GET /api/v1/admin/students).
+// Read-only. Scope is resolved server-side from the acting admin's active
+// scopes (HEAD all / CLASS assigned sections / ELECTIVE choice-roster /
+// SUBSECTION inert-empty); the frontend never supplies a scope parameter.
+// One logical SWR key per (q, page, page_size) combination.
+export function useAdminStudents(params: AdminStudentParams = {}) {
+  const query = new URLSearchParams();
+  if (params.q && params.q.trim()) query.set("q", params.q.trim());
+  if (params.page && params.page > 1) query.set("page", String(params.page));
+  if (params.page_size && params.page_size !== 20) query.set("page_size", String(params.page_size));
+  const qs = query.toString();
+  const key = qs ? `/api/v1/admin/students?${qs}` : "/api/v1/admin/students";
+  const { data, error, isLoading, mutate } = useSWR<AdminStudentListResponse>(key, fetcher, STANDARD_CACHE);
+  return { students: data, isLoading, isError: error, mutate };
+}
+
+// Phase 24.3 scoped student detail (GET /api/v1/admin/students/{id}).
+// Read-only academic context; out-of-scope or nonexistent students return 404
+// (surfaced through isError with the preserved status).
+export function useAdminStudentDetail(studentId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<AdminStudentDetail>(
+    studentId ? `/api/v1/admin/students/${studentId}` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { student: data, isLoading, isError: error, mutate };
 }

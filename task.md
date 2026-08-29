@@ -2052,29 +2052,29 @@ The core findings were accepted. Ten corrections were applied to the blueprint. 
 
 ---
 
-## PHASE 23.1 — ACADEMIC HIERARCHY & ENROLLMENT SCHEMA FOUNDATION (COMPLETE, 2026-08-27)
+## PHASE 23.1 ï¿½ ACADEMIC HIERARCHY & ENROLLMENT SCHEMA FOUNDATION (COMPLETE, 2026-08-27)
 
-Status: **COMPLETE — schema/data-model foundation only.** Migration `c8d9e0f1a2b3`. No consumer/engine/registration/UI/admin wiring. No commit, no push, no PR.
+Status: **COMPLETE ï¿½ schema/data-model foundation only.** Migration `c8d9e0f1a2b3`. No consumer/engine/registration/UI/admin wiring. No commit, no push, no PR.
 
 ## Objective
 
-Establish the minimum correct database/domain foundation required for later Phase 23 work: `subsections` entity, nullable `users.subsection_id`, `sections` composite-unique name, `student_enrollments` uniqueness constraint. Resolve the four decision gates (AcademicSession, Branch parentage, enrollment uniqueness, subsection semantics) from repository evidence. Schema/data-model foundation ONLY — no behavioral wiring.
+Establish the minimum correct database/domain foundation required for later Phase 23 work: `subsections` entity, nullable `users.subsection_id`, `sections` composite-unique name, `student_enrollments` uniqueness constraint. Resolve the four decision gates (AcademicSession, Branch parentage, enrollment uniqueness, subsection semantics) from repository evidence. Schema/data-model foundation ONLY ï¿½ no behavioral wiring.
 
 ## Delivered
 
-- [x] Decision gate: AcademicSession = academic-year entity — **CONFIRMED** (name "2026-27", start/end, is_active; `Semester.session_id` FK). No second entity.
-- [x] Decision gate: Branch parentage — **REMAINS UNRESOLVED** (no Branch entity; `Section.program` string only). No `branches` table created. Gate preserved.
-- [x] Decision gate: Section/program semantics — **CONFIRMED** (preserved; names now unique per semester, not globally).
-- [x] Decision gate: Enrollment uniqueness — **CONFIRMED** `UNIQUE(user_id, subject_id)` (subject_id is semester-scoped, so multi-semester history coexists).
-- [x] Decision gate: Subsection semantics — **CONFIRMED NULL-preserving** (no fabrication, no auto-assignment; `subsection_id` NULL = UNKNOWN/UNASSIGNED).
-- [x] `Subsection` model + `subsections` table (id, name, section_id FK, max_strength nullable, `UNIQUE(section_id, name)`) — no rows created.
+- [x] Decision gate: AcademicSession = academic-year entity ï¿½ **CONFIRMED** (name "2026-27", start/end, is_active; `Semester.session_id` FK). No second entity.
+- [x] Decision gate: Branch parentage ï¿½ **REMAINS UNRESOLVED** (no Branch entity; `Section.program` string only). No `branches` table created. Gate preserved.
+- [x] Decision gate: Section/program semantics ï¿½ **CONFIRMED** (preserved; names now unique per semester, not globally).
+- [x] Decision gate: Enrollment uniqueness ï¿½ **CONFIRMED** `UNIQUE(user_id, subject_id)` (subject_id is semester-scoped, so multi-semester history coexists).
+- [x] Decision gate: Subsection semantics ï¿½ **CONFIRMED NULL-preserving** (no fabrication, no auto-assignment; `subsection_id` NULL = UNKNOWN/UNASSIGNED).
+- [x] `Subsection` model + `subsections` table (id, name, section_id FK, max_strength nullable, `UNIQUE(section_id, name)`) ï¿½ no rows created.
 - [x] `users.subsection_id` (nullable FK, no backfill)
 - [x] `sections.name` global-unique ? composite `UNIQUE(semester_id, name)` (guarded)
 - [x] `student_enrollments` `UNIQUE(user_id, subject_id)` (guarded)
 - [x] Migration `c8d9e0f1a2b3` (chain: `b7c8d9e0f1a2` ? `c8d9e0f1a2b3`); offline SQL upgrade/downgrade verified
 - [x] Governance documents updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 
-## Not in this phase (HARD STOP — 23.1 boundary)
+## Not in this phase (HARD STOP ï¿½ 23.1 boundary)
 
 - [ ] NO `timetable_entries.subsection_id` / `class_sessions.subsection_id` (23.3)
 - [ ] NO occurrence/outcome model / event-scope enum (23.4/23.7)
@@ -2102,21 +2102,21 @@ Establish the minimum correct database/domain foundation required for later Phas
 
 ---
 
-## PHASE 23.2 — CURRICULUM MODEL DISCOVERY (COMPLETE — READ-ONLY, 2026-08-27)
+## PHASE 23.2 ï¿½ CURRICULUM MODEL DISCOVERY (COMPLETE ï¿½ READ-ONLY, 2026-08-27)
 
-Status: **DISCOVERY COMPLETE — READ-ONLY.** No code, no schema, no migration, no seed, no frontend, no auth, no database changes. No commit, no push, no PR. Authoritative report: `docs/phase_23/phase_23_2_curriculum_discovery.md`.
+Status: **DISCOVERY COMPLETE ï¿½ READ-ONLY.** No code, no schema, no migration, no seed, no frontend, no auth, no database changes. No commit, no push, no PR. Authoritative report: `docs/phase_23/phase_23_2_curriculum_discovery.md`.
 
 > **Note (governance reconciliation):** per operator directive 2026-08-27, Phase
 > 23.2 is scoped to the **curriculum/subject model**. This supersedes the earlier
-> Phase 23.0 blueprint label "23.2 — Student academic context" (that work is
+> Phase 23.0 blueprint label "23.2 ï¿½ Student academic context" (that work is
 > re-scoped as later Phase 23 work). The authoritative Phase 23 sequence is
 > otherwise unchanged.
 
 ## Objective
 
-Establish the authoritative curriculum/subject model required for the later Phase 23 architecture — before any implementation is authorized.
+Establish the authoritative curriculum/subject model required for the later Phase 23 architecture ï¿½ before any implementation is authorized.
 
-## Delivered (discovery only — no implementation)
+## Delivered (discovery only ï¿½ no implementation)
 
 - [x] Read-only audit of Subject model (columns, types, FKs, relationships, indexes, constraints, enums)
 - [x] Subject type audit: `SubjectCategory` = THEORY/LAB only; no NON_CREDIT/ELECTIVE/CORE values
@@ -2131,10 +2131,10 @@ Establish the authoritative curriculum/subject model required for the later Phas
 
 ## Key findings
 
-1. `Subject.code` is indexed but NOT unique. `UNIQUE(code, semester_id)` is missing — accidental duplicate insertion within a semester is possible (seed-script guard only).
-2. Elective catalog is duplicated across code constants, `subjects.tag`, and `elective_slot` markers — they agree today but could diverge (Phase 23.5 concern).
+1. `Subject.code` is indexed but NOT unique. `UNIQUE(code, semester_id)` is missing ï¿½ accidental duplicate insertion within a semester is possible (seed-script guard only).
+2. Elective catalog is duplicated across code constants, `subjects.tag`, and `elective_slot` markers ï¿½ they agree today but could diverge (Phase 23.5 concern).
 3. No non-credit distinction: BNC-501 (non-credit in CTT) is identical to every other theory subject.
-4. `get_by_code(code)` returns the first match regardless of semester — latent defect that activates with multi-semester data.
+4. `get_by_code(code)` returns the first match regardless of semester ï¿½ latent defect that activates with multi-semester data.
 5. Historical data safety is largely provided by the current schema (permanent FK chains), but no curriculum versioning / cross-semester subject identity exists.
 
 ## Not in this phase (HARD STOP)
@@ -2151,7 +2151,7 @@ Establish the authoritative curriculum/subject model required for the later Phas
 - Read-only repository inspection only; zero application/schema/seed/frontend files modified
 - DB untouched; git working tree clean before and after
 - New file: `docs/phase_23/phase_23_2_curriculum_discovery.md`
-- Governance: this file, MASTER_ROADMAP.md, implementation_plan.md, walkthrough.md — Phase 23.2 recorded as discovery only (implementation NOT started; not marked COMPLETE)
+- Governance: this file, MASTER_ROADMAP.md, implementation_plan.md, walkthrough.md ï¿½ Phase 23.2 recorded as discovery only (implementation NOT started; not marked COMPLETE)
 
 ## Do Not Touch Again
 
@@ -2201,7 +2201,7 @@ Implement the single confirmed REQUIRED change from the Phase 23.2 discovery: ad
 
 - Phase 23.2 schema hardening is complete. Do not reopen for further curriculum changes.
 - Phase 23.2 discovery report + correction matrix remains authoritative for the curriculum context.
-- Phase 23.3 (Student Academic Assignment) is COMPLETE (2026-08-28) — see below. Timetable + subsection scheduling (the slice the 23.0 blueprint had labeled "23.3") is re-scoped to later Phase 23 timetable redesign.
+- Phase 23.3 (Student Academic Assignment) is COMPLETE (2026-08-28) ï¿½ see below. Timetable + subsection scheduling (the slice the 23.0 blueprint had labeled "23.3") is re-scoped to later Phase 23 timetable redesign.
 
 ## PHASE 23.3 - STUDENT ACADEMIC ASSIGNMENT (COMPLETE, 2026-08-28)
 
@@ -2306,11 +2306,11 @@ Status: **COMPLETE - catalog normalized into the database.** Migration `f5a6b7c8
 
 ## Objective
 
-Normalize the elective/catalog domain only — make the catalog the authoritative source of what can be selected — without redesigning downstream systems, reopening 23.4, or creating a second elective resolver.
+Normalize the elective/catalog domain only ï¿½ make the catalog the authoritative source of what can be selected ï¿½ without redesigning downstream systems, reopening 23.4, or creating a second elective resolver.
 
 ## Delivered
 
-- [x] `app/models/academic.py`: `Subject.elective_slot` (nullable `electiveslot` enum) — the authoritative DB-backed catalog marker
+- [x] `app/models/academic.py`: `Subject.elective_slot` (nullable `electiveslot` enum) ï¿½ the authoritative DB-backed catalog marker
 - [x] Migration `f5a6b7c8d9e0` (parent `e3f4a5b6c7d8`): `ADD COLUMN` + deterministic backfill from `tag` ('Elective-I'?ELECTIVE_I, 'Elective-II'?ELECTIVE_II); downgrade `DROP COLUMN`
 - [x] `app/services/elective_resolver.py`: DB-driven catalog (`catalog_codes()`, `slot_for_code()`, `validate_selection()` async); removed hardcoded `ELECTIVE_I_CODES`/`ELECTIVE_II_CODES`/`SLOT_CODES`/`ALL_ELECTIVE_CODES` and module-level sync functions; `ANCHOR_CODES` retained (schedule anchors); per-student API unchanged
 - [x] Registration (`auth.py`): elective validation moved from Pydantic validators to async endpoint against the DB catalog (422 preserved); enrollment loop uses `subject.elective_slot` (not `tag`)
@@ -2415,7 +2415,7 @@ Represent event scope correctly when an event applies to a concrete subject with
 - [x] `attendance_repo.py`: `_apply_outcome_to_row` only sets is_extra for EXTRA_*/SURPRISE_QUIZ; MODIFIED changes no flag
 - [x] Frontend `types/api.ts` + `eventRules.ts`: additive CLASS_MODIFIED contract sync
 - [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS; alembic single head `f7a8b9c0d1e2`
-- [x] In-process simulations: CLASS_MODIFIED elective/non-elective with session ? MODIFIED outcome; no session ? no-op; 23.6 SURPRISE_QUIZ unchanged; EVENT_TO_OUTCOME_TYPE mapping; row flag behavior — ALL PASS
+- [x] In-process simulations: CLASS_MODIFIED elective/non-elective with session ? MODIFIED outcome; no session ? no-op; 23.6 SURPRISE_QUIZ unchanged; EVENT_TO_OUTCOME_TYPE mapping; row flag behavior ï¿½ ALL PASS
 - [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 
 ## Not in this phase (HARD SCOPE)
@@ -2432,7 +2432,7 @@ Represent event scope correctly when an event applies to a concrete subject with
 - `compileall` (app + alembic + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head)
 - Offline upgrade SQL PASS (ALTER TYPE ADD VALUE)
 - Frontend `npx tsc --noEmit` PASS
-- Simulations: CLASS_MODIFIED elective + non-elective ? MODIFIED outcome; no session ? no-op; 23.6 intact; row flag behavior — ALL PASS
+- Simulations: CLASS_MODIFIED elective + non-elective ? MODIFIED outcome; no session ? no-op; 23.6 intact; row flag behavior ï¿½ ALL PASS
 - **Migration NOT applied to any DB by the agent** - production pooler, Docker down. Operator applies on dev DB; production only when separately authorized. Production DB NOT touched.
 - Git: working tree contains 23.7 changes; no commit, no push, no PR
 
@@ -2449,7 +2449,7 @@ Status: **COMPLETE - MODIFIED is occurrence metadata for the quiz pipeline.** No
 
 ## Objective
 
-Keep quiz reality correct when a concrete subject's scheduled occurrence is modified — no quiz rebuild, no eligibility-engine change, no leakage to other subjects, no frontend quiz calculations.
+Keep quiz reality correct when a concrete subject's scheduled occurrence is modified ï¿½ no quiz rebuild, no eligibility-engine change, no leakage to other subjects, no frontend quiz calculations.
 
 ## Delivered
 
@@ -2458,7 +2458,7 @@ Keep quiz reality correct when a concrete subject's scheduled occurrence is modi
 - [x] Integration fix: `event_session_service.py` CLASS_MODIFIED branch no longer overwrites a CANCELLED desired outcome (cancellation wins over modification)
 - [x] `verify_phase_23_8.py` (NEW, DB-based, self-cleaning, operator-run): outcome isolation (BCS-058 vs BCS-055/056), read-path isolation per student, eligibility invariance, no-op without a session, idempotency, CANCELLED-wins, deactivation reversal, attendance safety
 - [x] Backend `compileall` PASS; frontend `npx tsc --noEmit` PASS (no frontend change); alembic head unchanged `f7a8b9c0d1e2`
-- [x] In-process checks: CANCELLED-wins fix; MODIFIED alone ? MODIFIED; no leakage; MODIFIED counts as conducted; SURPRISE_QUIZ/EXTRA/CANCELLED regression; QUIZ_DAY source uncoupled from outcomes — ALL PASS
+- [x] In-process checks: CANCELLED-wins fix; MODIFIED alone ? MODIFIED; no leakage; MODIFIED counts as conducted; SURPRISE_QUIZ/EXTRA/CANCELLED regression; QUIZ_DAY source uncoupled from outcomes ï¿½ ALL PASS
 - [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
 
 ## Not in this phase (HARD SCOPE)
@@ -2473,7 +2473,7 @@ Keep quiz reality correct when a concrete subject's scheduled occurrence is modi
 
 - `compileall` (app + alembic + scripts) PASS; alembic head `f7a8b9c0d1e2` (single head, no new migration)
 - Frontend `npx tsc --noEmit` PASS
-- In-process logic checks — ALL PASS (see Delivered)
+- In-process logic checks ï¿½ ALL PASS (see Delivered)
 - `verify_phase_23_8.py` written for the operator to run on the dev DB (self-cleaning)
 - **Production DB NOT touched.** No migration applied.
 - Git: working tree contains 23.8 changes; no commit, no push, no PR
@@ -2486,7 +2486,7 @@ Keep quiz reality correct when a concrete subject's scheduled occurrence is modi
 
 ## PHASE 23.9 - ATTENDANCE MUTATION GATE (COMPLETE / VERIFIED, 2026-08-29)
 
-Status: **COMPLETE / VERIFIED - outcome-aware attendance mutation safety.** No Phase 23.9 migration (discovery proved none necessary). Alembic head `f8a9b0c1d2e3` (the corrective Phase 23.7 migration `f8a9b0c1d2e3` adds `eventtype.CLASS_MODIFIED`; applied to the local dev DB only). **Git state (corrected after independent review):** committed and pushed — commit `d705034` on `main`, up to date with `origin/main`. The Phase 23.8 content (the `event_session_service.py` CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content, not 23.9 implementation, and history was not rewritten. **Live `verify_phase_23_9.py` PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29).
+Status: **COMPLETE / VERIFIED - outcome-aware attendance mutation safety.** No Phase 23.9 migration (discovery proved none necessary). Alembic head `f8a9b0c1d2e3` (the corrective Phase 23.7 migration `f8a9b0c1d2e3` adds `eventtype.CLASS_MODIFIED`; applied to the local dev DB only). **Git state (corrected after independent review):** committed and pushed ï¿½ commit `d705034` on `main`, up to date with `origin/main`. The Phase 23.8 content (the `event_session_service.py` CANCELLED-wins fix and `verify_phase_23_8.py`) was committed/pushed together with the Phase 23.9 work in the same commit `d705034`; it is Phase 23.8 content, not 23.9 implementation, and history was not rewritten. **Live `verify_phase_23_9.py` PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29).
 
 > Scope note: this execution prompt hardens the canonical attendance mutation path so attendance records cannot be created/modified in a way that contradicts the canonical session/occurrence outcome. It is NOT a change to attendance mathematics, quiz eligibility, calendar, or event-session synchronization semantics. Phase 23.9 was re-scoped by operator directive from the original blueprint label "Admin authorization foundation" to the attendance mutation gate.
 
@@ -2528,10 +2528,10 @@ Ensure the mutation endpoint (`POST /api/v1/attendance`) respects the canonical 
 - `compileall` (app + scripts) PASS; alembic head `f8a9b0c1d2e3` (single head; corrective Phase 23.7 migration applied locally)
 - Frontend `npx tsc --noEmit` PASS (no frontend change)
 - In-process import + logic checks PASS (gate branch, elective isolation key, error semantics 409/403/404/400 preserved)
-- `verify_phase_23_9.py` **PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29) — normal / MODIFIED / CANCELLED / elective isolation / MODIFIED isolation / duplicate-single-record / historical attendance safety / deactivation-reversal / idempotency / authorization / attendance safety
+- `verify_phase_23_9.py` **PASS 26/26** against `127.0.0.1:55432/attendancedash` (2026-08-29) ï¿½ normal / MODIFIED / CANCELLED / elective isolation / MODIFIED isolation / duplicate-single-record / historical attendance safety / deactivation-reversal / idempotency / authorization / attendance safety
 - **Production DB NOT touched.** No production migration applied. Local/dev DB mutation limited to verifier fixtures (cleaned by the verifier's finally block).
-- Independent review: **PASS (safe to freeze); live DB verifier PASS 26/26.** Non-blocking coverage observations: EXTRA-outcome-allowed and future-date-400 are not explicitly exercised by the verifier (code paths trivially correct / unchanged); the verifier also has a pre-existing `check()` argument-order bug (name/ok swapped) that makes the section-9 admin check always report PASS — the Phase 23.9 gate is independently verified by sections 1-8. No verifier changes made.
-- Git (corrected after review): Phase 23.9 work committed + pushed — `d705034` on `main`, up to date with `origin/main`; Phase 23.8 content (CANCELLED-wins fix + `verify_phase_23_8.py`) is inside the same commit.
+- Independent review: **PASS (safe to freeze); live DB verifier PASS 26/26.** Non-blocking coverage observations: EXTRA-outcome-allowed and future-date-400 are not explicitly exercised by the verifier (code paths trivially correct / unchanged); the verifier also has a pre-existing `check()` argument-order bug (name/ok swapped) that makes the section-9 admin check always report PASS ï¿½ the Phase 23.9 gate is independently verified by sections 1-8. No verifier changes made.
+- Git (corrected after review): Phase 23.9 work committed + pushed ï¿½ `d705034` on `main`, up to date with `origin/main`; Phase 23.8 content (CANCELLED-wins fix + `verify_phase_23_8.py`) is inside the same commit.
 
 ## Do Not Touch Again
 
@@ -2550,7 +2550,7 @@ Provide the backend a coherent student-specific interpretation of schedule reali
 
 ## Delivered
 
-- [x] Discovery audit of all student-facing surfaces (/student/me, timetable, subjects, Track, history, calendar, events, quiz schedule, quiz eligibility, dashboard, notifications, analytics) — all confirmed on the canonical architecture
+- [x] Discovery audit of all student-facing surfaces (/student/me, timetable, subjects, Track, history, calendar, events, quiz schedule, quiz eligibility, dashboard, notifications, analytics) ï¿½ all confirmed on the canonical architecture
 - [x] `attendance_repo.py`: `ClassSession.elective_slot` added to SELECT of `get_sessions_with_status`, `get_daily_sessions`, `_fetch_history_occurrences`
 - [x] `schemas/attendance.py`: `outcome_type` + `elective_slot` (additive optional) on `DailySessionResponse` and `AttendanceHistoryItem`
 - [x] `attendance_service.py`: pass-through in `get_daily_sessions` and `get_history`
@@ -2768,3 +2768,103 @@ scopes -> authorization-aware shell -> scope-aware navigation. No feature domain
 ## Do Not Touch Again
 - Phase 24.1 is the portal foundation; Phase 24.2+ requires a fresh execution prompt
 - `/admin/me` + `require_any_admin` are additive Phase 23.11 consumers - extend, never replace, `AuthorizationService`
+
+---
+
+## PHASE 24.2 - HEAD_ADMIN OPERATIONAL DASHBOARD (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - local development only.** No migration, no schema change
+(head unchanged `f9a0b1c2d3e4`), no production contact. No commit, no push, no PR.
+
+## Objective
+
+First real Admin Portal feature domain: an operational overview for the
+HEAD_ADMIN only, built on the Phase 23.11 authorization architecture and the
+Phase 24.1 portal foundation. No 24.3+ feature domains.
+
+## Delivered
+
+### Backend (additive)
+- [x] `app/repositories/admin_dashboard_repo.py` (NEW): bounded read-only COUNT/aggregate queries over the authoritative tables
+- [x] `app/services/admin_dashboard_service.py` (NEW): read-model composition + factual data-quality warnings; no attendance/eligibility/elective math re-implemented; quiz dates from active QUIZ_DAY events
+- [x] `app/schemas/admin_dashboard.py` (NEW): stable Pydantic contract (academic/curriculum/students/schedule/events/quizzes/attendance/warnings)
+- [x] `GET /api/v1/admin/dashboard` (`app/api/v1/endpoints/admin.py`): read-only, `require_head_admin` (STUDENT/scoped -> 403, no elevation), no client scope params
+- [x] No direct DB access from the endpoint; no N+1; no caching added
+
+### Frontend (additive)
+- [x] `types/api.ts`: `AdminDashboardResponse` + section types
+- [x] `hooks/useApi.ts`: `useAdminDashboard()` SWR hook
+- [x] `components/admin/dashboard/` (NEW): MetricCard, AdminSectionCard, AdminWarningsCard, AdminEventsCard
+- [x] `/admin` page: real HEAD dashboard inside the existing AdminShell (header + identity badges, warnings card, 8-metric grid, six section cards, events card, honest Available now / Planned portal areas, loading/403/error/empty states)
+- [x] Scoped admins: honest "global administrators only" card on 403 (never elevated)
+- [x] Student shell/routes/frozen primitives: UNCHANGED
+
+## Hard scope (respected)
+- [x] NO schema change / migration / production interaction
+- [x] NO second authorization system; backend remains the boundary; no client scope params
+- [x] NO speculative data model (no subsection/branch/deactivation/audit/room-faculty inventions)
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+- [x] NO fabricated subsection semantics; NULL subsection labeled UNKNOWN/UNASSIGNED
+- [x] NO fake future-domain pages (planned areas are badges with phase labels only)
+
+## Validation
+- `python -m compileall backend/app` PASS; new modules import cleanly
+- `npx tsc --noEmit` PASS (0 errors); ESLint clean on changed files
+- In-process read-only check against the LOCAL dev DB (`localhost:55432/attendancedash`, locality asserted before execution): `get_dashboard()` end-to-end + Pydantic serialization + 18/18 invariants PASS; no writes; script deleted after run
+- No browser/E2E/regression runs (operator tests manually, per phase boundary)
+
+## Do Not Touch Again
+- Phase 24.2 is the HEAD dashboard foundation; Phase 24.3+ requires a fresh execution prompt
+- `AdminDashboardService/Repository` are read-only consumers - never mutate schedule/session/event/quiz state from them
+
+## PHASE 24.3 - STUDENT MANAGEMENT (READ) (COMPLETE, 2026-08-29)
+
+Status: **COMPLETE - local development only.** No migration, no schema change
+(head unchanged `f9a0b1c2d3e4`), no production contact. No commit, no push, no PR.
+
+## Objective
+
+First SCOPED Admin Portal feature domain: read-only student list/search/detail
+whose visibility follows the acting admin's active Phase 23.11 scopes (HEAD
+all, CLASS assigned sections, ELECTIVE choice-roster, SUBSECTION inert-empty).
+Authoritative scope per Phase 24.0 report Â§24 row 24.3: scoped student
+list/search/detail via `StudentContextService`. No attendance/analytics
+(24.13), no student writes (24.4), no decision-gate resolution.
+
+## Delivered
+
+### Backend (additive)
+- [x] `app/schemas/admin_students.py` (NEW): `AdminStudentSummary`, `AdminStudentListResponse`, `AdminStudentEnrollment`, `AdminStudentDetail`
+- [x] `app/repositories/admin_student_repo.py` (NEW): bounded, read-only, scope-filtered list/count (q ILIKE roll/name, LIMIT/OFFSET, outer joins; no N+1); `StudentScopeFilter` data class; elective-roster membership check
+- [x] `app/services/admin_student_service.py` (NEW): server-side scope resolution from `AuthorizationService` active scopes (DB per request, UNION for multi-scope admins); 404 for out-of-scope detail (no existence leak); detail via `StudentContextService` (single context authority)
+- [x] `GET /api/v1/admin/students` (q, page, page_size): `require_any_admin` + scope resolution; no client scope params
+- [x] `GET /api/v1/admin/students/{student_id}`: `require_any_admin` + per-student scope check; 404 for out-of-scope/nonexistent
+- [x] No direct DB access from the endpoint; no N+1; no caching added
+
+### Frontend (additive, inside existing AdminShell)
+- [x] `types/api.ts`: `AdminStudentSummary`, `AdminStudentListResponse`, `AdminStudentParams`, `AdminStudentDetail`, enrollment types
+- [x] `hooks/useApi.ts`: `useAdminStudents()`, `useAdminStudentDetail()` SWR hooks
+- [x] `app/(admin)/admin/students/page.tsx` (NEW): scoped list + search (submit-driven) + pagination; loading/403/error/empty states
+- [x] `app/(admin)/admin/students/[student_id]/page.tsx` (NEW): detail with placement / electives / compulsory / elective-subject cards + data-quality inconsistencies; 404/403/error/loading states
+- [x] `components/admin/AdminShell.tsx`: "Students" nav entry (visible to all admins; scope filtering stays server-side)
+- [x] `app/(admin)/admin/page.tsx`: Students moved from "Planned portal areas" to "Available now"
+
+## Hard scope (respected)
+- [x] NO schema change / migration / production interaction
+- [x] NO attendance snapshot (Phase 24.13); detail is academic context only
+- [x] NO student writes (Phase 24.4); create/edit/move/subsection/elective changes deferred
+- [x] NO client scope parameters; no second authorization system
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+- [x] NO fabricated subsection semantics; SUBSECTION_ADMIN inert-empty (structural limitation)
+- [x] NO fake feature domains; no student-surface changes
+
+## Validation
+- [x] `python -m compileall backend/app` PASS; new modules import cleanly
+- [x] `npx tsc --noEmit` PASS (0 errors); ESLint clean on changed files
+- [x] `verify_phase_24_3.py` (NEW, self-cleaning, locality guard forces+asserts local dev URI) PASS 40/40: 401/403 matrix, HEAD all + search/pagination, HEAD detail + 404, CLASS section-only + out-of-section 404, ELECTIVE roster + exact-subject isolation (BCS-058 vs BCS-055), SUBSECTION inert/empty code path, no client scope params, CLASS+ELECTIVE UNION, counts unchanged after cleanup (users 3, enrollments 35, admin_scopes 0)
+- [x] No browser/E2E/regression runs (operator tests manually, per phase boundary)
+
+## Do Not Touch Again
+- Phase 24.3 is the student READ foundation; Phase 24.4+ requires a fresh execution prompt
+- `AdminStudentService/Repository` are read-only consumers - never write student data from them
+- `/admin/dashboard` is HEAD_ADMIN-only; scoped-admin dashboards are later work

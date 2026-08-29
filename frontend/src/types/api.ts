@@ -776,3 +776,162 @@ export interface AdminIdentity {
   is_global: boolean;
   scopes: AdminScopeDescriptor[];
 }
+
+// --- Phase 24.2 HEAD_ADMIN dashboard (GET /api/v1/admin/dashboard) ---
+// Read-only, current-state overview. HEAD_ADMIN only (403 for scoped admins).
+export interface AcademicOverview {
+  active_session: string | null;
+  session_start: string | null;
+  session_end: string | null;
+  active_session_count: number;
+  semester_count: number;
+  semester_name: string | null;
+  semester_start: string | null;
+  semester_end: string | null;
+  section_count: number;
+  program_count: number;
+  subject_count: number;
+  student_count: number;
+}
+
+export interface CurriculumOverview {
+  theory_subjects: number;
+  lab_subjects: number;
+  elective_i_subjects: number;
+  elective_ii_subjects: number;
+  compulsory_enrollments: number;
+  elective_enrollments: number;
+}
+
+export interface StudentOverview {
+  total: number;
+  placed: number;
+  unplaced: number;
+  subsection_assigned: number;
+  subsection_unassigned: number;
+  elective_choice_holders: number;
+  elective_choices_total: number;
+}
+
+export interface ScheduleOverview {
+  timetable_entry_count: number;
+  class_session_total: number;
+  class_sessions_cancelled: number;
+  class_sessions_extra: number;
+  sessions_today: number;
+  upcoming_sessions: number;
+  occurrence_outcomes: number;
+}
+
+export interface AdminUpcomingEvent {
+  id: string;
+  event_type: string;
+  start_date: string;
+  end_date: string;
+  subject_code: string | null;
+  elective_slot: string | null;
+}
+
+export interface EventsOverview {
+  total_active: number;
+  upcoming_active: number;
+  upcoming: AdminUpcomingEvent[];
+}
+
+export interface QuizOverview {
+  cycle_count: number;
+  schedule_total: number;
+  scheduled_dated: number;
+  unresolved: number;
+  cancelled: number;
+  next_quiz_date: string | null;
+}
+
+export interface AttendanceOverview {
+  total_records: number;
+  attended: number;
+  missed: number;
+  recorded_pct: number | null;
+  participants: number;
+}
+
+export interface AdminDashboardWarning {
+  code: string;
+  severity: "info" | "warning";
+  message: string;
+}
+
+export interface AdminDashboardResponse {
+  generated_at: string;
+  academic: AcademicOverview;
+  curriculum: CurriculumOverview;
+  students: StudentOverview;
+  schedule: ScheduleOverview;
+  events: EventsOverview;
+  quizzes: QuizOverview;
+  attendance: AttendanceOverview;
+  warnings: AdminDashboardWarning[];
+}
+
+// --- Phase 24.3 Admin Portal student management (read) ---
+// GET /api/v1/admin/students (scoped list/search) and
+// GET /api/v1/admin/students/{id} (scoped detail).
+// Read-only. Scope is resolved server-side from the acting admin's active
+// scopes — the frontend never supplies or trusts a scope parameter.
+export interface AdminStudentSummary {
+  id: string;
+  roll_number: string;
+  name: string;
+  section_name: string | null;
+  program: string | null;
+  semester_name: string | null;
+  subsection_name: string | null;
+  is_placed: boolean;
+}
+
+export interface AdminStudentListResponse {
+  items: AdminStudentSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface AdminStudentParams {
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type EnrollmentTypeLabel = "COMPULSORY" | "ELECTIVE";
+
+export interface AdminStudentEnrollment {
+  id: string;
+  code: string;
+  name: string;
+  enrollment_type: EnrollmentTypeLabel;
+}
+
+export interface AdminStudentDetail {
+  id: string;
+  roll_number: string;
+  name: string;
+  section_id: string | null;
+  section_name: string | null;
+  program: string | null;
+  semester_id: string | null;
+  semester_name: string | null;
+  semester_start: string | null;
+  semester_end: string | null;
+  academic_session_id: string | null;
+  academic_session_name: string | null;
+  subsection_id: string | null;
+  subsection_name: string | null;
+  is_placed: boolean;
+  enrollments: AdminStudentEnrollment[];
+  compulsory_subjects: AdminStudentEnrollment[];
+  elective_subjects: AdminStudentEnrollment[];
+  elective_choices: Record<string, string>;
+  inconsistencies: string[];
+  first_quiz_date: string | null;
+}
