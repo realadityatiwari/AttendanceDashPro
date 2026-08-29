@@ -3945,5 +3945,74 @@ ESLint (changed files) PASS · `git diff --check` clean · alembic single head
 `eb880e108f19` unchanged. No browser/E2E run (operator responsibility).
 Production untouched; `.env` unchanged (local dev target).
 
-**Next:** Phase 24.7 (timetable management) and beyond - NOT STARTED; requires
-fresh execution prompts. All 12 Phase 24.0 decision gates remain open.
+**Next:** Phase 24.7 (timetable management) IN PROGRESS (2026-08-29);
+**24.7-A (Timetable Domain Foundation) COMPLETE** — see the Phase 24.7-A
+section below. 24.7-B+ NOT STARTED — requires fresh execution prompts. All 12
+Phase 24.0 decision gates remain open.
+
+## Phase 24.7-A - Timetable Domain Foundation (CURRENT PLAN - EXECUTED, 2026-08-29)
+
+**Status: 24.7 IN PROGRESS: 24.7-A COMPLETE; 24.7-B (CRUD API) NOT STARTED.**
+Local development only. Schema change + Alembic migration `c4d5e6f7a8b9`.
+Git state: implemented but NOT committed (no commit made during
+implementation, per operator instruction).
+
+**Objective:** extend the existing `timetable_entries` table (the EXPECTED
+academic schedule, per Section/Subsection — distinct from actual
+`class_sessions` occurrences) with the Phase 24.7 admin timetable domain
+contract. No CRUD endpoints, no frontend timetable UI, no student timetable
+integration.
+
+**Implementation plan (executed as specified):**
+
+### Model changes (additive)
+
+- `models/timetable.py` — `TimetableEntry` extended with:
+  - `subsection_id` (nullable FK → subsections.id, composite FK for
+    section↔subsection coherence)
+  - `room` (nullable String(100))
+  - `is_active` (Boolean NOT NULL, server default `true`; 28 existing rows
+    backfilled as active)
+  - `sort_order` (nullable Integer, deterministic ordering hint)
+  - CHECK `end_time > start_time` (`ck_timetable_entries_end_gt_start`)
+  - CHECK `day_of_week BETWEEN 0 AND 6`
+    (`ck_timetable_entries_day_of_week_range`)
+  - Composite FK `(section_id, subsection_id)` → `subsections(section_id, id)`
+    (`fk_timetable_entries_section_subsection`) — guarantees subsection
+    belongs to the entry's section
+  - `subsection` relationship with explicit `foreign_keys`
+
+- `models/user.py` — `Subsection` extended with:
+  - `UniqueConstraint("section_id", "id", name="uq_subsections_section_id")`
+    — required target for the composite FK
+  - `timetable_entries` relationship with explicit `foreign_keys`
+
+### Migration `c4d5e6f7a8b9`
+
+Additive only — preserves all 28 existing timetable rows byte-for-byte (no
+backfill of invented academic data). Upgrade/downgrade tested locally. Single
+linear alembic head (`c4d5e6f7a8b9`).
+
+### Schemas
+
+- `schemas/admin_timetable.py` (NEW): `TimetableEntryAdminResponse` (id,
+  section_id, section_name, subsection_id, subsection_name, subject_id,
+  subject_code, subject_name, day_of_week, start_time, end_time, class_type,
+  room, elective_slot, is_active, sort_order) + `TimetableEntryAdminListResponse`.
+
+### Verifier
+
+- `scripts/verify_phase_24_7a.py` (NEW): static/DB verifier — column
+  existence, constraint presence, 28 rows preserved, no backfill of invented
+  data, upgrade/downgrade cycle validated.
+
+**Verification performed:** `verify_phase_24_7a.py` PASS (columns,
+constraints, rows 28, no fabricated data). Regression: 24.3 40/40 · 24.5
+46/46 · 24.6 46/46. `compileall` PASS · `alembic heads` single head
+`c4d5e6f7a8b9` · `git diff --check` clean. Student timetable endpoint
+unchanged (response keys verified). Schema serialization validated.
+Downgrade/upgrade cycle clean. No browser/E2E run (operator responsibility).
+Production untouched; `.env` unchanged (local dev target).
+
+**Next:** Phase 24.7-B (CRUD API) — NOT STARTED; requires fresh execution
+prompts. All 12 Phase 24.0 decision gates remain open.

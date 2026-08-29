@@ -47,6 +47,10 @@ class Subsection(Base):
     __table_args__ = (
         # Subsection names are unique within a section only (NOT globally).
         UniqueConstraint("section_id", "name", name="uq_subsections_section_name"),
+        # Phase 24.7-A: supports the composite FK from timetable_entries
+        # (section_id, subsection_id) -> subsections(section_id, id) which
+        # guarantees a timetable entry's subsection belongs to its section.
+        UniqueConstraint("section_id", "id", name="uq_subsections_section_id"),
     )
     name: Mapped[str] = mapped_column(String)
     section_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sections.id"))
@@ -54,6 +58,10 @@ class Subsection(Base):
 
     section: Mapped["Section"] = relationship(back_populates="subsections")
     users: Mapped[List["User"]] = relationship(back_populates="subsection")
+    timetable_entries: Mapped[List["TimetableEntry"]] = relationship(
+        back_populates="subsection",
+        foreign_keys="TimetableEntry.subsection_id",
+    )
 
 
 class User(Base):

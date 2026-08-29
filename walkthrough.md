@@ -7168,3 +7168,109 @@ bypass (non-HEAD 403 / HEAD + unknown UUID 404).
 **PHASE 24.6 - COMPLETE. HARD STOP:** Phase 24.7 NOT STARTED - requires a fresh
 execution prompt. No production system was intentionally contacted or modified.
 No commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7-A - Timetable Domain Foundation (IN PROGRESS - 24.7-A COMPLETE, 2026-08-29)
+
+## Scope
+
+Extend the existing `timetable_entries` table — the EXPECTED academic
+schedule (per Section, optionally per Subsection), distinct from actual
+`class_sessions` occurrences — with the Phase 24.7 admin timetable domain
+contract. NO CRUD endpoints, NO frontend timetable UI, NO student timetable
+integration. Local development only. Schema change + Alembic migration
+`c4d5e6f7a8b9` (applied to the local dev DB; production untouched). Git state:
+implemented but NOT committed (no commit made during implementation, per
+operator instruction).
+
+## What was implemented and why
+
+### Model (additive)
+
+- `models/timetable.py` — `TimetableEntry` extended with:
+  - `subsection_id` (nullable FK → subsections.id) via a composite FK
+    `(section_id, subsection_id)` → `subsections(section_id, id)` that
+    guarantees the subsection belongs to the entry's section
+    (`fk_timetable_entries_section_subsection`).
+  - `room` (nullable String(100)).
+  - `is_active` (Boolean NOT NULL, server default `true`) — the 28 existing
+    rows deterministically become active; no fabricated data.
+  - `sort_order` (nullable Integer) — deterministic ordering hint.
+  - CHECK `end_time > start_time` (`ck_timetable_entries_end_gt_start`) and
+    CHECK `day_of_week BETWEEN 0 AND 6`
+    (`ck_timetable_entries_day_of_week_range`).
+  - `subsection` relationship with explicit `foreign_keys` (required because
+    the composite FK introduces a second FK path from TimetableEntry to
+    Subsection).
+- `models/user.py` — `Subsection` extended with:
+  - `UniqueConstraint("section_id", "id", name="uq_subsections_section_id")`
+    — the required target for the composite FK.
+  - `timetable_entries` relationship (explicit `foreign_keys`).
+
+The existing `subject_id` / `section_id` / `day_of_week` / `start_time` /
+`end_time` / `class_type` / `elective_slot` columns are unchanged, preserving
+the Phase 22.x/23.x timetable data and the Phase 22.3 elective-slot semantics.
+
+### Migration `c4d5e6f7a8b9`
+
+Single, additive migration (head `eb880e108f19` → `c4d5e6f7a8b9`). Preserves
+all 28 existing rows byte-for-byte (no backfill of invented academic data).
+Verified: upgrade → column/constraint presence + 28 rows; downgrade →
+pre-24.7-A schema restored; upgrade again → rows still intact. Single linear
+alembic head.
+
+### Schemas
+
+- `schemas/admin_timetable.py` (NEW): `TimetableEntryAdminResponse` (id,
+  section_id, section_name, subsection_id, subsection_name, subject_id,
+  subject_code, subject_name, day_of_week, start_time, end_time, class_type,
+  room, elective_slot, is_active, sort_order) and
+  `TimetableEntryAdminListResponse`.
+
+### Verifier
+
+- `scripts/verify_phase_24_7a.py` (NEW): static/DB verifier — column
+  existence, constraint presence, 28 rows preserved, no backfill of invented
+  data, upgrade/downgrade cycle validated. PASS.
+
+## Verification performed
+
+- `verify_phase_24_7a.py` PASS (columns, constraints, rows 28, no fabricated
+  data).
+- Regression: `verify_phase_24_3.py` PASS 40/40 · `verify_phase_24_5.py` PASS
+  46/46 · `verify_phase_24_6.py` PASS 46/46.
+- `compileall` PASS · `alembic heads` single head `c4d5e6f7a8b9` ·
+  `git diff --check` clean.
+- Student-facing `GET /api/v1/timetable` unchanged — response keys verified
+  `{'id','day_of_week','class_type','subject','elective_slot'}`.
+- Schema serialization validated (`TimetableEntryAdminResponse` from ORM rows,
+  list response valid).
+- Downgrade/upgrade cycle clean.
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
+
+## Known limitations
+
+- `verify_phase_22_1.py` reports a PRE-EXISTING failure on "response fields
+  match" — its `expected_fields` set (`{id, day_of_week, class_type, subject}`)
+  predates the Phase 22.3 `elective_slot` field that the endpoint now
+  legitimately returns. Unrelated to 24.7-A; flagged for a future correction
+  prompt.
+- Data-integrity guards that are NOT expressible as pure DB CHECKs (e.g.,
+  "subject belongs to the section's semester") are enforced at the
+  application layer in Phase 24.7-B CRUD, not in this foundation slice.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7 IN PROGRESS, 24.7-A COMPLETE, migration
+  `c4d5e6f7a8b9`, git state), Phase 24.7-A record appended.
+- implementation_plan.md: Phase 24.7-A section (executed).
+- task.md: Phase 24.7-A checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-A COMPLETE. HARD STOP:** Phase 24.7-B (CRUD
+API) NOT STARTED - requires a fresh execution prompt. No production system was
+intentionally contacted or modified. No commit/push/PR made during
+implementation.

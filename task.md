@@ -2986,4 +2986,56 @@ Administrative management of subjects (curriculum): subject CRUD, elective catal
 ## Do Not Touch Again
 - Phase 24.6 subject endpoints are HEAD-only writes; code/semester immutable; anchors frozen; slot changes guarded by choice-dependents
 - `verify_phase_24_6.py` is the authoritative Phase 24.6 verifier
-- Phase 24.7+ requires a fresh execution prompt
+- Phase 24.7-B+ requires a fresh execution prompt
+
+## PHASE 24.7-A - TIMETABLE DOMAIN FOUNDATION (IN PROGRESS - 24.7-A COMPLETE, 2026-08-29)
+
+Status: **24.7 IN PROGRESS: 24.7-A COMPLETE; 24.7-B (CRUD API) NOT STARTED.**
+Local development only. Schema change + Alembic migration `c4d5e6f7a8b9`
+(applied to local dev DB; production untouched). Git state: implemented but
+NOT committed (no commit made during implementation, per operator
+instruction).
+
+## Objective
+
+Extend the existing `timetable_entries` table (the EXPECTED academic schedule,
+per Section/Subsection — distinct from actual `class_sessions` occurrences)
+with the Phase 24.7 admin timetable domain contract. No CRUD endpoints, no
+frontend timetable UI, no student timetable integration.
+
+## Delivered
+
+### Model (additive)
+- [x] `models/timetable.py` — `TimetableEntry` + `subsection_id` (nullable, composite FK), `room`, `is_active` (NOT NULL server default true), `sort_order`, CHECK `end_time > start_time`, CHECK `day_of_week` 0..6, composite FK `(section_id, subsection_id)` -> subsections, `subsection` relationship (explicit foreign_keys)
+- [x] `models/user.py` — `Subsection` + `uq_subsections_section_id` unique, `timetable_entries` relationship (explicit foreign_keys)
+
+### Migration
+- [x] `alembic/versions/c4d5e6f7a8b9_add_timetable_domain_foundation.py` — single additive migration; preserves all 28 existing rows; upgrade + downgrade verified locally; single linear head
+
+### Schemas
+- [x] `schemas/admin_timetable.py` (NEW) — `TimetableEntryAdminResponse` (full Phase 24.7 contract) + `TimetableEntryAdminListResponse`
+
+### Verifier
+- [x] `scripts/verify_phase_24_7a.py` (NEW) — static/DB verifier: columns, constraints, 28 rows preserved, no fabricated data, upgrade/downgrade cycle
+
+## Hard scope (respected)
+- [x] NO CRUD API / endpoints (24.7-B)
+- [x] NO frontend timetable UI / admin timetable page
+- [x] NO student timetable integration changes
+- [x] NO duplication of timetable data per student
+- [x] NO unrelated tables/schema changed
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_7a.py` PASS (columns, constraints, 28 rows, no backfill of invented data)
+- [x] Regression: `verify_phase_24_3.py` PASS 40/40; `verify_phase_24_5.py` PASS 46/46; `verify_phase_24_6.py` PASS 46/46
+- [x] `python -m compileall backend/app backend/scripts` PASS; `git diff --check` clean; alembic single head `c4d5e6f7a8b9`
+- [x] Student-facing `GET /api/v1/timetable` endpoint unchanged (response keys verified: `{'id','day_of_week','class_type','subject','elective_slot'}`)
+- [x] Schema serialization: `TimetableEntryAdminResponse` from ORM rows + list response valid
+- [x] Downgrade `c4d5e6f7a8b9 -> eb880e108f19` and upgrade `eb880e108f19 -> c4d5e6f7a8b9` clean; rows preserved
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.7-A schema/model changes are reviewed and frozen (additive columns + integrity guards + migration `c4d5e6f7a8b9`)
+- `verify_phase_24_7a.py` is the Phase 24.7-A verifier
+- Phase 24.7-B (CRUD API) and Phase 24.8+ require fresh execution prompts
