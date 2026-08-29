@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Users,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,11 +22,15 @@ import { AdminIdentity } from "@/types/api";
 const ADMIN_NAV_ITEMS = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard, globalOnly: false },
   { label: "Students", href: "/admin/students", icon: Users, globalOnly: false },
+  // Phase 24.5: Academic Structure (HEAD_ADMIN only — backend enforces 403).
+  // Shown for global administrators only (presentation filter; backend is authoritative).
+  { label: "Structure", href: "/admin/structure", icon: BookOpen, globalOnly: true },
   // Existing admin surface (GET /api/v1/feedback/admin is require_head_admin-
   // gated server-side). Shown for global administrators only — presentation
   // filtering; the backend remains the boundary.
   { label: "Feedback Review", href: "/tools/feedback", icon: MessageSquareText, globalOnly: true },
 ] as const;
+
 
 /**
  * Admin Portal shell (Phase 24.1) — deliberately separate from the student

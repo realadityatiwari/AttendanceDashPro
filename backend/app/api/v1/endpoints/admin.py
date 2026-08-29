@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -12,13 +12,30 @@ from app.schemas.admin_students import (
     AssignSubsectionRequest, CorrectElectiveRequest, SetStudentStatusRequest,
     SubsectionDropdownResponse, ElectiveDropdownResponse
 )
+from app.schemas.admin_structure import (
+    AcademicSessionResponse,
+    CreateSessionRequest,
+    UpdateSessionRequest,
+    SessionActivationResponse,
+    SemesterResponse,
+    CreateSemesterRequest,
+    UpdateSemesterRequest,
+    SemesterMutationResponse,
+    SectionResponse,
+    CreateSectionRequest,
+    UpdateSectionRequest,
+    SectionMutationResponse,
+    SubsectionAdminResponse,
+    CreateSubsectionRequest,
+    UpdateSubsectionRequest,
+)
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
 from app.services.admin_student_service import AdminStudentService
+from app.services.admin_structure_service import AdminStructureService
 from app.models.user import Subsection
 from app.models.academic import Subject
 from sqlalchemy import select, func
-from typing import List
 
 router = APIRouter()
 
@@ -203,3 +220,194 @@ async def list_semester_electives(
         )
         for s in subjects
     ]
+
+
+# ===========================================================================
+# Phase 24.5 — Academic Structure Management (HEAD_ADMIN only)
+# ===========================================================================
+
+@router.get("/structure/sessions", response_model=List[AcademicSessionResponse])
+async def list_sessions(
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: list all academic sessions ordered by start date descending.
+    Authorization: require_head_admin — unauthenticated → 401, non-HEAD → 403.
+    """
+    return await AdminStructureService(db).list_sessions()
+
+
+@router.post("/structure/sessions", response_model=AcademicSessionResponse, status_code=201)
+async def create_session(
+    request: CreateSessionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: create a new academic session.
+    New sessions are always inactive — use the /activate endpoint to activate.
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).create_session(request)
+
+
+@router.patch("/structure/sessions/{session_id}", response_model=AcademicSessionResponse)
+async def update_session(
+    session_id: UUID,
+    request: UpdateSessionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: update session name / dates.  is_active is NOT a valid field
+    here — use /activate or /deactivate instead.
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).update_session(session_id, request)
+
+
+@router.post("/structure/sessions/{session_id}/activate", response_model=SessionActivationResponse)
+async def activate_session(
+    session_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: explicitly activate an academic session.
+
+    Invariant (Operator Decision Q2): at most one session may be active.
+    If another session is already active, returns 409 — do NOT automatically
+    deactivate the existing active session.  The administrator must first
+    explicitly deactivate the current active session.
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).activate_session(session_id)
+
+
+@router.post("/structure/sessions/{session_id}/deactivate", response_model=SessionActivationResponse)
+async def deactivate_session(
+    session_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: explicitly deactivate an academic session.
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).deactivate_session(session_id)
+
+
+@router.get("/structure/sessions/{session_id}/semesters", response_model=List[SemesterResponse])
+async def list_semesters(
+    session_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.5: list semesters for a session. Authorization: require_head_admin."""
+    return await AdminStructureService(db).list_semesters(session_id)
+
+
+@router.post("/structure/sessions/{session_id}/semesters", response_model=SemesterMutationResponse, status_code=201)
+async def create_semester(
+    session_id: UUID,
+    request: CreateSemesterRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: create a semester under an academic session.
+    Response includes registration-ambiguity warnings if multiple semesters now
+    exist under the active session (new student registration will fail 409).
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).create_semester(session_id, request)
+
+
+@router.patch("/structure/semesters/{semester_id}", response_model=SemesterMutationResponse)
+async def update_semester(
+    semester_id: UUID,
+    request: UpdateSemesterRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.5: update semester name / dates. Authorization: require_head_admin."""
+    return await AdminStructureService(db).update_semester(semester_id, request)
+
+
+@router.get("/structure/semesters/{semester_id}/sections", response_model=List[SectionResponse])
+async def list_sections(
+    semester_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.5: list sections for a semester. Authorization: require_head_admin."""
+    return await AdminStructureService(db).list_sections(semester_id)
+
+
+@router.post("/structure/semesters/{semester_id}/sections", response_model=SectionMutationResponse, status_code=201)
+async def create_section(
+    semester_id: UUID,
+    request: CreateSectionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: create a section under a semester.
+    Response includes registration-ambiguity warnings if multiple sections now
+    exist under the active session's semester (new student registration 409).
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).create_section(semester_id, request)
+
+
+@router.patch("/structure/sections/{section_id}", response_model=SectionMutationResponse)
+async def update_section(
+    section_id: UUID,
+    request: UpdateSectionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.5: update section name / program. Authorization: require_head_admin."""
+    return await AdminStructureService(db).update_section(section_id, request)
+
+
+@router.get("/structure/sections/{section_id}/subsections", response_model=List[SubsectionAdminResponse])
+async def list_subsections_structure(
+    section_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: list subsections for a section (richer structure view).
+    Authorization: require_head_admin.
+    Note: the Phase 24.4 /sections/{id}/subsections dropdown endpoint
+    (require_any_admin, lightweight) remains available for student assignment.
+    """
+    return await AdminStructureService(db).list_subsections(section_id)
+
+
+@router.post("/structure/sections/{section_id}/subsections", response_model=SubsectionAdminResponse, status_code=201)
+async def create_subsection(
+    section_id: UUID,
+    request: CreateSubsectionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.5: create a subsection under a section.
+    Subsection scheduling remains inert (SUBSECTION_ADMIN still not operational).
+    Authorization: require_head_admin.
+    """
+    return await AdminStructureService(db).create_subsection(section_id, request)
+
+
+@router.patch("/structure/subsections/{subsection_id}", response_model=SubsectionAdminResponse)
+async def update_subsection(
+    subsection_id: UUID,
+    request: UpdateSubsectionRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.5: update subsection name / max_strength. Authorization: require_head_admin."""
+    return await AdminStructureService(db).update_subsection(subsection_id, request)

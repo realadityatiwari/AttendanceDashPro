@@ -558,3 +558,104 @@ export function useAdminStudentMutations() {
 
   return { assignSubsection, correctElective, setStudentStatus };
 }
+
+// ===========================================================================
+// Phase 24.5 — Academic Structure Management (HEAD_ADMIN only)
+// ===========================================================================
+
+import type {
+  AcademicSessionResponse,
+  CreateSessionRequest,
+  UpdateSessionRequest,
+  SessionActivationResponse,
+  SemesterResponse,
+  CreateSemesterRequest,
+  UpdateSemesterRequest,
+  SemesterMutationResponse,
+  SectionResponse,
+  CreateSectionRequest,
+  UpdateSectionRequest,
+  SectionMutationResponse,
+  SubsectionAdminResponse,
+  CreateSubsectionRequest,
+  UpdateSubsectionRequest,
+} from '@/types/api';
+
+export function useAdminSessions() {
+  const { data, error, isLoading, mutate } = useSWR<AcademicSessionResponse[]>(
+    '/api/v1/admin/structure/sessions',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { sessions: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminSemesters(sessionId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<SemesterResponse[]>(
+    sessionId ? `/api/v1/admin/structure/sessions/${sessionId}/semesters` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { semesters: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminSections(semesterId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<SectionResponse[]>(
+    semesterId ? `/api/v1/admin/structure/semesters/${semesterId}/sections` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { sections: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminSubsectionsStructure(sectionId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<SubsectionAdminResponse[]>(
+    sectionId ? `/api/v1/admin/structure/sections/${sectionId}/subsections` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { subsections: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminStructureMutations() {
+  // Sessions
+  const createSession = async (payload: CreateSessionRequest): Promise<AcademicSessionResponse> =>
+    apiFetch('/api/v1/admin/structure/sessions', { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSession = async (sessionId: string, payload: UpdateSessionRequest): Promise<AcademicSessionResponse> =>
+    apiFetch(`/api/v1/admin/structure/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  const activateSession = async (sessionId: string): Promise<SessionActivationResponse> =>
+    apiFetch(`/api/v1/admin/structure/sessions/${sessionId}/activate`, { method: 'POST' });
+
+  const deactivateSession = async (sessionId: string): Promise<SessionActivationResponse> =>
+    apiFetch(`/api/v1/admin/structure/sessions/${sessionId}/deactivate`, { method: 'POST' });
+
+  // Semesters
+  const createSemester = async (sessionId: string, payload: CreateSemesterRequest): Promise<SemesterMutationResponse> =>
+    apiFetch(`/api/v1/admin/structure/sessions/${sessionId}/semesters`, { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSemester = async (semesterId: string, payload: UpdateSemesterRequest): Promise<SemesterMutationResponse> =>
+    apiFetch(`/api/v1/admin/structure/semesters/${semesterId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  // Sections
+  const createSection = async (semesterId: string, payload: CreateSectionRequest): Promise<SectionMutationResponse> =>
+    apiFetch(`/api/v1/admin/structure/semesters/${semesterId}/sections`, { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSection = async (sectionId: string, payload: UpdateSectionRequest): Promise<SectionMutationResponse> =>
+    apiFetch(`/api/v1/admin/structure/sections/${sectionId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  // Subsections
+  const createSubsection = async (sectionId: string, payload: CreateSubsectionRequest): Promise<SubsectionAdminResponse> =>
+    apiFetch(`/api/v1/admin/structure/sections/${sectionId}/subsections`, { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSubsection = async (subsectionId: string, payload: UpdateSubsectionRequest): Promise<SubsectionAdminResponse> =>
+    apiFetch(`/api/v1/admin/structure/subsections/${subsectionId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  return {
+    createSession, updateSession, activateSession, deactivateSession,
+    createSemester, updateSemester,
+    createSection, updateSection,
+    createSubsection, updateSubsection,
+  };
+}

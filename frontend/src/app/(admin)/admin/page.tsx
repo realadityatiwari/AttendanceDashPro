@@ -30,8 +30,9 @@ import { AdminDashboardResponse } from "@/types/api";
 // Planned portal areas (Phase 24.0 sequence). PRESENTATION ONLY — these are
 // NOT implemented and no route exists; the phase hint is the discovery
 // sequence, never a claim of availability.
+// NOTE: Phase 24.5 (Academic Structure) is NOW implemented and has been
+// removed from this list and added to the "Available now" section.
 const FUTURE_AREAS: { label: string; phase: string }[] = [
-  { label: "Academic Structure", phase: "Phase 24.5" },
   { label: "Curriculum", phase: "Phase 24.6" },
   { label: "Timetable", phase: "Phase 24.7" },
   { label: "Sessions & Occurrences", phase: "Phase 24.8" },
@@ -244,6 +245,32 @@ function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) 
               className="self-start sm:self-auto"
               nativeButton={false}
               render={<Link href="/admin/students" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.5: Academic Structure (HEAD_ADMIN only) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <BookOpen
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Academic Structure
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Manage sessions, semesters, sections, and subsections (global administrators).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/structure" />}
             >
               Open
             </Button>

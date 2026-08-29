@@ -964,3 +964,111 @@ export interface CorrectElectiveRequest {
 export interface SetStudentStatusRequest {
   is_active: boolean;
 }
+
+// ===========================================================================
+// Phase 24.5 — Academic Structure Management (HEAD_ADMIN only)
+// ===========================================================================
+
+export interface RegistrationWarning {
+  code: string;   // e.g. "MULTI_SEMESTER" | "MULTI_SECTION"
+  message: string;
+}
+
+export interface AcademicSessionResponse {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  semester_count: number;
+}
+
+export interface CreateSessionRequest {
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface UpdateSessionRequest {
+  name?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface SessionActivationResponse {
+  id: string;
+  name: string;
+  is_active: boolean;
+  warnings: RegistrationWarning[];
+}
+
+export interface SemesterResponse {
+  id: string;
+  name: string;
+  session_id: string;
+  session_name: string;
+  start_date: string;
+  end_date: string;
+  section_count: number;
+}
+
+export interface CreateSemesterRequest {
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface UpdateSemesterRequest {
+  name?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface SemesterMutationResponse {
+  semester: SemesterResponse;
+  warnings: RegistrationWarning[];
+}
+
+export interface SectionResponse {
+  id: string;
+  name: string;
+  program: string | null;
+  semester_id: string;
+  semester_name: string;
+  subsection_count: number;
+  student_count: number;
+}
+
+export interface CreateSectionRequest {
+  name: string;
+  program?: string | null;
+}
+
+export interface UpdateSectionRequest {
+  name?: string;
+  program?: string | null;
+}
+
+export interface SectionMutationResponse {
+  section: SectionResponse;
+  warnings: RegistrationWarning[];
+}
+
+export interface SubsectionAdminResponse {
+  id: string;
+  name: string;
+  section_id: string;
+  section_name: string;
+  max_strength: number | null;
+  student_count: number;
+}
+
+export interface CreateSubsectionRequest {
+  name: string;
+  max_strength?: number | null;
+}
+
+export interface UpdateSubsectionRequest {
+  name?: string;
+  max_strength?: number | null;
+}

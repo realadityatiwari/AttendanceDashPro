@@ -4199,3 +4199,31 @@ Implement core student record modifications including status toggling (active/de
 - All 12 Phase 24.0 decision gates (unchanged, unresolved).
 
 **HARD STOP: Phase 24.4 complete. Phase 24.5 requires a separate execution prompt.**
+
+## Phase 24.5 - Academic Structure Management
+
+**Status: COMPLETE (2026-08-29).** Local development only. No schema changes or migrations.
+
+## Objective
+Implement administrative management of Academic Sessions, Semesters, Sections, and Subsections.
+Batch student management / CSV import is explicitly NOT part of this phase and remains deferred.
+
+## Delivered
+
+### Backend
+- Created `admin_structure.py` (schemas), `admin_structure_repo.py` (repository), and `admin_structure_service.py` (service).
+- Added 14 administrative endpoints in `app/api/v1/endpoints/admin.py` for full CRUD (except destructive deletes) on the academic hierarchy.
+- All structural mutations gated by `require_head_admin`.
+- Session activation logic enforcing at most one active session, requiring explicit manual deactivation (rejects with 409 if another session is active).
+
+### Frontend
+- Created/updated API types and SWR hooks/mutations in `api.ts` and `useApi.ts`.
+- Implemented `/admin/structure` page with a list of sessions and activation controls.
+- Implemented `/admin/structure/[session_id]` page with a full interactive hierarchy view (Semesters > Sections > Subsections).
+- Created interactive dialogs for adding new structural entities safely.
+
+## Deferred
+- Batch student management, CSV uploads (deferred to a later explicit phase).
+- All 12 Phase 24.0 decision gates (unchanged, unresolved).
+
+**HARD STOP: Phase 24.5 complete.**
