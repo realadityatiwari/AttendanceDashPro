@@ -699,3 +699,42 @@ export function useAdminSubjectMutations() {
 
   return { createSubject, updateSubject };
 }
+
+// ===========================================================================
+// Phase 24.7 — Admin Timetable Management
+// ===========================================================================
+
+import type {
+  TimetableEntryAdminListResponse,
+  CreateTimetableEntryRequest,
+  UpdateTimetableEntryRequest,
+  DuplicateTimetableEntryRequest,
+  TimetableEntryMutationResponse,
+} from '@/types/api';
+
+export function useAdminTimetableEntries(params?: Record<string, string>) {
+  const query = params ? new URLSearchParams(params).toString() : '';
+  const key = query ? `/api/v1/admin/timetable?${query}` : '/api/v1/admin/timetable';
+  const { data, error, isLoading, mutate } = useSWR<TimetableEntryAdminListResponse>(
+    key,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { entries: data?.items, total: data?.total ?? 0, isLoading, isError: error, mutate };
+}
+
+export function useAdminTimetableMutations() {
+  const createEntry = async (payload: CreateTimetableEntryRequest): Promise<TimetableEntryMutationResponse> =>
+    apiFetch('/api/v1/admin/timetable', { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateEntry = async (entryId: string, payload: UpdateTimetableEntryRequest): Promise<TimetableEntryMutationResponse> =>
+    apiFetch(`/api/v1/admin/timetable/${entryId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  const deactivateEntry = async (entryId: string): Promise<TimetableEntryMutationResponse> =>
+    apiFetch(`/api/v1/admin/timetable/${entryId}/deactivate`, { method: 'POST' });
+
+  const duplicateEntry = async (entryId: string, payload: DuplicateTimetableEntryRequest): Promise<TimetableEntryMutationResponse> =>
+    apiFetch(`/api/v1/admin/timetable/${entryId}/duplicate`, { method: 'POST', body: JSON.stringify(payload) });
+
+  return { createEntry, updateEntry, deactivateEntry, duplicateEntry };
+}

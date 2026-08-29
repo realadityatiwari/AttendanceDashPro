@@ -1140,3 +1140,111 @@ export interface SubjectMutationResponse {
   subject: AdminSubjectDetail;
   warnings: RegistrationWarning[];
 }
+
+// ===========================================================================
+// Phase 24.7 — Admin Timetable Management
+// ===========================================================================
+
+// GET /api/v1/admin/timetable (scoped list). Read scope is resolved
+// server-side: HEAD all / CLASS assigned sections / SUBSECTION assigned
+// subsections' sections / ELECTIVE exact concrete subject. Writes (POST /
+// PATCH / deactivate / duplicate) are gated to HEAD_ADMIN + CLASS_ADMIN
+// (assigned section) by the backend.
+export interface TimetableEntryAdminResponse {
+  id: string;
+  section_id: string;
+  section_name: string;
+  subsection_id: string | null;
+  subsection_name: string | null;
+  subject_id: string;
+  subject_code: string;
+  subject_name: string;
+  day_of_week: number; // 0=Monday .. 6=Sunday
+  start_time: string; // "HH:MM:SS"
+  end_time: string; // "HH:MM:SS"
+  class_type: ClassType;
+  room: string | null;
+  elective_slot: ElectiveSlot | null;
+  is_active: boolean;
+  sort_order: number | null;
+}
+
+export interface TimetableEntryAdminListResponse {
+  items: TimetableEntryAdminResponse[];
+  total: number;
+}
+
+export interface CreateTimetableEntryRequest {
+  section_id: string;
+  subject_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  class_type: ClassType;
+  room?: string | null;
+  subsection_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  is_active?: boolean;
+  sort_order?: number | null;
+}
+
+// PATCH — omitted field = unchanged; explicit null clears nullable fields.
+// Conflict detection ignores the row being updated.
+export interface UpdateTimetableEntryRequest {
+  section_id?: string;
+  subject_id?: string;
+  day_of_week?: number;
+  start_time?: string;
+  end_time?: string;
+  class_type?: ClassType;
+  room?: string | null;
+  subsection_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  is_active?: boolean;
+  sort_order?: number | null;
+}
+
+// Duplicate — every field optional; absent fields copied from the source
+// entry server-side.
+export interface DuplicateTimetableEntryRequest {
+  section_id?: string;
+  subject_id?: string;
+  day_of_week?: number;
+  start_time?: string;
+  end_time?: string;
+  class_type?: ClassType;
+  room?: string | null;
+  subsection_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  is_active?: boolean;
+  sort_order?: number | null;
+}
+
+export interface TimetableEntryMutationResponse {
+  entry: TimetableEntryAdminResponse;
+}
+
+/** One conflicting timetable entry as resolved by the backend (Phase 24.7-F).
+ *  Only fields the backend returned are present — the UI never infers
+ *  conflict data from stale client state. */
+export interface TimetableConflict {
+  id: string;
+  subject_code: string;
+  subject_name: string;
+  section_name: string;
+  subsection_name: string | null;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  subsection_id: string | null;
+  elective_slot: ElectiveSlot | null;
+}
+
+/** Structured 409 conflict response body: human message + backend-resolved
+ *  conflicting entries. */
+export interface TimetableConflictResponse {
+  detail: {
+    message: string;
+    conflicts: TimetableConflict[];
+  };
+}

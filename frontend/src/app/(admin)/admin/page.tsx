@@ -30,11 +30,10 @@ import { AdminDashboardResponse } from "@/types/api";
 // Planned portal areas (Phase 24.0 sequence). PRESENTATION ONLY — these are
 // NOT implemented and no route exists; the phase hint is the discovery
 // sequence, never a claim of availability.
-// NOTE: Phase 24.5 (Academic Structure) and Phase 24.6 (Curriculum) are NOW
-// implemented and have been removed from this list and added to the
-// "Available now" section.
+// NOTE: Phase 24.5 (Academic Structure), Phase 24.6 (Curriculum) and Phase
+// 24.7 (Timetable) are NOW implemented and have been removed from this list
+// and added to the "Available now" section.
 const FUTURE_AREAS: { label: string; phase: string }[] = [
-  { label: "Timetable", phase: "Phase 24.7" },
   { label: "Sessions & Occurrences", phase: "Phase 24.8" },
   { label: "Quiz Management", phase: "Phase 24.10" },
   { label: "Events", phase: "Phase 24.11" },
@@ -272,6 +271,33 @@ function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) 
               className="self-start sm:self-auto"
               nativeButton={false}
               render={<Link href="/admin/curriculum" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.7-D: Timetable (scoped reads; writes HEAD + CLASS only) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <CalendarDays
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Timetable
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Weekly academic schedule per section, with conflict detection
+                  and elective-slot resolution (management is global or section-scoped).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/timetable" />}
             >
               Open
             </Button>

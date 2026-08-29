@@ -21,13 +21,14 @@ Design rules:
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.timetable import TimetableEntry
 from app.models.user import Section, Subsection
-from app.models.academic import Subject
+from app.models.academic import Subject, Semester
+from app.models.enums import ElectiveSlot
 
 
 class AdminTimetableRepository:
@@ -43,13 +44,20 @@ class AdminTimetableRepository:
         *,
         section_ids: Optional[List[UUID]] = None,
         subject_ids: Optional[List[UUID]] = None,
+        subsection_ids: Optional[List[UUID]] = None,
+        semester_ids: Optional[List[UUID]] = None,
+        session_ids: Optional[List[UUID]] = None,
         day_of_week: Optional[int] = None,
+        elective_slot: Optional[ElectiveSlot] = None,
+        is_active: Optional[bool] = None,
         include_inactive: bool = False,
     ) -> List[TimetableEntry]:
         """Bounded scoped list.  ``section_ids`` / ``subject_ids`` are the
-        server-derived scope filters (None = unrestricted).  Entries are
-        deterministically ordered: day, then sort_order (NULLs last), then
-        start_time, then id — the id tiebreak guarantees total order."""
+        server-derived scope filters (None = unrestricted).  The remaining
+        filters (subsection / semester / session / day / elective slot /
+        active state) are additive narrowing.  Entries are deterministically
+        ordered: day, then sort_order (NULLs last), then start_time, then id
+        — the id tiebreak guarantees total order."""
         stmt = (
             select(TimetableEntry)
             .options(
@@ -68,9 +76,30 @@ class AdminTimetableRepository:
             stmt = stmt.where(TimetableEntry.section_id.in_(section_ids))
         if subject_ids is not None:
             stmt = stmt.where(TimetableEntry.subject_id.in_(subject_ids))
+        if subsection_ids is not None:
+            stmt = stmt.where(TimetableEntry.subsection_id.in_(subsection_ids))
+        if semester_ids is not None:
+            stmt = stmt.where(
+                exists().where(
+                    Section.id == TimetableEntry.section_id,
+                    Section.semester_id.in_(semester_ids),
+                )
+            )
+        if session_ids is not None:
+            stmt = stmt.where(
+                exists().where(
+                    Section.id == TimetableEntry.section_id,
+                    Section.semester_id == Semester.id,
+                    Semester.session_id.in_(session_ids),
+                )
+            )
         if day_of_week is not None:
             stmt = stmt.where(TimetableEntry.day_of_week == day_of_week)
-        if not include_inactive:
+        if elective_slot is not None:
+            stmt = stmt.where(TimetableEntry.elective_slot == elective_slot)
+        if is_active is not None:
+            stmt = stmt.where(TimetableEntry.is_active.is_(is_active))
+        elif not include_inactive:
             stmt = stmt.where(TimetableEntry.is_active.is_(True))
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -95,7 +124,11 @@ class AdminTimetableRepository:
         deterministic conflict predicate (scope/elective/time semantics)."""
         stmt = (
             select(TimetableEntry)
-            .options(selectinload(TimetableEntry.subject))
+            .options(
+                selectinload(TimetableEntry.subject),
+                selectinload(TimetableEntry.section),
+                selectinload(TimetableEntry.subsection),
+            )
             .where(
                 TimetableEntry.section_id == section_id,
                 TimetableEntry.day_of_week == day_of_week,

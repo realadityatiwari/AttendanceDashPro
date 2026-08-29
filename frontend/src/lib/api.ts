@@ -72,17 +72,29 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
       }
     }
     let errorMessage = "API request failed";
+    let errorData: Record<string, unknown> = {};
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.detail || errorData.message || errorMessage;
+      errorData = await response.json();
+      if (typeof errorData.detail === "string") {
+        errorMessage = errorData.detail || (errorData.message as string) || errorMessage;
+      } else if (typeof errorData.detail === "object" && errorData.detail !== null) {
+        // Structured detail (e.g. 409 conflict with "message" + "conflicts").
+        const structured = errorData.detail as { message?: string };
+        errorMessage = structured.message || errorMessage;
+      } else {
+        errorMessage = (errorData.message as string) || errorMessage;
+      }
     } catch {
       errorMessage = response.statusText;
     }
     // Phase 24.1: preserve the HTTP status on the thrown error so callers can
     // distinguish authorization failures (403) from other API failures.
     // Additive only — existing consumers are unaffected.
-    const error = new Error(errorMessage) as Error & { status?: number };
+    // Phase 24.7-F: also attach the raw response body so callers (e.g. the
+    // timetable form) can access structured fields like "conflicts".
+    const error = new Error(errorMessage) as Error & { status?: number; body?: Record<string, unknown> };
     error.status = response.status;
+    error.body = errorData;
     throw error;
   }
 

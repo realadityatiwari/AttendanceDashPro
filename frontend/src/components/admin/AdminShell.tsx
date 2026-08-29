@@ -12,6 +12,7 @@ import {
   Users,
   BookOpen,
   FolderTree,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +28,10 @@ const ADMIN_NAV_ITEMS = [
   // backend-enforced). Shown for all admins; the page hides write controls
   // for non-global admins (presentation; backend is authoritative).
   { label: "Curriculum", href: "/admin/curriculum", icon: BookOpen, globalOnly: false },
+  // Phase 24.7-D: Timetable (scoped reads — any admin; writes HEAD + CLASS
+  // only, backend-enforced). Shown for all admins; the page hides write
+  // controls for non-writers (presentation; backend is authoritative).
+  { label: "Timetable", href: "/admin/timetable", icon: CalendarClock, globalOnly: false },
   // Phase 24.5: Academic Structure (HEAD_ADMIN only — backend enforces 403).
   // Shown for global administrators only (presentation filter; backend is authoritative).
   { label: "Structure", href: "/admin/structure", icon: FolderTree, globalOnly: true },

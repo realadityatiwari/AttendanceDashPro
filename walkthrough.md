@@ -7405,3 +7405,716 @@ are created.
 CRUD API) NOT STARTED - requires a fresh execution prompt. No production
 system was intentionally contacted or modified. No commit/push/PR made during
 implementation.
+
+---
+
+# Phase 24.7-C - Admin Timetable CRUD API (IN PROGRESS - 24.7-C COMPLETE, 2026-08-29)
+
+## Scope
+
+Expose the timetable management functionality through a secure Admin API.
+Security is backend-enforced (frontend hiding is not authorization). No
+hard-delete of timetable history — deactivation (`is_active=false`) preserves
+history per Gate 7. NO frontend (24.7-D). Local development only. No schema
+change, NO new migration (alembic head `c4d5e6f7a8b9` unchanged). Git state:
+implemented but NOT committed (no commit made during implementation, per
+operator instruction).
+
+## What was implemented and why
+
+### Backend (additive)
+
+- `schemas/admin_timetable.py` — `DuplicateTimetableEntryRequest` (every field
+  optional; absent fields copied from the source entry).
+- `repositories/admin_timetable_repo.py` — list filters extended with
+  `subsection_ids`, `semester_ids`, `session_ids`, `elective_slot`,
+  `is_active` (bounded `EXISTS` joins through `sections`/`semesters` — no row
+  materialization, no N+1).
+- `services/admin_timetable_service.py` —
+  - `list_entries` accepts session/semester/section/subsection/day/subject/
+    elective/active filters that INTERSECT with the scope-derived set — they
+    never expand it, so a scoped admin cannot reach unrelated sections by
+    passing query parameters;
+  - `_assert_write_scope` — STRICT write gate per the authoritative Phase 24.0
+    matrix: HEAD_ADMIN (any section) and CLASS_ADMIN (assigned section) only.
+    ELECTIVE_ADMIN and SUBSECTION_ADMIN are denied 403 on timetable writes —
+    the timetable is the institutional shared schedule; an elective admin's
+    write surface is the event path (CLASS_CANCELLED / EXTRA_*);
+  - `duplicate_entry` — server-side duplication: absent overrides are copied
+    from the source entry, the FULL resulting entry is validated, and conflict
+    detection runs — a duplicate never silently overwrites another entry.
+- `endpoints/admin.py` — six additive endpoints under
+  `/api/v1/admin/timetable` (list, detail, create, PATCH, deactivate,
+  duplicate) with `_raise_timetable_error` mapping the 24.7-B domain hierarchy
+  to the project's HTTP conventions (404 not-found, 403 insufficient scope,
+  409 conflict/inactive-parent, 422 malformed data, 400 fallback). Reads use
+  `require_any_admin` + service scope; writes use `require_any_admin` + the
+  service write gate.
+
+## API contract (recorded)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/admin/timetable` | scoped list; filters `session_id`, `semester_id`, `section_id`, `subsection_id`, `day_of_week`, `is_active`, `subject_id`, `elective_slot` (narrow-only); active-only default |
+| GET | `/api/v1/admin/timetable/{entry_id}` | scoped detail; out-of-scope/nonexistent -> 404 |
+| POST | `/api/v1/admin/timetable` | create; write gate HEAD + CLASS; conflict 409 |
+| PATCH | `/api/v1/admin/timetable/{entry_id}` | partial update (omitted = unchanged; explicit null clears nullable); revalidates complete entry; conflict detection ignores the row being updated |
+| POST | `/api/v1/admin/timetable/{entry_id}/deactivate` | soft deactivate, idempotent |
+| POST | `/api/v1/admin/timetable/{entry_id}/duplicate` | server-side duplication with overrides; conflict 409 |
+
+Authorization matrix (Phase 24.0 §7): HEAD global; CLASS assigned sections
+(read + write); SUBSECTION read-only (inert); ELECTIVE read own-subject
+entries only (write NO — event path is their write surface). No client
+role/scope trusted; filters never expand scope.
+
+## Verification performed
+
+- `verify_phase_24_7c.py` PASS **30/30** (×2 runs, idempotent): in-process
+  HTTP testing (ASGITransport) against the LOCAL DB — unauth 401, STUDENT 403,
+  HEAD read/create, conflict 409, adjacent allowed, detail, PATCH room,
+  deactivate + reactivate, duplicate (day override), CLASS_ADMIN own-section
+  201 + other-section 403, ELECTIVE_ADMIN create 403, SUBSECTION_ADMIN create
+  403, CLASS list own-section only, ELECTIVE list own-subject only,
+  SUBSECTION list own-section, filtered list, nonexistent 404s
+  (GET/PATCH/deactivate/duplicate), baseline restored, active session
+  unchanged.
+- Regression: `verify_phase_24_3.py` PASS 40/40 · `verify_phase_24_5.py` PASS
+  46/46 · `verify_phase_24_6.py` PASS 46/46 · `verify_phase_24_7a.py` PASS ·
+  `verify_phase_24_7b.py` PASS 29/29.
+- `compileall` PASS · `git diff --check` clean · alembic single head
+  `c4d5e6f7a8b9` unchanged (no new migration).
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-C COMPLETE, verifier 30/30, git state), Phase
+  24.7-C record appended with the endpoint table and authorization matrix.
+- implementation_plan.md: Phase 24.7-C section (executed).
+- task.md: Phase 24.7-C checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-C COMPLETE. HARD STOP:** Phase 24.7-D
+(frontend timetable editor) NOT STARTED - requires a fresh execution prompt.
+No production system was intentionally contacted or modified. No
+commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7-D - Admin Timetable Builder UI (IN PROGRESS - 24.7-D COMPLETE, 2026-08-30)
+
+## Scope
+
+Build the Admin Portal timetable management surface — a real CRUD interface
+(not a mockup) inside the existing AdminShell. The UI is NOT the security
+boundary: reads are scoped server-side; writes are gated by the backend to
+HEAD_ADMIN + CLASS_ADMIN (assigned section); the frontend only hides controls
+for presentation. No backend/schema/DB changes. No frozen student surfaces
+rewritten. Local development only. Git state: implemented but NOT committed.
+
+## What was implemented and why
+
+### Frontend (additive, inside the existing AdminShell)
+
+- `types/api.ts` + `hooks/useApi.ts` (extended): `TimetableEntryAdminResponse`
+  (id, section, subsection, subject, day, start/end, class_type, room,
+  elective_slot, is_active, sort_order), create/update/duplicate request
+  schemas, mutation response, `useAdminTimetableEntries(params)` (query-string
+  filters), `useAdminTimetableEntryDetail`, `useAdminTimetableMutations`
+  (create/update/deactivate/duplicate). Contracts mirrored from the backend
+  with canonical enums (no divergent values).
+
+- `app/(admin)/admin/timetable/page.tsx` (NEW): scoped timetable page —
+  - filters: session/semester/section (HEAD only — structure hooks are
+    HEAD-gated), day, active state, subject, elective slot; filters only
+    NARROW the server-derived result (never expand);
+  - weekly grid grouped by day (Mon–Sun) with per-entry cards (time range,
+    subject code/name, class type badge L/T/P, elective slot badge EI/EII,
+    room, subsection, active state);
+  - loading skeleton, 403 state, error-with-retry, truthful empty state;
+  - create/edit/deactivate/duplicate entry actions (shown only to writers;
+    the backend is the security boundary);
+  - SWR revalidation after successful mutations; never invents the resulting
+    row; no stale optimistic state survives a failed mutation;
+  - server-derived `scopedSections` from the loaded entries' distinct
+    section_ids — used to populate the create form for scoped admins (CLASS)
+    who cannot call the HEAD-gated structure endpoints.
+
+- `components/timetable/TimetableEntryForm.tsx` (NEW): reusable form —
+  section (dropdown from structure hooks for HEAD / scopedSections for
+  non-global), subsection (from `useAdminSubsectionsStructure`), day,
+  start/end, subject, class type, room, elective slot, active, sort order.
+  Light UX validation (required fields, end-before-start) only; server
+  validation is authoritative.
+
+- `components/timetable/CreateTimetableEntryDialog.tsx` (NEW): create entry
+  flow. `EditTimetableEntryDialog.tsx` (NEW): PATCH-based partial update.
+  `DeactivateTimetableEntryDialog.tsx` (NEW): explicit confirmation dialog
+  — never silently deletes. `DuplicateTimetableEntryDialog.tsx` (NEW):
+  server-side duplication with day/time/room overrides.
+
+- `components/admin/AdminShell.tsx`: "Timetable" nav entry (all admins —
+  scoped reads exist; writes HEAD + CLASS server-side).
+
+- `app/(admin)/admin/page.tsx`: Timetable promoted from "Planned portal areas"
+  to "Available now" with a card linking to `/admin/timetable`.
+
+## Behavior notes (recorded)
+
+- The grid makes overlapping/conflicting entries obvious via per-day stacking
+  with time labels; the frontend NEVER computes business conflicts
+  independently — the backend is authoritative (409).
+- After create/edit/deactivate/duplicate: `mutate()` revalidates the
+  authoritative query, filters are preserved (params unchanged), the current
+  view is kept; no optimistic row invention.
+- Errors: 401/403/404/409/422/network surface via the existing error
+  conventions (403 → ForbiddenState, other failures → error-with-retry;
+  mutation failures show the backend message in the dialog and never show
+  success).
+- Accessibility: semantic buttons (no div-as-button), labels on all selects,
+  keyboard-accessible Base UI dialogs, visible focus states.
+
+## Verification performed (static only)
+
+- `npx tsc --noEmit` PASS (0 errors).
+- ESLint on all changed files PASS (0 warnings after fixing: unused
+  `setSubsectionId` hook state, pointless `filter` in subject selector).
+- `git diff --check` clean.
+- No browser/E2E run performed (operator responsibility). No frozen student
+  surfaces rewritten. No backend/schema/DB changes in this slice. Production
+  untouched; `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-D COMPLETE, `tsc`+ESLint clean, git state), Phase
+  24.7-D record appended.
+- implementation_plan.md: Phase 24.7-D section (executed).
+- task.md: Phase 24.7-D checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-D COMPLETE. HARD STOP:** Phase 24.7-E
+(refinements) NOT STARTED - requires a fresh execution prompt. No production
+system was intentionally contacted or modified. No commit/push/PR made during
+implementation.
+
+---
+
+# Phase 24.7-E - Mutation Workflow Completion (IN PROGRESS - 24.7-E COMPLETE, 2026-08-30)
+
+## Scope
+
+Finish the timetable builder's mutation workflows so there are no obvious
+CRUD leftovers. No backend/schema/DB changes. No new files — edits only to
+the existing 24.7-D timetable components. Git state: implemented but NOT
+committed.
+
+## What was implemented and why
+
+- **Create dialog** (`CreateTimetableEntryDialog`): closes ONLY after the
+  backend accepts the mutation and the page revalidates. Remounts fresh per
+  open (`key` on `createOpen`), so no stale form state from a previous
+  cancelled creation. Error handling unchanged (errors shown in the form; the
+  dialog stays open so the user can fix the issue).
+
+- **Edit dialog** (`EditTimetableEntryDialog`): sends ONLY CHANGED fields
+  (diff against the loaded persisted entry). This implements the PATCH
+  "preserve omitted values" semantic correctly: a non-scheduling edit (e.g.
+  room only) on an INACTIVE entry no longer trips the backend INACTIVE_PARENT
+  guard (which only fires when scheduling fields are present in the payload).
+  An existing subsection is never silently cleared (`subsection_id` now
+  pre-filled in the initial form state). The dialog closes on success.
+
+- **Deactivate dialog** (`DeactivateTimetableEntryDialog`): wraps the
+  deactivation call in a try/catch and surfaces backend failures inside the
+  dialog (no silent failure, no fake success). The entry is NOT removed and
+  no success is claimed when the backend rejects the operation.
+
+- **Duplicate dialog** (`DuplicateTimetableEntryDialog`): the description
+  now states exactly which fields are copied (subject, section, class type,
+  elective slot, active state) vs overridable (day/time/room). The dialog
+  preserves the source's `is_active` state. 409 conflicts render a styled
+  warning banner showing only the backend detail (day/time/subject as
+  returned — no client-inferred conflict data). The backend runs full
+  validation + conflict detection; the duplicate never bypasses it.
+
+- **TimetableEntryForm** (`TimetableEntryForm`): the error state now carries
+  the HTTP status alongside the message. When the status is 409, the form
+  renders a distinct warning-styled banner with a "Schedule conflict — the
+  backend rejected this entry" header and the backend's detail string
+  verbatim. Other errors render with destructive styling.
+
+- **Page** (`page.tsx`): all mutation dialogs are keyed per entry id, so
+  switching between different entries always gives a fresh form (no stale
+  edit data). The create dialog uses a key tied to `createOpen` to remount
+  fresh per open. Filters are preserved across mutations — `mutate()`
+  revalidates the same key (params unchanged); revalidation determines row
+  visibility (deactivated rows leave the active view naturally when the
+  active filter excludes inactive).
+
+## Verification performed (static only)
+
+- `npx tsc --noEmit` PASS (0 errors).
+- ESLint on all changed files PASS (0 warnings/errors; one unescaped-entity
+  fix in the duplicate dialog description).
+- `git diff --check` clean.
+- No browser/E2E run performed (operator responsibility). No backend/schema/DB
+  changes in this slice. No student attendance/session behavior touched.
+  Production untouched; `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-E COMPLETE, 24.7-F NOT STARTED), Phase 24.7-E
+  record appended.
+- implementation_plan.md: Phase 24.7-E section (executed).
+- task.md: Phase 24.7-E checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-E COMPLETE. HARD STOP:** Phase 24.7-F
+(student-facing timetable integration) NOT STARTED - requires a fresh
+execution prompt. No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7-F - Conflict-Aware UX (IN PROGRESS - 24.7-F COMPLETE, 2026-08-30)
+
+## Scope
+
+Make timetable conflicts understandable and prevent avoidable administrative
+mistakes without moving business logic into React. Backend remains
+authoritative. No schema/migration changes; no new endpoints (the 24.7-C API
+contract is extended additively). Git state: implemented but NOT committed.
+
+## What was implemented and why
+
+### Backend (additive — 24.7-C conflict contract extended)
+
+- **Structured 409 contract:** a timetable conflict now returns
+  `{"detail": {"message": "...", "conflicts": [...]}}` where `conflicts` is
+  the backend-resolved list of conflicting entries — each carries `id`
+  (string), `subject_code`, `subject_name`, `section_name`,
+  `subsection_name`, `day_of_week`, `start_time`, `end_time`,
+  `subsection_id`, `elective_slot`. UUIDs are stringified so the body is
+  JSON-serializable (this fixed a `TypeError: UUID is not JSON serializable`
+  in the 24.7-C verifier after the contract change).
+- `_format_conflicts` builds the human-readable message with scope context:
+  subject code, day label (Monday–Sunday), time range, and section/subsection
+  name — e.g. `REV-F1 on Monday 09:00-10:00 (REV-F)`.
+- Conflict-candidate query now eager-loads subject + section + subsection so
+  the structured payload can carry names without N+1.
+- Non-conflict error codes keep the existing string `detail` convention
+  (404/403/422 unchanged).
+
+### Frontend (additive)
+
+- **`apiFetch`:** preserves the HTTP status (Phase 24.1) and now attaches the
+  parsed response body (`error.body`) so callers can read structured fields
+  like `conflicts`. Handles string, object, and absent `detail` forms.
+- **Form (`TimetableEntryForm`) and Duplicate dialog:** on a 409 the dialogs
+  render the backend `conflicts` list verbatim inside the warning banner —
+  subject code, section, day label, time range, subsection — only fields the
+  backend returned. No conflict data is inferred on the client.
+- **Conflict-aware form behavior:** a 409 keeps the form values, keeps the
+  dialog open, shows the conflict, and never shows success. The admin can
+  correct day/time/scope and resubmit; the backend re-validates.
+- **Grid:** entry cards render a time-position bar within the 08:00–18:00 day
+  window, so overlapping entries are visually obvious instead of silently
+  stacked.
+
+## Concurrency behavior (recorded)
+
+Admin A opens an entry; Admin B changes a conflicting entry; Admin A saves.
+The backend remains authoritative: every create/update/duplicate/deactivate
+re-reads the CURRENT database state via `AdminTimetableService`/repository and
+re-runs deterministic conflict detection against it. A stale frontend can
+never bypass conflict validation — the save is validated against live rows and
+returns 409 (or 404/403 if the target changed) with the structured conflict
+list. There is no optimistic UI state; after a successful save the page
+revalidates the authoritative query. On 409 the dialog stays open with form
+values intact for correction.
+
+## Verification performed
+
+- `verify_phase_24_7c.py` PASS **30/30** (×2 runs) — its 409 assertions check
+  status code only, so the structured-detail change does not break it.
+- `compileall` PASS · `npx tsc --noEmit` PASS · ESLint PASS (one
+  pre-existing `window.location.href` warning in `api.ts`, unrelated to this
+  slice) · `git diff --check` clean.
+- Live 409 body verified: `detail.message` with scope context and a structured
+  `conflicts` list present.
+- No browser/E2E run performed (operator responsibility). No schema/migration/
+  DB changes. No student attendance/session behavior touched. Production
+  untouched; `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-F COMPLETE, verifier 30/30, git state), Phase
+  24.7-F record appended with the conflict contract + concurrency semantics.
+- implementation_plan.md: Phase 24.7-F section (executed).
+- task.md: Phase 24.7-F checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-F COMPLETE. HARD STOP:** Phase 24.7-G
+(student-facing timetable integration) NOT STARTED - requires a fresh
+execution prompt. No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7-G - Student Timetable Resolution (IN PROGRESS - 24.7-G COMPLETE, 2026-08-30)
+
+## Scope
+
+Derive the student-facing timetable from the student's academic context
+(section + subsection), their LOCKED elective choices, and the authoritative
+timetable — no hardcoded current-semester assumptions. The timetable remains
+the EXPECTED schedule; entries are NOT collapsed into `class_sessions`. No
+schema/migration changes. Git state: implemented but NOT committed.
+
+## What was implemented and why
+
+### Backend
+
+- `repositories/timetable_repo.py` — new `get_weekly_entries_for_student(
+  section_id, subsection_id)`:
+  - ACTIVE entries only (`is_active = true`) — deactivated entries never
+    appear in a student timetable;
+  - section-wide entries (`subsection_id IS NULL`) PLUS the student's OWN
+    subsection entries when assigned;
+  - OTHER subsections' private schedules are excluded — no subsection
+    schedule leakage. A student with no subsection sees section-wide entries
+    only.
+- `api/v1/endpoints/timetable.py` — uses the student-scoped query and applies
+  the elective rule:
+  - shared DE-I / DE-II slot entries resolve to the student's LOCKED concrete
+    subject via their `StudentElectiveChoice`;
+  - a slot entry with NO recorded choice is **OMITTED** — the anchor subject
+    (BCS-054 / BCS-058) is never exposed merely because it exists in the
+    timetable configuration;
+  - common subjects are returned unchanged for applicable students.
+
+### Frontend
+
+- No changes required. The student timetable surface (dashboard today-classes
+  and the EventFormDialog subject picker) consumes `GET /api/v1/timetable`
+  whose response shape is unchanged; the corrected resolution flows through
+  automatically. Frozen student features are preserved.
+
+## Verification performed
+
+- `verify_phase_24_7g.py` PASS **25/25** (×2 runs, idempotent), in-process
+  HTTP testing (ASGITransport) against the LOCAL DB with isolated fixtures
+  (fixture session/semester/section, two subsections, six timetable entries
+  incl. one inactive, three fixture students) cleaned up in `finally`:
+  - Student A (subsection A1; DE-I→BCS-054, DE-II→BCS-058): resolved set
+    exactly `{(BCS-501,0), (BCS-054,1), (BCS-058,1), (BCS-501,2)}`, 4 items,
+    no BCS-052/BCS-055, exactly one own-subsection day-2 entry, inactive
+    excluded;
+  - Student B (subsection A2; DE-I→BCS-052, DE-II→BCS-055): resolved set
+    exactly `{(BCS-501,0), (BCS-052,1), (BCS-055,1), (BCS-501,2)}`, 4 items,
+    no BCS-054/BCS-058 (no anchor leakage), exactly one own-subsection day-2
+    entry, inactive excluded;
+  - Student C (subsection A1; NO locked choices): resolved set exactly
+    `{(BCS-501,0), (BCS-501,2)}`, 2 items — the DE-I/DE-II slot entries are
+    omitted (no anchor exposure), exactly one own-subsection day-2 entry,
+    inactive excluded;
+  - baseline counts restored; original active session unchanged.
+- Regressions: `verify_phase_24_3.py` PASS 40/40 · `verify_phase_24_5.py`
+  PASS 46/46 · `verify_phase_24_6.py` PASS 46/46 · `verify_phase_24_7c.py`
+  PASS 30/30.
+- `compileall` PASS · `git diff --check` clean · alembic single head
+  `c4d5e6f7a8b9` unchanged (no new migration).
+- No browser/E2E run performed (operator responsibility). No student
+  attendance/session behavior mutated. Production untouched; `.env` unchanged
+  (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.7-G COMPLETE, verifier 25/25, git state), Phase
+  24.7-G record appended.
+- implementation_plan.md: Phase 24.7-G section (executed).
+- task.md: Phase 24.7-G checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - IN PROGRESS: 24.7-G COMPLETE. HARD STOP:** Phase 24.7-H
+(timetable→session materialization alignment) NOT STARTED - requires a fresh
+execution prompt. No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7 - Timetable Management (COMPLETE — FROZEN, 2026-08-30)
+
+## Implementation summary
+
+Phase 24.7 delivered the complete timetable management domain across 8
+controlled slices:
+
+- **24.7-A — Domain Foundation:** extended `timetable_entries` with
+  `subsection_id`, `room`, `is_active`, `sort_order`; CHECK guards (end>start,
+  day 0–6); composite FK (section_id, subsection_id) → subsections;
+  `uq_subsections_section_id`; admin read schemas. Migration `c4d5e6f7a8b9`
+  (additive; 28 rows preserved; upgrade/downgrade verified locally).
+- **24.7-B — Repository / Service / Conflict Detection:** `AdminTimetableRepository`
+  (bounded scope-aware queries, deterministic ordering) + `AdminTimetableService`
+  (academic-context/subject/subsection/elective-slot/time validation,
+  deterministic conflict predicate, domain-error hierarchy, server-side scope
+  resolution via AuthorizationService). Verifier 29/29.
+- **24.7-C — Admin CRUD API:** six `/api/v1/admin/timetable` endpoints
+  (list/detail/create/PATCH/deactivate/duplicate); reads `require_any_admin` +
+  server scope; writes HEAD + CLASS (assigned section) only; domain-error →
+  401/403/404/409/422 mapping. Verifier 30/30.
+- **24.7-D — Admin Builder UI:** `/admin/timetable` page (scoped filters,
+  weekly grid grouped by day, per-entry cards with time bar), reusable
+  `TimetableEntryForm`, create/edit/deactivate/duplicate dialogs, AdminShell
+  nav, dashboard promotion. `tsc` + ESLint clean.
+- **24.7-E — Mutation Workflow Completion:** create/edit close only on
+  backend accept + revalidation; edit sends ONLY changed fields (PATCH
+  preserve-omitted); duplicate preserves source active state; deactivate
+  surfaces errors; 409 keeps form values open (no fake success).
+- **24.7-F — Conflict-Aware UX:** structured 409 contract (`detail.message`
+  + `detail.conflicts`), `apiFetch` body attachment (additive), conflict list
+  rendered verbatim, concurrency semantics recorded (backend authoritative).
+- **24.7-G — Student Resolution:** `get_weekly_entries_for_student`
+  (active-only, section-wide + own subsection; other subsections excluded);
+  DE-I/DE-II slots resolve to locked choices; no anchor leakage; common
+  subjects visible. Verifier 25/25.
+- **24.7-H — Completion Gate:** full conflict matrix, security matrix,
+  academic matrix, data integrity. Verifier 27/27. Dead frontend hook
+  (`useAdminTimetableEntryDetail`) removed.
+
+## Verification summary
+
+- Completion gate (`verify_phase_24_7h.py`) **27/27**: conflict matrix 9/9
+  (exact/partial/containing/contained overlap rejected; adjacent allowed;
+  different day allowed; different section allowed; inactive conflicting row
+  allowed; self-edit conflict-free) · security matrix 9/9 (HEAD global,
+  CLASS own-section + cross-section 403 read/write, SUBSECTION own-section +
+  write 403, ELECTIVE own-subject + write 403, STUDENT 403) · academic matrix
+  6/6 (Student A/B exact resolved sets; no anchor leakage; no cross-student
+  leakage; subsection isolation; inactive excluded) · data integrity 3/3.
+- Slice verifiers: 24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25.
+- Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS.
+- `compileall` PASS · `tsc --noEmit` PASS · ESLint PASS (one pre-existing
+  `window.location.href` warning in api.ts, unrelated) · `git diff --check`
+  clean · alembic single head `c4d5e6f7a8b9` unchanged.
+- No browser/E2E run performed (operator responsibility). Production
+  untouched; `.env` unchanged (local dev target).
+
+## Authorization matrix
+
+| Actor | Read | Write |
+|---|---|---|
+| HEAD_ADMIN | all sections | any section |
+| CLASS_ADMIN | assigned section(s) only | assigned section(s) only |
+| SUBSECTION_ADMIN | own subsection's section | 403 |
+| ELECTIVE_ADMIN | exact concrete subject only | 403 |
+| STUDENT | 403 | 403 |
+
+Cross-scope access via direct API calls (query params, cross-section POST,
+subject forging) is rejected server-side; UI hiding is not authorization.
+
+## Conflict matrix (recorded)
+
+Two entries CONFLICT when ALL hold: both active; same day; same section; time
+overlap (`existing.start < new.end AND existing.end > new.start`, adjacent
+allowed); same effective scope (section-wide×section-wide, section-wide×
+subsection, same subsection; different subsections parallel; different
+sections never). Same elective_slot never auto-conflicts (per-student
+resolution); ELECTIVE_I×ELECTIVE_II and elective×regular conflict.
+
+## Migration
+
+`c4d5e6f7a8b9` — additive; 28 rows preserved; deterministic backfill
+(is_active=true); upgrade/downgrade cycle verified locally; alembic single
+linear head unchanged.
+
+## Data integrity
+
+Baseline counts restored after every verifier run; attendance_records,
+class_sessions, quiz_schedules, academic_events, student_elective_choices and
+student accounts unchanged; no DELETE routes (405); no per-student timetable
+rows; no attendance/session/quiz/event mutation.
+
+## Known limitations
+
+- `verify_phase_22_1.py` reports a PRE-EXISTING "response fields match"
+  failure — its `expected_fields` set predates the Phase 22.3 `elective_slot`
+  field; the live student timetable API is correct. A future correction prompt
+  is recommended.
+- `get_class_sessions_for_subject` in `timetable_repo.py` appears unused
+  (pre-existing; not a 24.7 concern).
+
+## Manual browser checklist (operator)
+
+1. `/admin/timetable`: weekly grid renders per day; filters narrow correctly
+   (session/semester/section/day/state/subject/elective).
+2. Create an entry that conflicts → 409 banner lists conflicting entry
+   (subject/section/day/time); dialog stays open with values intact.
+3. Edit an entry's room → only changed fields sent; edit an INACTIVE entry's
+   scheduling fields → INACTIVE_PARENT message.
+4. Duplicate an entry with a day/time override → copy created; conflicts
+   respected.
+5. Deactivate an entry → explicit confirmation; row leaves the active view;
+   no hard delete.
+6. As CLASS_ADMIN: only assigned section visible/writable; cross-section
+   attempts fail.
+7. As ELECTIVE_ADMIN: own-subject entries only; writes rejected server-side.
+8. As SUBSECTION_ADMIN: own-section entries only; writes rejected.
+9. Student timetable: Student A sees DE-I BCS-054 / DE-II BCS-058; Student B
+   sees DE-I BCS-052 / DE-II BCS-055; no anchor leakage; no cross-student
+   leakage; common subjects visible; subsection isolation.
+10. Concurrency: edit an entry while another admin changes it → save returns
+    409 (backend authoritative); form values preserved.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated — **Phase 24.7 ✅ FROZEN**, next pointer set to Phase
+  24.8 — Quiz Schedule Manager. 24.8+ NOT STARTED.
+- implementation_plan.md: final authoritative Phase 24.7 state (architecture,
+  slices, verification, limitations).
+- task.md: 24.7 tasks closed; completion-gate checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - ✅ COMPLETE / FROZEN.** Next: Phase 24.8 — Quiz Schedule
+Manager (NOT STARTED). No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.
+
+---
+
+# Phase 24.7 - Timetable Management (COMPLETE — FROZEN, 2026-08-30)
+
+## Summary
+
+Phase 24.7 delivered the full timetable management domain across 8 controlled
+slices: domain foundation, repository/service/conflict detection, admin CRUD
+API, admin builder UI, mutation workflows, conflict-aware UX, student
+resolution, and a completion gate. The timetable represents the EXPECTED
+academic schedule — it is NOT collapsed into actual `class_sessions`.
+
+## Implementation summary
+
+- **24.7-A (Domain Foundation):** extended `timetable_entries` with
+  `subsection_id`, `room`, `is_active`, `sort_order`; CHECK guards
+  (end>start, day 0–6); composite FK (section_id, subsection_id) →
+  subsections; `uq_subsections_section_id`; admin read schemas. Additive
+  migration `c4d5e6f7a8b9` (28 rows preserved; upgrade/downgrade verified).
+- **24.7-B (Repo/Service/Conflict):** `AdminTimetableRepository` (scope-aware
+  list/detail/conflict-candidate queries with deterministic ordering) and
+  `AdminTimetableService` (academic-context/subsection/elective-slot/time
+  validation, deterministic conflict predicate, domain-error hierarchy,
+  server-side scope resolution). Verifier 29/29.
+- **24.7-C (CRUD API):** six additive `/api/v1/admin/timetable` endpoints
+  (list/detail/create/PATCH/deactivate/duplicate); reads `require_any_admin`
+  + service scope; writes HEAD + CLASS (assigned section) only; domain errors
+  mapped to 401/403/404/409/422. Verifier 30/30.
+- **24.7-D (Builder UI):** `/admin/timetable` page — scoped filters, weekly
+  grid grouped by day with per-entry cards, create/edit/deactivate/duplicate
+  dialogs, reusable `TimetableEntryForm`, AdminShell nav, dashboard promotion.
+  `tsc` + ESLint clean.
+- **24.7-E (Mutation Workflows):** create/edit dialogs close only after
+  backend accept + revalidation; edit sends ONLY changed fields (PATCH
+  preserve-omitted); duplicate preserves source active state and states
+  copied-vs-overridable fields; deactivate surfaces errors; 409 keeps form
+  values open (no fake success).
+- **24.7-F (Conflict-Aware UX):** structured 409 contract (`detail.message`
+  with scope context + `detail.conflicts` list of backend-resolved entries);
+  `apiFetch` attaches response body (additive); form/duplicate dialogs render
+  the conflict list verbatim; concurrency is backend-authoritative; entry
+  cards show a time-position bar.
+- **24.7-G (Student Resolution):** `get_weekly_entries_for_student` —
+  active-only, section-wide + own-subsection entries (other subsections
+  excluded); DE-I/DE-II slots resolve to locked choices; slots with NO locked
+  choice are omitted (no anchor leakage); common subjects visible. Verifier
+  25/25.
+- **24.7-H (Completion Gate):** full conflict matrix (9/9), security matrix
+  (9/9), academic matrix (6/6), data integrity (3/3). Verifier 27/27. One dead
+  frontend hook removed.
+
+## Authorization matrix (verified via direct API)
+
+| Actor | Read | Write |
+|---|---|---|
+| HEAD_ADMIN | all sections | any section |
+| CLASS_ADMIN | assigned section(s) only | assigned section(s) only |
+| SUBSECTION_ADMIN | own subsection's section | 403 |
+| ELECTIVE_ADMIN | exact concrete subject only | 403 |
+| STUDENT | 403 | 403 |
+
+Cross-scope attempts (section_id query param, cross-section POST, subject-id
+forging) are rejected server-side; frontend hiding is not authorization.
+
+## Conflict matrix (verified)
+
+Exact overlap rejected · partial overlap rejected · containing overlap
+rejected · contained overlap rejected · adjacent allowed · different day
+allowed · different section (unrelated scope) allowed · inactive conflicting
+row allowed · editing a row does not conflict with itself.
+
+## Migration
+
+`c4d5e6f7a8b9` — additive only; 28 existing rows preserved; deterministic
+backfill (is_active=true via server default); upgrade/downgrade verified
+locally; alembic single linear head.
+
+## Data integrity
+
+Baseline counts restored after every verifier run; attendance_records,
+class_sessions, quiz_schedules, academic_events, student_elective_choices and
+student accounts unchanged; no DELETE routes (405); no per-student timetable
+rows; no attendance/session/quiz/event mutation.
+
+## Known limitations
+
+- `verify_phase_22_1.py` reports a PRE-EXISTING "response fields match"
+  failure — its `expected_fields` set predates the Phase 22.3 `elective_slot`
+  field; the live student timetable API is correct. A correction prompt is
+  recommended for the operator's backlog.
+- `get_class_sessions_for_subject` in `timetable_repo.py` may be unused;
+  pre-existing, not a 24.7 concern.
+- No browser/E2E run performed (operator responsibility).
+
+## Manual browser checklist for the operator
+
+1. As HEAD_ADMIN: `/admin/timetable` loads the weekly grid; filters by
+   session/semester/section/day/state/subject/elective narrow correctly.
+2. Create an entry (with a conflict) → verify the 409 banner lists the
+   conflicting entry with day/time/subject/scope; the dialog stays open with
+   values intact.
+3. Edit an entry (change room only) → verify only changed fields sent and the
+   row updates; edit an INACTIVE entry's scheduling fields → verify the
+   INACTIVE_PARENT message.
+4. Duplicate an entry with a day/time override → verify the copy appears and
+   respects conflicts.
+5. Deactivate an entry → explicit confirmation; after deactivate the row
+   leaves the active view; no delete.
+6. As CLASS_ADMIN: verify only the assigned section's entries are visible and
+   writable; cross-section attempts fail.
+7. As ELECTIVE_ADMIN: verify only the own-subject entries appear; create is
+   hidden and rejected server-side.
+8. As SUBSECTION_ADMIN: verify own-section entries only; writes rejected.
+9. Student dashboard (or `/api/v1/timetable`): Student A sees DE-I
+   BCS-054 + DE-II BCS-058; Student B sees DE-I BCS-052 + DE-II BCS-055; no
+   anchor leakage; no cross-student leakage; common subjects visible.
+10. After another admin changes a timetable entry while you are editing,
+    saving your stale copy returns 409 (backend-authoritative concurrency).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated — **Phase 24.7 ✅ FROZEN**, next pointer set to Phase
+  24.8 — Quiz Schedule Manager.
+- implementation_plan.md: final authoritative Phase 24.7 state (architecture,
+  slices, verification, limitations).
+- task.md: 24.7 tasks closed; completion-gate checklist recorded.
+- walkthrough.md: this entry.
+
+**PHASE 24.7 - ✅ COMPLETE / FROZEN.** Next: Phase 24.8 — Quiz Schedule
+Manager (NOT STARTED). No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.

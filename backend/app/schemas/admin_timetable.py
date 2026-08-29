@@ -93,3 +93,29 @@ class UpdateTimetableEntryRequest(BaseModel):
 
 class TimetableEntryMutationResponse(BaseModel):
     entry: TimetableEntryAdminResponse
+
+
+# ---------------------------------------------------------------------------
+# Duplicate (24.7-C)
+# ---------------------------------------------------------------------------
+
+class DuplicateTimetableEntryRequest(BaseModel):
+    """Duplicate an existing timetable entry server-side.
+
+    Every field is optional: absent fields are copied from the source entry.
+    Provide overrides to change the target day/time/scope as required.  The
+    full resulting entry is validated (academic context, elective slot, time
+    range) and conflict detection runs against the prospective entry — a
+    duplicate never silently overwrites another entry.
+    """
+    section_id: Optional[UUID] = None
+    subject_id: Optional[UUID] = None
+    day_of_week: Optional[int] = Field(None, ge=0, le=6)
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    class_type: Optional[ClassType] = None
+    room: Optional[str] = Field(None, max_length=100)
+    subsection_id: Optional[UUID] = None
+    elective_slot: Optional[ElectiveSlot] = None
+    is_active: bool = True
+    sort_order: Optional[int] = None

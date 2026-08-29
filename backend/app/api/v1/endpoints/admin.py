@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, require_any_admin, require_head_admin
 from app.models.user import User
@@ -36,11 +36,32 @@ from app.schemas.admin_subjects import (
     UpdateSubjectRequest,
     SubjectMutationResponse,
 )
+from app.models.enums import ElectiveSlot
+from app.schemas.admin_timetable import (
+    TimetableEntryAdminListResponse,
+    TimetableEntryAdminResponse,
+    TimetableEntryMutationResponse,
+    CreateTimetableEntryRequest,
+    UpdateTimetableEntryRequest,
+    DuplicateTimetableEntryRequest,
+)
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
 from app.services.admin_student_service import AdminStudentService
 from app.services.admin_structure_service import AdminStructureService
 from app.services.admin_subject_service import AdminSubjectService
+from app.services.admin_timetable_service import (
+    AdminTimetableService,
+    TimetableDomainError,
+    TimetableNotFoundError,
+    TimetableInvalidScopeError,
+    TimetableInvalidSubjectError,
+    TimetableInvalidSubsectionError,
+    TimetableInvalidElectiveSlotError,
+    TimetableInvalidTimeRangeError,
+    TimetableTimeConflictError,
+    TimetableInactiveParentError,
+)
 from app.models.user import Subsection
 from app.models.academic import Subject
 from sqlalchemy import select, func
@@ -500,3 +521,189 @@ async def update_admin_subject(
     Authorization: ``require_head_admin``.
     """
     return await AdminSubjectService(db).update_subject(subject_id, request)
+
+
+# ===========================================================================
+# Phase 24.7-C — Admin Timetable CRUD API
+# ===========================================================================
+
+def _raise_timetable_error(exc: TimetableDomainError) -> None:
+    """Map the 24.7-B domain-error hierarchy to the project's HTTP
+    conventions: 404 not-found, 403 insufficient scope, 409 conflict /
+    inactive-parent, 422 malformed/invalid data.
+
+    409 conflicts additionally carry the structured conflicting-entry list
+    (``detail.conflicts`` — only backend-resolved fields) so the UI can
+    render each conflicting day/time/subject/scope without inferring from
+    stale client state. The human-readable message stays in
+    ``detail.message``.
+    """
+    if isinstance(exc, TimetableNotFoundError):
+        raise HTTPException(status_code=404, detail=exc.detail)
+    if isinstance(exc, TimetableInvalidScopeError):
+        raise HTTPException(status_code=403, detail=exc.detail)
+    if isinstance(exc, TimetableTimeConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail={"message": exc.detail, "conflicts": exc.conflicts},
+        )
+    if isinstance(exc, TimetableInactiveParentError):
+        raise HTTPException(status_code=409, detail=exc.detail)
+    if isinstance(exc, (TimetableInvalidSubjectError, TimetableInvalidSubsectionError,
+                        TimetableInvalidElectiveSlotError, TimetableInvalidTimeRangeError)):
+        raise HTTPException(status_code=422, detail=exc.detail)
+    raise HTTPException(status_code=400, detail=exc.detail)
+
+
+@router.get("/timetable", response_model=TimetableEntryAdminListResponse)
+async def list_admin_timetable(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+    session_id: Optional[UUID] = Query(None, description="Filter by academic session"),
+    semester_id: Optional[UUID] = Query(None, description="Filter by semester"),
+    section_id: Optional[UUID] = Query(None, description="Filter by section"),
+    subsection_id: Optional[UUID] = Query(None, description="Filter by subsection"),
+    day_of_week: Optional[int] = Query(None, ge=0, le=6, description="0=Monday .. 6=Sunday"),
+    is_active: Optional[bool] = Query(None, description="True=active only; False=inactive only; omitted=active only"),
+    subject_id: Optional[UUID] = Query(None, description="Filter by subject"),
+    elective_slot: Optional[ElectiveSlot] = Query(None, description="Filter by elective slot"),
+):
+    """
+    Phase 24.7-C: scoped timetable entry list.
+
+    Authorization: ``require_any_admin`` (Phase 23.11, DB-resolved per
+    request) + server-side scope filtering in ``AdminTimetableService``:
+      - HEAD_ADMIN       -> all sections;
+      - CLASS_ADMIN      -> assigned section(s) only;
+      - SUBSECTION_ADMIN -> sections of assigned subsection(s) (inert);
+      - ELECTIVE_ADMIN   -> entries of the exact assigned concrete subject.
+    User-supplied filters (session/semester/section/subsection/day/subject/
+    elective/active) only NARROW the scope-derived set — they never expand it,
+    so a scoped admin cannot see unrelated sections by passing query params.
+    No client-supplied role/scope is trusted. Read-only.
+    """
+    try:
+        return await AdminTimetableService(db).list_entries(
+            current_user,
+            session_id=session_id,
+            semester_id=semester_id,
+            section_id=section_id,
+            subsection_id=subsection_id,
+            day_of_week=day_of_week,
+            is_active=is_active,
+            subject_id=subject_id,
+            elective_slot=elective_slot,
+        )
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)
+
+
+@router.get("/timetable/{entry_id}", response_model=TimetableEntryAdminResponse)
+async def get_admin_timetable_entry(
+    entry_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.7-C: scoped timetable entry detail.
+
+    Authorization: ``require_any_admin`` + per-entry scope check in
+    ``AdminTimetableService`` (DB-resolved per request).  An out-of-scope or
+    nonexistent entry is surfaced as 404 (no existence leak).
+    """
+    try:
+        return await AdminTimetableService(db).get_entry(current_user, entry_id)
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)
+
+
+@router.post("/timetable", response_model=TimetableEntryMutationResponse, status_code=201)
+async def create_admin_timetable_entry(
+    request: CreateTimetableEntryRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.7-C: create a timetable entry.
+
+    Authorization: ``require_any_admin`` + STRICT write gate in the service —
+    only HEAD_ADMIN (any section) and CLASS_ADMIN (assigned section) may
+    create timetable entries.  ELECTIVE_ADMIN / SUBSECTION_ADMIN receive 403
+    even though they hold an admin identity (the Phase 24.0 matrix reserves
+    timetable writes to HEAD + CLASS).  All validation (academic context,
+    subject, subsection, elective slot, time range) and conflict detection run
+    on the backend; the entry is never persisted on conflict (409).
+    """
+    try:
+        entry = await AdminTimetableService(db).create_entry(current_user, request)
+        return TimetableEntryMutationResponse(entry=entry)
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)
+
+
+@router.patch("/timetable/{entry_id}", response_model=TimetableEntryMutationResponse)
+async def update_admin_timetable_entry(
+    entry_id: UUID,
+    request: UpdateTimetableEntryRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.7-C: partial update of a timetable entry.
+
+    Explicit-PATCH semantics: omitted field = unchanged; explicit null clears
+    only when the field is nullable.  The resulting COMPLETE entry is
+    revalidated (academic context, elective slot, time range) and conflict
+    detection runs ignoring the row being updated (same-row edit never
+    self-conflicts).  Write gate: HEAD_ADMIN (any) / CLASS_ADMIN (assigned
+    section) only; others 403.  Conflict -> 409.
+    """
+    try:
+        entry = await AdminTimetableService(db).update_entry(current_user, entry_id, request)
+        return TimetableEntryMutationResponse(entry=entry)
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)
+
+
+@router.post("/timetable/{entry_id}/deactivate", response_model=TimetableEntryMutationResponse)
+async def deactivate_admin_timetable_entry(
+    entry_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.7-C: deactivate a timetable entry (soft).
+
+    Sets ``is_active = false`` — historical preservation over hard delete (no
+    DELETE route; Gate 7 destructive-action policy unresolved).  Idempotent:
+    deactivating an already-inactive entry returns it unchanged.  Write gate:
+    HEAD_ADMIN (any) / CLASS_ADMIN (assigned section) only.
+    """
+    try:
+        entry = await AdminTimetableService(db).deactivate_entry(current_user, entry_id)
+        return TimetableEntryMutationResponse(entry=entry)
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)
+
+
+@router.post("/timetable/{entry_id}/duplicate", response_model=TimetableEntryMutationResponse, status_code=201)
+async def duplicate_admin_timetable_entry(
+    entry_id: UUID,
+    request: DuplicateTimetableEntryRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.7-C: server-side duplication of a timetable entry.
+
+    The client does NOT rebuild the full payload: absent override fields are
+    copied from the source entry.  The FULL resulting entry is validated and
+    conflict detection runs — a duplicate never silently overwrites another
+    entry (409 on conflict).  Write gate: HEAD_ADMIN (any) / CLASS_ADMIN
+    (assigned section) only.
+    """
+    try:
+        entry = await AdminTimetableService(db).duplicate_entry(current_user, entry_id, request)
+        return TimetableEntryMutationResponse(entry=entry)
+    except TimetableDomainError as exc:
+        _raise_timetable_error(exc)

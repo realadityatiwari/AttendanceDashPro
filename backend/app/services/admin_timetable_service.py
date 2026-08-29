@@ -63,6 +63,7 @@ from app.repositories.admin_timetable_repo import AdminTimetableRepository
 from app.services.authorization_service import AuthorizationService
 from app.schemas.admin_timetable import (
     CreateTimetableEntryRequest,
+    DuplicateTimetableEntryRequest,
     TimetableEntryAdminResponse,
     TimetableEntryAdminListResponse,
     UpdateTimetableEntryRequest,
@@ -110,6 +111,18 @@ class TimetableInvalidTimeRangeError(TimetableDomainError):
 
 class TimetableTimeConflictError(TimetableDomainError):
     code = "TIME_CONFLICT"
+
+    def __init__(self, detail: str, conflicts: Optional[List[dict]] = None):
+        """Conflict error carrying the structured conflicting-entry list.
+
+        ``conflicts`` is a list of dicts with the fields the backend actually
+        resolved: ``id``, ``subject_code``, ``day_of_week``, ``start_time``,
+        ``end_time``, ``section_name``, ``subsection_name``, ``elective_slot``.
+        The UI renders ONLY these backend-returned fields — it never infers
+        conflict data from stale client state.
+        """
+        super().__init__(detail)
+        self.conflicts = conflicts or []
 
 
 class TimetableInactiveParentError(TimetableDomainError):
@@ -168,6 +181,32 @@ class AdminTimetableService:
         return (
             section_ids if section_ids else None,
             subject_ids if subject_ids else None,
+        )
+
+    async def _assert_write_scope(self, user: User, section_id: UUID) -> None:
+        """STRICT write gate (authoritative Phase 24.0 matrix).
+
+        Timetable creation/editing/deactivation/duplication is reserved to:
+          - HEAD_ADMIN (any section), and
+          - CLASS_ADMIN (only the assigned section(s)).
+        ELECTIVE_ADMIN and SUBSECTION_ADMIN may READ (scoped) but NEVER write
+        the timetable — an elective admin's write surface is the event path
+        (CLASS_CANCELLED / EXTRA_*) — so they are denied 403 here.
+        """
+        authz = AuthorizationService(self.db)
+        if await authz.is_head_admin(user):
+            return
+        scopes = await authz.get_active_scopes(user.id)
+        if any(
+            s.role == AdminRole.CLASS_ADMIN
+            and s.section_id is not None
+            and s.section_id == section_id
+            for s in scopes
+        ):
+            return
+        raise TimetableInvalidScopeError(
+            "Timetable modifications require global or section-scoped "
+            "administrator authority"
         )
 
     async def _assert_section_in_scope(
@@ -239,7 +278,11 @@ class AdminTimetableService:
         self, entry: TimetableEntry, exclude_id: Optional[UUID] = None
     ) -> List[dict]:
         """Return conflicting entries (deterministic) for a prospective
-        entry.  Bounded: only active same-section/same-day candidates."""
+        entry.  Bounded: only active same-section/same-day candidates.
+
+        Each conflict dict carries ONLY fields the backend resolved — the UI
+        renders these verbatim and never infers from stale client state.
+        """
         candidates = await self.repo.list_active_conflict_candidates(
             entry.section_id, entry.day_of_week, exclude_id=exclude_id
         )
@@ -247,15 +290,38 @@ class AdminTimetableService:
         for cand in candidates:
             if self._entries_conflict(entry, cand):
                 conflicts.append({
-                    "id": cand.id,
+                    "id": str(cand.id),
                     "subject_code": cand.subject.code if cand.subject else "?",
+                    "subject_name": cand.subject.name if cand.subject else "",
+                    "section_name": cand.section.name if cand.section else "",
+                    "subsection_name": cand.subsection.name if cand.subsection else None,
                     "day_of_week": cand.day_of_week,
                     "start_time": cand.start_time.isoformat(),
                     "end_time": cand.end_time.isoformat(),
-                    "subsection_id": cand.subsection_id,
+                    "subsection_id": str(cand.subsection_id) if cand.subsection_id else None,
                     "elective_slot": cand.elective_slot.value if cand.elective_slot else None,
                 })
         return conflicts
+
+    @staticmethod
+    def _format_conflicts(conflicts: List[dict]) -> str:
+        """Human-readable conflict summary for the 409 detail.
+
+        Scope context included: section, subsection (when set), day label,
+        and the conflicting time range + subject — all backend-returned.
+        """
+        day_labels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        parts = []
+        for c in conflicts:
+            label = day_labels[c["day_of_week"]] if 0 <= c["day_of_week"] <= 6 else f"day {c['day_of_week']}"
+            scope = c["section_name"] or ""
+            if c.get("subsection_name"):
+                scope = f"{scope} / {c['subsection_name']}" if scope else c["subsection_name"]
+            desc = f"{c['subject_code']} on {label} {c['start_time'][:5]}-{c['end_time'][:5]}"
+            if scope:
+                desc = f"{desc} ({scope})"
+            parts.append(desc)
+        return "; ".join(parts)
 
     # ------------------------------------------------------------------
     # Validation helpers
@@ -327,14 +393,74 @@ class AdminTimetableService:
     # ------------------------------------------------------------------
 
     async def list_entries(
-        self, user: User, *, day_of_week: Optional[int] = None, include_inactive: bool = False
+        self,
+        user: User,
+        *,
+        session_id: Optional[UUID] = None,
+        semester_id: Optional[UUID] = None,
+        section_id: Optional[UUID] = None,
+        subsection_id: Optional[UUID] = None,
+        day_of_week: Optional[int] = None,
+        is_active: Optional[bool] = None,
+        subject_id: Optional[UUID] = None,
+        elective_slot: Optional[ElectiveSlot] = None,
     ) -> TimetableEntryAdminListResponse:
-        section_ids, subject_ids = await self._resolve_scope(user)
+        scope_section_ids, scope_subject_ids = await self._resolve_scope(user)
+
+        # User-provided filters INTERSECT with scope-derived filters — never
+        # expand.  This prevents a scoped admin from seeing another section
+        # by passing a foreign section_id in the query string.
+        section_ids = list(scope_section_ids) if scope_section_ids is not None else None
+        if section_id is not None:
+            if scope_section_ids is not None and section_id not in scope_section_ids:
+                return TimetableEntryAdminListResponse(items=[], total=0)
+            section_ids = [section_id]
+
+        subject_ids = list(scope_subject_ids) if scope_subject_ids is not None else None
+        if subject_id is not None:
+            if scope_subject_ids is not None and subject_id not in scope_subject_ids:
+                return TimetableEntryAdminListResponse(items=[], total=0)
+            subject_ids = [subject_id]
+
+        # Resolve session/semester to section_ids (bounded join).
+        if semester_id is not None or session_id is not None:
+            sem_ids = None
+            sess_ids = None
+            if semester_id is not None:
+                sem_ids = [semester_id]
+            if session_id is not None:
+                sess_ids = [session_id]
+            # If the caller already has section-level scope, intersect with
+            # the semester/session-resolved section ids.
+            from sqlalchemy import select as sel2
+            q = sel2(Section.id)
+            if sem_ids:
+                q = q.where(Section.semester_id.in_(sem_ids))
+            if sess_ids:
+                from app.models.academic import Semester
+                q = (q.join(Semester, Semester.id == Section.semester_id)
+                     .where(Semester.session_id.in_(sess_ids)))
+            result = await self.db.execute(q)
+            resolved_ids = {row[0] for row in result.all()}
+            if scope_section_ids is not None:
+                resolved_ids &= set(scope_section_ids)
+            if not resolved_ids:
+                return TimetableEntryAdminListResponse(items=[], total=0)
+            section_ids = list(resolved_ids)
+
+        subsection_ids = [subsection_id] if subsection_id is not None else None
+
+        # Default: active entries only (preserves 24.7-B semantics).
+        # is_active=True -> active only; is_active=False -> inactive only.
+        active_filter = True if is_active is None else is_active
+
         entries = await self.repo.list_entries(
-            section_ids=list(section_ids) if section_ids is not None else None,
-            subject_ids=list(subject_ids) if subject_ids is not None else None,
+            section_ids=section_ids,
+            subject_ids=subject_ids,
+            subsection_ids=subsection_ids,
             day_of_week=day_of_week,
-            include_inactive=include_inactive,
+            elective_slot=elective_slot,
+            is_active=active_filter,
         )
         items = [self._to_response(e) for e in entries]
         return TimetableEntryAdminListResponse(items=items, total=len(items))
@@ -357,6 +483,7 @@ class AdminTimetableService:
         self, user: User, request: CreateTimetableEntryRequest
     ) -> TimetableEntryAdminResponse:
         section_ids, subject_ids = await self._resolve_scope(user)
+        await self._assert_write_scope(user, request.section_id)
         await self._assert_section_in_scope(
             request.section_id, section_ids, subject_ids, subject_id=request.subject_id
         )
@@ -387,11 +514,8 @@ class AdminTimetableService:
         if conflicts:
             raise TimetableTimeConflictError(
                 "Timetable entry conflicts with an existing active entry: "
-                + "; ".join(
-                    f"{c['subject_code']} day {c['day_of_week']} "
-                    f"{c['start_time']}-{c['end_time']}"
-                    for c in conflicts
-                )
+                + self._format_conflicts(conflicts),
+                conflicts=conflicts,
             )
         self.db.add(entry)
         await self.db.commit()
@@ -405,6 +529,7 @@ class AdminTimetableService:
         if entry is None:
             raise TimetableNotFoundError("Timetable entry not found")
         section_ids, subject_ids = await self._resolve_scope(user)
+        await self._assert_write_scope(user, entry.section_id)
         await self._assert_section_in_scope(
             entry.section_id, section_ids, subject_ids, subject_id=entry.subject_id
         )
@@ -441,6 +566,7 @@ class AdminTimetableService:
                     "reactivation (set is_active=true) so conflict detection re-runs"
                 )
 
+        await self._assert_write_scope(user, new_section_id)
         await self._assert_section_in_scope(
             new_section_id, section_ids, subject_ids, subject_id=new_subject_id
         )
@@ -472,11 +598,8 @@ class AdminTimetableService:
         if conflicts:
             raise TimetableTimeConflictError(
                 "Updated timetable entry conflicts with an existing active entry: "
-                + "; ".join(
-                    f"{c['subject_code']} day {c['day_of_week']} "
-                    f"{c['start_time']}-{c['end_time']}"
-                    for c in conflicts
-                )
+                + self._format_conflicts(conflicts),
+                conflicts=conflicts,
             )
 
         # Apply.
@@ -502,6 +625,7 @@ class AdminTimetableService:
         if entry is None:
             raise TimetableNotFoundError("Timetable entry not found")
         section_ids, subject_ids = await self._resolve_scope(user)
+        await self._assert_write_scope(user, entry.section_id)
         await self._assert_section_in_scope(
             entry.section_id, section_ids, subject_ids, subject_id=entry.subject_id
         )
@@ -509,6 +633,82 @@ class AdminTimetableService:
             entry.is_active = False
             await self.db.commit()
             entry = await self.repo.get_entry(entry.id)
+        return self._to_response(entry)
+
+    async def duplicate_entry(
+        self, user: User, source_id: UUID, request: DuplicateTimetableEntryRequest
+    ) -> TimetableEntryAdminResponse:
+        """Server-side duplication of an existing timetable entry.
+
+        Absent override fields are copied from the source entry; the FULL
+        resulting entry is validated (academic context, elective slot, time
+        range) and conflict detection runs against the prospective entry —
+        a duplicate never silently overwrites another timetable entry.
+        """
+        source = await self.repo.get_entry(source_id)
+        if source is None:
+            raise TimetableNotFoundError("Timetable entry not found")
+        section_ids, subject_ids = await self._resolve_scope(user)
+        await self._assert_write_scope(user, source.section_id)
+        await self._assert_section_in_scope(
+            source.section_id, section_ids, subject_ids, subject_id=source.subject_id
+        )
+
+        # Resolve the prospective values: explicit override or source copy.
+        new_section_id = request.section_id or source.section_id
+        new_subject_id = request.subject_id or source.subject_id
+        new_subsection_id = (
+            request.subsection_id if request.subsection_id is not None
+            else source.subsection_id
+        )
+        new_elective_slot = (
+            request.elective_slot if request.elective_slot is not None
+            else source.elective_slot
+        )
+        new_day = request.day_of_week if request.day_of_week is not None else source.day_of_week
+        new_start = request.start_time if request.start_time is not None else source.start_time
+        new_end = request.end_time if request.end_time is not None else source.end_time
+        new_class_type = request.class_type if request.class_type is not None else source.class_type
+        new_room = request.room if request.room is not None else source.room
+        new_sort_order = request.sort_order if request.sort_order is not None else source.sort_order
+
+        await self._assert_write_scope(user, new_section_id)
+        await self._assert_section_in_scope(
+            new_section_id, section_ids, subject_ids, subject_id=new_subject_id
+        )
+        await self._validate_common(
+            new_section_id,
+            new_subject_id,
+            new_subsection_id,
+            new_elective_slot,
+            new_class_type,
+            new_start,
+            new_end,
+        )
+
+        entry = TimetableEntry(
+            section_id=new_section_id,
+            subject_id=new_subject_id,
+            subsection_id=new_subsection_id,
+            day_of_week=new_day,
+            start_time=new_start,
+            end_time=new_end,
+            class_type=new_class_type,
+            room=new_room,
+            elective_slot=new_elective_slot,
+            is_active=request.is_active,
+            sort_order=new_sort_order,
+        )
+        conflicts = await self._find_conflicts(entry)
+        if conflicts:
+            raise TimetableTimeConflictError(
+                "Duplicated timetable entry conflicts with an existing active entry: "
+                + self._format_conflicts(conflicts),
+                conflicts=conflicts,
+            )
+        self.db.add(entry)
+        await self.db.commit()
+        entry = await self.repo.get_entry(entry.id)
         return self._to_response(entry)
 
     # ------------------------------------------------------------------
