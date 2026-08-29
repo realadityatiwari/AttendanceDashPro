@@ -3388,7 +3388,9 @@ PHASE 21  ← COMPLETE & FROZEN
    ↓
 PHASE 22  ← COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
    ↓
-PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE; Phase 24 pending
+PHASE 23  ← 23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (service) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE
+   ↓
+PHASE 24  ← 24.0 ADMIN PORTAL DISCOVERY COMPLETE (2026-08-29) — implementation phases (24.1+) NOT STARTED
 ```
 
 This is a dependency path, not a rule that every subtask must be executed serially. Independent work can be parallelized when it is safe.
@@ -3624,7 +3626,8 @@ PHASE 10 ████████████████████  COMPLETE 
 Phase 20 ░░░░░░░░░░░░░░░░░░░░  COMPLETE & FROZEN
 Phase 21 ████████████████████  COMPLETE 🔒 (21A–21D.4, production LIVE on Vercel + Render + Supabase)
 Phase 22 ████████████████████  COMPLETE (22.1 VERIFIED · 22.2 COMPLETE · 22.3 COMPLETE · 22.4 COMPLETE)
-Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE; Phase 24 pending
+Phase 23 ████████████████████  23.0 DISCOVERY + RECONCILED · 23.1 (c8d9e0f1a2b3) · 23.2 (d0e1f2a3b4c5) · 23.3 (e3f4a5b6c7d8) · 23.4 (StudentContextService) · 23.5 (f5a6b7c8d9e0) · 23.6 (f6a7b8c9d0e1) · 23.7 (f7a8b9c0d1e2 + corrective f8a9b0c1d2e3) · 23.8 (quiz integration) · 23.9 (mutation gate, VERIFIED 26/26) · 23.10 (read models, VERIFIED 26/26) · 23.11 (authz, f9a0b1c2d3e4, VERIFIED 23/23) · 23.12 (migration gate, VERIFIED 52/52) — PHASE 23 CORE COMPLETE
+Phase 24 ░░░░░░░░░░░░░░░░░░░░  24.0 ADMIN PORTAL DISCOVERY COMPLETE (2026-08-29) · implementation phases (24.1+) NOT STARTED
 
 > **Next phase:** Phase 23 — Academic Architecture Evolution — **23.0 DISCOVERY
 > + BLUEPRINT RECONCILED (2026-08-27)** · **23.1 COMPLETE (2026-08-27)** —
@@ -3678,7 +3681,16 @@ Phase 23 ████████████████████  23.0 DISC
 > upgrade/downgrade SQL validated; data-integrity baseline unchanged;
 > `verify_phase_23_12.py` PASS 52/52); **no migration created, not applied to
 > production** (operator boundary).
-> Phase 24 (Admin Portal) pending.
+> **24.0 DISCOVERY COMPLETE (2026-08-29)** — Admin Portal Discovery &
+> Architecture. Read-only repository audit: baseline, frontend architecture,
+> Phase 23.11 authorization trace, 41-endpoint API inventory, admin capability
+> matrix, HEAD/CLASS/SUBSECTION/ELECTIVE information architectures, student/
+> timetable/occurrence/quiz/event management designs, API gap analysis,
+> 14-sub-phase proposed sequence (24.1–24.14), 12 decision gates.
+> Report: `docs/phase_24/phase_24_0_admin_portal_discovery.md`. No code,
+> schema, migration, or data changes; migration head unchanged `f9a0b1c2d3e4`.
+> Phase 24 implementation phases (24.1+) NOT STARTED — require operator review
+> and fresh execution prompts.
 > Blueprint: `docs/phase_23/phase_23_0_architecture_discovery.md`.
 ```## Phase 6.5 — Event persistence, admin authentication & seeding (historical)
 

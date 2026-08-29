@@ -2667,3 +2667,57 @@ Prove the Phase 23 migration chain is coherent, reproducible, reversible where a
 - The Phase 23 migration chain is validated and frozen. Do not rewrite migrations.
 - `verify_phase_23_12.py` is the migration-gate verifier for future schema work.
 - Phase 24 (Admin Portal) requires a fresh execution prompt.
+
+---
+
+## PHASE 24.0 - ADMIN PORTAL DISCOVERY & ARCHITECTURE (DISCOVERY COMPLETE, 2026-08-29)
+
+Status: **DISCOVERY COMPLETE - discovery only.** No implementation, no code/schema/
+migration/data changes, migration head unchanged (`f9a0b1c2d3e4`). No commit, no push,
+no PR. Phase 24 implementation phases (24.1+) remain **NOT STARTED**.
+
+## Objective
+
+Discovery-only design of the dedicated Admin Portal (master control surface) on top of
+the frozen Phase 23 Academic Core and the Phase 23.11 authorization foundation.
+
+## Delivered
+
+- [x] Authoritative discovery report: `docs/phase_24/phase_24_0_admin_portal_discovery.md` (28 sections + evidence appendices)
+- [x] A. Frontend architecture audit (routing, layout, auth/session, API client, SWR, UI primitives, modals, PWA, existing admin surfaces)
+- [x] B. Phase 23.11 authorization trace end-to-end (AdminRole, AdminScope, AuthorizationService, dependency factories, EventService gate, laboratory/feedback gates, DB constraints)
+- [x] C. Backend admin API inventory: all 41 endpoints with method/purpose/auth/scope/portal-safety
+- [x] D. Admin capability matrix (44 capabilities x HEAD/CLASS/SUBSECTION/ELECTIVE, each CONFIRMED/PROPOSED/DEFERRED/UNKNOWN)
+- [x] E-H. Information architectures: HEAD_ADMIN control surface, CLASS_ADMIN (section-scoped), SUBSECTION_ADMIN (inert boundaries), ELECTIVE_ADMIN (six concrete-subject scopes; BCS-058 vs BCS-055 vs BCS-056 isolation verified against code paths)
+- [x] I. Student management architecture (create/edit/move/subsection/electives/deactivation-gate/audit/safety)
+- [x] J. Timetable design (current-model sufficiency assessed; deferred fields recorded, none invented)
+- [x] K. Elective occurrence control (event-driven outcome design; no direct outcome API; no per-student sessions)
+- [x] L/M. Quiz + event management mapping over the frozen engines
+- [x] N. API gap analysis (reusable / additive / genuinely new / must-NOT-create)
+- [x] O. Data safety & auditability standards (audit-log architecture as a gated decision)
+- [x] P/Q. Main-app-vs-portal boundary; desktop-first responsive strategy (no separate admin PWA)
+- [x] R. Proposed Phase 24 sequence: 24.1-24.14 with objectives/dependencies/verification/production boundary
+- [x] S. Blockers/decision gates: 12 explicit gates recorded (no guesses)
+- [x] Migration head verified: 25 revisions, single linear chain, one head `f9a0b1c2d3e4`
+- [x] Governance docs updated (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md)
+
+## Not in this phase (HARD SCOPE)
+
+- [ ] NO portal screen/endpoint implementation
+- [ ] NO new role/scope/permission/resolver system
+- [ ] NO schema migrations, NO fabricated subsection data, NO admin fixtures
+- [ ] NO destructive DB operations, NO production contact
+- [ ] NO browser/E2E/test-suite runs (lightweight static inspection only)
+- [ ] NO commit/push/merge/PR
+
+## Validation
+
+- Read-only repository inspection + route inventory + model/service tracing + migration chain walk
+- Static consistency checks (matrix vs authorization code)
+- No DB connection required; production untouched
+
+## Do Not Touch Again
+
+- Phase 23 Academic Core (23.0-23.12) is frozen; Phase 23.11 authorization semantics are final
+- The event pipeline is the canonical occurrence-control path - no direct session/outcome writes
+- Phase 24 implementation requires fresh execution prompts per sub-phase, after decision-gate review

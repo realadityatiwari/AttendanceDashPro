@@ -3523,3 +3523,52 @@ semantics, drift, imports, offline downgrade, cleanup, counts unchanged).
 
 **Deferred:** production migration (operator); legacy timestamp-nullable
 alignment (optional); Phase 24 Admin Portal.
+
+---
+
+## Phase 24.0 - Admin Portal Discovery & Architecture (DISCOVERY ONLY, 2026-08-29)
+
+**Status: DISCOVERY COMPLETE.** No implementation. No code, schema, migration, or
+data changes. Migration head unchanged (`f9a0b1c2d3e4`). No commit, no push, no PR.
+
+**Objective:** design the architecture and implementation boundaries for the dedicated
+Admin Portal (master control surface) without building anything, preserving the frozen
+Phase 23 Academic Core and the Phase 23.11 authorization foundation.
+
+**Authoritative report:** `docs/phase_24/phase_24_0_admin_portal_discovery.md`
+(28 sections + evidence appendices).
+
+**Key discovery findings:**
+
+- Authorization foundation ready: `AuthorizationService` + `admin_scopes`
+  (CHECK-constrained) + Phase 23.11 dependency factories are the ONLY layer the portal
+  may rely on; no parallel role/scope system permitted.
+- Event pipeline is the canonical occurrence-control mechanism: subject-scoped events
+  -> `EventSessionSynchronizer` -> `occurrence_outcomes` on the shared anchor session.
+  The DE-II brief case (BCS-058 SURPRISE_QUIZ / BCS-055 normal / BCS-056 CANCELLED) is
+  representable today; NO direct occurrence-outcome API should be created.
+- API inventory: 41 endpoints; only 7 admin-gated (`require_head_admin`); portal is
+  primarily a new additive API surface (identity, students, structure, curriculum,
+  timetable, sessions, quizzes, attendance admin, analytics admin, admin/scope
+  management).
+- SUBSECTION_ADMIN stays conservatively inert; subsection capabilities disabled/deferred
+  until subsection-aware scheduling exists (no fabrication).
+- Genuine schema gaps recorded as decision gates only (timetable room/faculty/
+  subsection-scope/date-versioning absent; `users` activation flag absent for student
+  deactivation; audit-log architecture absent) - nothing invented in discovery.
+- Proposed sequence: 24.1 identity+shell -> 24.2 HEAD dashboard -> 24.3/24.4 student
+  management (read/write) -> 24.5 structure -> 24.6 curriculum -> 24.7 timetable ->
+  24.8 sessions/occurrences -> 24.9 elective outcome controls -> 24.10 quizzes ->
+  24.11 events -> 24.12 admin/scope management -> 24.13 attendance admin/analytics ->
+  24.14 integration/hardening. 12 explicit decision gates recorded (subsection
+  scheduling, move semantics, branch hierarchy, elective switching, deactivation,
+  audit log, destructive policy, provisioning workflow, production migration,
+  multi-section session scoping, CLASS_ADMIN semester breadth, settings justification).
+
+**Verification (read-only):** repository inspection; full route inventory; model/
+service/dependency tracing; migration chain walk (25 revisions, single linear chain,
+one head); static consistency checks. No DB connection required; no tests run; no
+browser/E2E; production untouched.
+
+**Next:** Phase 24.1 (Admin identity + portal shell) PROPOSED - requires operator
+review and a fresh execution prompt. Phase 24 implementation phases remain NOT STARTED.

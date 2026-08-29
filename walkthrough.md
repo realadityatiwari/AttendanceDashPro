@@ -6448,3 +6448,77 @@ not started — requires operator review and a fresh execution prompt.
 Production not touched.
 
 ---
+
+---
+
+# Phase 24.0 - Admin Portal Discovery & Architecture (DISCOVERY ONLY, 2026-08-29)
+
+## Scope
+
+Discovery-only. No implementation, no code, no schema, no migrations, no DB changes,
+no commit/push/PR. Phase 23 Academic Core (23.0-23.12) treated as frozen throughout;
+Phase 23.11 authorization semantics treated as final.
+
+## What was inspected (read-only)
+
+- Backend: `main.py`, `api/api.py` (live router) + `api/v1/router.py` (legacy, unwired),
+  all 15 endpoint modules (41 endpoints inventoried), 8 domain models, `base_class`,
+  6 services (`authorization_service`, `event_service`, `event_session_service`,
+  `event_registry`, `elective_resolver`, `student_context_service`),
+  `deps.py` dependency factories, `provision_admin.py`, seed/verify scripts.
+- Migrations: revision/down_revision extraction for all 25 version files; chain walked
+  base->head; confirmed single linear chain and exactly one head `f9a0b1c2d3e4`
+  (Phase 23.11 `admin_scopes`).
+- Frontend: App Router route groups, `AppShell/TopNav/MobileBottomNav`, `AuthContext`
+  (localStorage JWT, `/student/me` profile), `api.ts` (`apiFetch`, 401 handling,
+  production URL guard), `useApi.ts` (SWR cache strategies), shadcn UI inventory,
+  shared/shell components, event form, notifications, PWA manifest + service worker;
+  admin-usage grep across all `.tsx` (only legacy `role === "ADMIN"` UI gating exists).
+- Governance docs: current Phase 23 completion state and Phase 24 pending markers.
+
+## What was discovered (summary)
+
+- The Phase 23.11 layer (AdminRole / admin_scopes CHECK / AuthorizationService /
+  require_head_admin + scope factories / EventService `can_mutate_event`) is sufficient
+  for the Admin Portal to rely on; no parallel authorization may be created.
+- Only 7 of 41 endpoints are admin-gated today; the portal is a new additive API
+  surface. No endpoints exist for students, structure, curriculum, timetable,
+  enrollment, quiz schedules, scopes, or attendance correction.
+- The event pipeline (subject-scoped events -> EventSessionSynchronizer ->
+  occurrence_outcomes on the shared anchor session) already represents the DE-II
+  per-subject outcome case; direct outcome/session write APIs are explicitly rejected
+  by the design.
+- SUBSECTION_ADMIN remains inert; six ELECTIVE_ADMIN scopes are exact-subject and
+  mutually isolated (verified against `can_access_subject` and the synchronizer).
+- Genuine schema gaps (timetable room/faculty/subsection-scope/versioning; users
+  activation flag; audit log) recorded as decision gates - nothing invented.
+- Proposed Phase 24 sequence: 24.1 identity+shell, 24.2 HEAD dashboard, 24.3/24.4
+  students, 24.5 structure, 24.6 curriculum, 24.7 timetable, 24.8 sessions/occurrences,
+  24.9 elective outcome controls, 24.10 quizzes, 24.11 events, 24.12 admin/scope
+  management, 24.13 attendance admin/analytics, 24.14 hardening. 12 decision gates
+  documented.
+
+## Authoritative report
+
+`docs/phase_24/phase_24_0_admin_portal_discovery.md` - 28 sections + evidence
+appendices (exact files, exact routes, CONFIRMED/PROPOSED/DEFERRED/UNKNOWN markers).
+
+## Verification
+
+- Repository inspection, route inventory (41), model/service/dependency tracing,
+  migration-head inspection (25 revisions, linear, head `f9a0b1c2d3e4`), static
+  consistency checks between the capability matrix and authorization code.
+- No DB connection required; no tests, no browser, no E2E run.
+- Production: zero contact, zero mutation.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24.0 DISCOVERY COMPLETE added to dependency path, operating
+  state, and next-phase paragraph (implementation phases NOT STARTED).
+- implementation_plan.md: Phase 24.0 section.
+- task.md: Phase 24.0 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.0 - DISCOVERY COMPLETE. HARD STOP:** Phase 24.1 and all implementation
+phases NOT STARTED - require operator review of the 12 decision gates and fresh
+execution prompts. No source/schema/database/production changes made.
