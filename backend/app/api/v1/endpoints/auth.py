@@ -84,6 +84,13 @@ async def login(
             detail="Incorrect roll number or password",
         )
         
+    if not getattr(user, 'is_active', True):
+        logger.warning("Login failed: account deactivated for roll_number=%s", credentials.roll_number)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated. Please contact an administrator.",
+        )
+        
     # 3. Generate JWT
     access_token = create_access_token(subject=str(user.id), roll_number=user.roll_number)
     

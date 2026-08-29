@@ -887,6 +887,7 @@ export interface AdminStudentSummary {
   semester_name: string | null;
   subsection_name: string | null;
   is_placed: boolean;
+  is_active: boolean;
 }
 
 export interface AdminStudentListResponse {
@@ -916,6 +917,7 @@ export interface AdminStudentDetail {
   id: string;
   roll_number: string;
   name: string;
+  is_active: boolean;
   section_id: string | null;
   section_name: string | null;
   program: string | null;
@@ -934,4 +936,31 @@ export interface AdminStudentDetail {
   elective_choices: Record<string, string>;
   inconsistencies: string[];
   first_quiz_date: string | null;
+}
+
+export interface SubsectionDropdownResponse {
+  id: string;
+  name: string;
+  max_strength: number | null;
+  current_strength: number | null;
+}
+
+export interface ElectiveDropdownResponse {
+  id: string;
+  code: string;
+  name: string;
+  elective_slot: ElectiveSlot;
+}
+
+export interface AssignSubsectionRequest {
+  subsection_id: string;
+}
+
+export interface CorrectElectiveRequest {
+  slot: ElectiveSlot;
+  subject_id: string;
+}
+
+export interface SetStudentStatusRequest {
+  is_active: boolean;
 }

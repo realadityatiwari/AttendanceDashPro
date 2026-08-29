@@ -37,7 +37,12 @@ import {
   AdminDashboardResponse,
   AdminStudentListResponse,
   AdminStudentDetail,
-  AdminStudentParams
+  AdminStudentParams,
+  SubsectionDropdownResponse,
+  ElectiveDropdownResponse,
+  AssignSubsectionRequest,
+  CorrectElectiveRequest,
+  SetStudentStatusRequest
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -508,4 +513,48 @@ export function useAdminStudentDetail(studentId: string | null) {
     STANDARD_CACHE
   );
   return { student: data, isLoading, isError: error, mutate };
+}
+
+// Phase 24.4 Admin Portal student management (write)
+export function useSectionSubsections(sectionId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<SubsectionDropdownResponse[]>(
+    sectionId ? `/api/v1/admin/sections/${sectionId}/subsections` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { subsections: data, isLoading, isError: error, mutate };
+}
+
+export function useSemesterElectives(semesterId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<ElectiveDropdownResponse[]>(
+    semesterId ? `/api/v1/admin/semesters/${semesterId}/electives` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { electives: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminStudentMutations() {
+  const assignSubsection = async (studentId: string, payload: AssignSubsectionRequest): Promise<AdminStudentDetail> => {
+    return apiFetch(`/api/v1/admin/students/${studentId}/subsection`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  const correctElective = async (studentId: string, payload: CorrectElectiveRequest): Promise<AdminStudentDetail> => {
+    return apiFetch(`/api/v1/admin/students/${studentId}/electives`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  const setStudentStatus = async (studentId: string, payload: SetStudentStatusRequest): Promise<AdminStudentDetail> => {
+    return apiFetch(`/api/v1/admin/students/${studentId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  return { assignSubsection, correctElective, setStudentStatus };
 }

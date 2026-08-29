@@ -22,6 +22,7 @@ class AdminStudentSummary(BaseModel):
     semester_name: Optional[str] = None
     subsection_name: Optional[str] = None
     is_placed: bool = False
+    is_active: bool = True
 
 
 class AdminStudentListResponse(BaseModel):
@@ -57,6 +58,7 @@ class AdminStudentDetail(BaseModel):
     id: UUID
     roll_number: str
     name: str
+    is_active: bool = True
 
     section_id: Optional[UUID] = None
     section_name: Optional[str] = None
@@ -77,3 +79,25 @@ class AdminStudentDetail(BaseModel):
     elective_choices: Dict[str, str] = Field(default_factory=dict)
     inconsistencies: List[str] = Field(default_factory=list)
     first_quiz_date: Optional[date] = None
+
+class AssignSubsectionRequest(BaseModel):
+    subsection_id: UUID
+
+class CorrectElectiveRequest(BaseModel):
+    slot: ElectiveSlot
+    subject_id: UUID
+
+class SetStudentStatusRequest(BaseModel):
+    is_active: bool
+
+class SubsectionDropdownResponse(BaseModel):
+    id: UUID
+    name: str
+    max_strength: Optional[int] = None
+    current_strength: Optional[int] = None
+
+class ElectiveDropdownResponse(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    elective_slot: ElectiveSlot

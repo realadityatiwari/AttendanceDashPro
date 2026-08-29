@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, Enum, text, UniqueConstraint, Integer
+from sqlalchemy import String, ForeignKey, Enum, text, UniqueConstraint, Integer, Boolean
 from app.db.base_class import Base
 from app.models.enums import UserRole
 from app.models.laboratory import LaboratoryRecord
@@ -61,6 +61,9 @@ class User(Base):
     roll_number: Mapped[str] = mapped_column(String, unique=True, index=True)
     name: Mapped[str] = mapped_column(String)
     hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
     # Authorization role (Phase 6.5): every account is STUDENT by default;
     # ADMIN is granted only through the explicit provisioning script
     # (backend/scripts/provision_admin.py). Never self-assignable.

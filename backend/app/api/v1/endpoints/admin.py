@@ -7,10 +7,18 @@ from app.api.dependencies.deps import get_db, require_any_admin, require_head_ad
 from app.models.user import User
 from app.schemas.admin import AdminIdentity, AdminScopeDescriptor
 from app.schemas.admin_dashboard import AdminDashboardResponse
-from app.schemas.admin_students import AdminStudentDetail, AdminStudentListResponse
+from app.schemas.admin_students import (
+    AdminStudentDetail, AdminStudentListResponse,
+    AssignSubsectionRequest, CorrectElectiveRequest, SetStudentStatusRequest,
+    SubsectionDropdownResponse, ElectiveDropdownResponse
+)
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
 from app.services.admin_student_service import AdminStudentService
+from app.models.user import Subsection
+from app.models.academic import Subject
+from sqlalchemy import select, func
+from typing import List
 
 router = APIRouter()
 
@@ -118,3 +126,80 @@ async def get_admin_student_detail(
     ``StudentContextService``. Read-only.
     """
     return await AdminStudentService(db).get_student_detail(current_user, student_id)
+
+@router.patch("/students/{student_id}/subsection", response_model=AdminStudentDetail)
+async def assign_student_subsection(
+    student_id: UUID,
+    request: AssignSubsectionRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assign a student to a subsection."""
+    return await AdminStudentService(db).assign_subsection(current_user, student_id, request.subsection_id)
+
+@router.patch("/students/{student_id}/electives", response_model=AdminStudentDetail)
+async def correct_student_elective(
+    student_id: UUID,
+    request: CorrectElectiveRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Correct a student's elective choice."""
+    return await AdminStudentService(db).correct_elective(current_user, student_id, request.slot, request.subject_id)
+
+@router.patch("/students/{student_id}/status", response_model=AdminStudentDetail)
+async def set_student_status(
+    student_id: UUID,
+    request: SetStudentStatusRequest,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate or deactivate a student account."""
+    return await AdminStudentService(db).set_student_status(current_user, student_id, request.is_active)
+
+@router.get("/sections/{section_id}/subsections", response_model=List[SubsectionDropdownResponse])
+async def list_section_subsections(
+    section_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List available subsections for a section."""
+    stmt = select(Subsection).where(Subsection.section_id == section_id)
+    result = await db.execute(stmt)
+    subsections = result.scalars().all()
+    
+    count_stmt = select(User.subsection_id, func.count(User.id)).where(
+        User.section_id == section_id, User.subsection_id.isnot(None)
+    ).group_by(User.subsection_id)
+    count_result = await db.execute(count_stmt)
+    counts = dict(count_result.all())
+
+    return [
+        SubsectionDropdownResponse(
+            id=s.id,
+            name=s.name,
+            max_strength=s.max_strength,
+            current_strength=counts.get(s.id, 0)
+        )
+        for s in subsections
+    ]
+
+@router.get("/semesters/{semester_id}/electives", response_model=List[ElectiveDropdownResponse])
+async def list_semester_electives(
+    semester_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List available elective subjects for a semester."""
+    stmt = select(Subject).where(Subject.semester_id == semester_id, Subject.elective_slot.isnot(None))
+    result = await db.execute(stmt)
+    subjects = result.scalars().all()
+    return [
+        ElectiveDropdownResponse(
+            id=s.id,
+            code=s.code,
+            name=s.name,
+            elective_slot=s.elective_slot
+        )
+        for s in subjects
+    ]

@@ -27,9 +27,11 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
 
-from app.models.user import User
-from app.models.enums import AdminRole, UserRole
+from app.models.user import User, Subsection
+from app.models.academic import StudentEnrollment, StudentElectiveChoice, Subject
+from app.models.enums import AdminRole, UserRole, ElectiveSlot, EnrollmentType
 from app.schemas.admin_students import (
     AdminStudentDetail,
     AdminStudentEnrollment,
@@ -158,6 +160,7 @@ class AdminStudentService:
             id=student.id,
             roll_number=student.roll_number,
             name=student.name,
+            is_active=getattr(student, 'is_active', True),
             section_id=ctx.section_id,
             section_name=ctx.section_name,
             program=ctx.program,
@@ -180,3 +183,111 @@ class AdminStudentService:
             inconsistencies=list(ctx.inconsistencies),
             first_quiz_date=ctx.first_quiz_date,
         )
+
+    # ------------------------------------------------------------------
+    # Write contract
+    # ------------------------------------------------------------------
+    async def assign_subsection(self, user: User, student_id: UUID, subsection_id: UUID) -> AdminStudentDetail:
+        student = await self.repo.get_student(student_id)
+        if not await self._can_access_student(user, student):
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        # Verify subsection belongs to student's section
+        stmt = select(Subsection).where(Subsection.id == subsection_id)
+        result = await self.db.execute(stmt)
+        subsection = result.scalars().first()
+        if not subsection:
+            raise HTTPException(status_code=404, detail="Subsection not found")
+        
+        if subsection.section_id != student.section_id:
+            raise HTTPException(status_code=409, detail="Subsection does not belong to the student's section")
+
+        # Enforce capacity
+        if subsection.max_strength is not None:
+            count_stmt = select(func.count()).select_from(User).where(User.subsection_id == subsection_id)
+            count_result = await self.db.execute(count_stmt)
+            current_count = count_result.scalar_one()
+            if current_count >= subsection.max_strength:
+                raise HTTPException(status_code=409, detail="Subsection is at maximum capacity")
+
+        student.subsection_id = subsection_id
+        await self.db.commit()
+        return await self.get_student_detail(user, student_id)
+
+    async def correct_elective(self, user: User, student_id: UUID, slot: ElectiveSlot, new_subject_id: UUID) -> AdminStudentDetail:
+        student = await self.repo.get_student(student_id)
+        if not await self._can_access_student(user, student):
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        # Verify new subject is valid and belongs to the correct slot and semester
+        stmt = select(Subject).where(Subject.id == new_subject_id)
+        result = await self.db.execute(stmt)
+        new_subject = result.scalars().first()
+        if not new_subject:
+            raise HTTPException(status_code=404, detail="New subject not found")
+        
+        ctx = await StudentContextService(self.db).get_context(student)
+        if new_subject.semester_id != ctx.semester_id:
+            raise HTTPException(status_code=409, detail="Subject does not belong to the student's current semester")
+        if new_subject.elective_slot != slot:
+            raise HTTPException(status_code=409, detail=f"Subject is not configured for {slot.value}")
+
+        # Find existing choice for this slot
+        choice_stmt = select(StudentElectiveChoice).where(
+            StudentElectiveChoice.user_id == student_id,
+            StudentElectiveChoice.elective_slot == slot
+        )
+        choice_result = await self.db.execute(choice_stmt)
+        existing_choice = choice_result.scalars().first()
+
+        old_subject_id = existing_choice.subject_id if existing_choice else None
+
+        if old_subject_id == new_subject_id:
+            return await self.get_student_detail(user, student_id)
+
+        # Update or create choice
+        if existing_choice:
+            existing_choice.subject_id = new_subject_id
+        else:
+            self.db.add(StudentElectiveChoice(
+                user_id=student_id,
+                elective_slot=slot,
+                subject_id=new_subject_id
+            ))
+
+        # Swap enrollment if necessary
+        if old_subject_id and old_subject_id != new_subject_id:
+            enroll_stmt = select(StudentEnrollment).where(
+                StudentEnrollment.user_id == student_id,
+                StudentEnrollment.subject_id == old_subject_id,
+                StudentEnrollment.enrollment_type == EnrollmentType.ELECTIVE
+            )
+            enroll_result = await self.db.execute(enroll_stmt)
+            old_enrollment = enroll_result.scalars().first()
+            if old_enrollment:
+                await self.db.delete(old_enrollment)
+        
+        # Ensure enrollment exists for the new subject
+        new_enroll_stmt = select(StudentEnrollment).where(
+            StudentEnrollment.user_id == student_id,
+            StudentEnrollment.subject_id == new_subject_id
+        )
+        new_enroll_result = await self.db.execute(new_enroll_stmt)
+        if not new_enroll_result.scalars().first():
+            self.db.add(StudentEnrollment(
+                user_id=student_id,
+                subject_id=new_subject_id,
+                enrollment_type=EnrollmentType.ELECTIVE
+            ))
+
+        await self.db.commit()
+        return await self.get_student_detail(user, student_id)
+
+    async def set_student_status(self, user: User, student_id: UUID, is_active: bool) -> AdminStudentDetail:
+        student = await self.repo.get_student(student_id)
+        if not await self._can_access_student(user, student):
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        student.is_active = is_active
+        await self.db.commit()
+        return await self.get_student_detail(user, student_id)

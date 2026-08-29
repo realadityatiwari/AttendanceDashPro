@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, ShieldAlert, Users } from "lucide-react";
+import { AlertCircle, ArrowLeft, ShieldAlert, Users, Pencil } from "lucide-react";
 import { useAdminStudentDetail } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
@@ -12,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdminStudentDetail } from "@/types/api";
 import { formatShortDate } from "@/lib/date";
+import { AssignSubsectionDialog } from "./components/AssignSubsectionDialog";
+import { CorrectElectiveDialog } from "./components/CorrectElectiveDialog";
+import { SetStudentStatusDialog } from "./components/SetStudentStatusDialog";
 
 /**
  * Phase 24.3 scoped student detail (read-only academic context).
@@ -80,18 +84,34 @@ export default function AdminStudentDetailPage() {
 }
 
 function DetailContent({ student }: { student: AdminStudentDetail }) {
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+
   return (
     <div className="space-y-4">
-      <PageHeader title={student.name} description={student.roll_number}>
-        <div className="flex items-center gap-2">
-          {student.is_placed && student.section_name ? (
-            <Badge variant="secondary">{student.section_name}</Badge>
-          ) : (
-            <Badge variant="warning">Unplaced</Badge>
-          )}
-          {student.program && <Badge variant="neutral">{student.program}</Badge>}
-        </div>
-      </PageHeader>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <PageHeader title={student.name} description={student.roll_number}>
+          <div className="flex items-center gap-2">
+            {!student.is_active && (
+              <Badge variant="destructive">Deactivated</Badge>
+            )}
+            {student.is_placed && student.section_name ? (
+              <Badge variant="secondary">{student.section_name}</Badge>
+            ) : (
+              <Badge variant="warning">Unplaced</Badge>
+            )}
+            {student.program && <Badge variant="neutral">{student.program}</Badge>}
+          </div>
+        </PageHeader>
+        <Button variant="outline" size="sm" onClick={() => setStatusDialogOpen(true)}>
+          {student.is_active ? "Deactivate Account" : "Activate Account"}
+        </Button>
+      </div>
+
+      <SetStudentStatusDialog 
+        student={student} 
+        open={statusDialogOpen} 
+        onOpenChange={setStatusDialogOpen} 
+      />
 
       {student.inconsistencies.length > 0 && (
         <GlassCard className="border-warning/40">
@@ -127,11 +147,17 @@ function DetailContent({ student }: { student: AdminStudentDetail }) {
 }
 
 function PlacementCard({ student }: { student: AdminStudentDetail }) {
-  const rows: { label: string; value: string }[] = [
+  const [subsectionDialogOpen, setSubsectionDialogOpen] = useState(false);
+
+  const rows: { label: string; value: React.ReactNode; editable?: boolean }[] = [
     { label: "Academic session", value: student.academic_session_name ?? "None" },
     { label: "Semester", value: student.semester_name ?? "None" },
     { label: "Section", value: student.section_name ?? "Unplaced" },
-    { label: "Subsection", value: student.subsection_name ?? "Unassigned" },
+    { 
+      label: "Subsection", 
+      value: student.subsection_name ?? "Unassigned",
+      editable: !!student.section_id 
+    },
     { label: "Program", value: student.program ?? "—" },
     {
       label: "Semester dates",
@@ -142,52 +168,98 @@ function PlacementCard({ student }: { student: AdminStudentDetail }) {
     },
   ];
   return (
-    <GlassCard>
-      <div className="p-4">
-        <h2 className="text-sm font-semibold text-foreground">Placement</h2>
-        <dl className="mt-2 divide-y divide-border/60">
-          {rows.map((r) => (
-            <div
-              key={r.label}
-              className="flex items-center justify-between gap-3 py-2"
-            >
-              <dt className="text-sm text-muted-foreground">{r.label}</dt>
-              <dd className="text-sm font-medium text-foreground">{r.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </GlassCard>
+    <>
+      <GlassCard>
+        <div className="p-4">
+          <h2 className="text-sm font-semibold text-foreground">Placement</h2>
+          <dl className="mt-2 divide-y divide-border/60">
+            {rows.map((r) => (
+              <div
+                key={r.label}
+                className="flex items-center justify-between gap-3 py-2"
+              >
+                <dt className="text-sm text-muted-foreground">{r.label}</dt>
+                <dd className="text-sm font-medium text-foreground flex items-center gap-2">
+                  {r.value}
+                  {r.editable && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 ml-1 text-muted-foreground hover:text-foreground"
+                      onClick={() => setSubsectionDialogOpen(true)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span className="sr-only">Edit {r.label}</span>
+                    </Button>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </GlassCard>
+      
+      {student.section_id && (
+        <AssignSubsectionDialog 
+          student={student} 
+          open={subsectionDialogOpen} 
+          onOpenChange={setSubsectionDialogOpen} 
+        />
+      )}
+    </>
   );
 }
 
 function ElectiveCard({ student }: { student: AdminStudentDetail }) {
+  const [editingSlot, setEditingSlot] = useState<string | null>(null);
   const entries = Object.entries(student.elective_choices);
   return (
-    <GlassCard>
-      <div className="p-4">
-        <h2 className="text-sm font-semibold text-foreground">
-          Department electives
-        </h2>
-        {entries.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            No elective selection recorded.
-          </p>
-        ) : (
-          <dl className="mt-2 divide-y divide-border/60">
-            {entries.map(([slot, code]) => (
-              <div
-                key={slot}
-                className="flex items-center justify-between gap-3 py-2"
-              >
-                <dt className="text-sm text-muted-foreground">{slot}</dt>
-                <dd className="text-sm font-medium text-foreground">{code}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </div>
-    </GlassCard>
+    <>
+      <GlassCard>
+        <div className="p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            Department electives
+          </h2>
+          {entries.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No elective selection recorded.
+            </p>
+          ) : (
+            <dl className="mt-2 divide-y divide-border/60">
+              {entries.map(([slot, code]) => (
+                <div
+                  key={slot}
+                  className="flex items-center justify-between gap-3 py-2"
+                >
+                  <dt className="text-sm text-muted-foreground">{slot}</dt>
+                  <dd className="text-sm font-medium text-foreground flex items-center gap-2">
+                    {code}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 ml-1 text-muted-foreground hover:text-foreground"
+                      onClick={() => setEditingSlot(slot)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span className="sr-only">Edit {slot}</span>
+                    </Button>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </GlassCard>
+
+      {editingSlot && (
+        <CorrectElectiveDialog 
+          student={student} 
+          open={!!editingSlot} 
+          onOpenChange={(open) => !open && setEditingSlot(null)} 
+          slot={editingSlot}
+        />
+      )}
+    </>
   );
 }
 

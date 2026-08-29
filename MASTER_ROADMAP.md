@@ -4074,12 +4074,12 @@ prompt.**
 
 ---
 
-# ? Phase 24.3 — Student Management (READ)
+# ? Phase 24.3  Student Management (READ)
 
 **Status: COMPLETE (2026-08-29).** Local development only. No migration, no
 schema change (Alembic head unchanged `f9a0b1c2d3e4`), no commit/push/PR.
-Authoritative scope (Phase 24.0 report §24 row 24.3 + §7 matrix): scoped
-student **list/search/detail via StudentContextService** — read-only; no
+Authoritative scope (Phase 24.0 report 24 row 24.3 + 7 matrix): scoped
+student **list/search/detail via StudentContextService**  read-only; no
 attendance/analytics (Phase 24.13), no student writes (Phase 24.4), no
 decision-gate resolution.
 
@@ -4087,7 +4087,7 @@ decision-gate resolution.
 
 Add the first scoped (non-global) Admin Portal feature domain: read-only
 student list/search/detail whose visibility follows the acting admin's active
-Phase 23.11 scopes — HEAD_ADMIN all, CLASS_ADMIN assigned sections,
+Phase 23.11 scopes  HEAD_ADMIN all, CLASS_ADMIN assigned sections,
 ELECTIVE_ADMIN choice-roster, SUBSECTION_ADMIN inert-empty. The backend
 remains the sole authorization boundary.
 
@@ -4097,7 +4097,7 @@ remains the sole authorization boundary.
 
 - `backend/app/schemas/admin_students.py` (NEW): `AdminStudentSummary`,
   `AdminStudentListResponse`, `AdminStudentEnrollment`,
-  `AdminStudentDetail` — stable Pydantic contract.
+  `AdminStudentDetail`  stable Pydantic contract.
 - `backend/app/repositories/admin_student_repo.py` (NEW): bounded, read-only,
   scope-filtered list/count with optional `q` (roll/name ILIKE), pagination,
   and an elective-roster membership check. No N+1 (one query with outer joins
@@ -4109,7 +4109,7 @@ remains the sole authorization boundary.
   authority). UNION rule preserved for multi-scope admins.
 - `backend/app/api/v1/endpoints/admin.py`: additive
   `GET /api/v1/admin/students` (q, page, page_size) and
-  `GET /api/v1/admin/students/{student_id}` — both gated by
+  `GET /api/v1/admin/students/{student_id}`  both gated by
   `require_any_admin` (401 unauth / 403 STUDENT), scope resolved server-side.
   No client-supplied scope parameters are accepted.
 
@@ -4136,7 +4136,7 @@ remains the sole authorization boundary.
 - STUDENT -> 403 on both endpoints. SUBSECTION_ADMIN -> inert empty (no
   authoritative subsection data; scope with no section/subject matches is
   conservatively empty; a SUBSECTION_ADMIN scope row cannot even be created
-  while `subsections` is empty — FK constraint, same structural limitation
+  while `subsections` is empty  FK constraint, same structural limitation
   proven in Phase 23.11).
 - ELECTIVE_ADMIN is exact-subject: a BCS-058 admin never sees/reads a BCS-055
   roster student (proven by verifier J2/J3).
@@ -4145,7 +4145,7 @@ remains the sole authorization boundary.
 ## Query / performance design
 
 - List: 1 count + 1 bounded SELECT (outer joins to Section/Subsection,
-  optional ILIKE, LIMIT/OFFSET) — no N+1, no row materialization for counting.
+  optional ILIKE, LIMIT/OFFSET)  no N+1, no row materialization for counting.
 - Detail: scope check (2 small queries max) + `StudentContextService`
   (its own bounded query set). No caching added (documented; cheap reads).
 
@@ -4157,12 +4157,12 @@ remains the sole authorization boundary.
 - `backend/scripts/verify_phase_24_3.py` (NEW, self-cleaning) PASS **40/40**
   on the LOCAL dev DB. Locality guard FORCES `DATABASE_URI` to
   `127.0.0.1:55432/attendancedash` and aborts otherwise (the ambient backend
-  `.env` points at the Supabase production pooler — never contacted). Proves:
+  `.env` points at the Supabase production pooler  never contacted). Proves:
   401/403 matrix, HEAD all + search/pagination, HEAD detail + 404, CLASS
   section-only list + out-of-section detail 404, ELECTIVE roster + exact-
   subject isolation (BCS-058 vs BCS-055), SUBSECTION inert/empty code path,
   no client scope params, CLASS+ELECTIVE UNION behavior, and counts unchanged
-  after fixture cleanup (users 3, enrollments 35, admin_scopes 0 — matching
+  after fixture cleanup (users 3, enrollments 35, admin_scopes 0  matching
   the Phase 23.12 baseline).
 - Manual/browser testing remains the operator's responsibility.
 
@@ -4175,12 +4175,27 @@ remains the sole authorization boundary.
   at the Supabase pooler; the verifier forces + asserts the local URI before
   anything executes.
 
-## Deferred
+## Phase 24.4 - Student Management WRITE
 
-- Phase 24.4 (student management WRITE: create/edit/move-section/subsection/
-  elective changes, confirmations) — not started.
-- Phase 24.13 attendance snapshot on the detail read — not in 24.3.
+**Status: COMPLETE (2026-08-29).** Local development only. Includes schema change and Alembic migration `eb880e108f19_add_user_is_active.py` to add `is_active` to the `users` table.
+
+## Objective
+Implement core student record modifications including status toggling (active/deactive), subsection assignment, and elective corrections directly from the student detail view.
+
+## Delivered
+
+### Backend
+- AdminStudentService expanded with mutation methods: set_student_status, ssign_subsection, and correct_elective.
+- pp/api/v1/endpoints/admin.py updated with PATCH mutation routes and new dropdown/schema responses.
+- Backend handles database atomic operations, resolving previous enrollment issues if they exist.
+
+### Frontend
+- Dialog components created: AssignSubsectionDialog, CorrectElectiveDialog, and SetStudentStatusDialog.
+- Integrated directly into the [student_id]/page.tsx read-only interface.
+- Mutation uses SWR to invalidate caches and reflect immediately.
+
+## Deferred
+- Phase 24.5 (Batch student management, CSV uploads).
 - All 12 Phase 24.0 decision gates (unchanged, unresolved).
 
-**HARD STOP: Phase 24.3 complete. Phase 24.4 requires a separate execution
-prompt.**
+**HARD STOP: Phase 24.4 complete. Phase 24.5 requires a separate execution prompt.**
