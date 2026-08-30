@@ -3813,3 +3813,133 @@ Shared SWR profile resource. AuthContext consumes the same `PROFILE_KEY` constan
 - ESLint: AuthContext 2 errors (same `react-hooks/set-state-in-effect` rule, 1 pre-existing, 1 new — CI informational, no change in useApi/api.ts)
 - `git diff --check` clean
 - No commit/push
+
+---
+
+## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Backend-only, minimal.**
+
+### Root cause
+NotificationService.get_notifications regenerated + upserted ALL projection
+kinds on EVERY GET. NotificationBell fetches at shell mount with
+revalidateOnFocus: true, so mounts/focus/panel-open each paid full
+regeneration (class reminders, quiz, attendance, events).
+
+### Fix
+Per-user in-process TTL cache (60s) in `backend/app/services/notification_service.py`:
+- [x] `_cache_get/_cache_put/_cache_invalidate` (keyed by user UUID)
+- [x] get_notifications serves cached response within TTL (no regen, no writes)
+- [x] update_state invalidates user entry (badge correctness after read/dismiss)
+- [x] TTL expiry deterministic (monotonic), expired entry evicted
+- [x] No cross-user leakage (per-user key)
+- [x] No new infra/migration; limitation documented
+
+### Freshness model (deliberate)
+- Badge/mount reads: at most one regeneration per 60s per user; otherwise cached.
+- Panel open: bell mutate() forces GET — regenerates only if TTL expired, else cached (fresh enough).
+- Read/dismiss: immediate via cache invalidation + SWR local update.
+- Regeneration still runs (once per TTL) so new class/quiz/attendance/event
+  notifications are eventually reflected — nothing removed.
+
+### Files changed
+- backend/app/services/notification_service.py
+
+### Not changed
+- Frontend (already correct: center gated on open, SWR dedup, mutate on open),
+  engines, repos, schemas, endpoints, DB, migrations, Admin, JWT.
+
+### Validation
+- backend compileall + import OK
+- in-memory cache test PASS (hit/isolation/invalidate/TTL/eviction)
+- frontend `npx tsc --noEmit` PASS
+- git diff --check clean; no commit/push
+
+---
+
+## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+### Root cause
+Universal STANDARD_CACHE revalidateOnFocus caused every mounted hook (profile, dashboard summary, analytics, notifications, calendar, events, history, lab, preferences) to refetch simultaneously on PWA foreground transitions.
+
+### New resource-aware policies
+| Policy | revalidateOnFocus | revalidateIfStale | dedupingInterval | Hooks |
+|---|---|---|---|---|
+| INTERACTIVE | true | true | 60s | profile, daily sessions, subject summary, quiz eligibility, current quiz cycle, calendar day |
+| DASHBOARD | true | true | 120s | dashboard summary |
+| SEMI_STATIC | false | true | 5 min | analytics overview, calendar month, events, attendance history, lab records/summary/activity, preferences |
+| STANDARD (unchanged) | true | — | 60s | notifications (Phase B), all admin hooks |
+| LONG (unchanged) | false | false | 1h | subjects, timetable, lab experiments |
+
+### Cross-user isolation
+- [x] AuthContext.logout: `globalMutate(() => true, () => undefined, { revalidate: false })` clears all SWR cache
+- [x] AuthContext.refreshUser: same full-clear before revalidating profile on new login
+
+### Files changed
+- frontend/src/hooks/useApi.ts (new policies + per-hook assignment)
+- frontend/src/contexts/AuthContext.tsx (cross-user cache clear)
+
+### Validation
+- npx tsc --noEmit PASS
+- ESLint: AuthContext 2 pre-existing set-state-in-effect errors; useApi.ts clean
+- git diff --check clean; no commit/push
+
+---
+
+## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+
+### Scope
+Repair ONLY the existing Student Portal service worker behavior. No PWA redesign, no backend/API/auth/JWT/DB/migration changes, no Admin Portal, no deploy, no commit.
+
+### Old service-worker behavior (confirmed)
+- [x] Navigation requests: **cache-first** with network fallback — stale HTML shell can persist indefinitely after deployment
+- [x] `/api/*`: network-first, never cached (clone-but-not-cache no-op) with 503 JSON offline fallback
+- [x] `STATIC_ASSETS` contained `/ _app`, `/ _error`, `/globals.css` — not literal files produced by the App Router build
+- [x] `self.skipWaiting()` on install + `self.clients.claim()` on activate
+- [x] No cache-version constant (hardcoded `attendancedash-pro-v1`)
+- [x] Navigation branch matched `url.pathname.startsWith("/")` — effectively all same-origin GETs (JS/CSS too)
+
+### New caching strategy
+- [x] **Navigation: network-first with cache fallback** — `request.mode === "navigate"`; fetched HTML stored in versioned cache via `cache.put`; cached shell used only when network is unavailable
+- [x] **API: network-only, never cached** — `/student/me`, dashboard summary, attendance, notifications, calendar, all user-specific data stay network-driven; no cross-user shared cache
+- [x] **Static precache**: verified paths only — `/`, `/favicon.ico`, `/manifest.json`, `/icons/icons-192.svg`, `/icons/icons-512.svg`; invalid `/_app`, `/_error`, `/globals.css` removed; `cache.addAll` errors swallowed so install never fails on a missing guessed path; hashed `/_next/static/*` NOT enumerated (browser HTTP cache handles content-addressed assets)
+- [x] **Subresources** (JS/CSS/images/fonts) no longer intercepted
+- [x] Offline: cached shell for navigation; truthful 503 JSON for API; offline never overrides fresh code when network is up
+
+### Cache versioning & invalidation
+- [x] `CACHE_VERSION = "v2"` ? `attendancedash-pro-v2`
+- [x] Activate deletes all caches not matching the current version — old caches cleaned, new cache authoritative
+- [x] Bumping the constant invalidates everything on next SW update
+
+### Update lifecycle (safe)
+- [x] `skipWaiting` **removed** — new worker waits for reload (avoids fresh-HTML-with-stale-JS pairing)
+- [x] `clients.claim()` retained — safe under network-first navigation
+- [x] Registration hook: `onupdatefound` notice, hourly `registration.update()`, update check on window focus — active clients eventually receive the deployed worker
+- [x] No aggressive unregister
+
+### Authentication safety
+- [x] Login responses never cached
+- [x] Authenticated API data never cached into shared static cache
+- [x] Logout untouched; no credential interception; SW never redirects users
+- [x] No auth logic moved into the SW
+
+### Files changed
+- `frontend/public/service-worker.js` (rewritten)
+- `frontend/src/components/pwa/useServiceWorker.ts` (update lifecycle + effect cleanup)
+
+### Files NOT changed
+- Backend, DB, migrations, API endpoints, auth, JWT, manifest.json, layout.tsx, next.config.ts, Admin Portal
+
+### Validation
+- [x] `node --check public/service-worker.js` — syntax PASS
+- [x] `npx tsc --noEmit` — PASS (0 errors)
+- [x] ESLint `useServiceWorker.ts` — clean
+- [x] Static asset paths verified against repo (public/ + src/app/favicon.ico)
+- [x] `git diff --check` clean; no commit/push
+
+### Known follow-up (out of scope)
+- `useServiceWorker()` hook is not mounted anywhere in the app (pre-existing wiring gap — the SW is never registered at runtime). Mounting it (e.g., in a client layout component) is a separate wiring decision, not a SW behavior repair.

@@ -49,19 +49,58 @@ import {
 const fetcher = (url: string) => apiFetch(url);
 
 // Caching strategies
+//
+// Phase C (2026-08-31): resource-aware policies replace the old universal
+// STANDARD_CACHE to avoid the refetch storm on PWA foreground transitions.
+// Each category documents its freshness trade-off.
+
 const LONG_CACHE = {
   revalidateOnFocus: false,
   revalidateIfStale: false,
   dedupingInterval: 3600000 // 1 hour
 };
 
+// INTERACTIVE: resources the user sees directly and wants reasonably fresh.
+// Refetch on focus (one request, not a storm); dedup within 60s.
+// Used for: profile, dashboard summary, daily sessions, quiz cycle, subject
+// summary, quiz eligibility, calendar day.
+const INTERACTIVE_CACHE = {
+  revalidateOnFocus: true,
+  revalidateIfStale: true,
+  dedupingInterval: 60000,
+};
+
+// SEMI_STATIC: resources that change infrequently or are only viewed on
+// explicit navigation. Never refetch on focus (silent PWA transitions).
+// Revalidate on mount (navigation) with a 5-minute dedupe to avoid repeated
+// fetches on back-to-back page visits.
+// Used for: analytics overview, calendar month, events, attendance history,
+// lab records/summary/activity, preferences.
+const SEMI_STATIC_CACHE = {
+  revalidateOnFocus: false,
+  revalidateIfStale: true,
+  dedupingInterval: 300000, // 5 minutes
+};
+
+// DASHBOARD: the Home summary is the primary view the user sees on return.
+// Controlled focus revalidation with a moderate dedupe (2 minutes) so
+// returning to the app refreshes it without a simultaneous storm.
+const DASHBOARD_CACHE = {
+  revalidateOnFocus: true,
+  revalidateIfStale: true,
+  dedupingInterval: 120000, // 2 minutes
+};
+
+// STANDARD_CACHE: legacy policy, kept for Admin Portal hooks (out of scope)
+// and for useNotifications (Phase B backend TTL cache makes focus revalidation
+// cheap). Do not change — Admin Portal is not part of this phase.
 const STANDARD_CACHE = {
   revalidateOnFocus: true,
-  dedupingInterval: 60000 // 1 minute
+  dedupingInterval: 60000
 };
 
 export function useProfile() {
-  const { data, error, isLoading, mutate } = useSWR<StudentProfile>(PROFILE_KEY, fetcher, STANDARD_CACHE);
+  const { data, error, isLoading, mutate } = useSWR<StudentProfile>(PROFILE_KEY, fetcher, INTERACTIVE_CACHE);
   return {
     profile: data,
     isLoading,
@@ -94,7 +133,7 @@ export function useCalendarDay(date: string) {
   const { data, error, isLoading, mutate } = useSWR<AcademicDayResponse>(
     date ? `/api/v1/calendar/${date}` : null,
     fetcher,
-    STANDARD_CACHE
+    INTERACTIVE_CACHE
   );
   return {
     calendarDay: data,
@@ -108,7 +147,7 @@ export function useSubjectSummary(subjectCode: string | null) {
   const { data, error, isLoading, mutate } = useSWR<SubjectAttendanceSummary>(
     subjectCode ? `/api/v1/attendance/summary/${subjectCode}` : null,
     fetcher,
-    STANDARD_CACHE
+    INTERACTIVE_CACHE
   );
   return {
     summary: data,
@@ -122,7 +161,7 @@ export function useQuizEligibility(subjectCode: string | null, cycle: number | n
   const { data, error, isLoading, mutate } = useSWR<EligibilityResult>(
     subjectCode && cycle !== null ? `/api/v1/quiz-eligibility/${subjectCode}/${cycle}` : null,
     fetcher,
-    STANDARD_CACHE
+    INTERACTIVE_CACHE
   );
   return {
     eligibility: data,
@@ -138,7 +177,7 @@ export function useCurrentQuizCycle() {
   const { data, error, isLoading, mutate } = useSWR<CurrentQuizCycle>(
     '/api/v1/quiz-eligibility/current-cycle',
     fetcher,
-    STANDARD_CACHE
+    INTERACTIVE_CACHE
   );
   return {
     currentCycle: data,
@@ -157,7 +196,7 @@ export function useAttendanceHistory(params: AttendanceHistoryParams = {}) {
   });
   const queryString = query.toString();
   const url = queryString ? `/api/v1/attendance/history?${queryString}` : "/api/v1/attendance/history";
-  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>(url, fetcher, STANDARD_CACHE);
+  const { data, error, isLoading, mutate } = useSWR<AttendanceHistoryResponse>(url, fetcher, SEMI_STATIC_CACHE);
   return {
     history: data,
     isLoading,
@@ -178,7 +217,7 @@ export function useEvents(params: EventsParams = {}) {
   });
   const queryString = query.toString();
   const url = queryString ? `/api/v1/events?${queryString}` : "/api/v1/events";
-  const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>(url, fetcher, STANDARD_CACHE);
+  const { data, error, isLoading, mutate } = useSWR<AcademicEventResponse[]>(url, fetcher, SEMI_STATIC_CACHE);
   return {
     events: data,
     isLoading,
@@ -215,7 +254,7 @@ export function useCalendarMonth(year: number, month: number) {
   const { data, error, isLoading, mutate } = useSWR<CalendarMonthResponse>(
     `/api/v1/calendar?year=${year}&month=${month}`,
     fetcher,
-    { ...STANDARD_CACHE, keepPreviousData: true }
+    { ...SEMI_STATIC_CACHE, keepPreviousData: true }
   );
   return {
     calendarMonth: data,
@@ -243,7 +282,7 @@ export function useLabRecords(subjectCode: string | null) {
   const { data, error, isLoading, mutate } = useSWR<LaboratoryRecordResponse[]>(
     subjectCode ? `/api/v1/laboratory/${subjectCode}/records` : null,
     fetcher,
-    STANDARD_CACHE
+    SEMI_STATIC_CACHE
   );
   return {
     records: data,
@@ -257,7 +296,7 @@ export function useLabSummary(subjectCode: string | null) {
   const { data, error, isLoading, mutate } = useSWR<LaboratorySummary>(
     subjectCode ? `/api/v1/laboratory/${subjectCode}/summary` : null,
     fetcher,
-    STANDARD_CACHE
+    SEMI_STATIC_CACHE
   );
   return {
     summary: data,
@@ -271,7 +310,7 @@ export function useLabActivity(subjectCode: string | null) {
   const { data, error, isLoading, mutate } = useSWR<LaboratoryActivityResponse>(
     subjectCode ? `/api/v1/laboratory/${subjectCode}/activity` : null,
     fetcher,
-    STANDARD_CACHE
+    SEMI_STATIC_CACHE
   );
   return {
     activity: data,
@@ -331,7 +370,7 @@ export function useDashboardSummary() {
   const { data, error, isLoading, mutate } = useSWR<DashboardSummaryResponse>(
     '/api/v1/dashboard/summary',
     fetcher,
-    STANDARD_CACHE
+    DASHBOARD_CACHE
   );
   return {
     summary: data,
@@ -349,7 +388,7 @@ export function useAnalyticsOverview() {
   const { data, error, isLoading, mutate } = useSWR<AnalyticsOverviewResponse>(
     '/api/v1/analytics/overview',
     fetcher,
-    STANDARD_CACHE
+    SEMI_STATIC_CACHE
   );
   return {
     overview: data,
@@ -363,7 +402,7 @@ export function useDailySessions(dateStr: string | null) {
   const { data, error, isLoading, mutate } = useSWR<DailySessionsResponse>(
     dateStr ? `/api/v1/attendance/daily/${dateStr}` : null,
     fetcher,
-    STANDARD_CACHE
+    INTERACTIVE_CACHE
   );
   return {
     dailySessions: data,
@@ -393,7 +432,7 @@ export function usePreferences(enabled = true) {
   const { data, error, isLoading, mutate } = useSWR<UserPreferences>(
     enabled ? '/api/v1/student/preferences' : null,
     fetcher,
-    STANDARD_CACHE
+    SEMI_STATIC_CACHE
   );
   return {
     preferences: data,

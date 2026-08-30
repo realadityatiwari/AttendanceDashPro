@@ -4724,3 +4724,78 @@ Auth invariants: see walkthrough.md.
 Files: lib/api.ts (PROFILE_KEY export), useApi.ts (useProfile uses PROFILE_KEY),
 AuthContext.tsx (SWR-based rewrite, derived user, no loadUser).
 Validation: tsc PASS, ESLint informational (pre-existing class), diff clean.
+
+---
+
+## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (backend-only, uncommitted).**
+
+Previous: GET /api/v1/notifications regenerated all projections on every read.
+New: per-user in-process 60s TTL cache in NotificationService; PATCH
+invalidates. Frontend unchanged (already gates center fetch on open + SWR
+dedup + mutate on open). Validation: compile/import OK, in-memory cache
+mechanics test PASS, frontend tsc PASS, git diff clean.
+
+---
+
+## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+Previous: universal STANDARD_CACHE revalidateOnFocus caused refetch storm on PWA foreground.
+New: INTERACTIVE, DASHBOARD, SEMI_STATIC, STANDARD, LONG — per-resource cache policies.
+Cross-user isolation: AuthContext full cache clear on logout/refreshUser.
+Files: useApi.ts (hooks), AuthContext.tsx (cache clear). Validation: tsc PASS, eslint pre-existing, diff clean.
+
+---
+
+## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+
+### Old cache strategy
+- Navigation: **cache-first** (`caches.match` before network) ? stale HTML application shell after deploys.
+- `/api/*`: network-first with a clone-but-not-cache no-op; 503 JSON offline fallback.
+- `STATIC_ASSETS`: hardcoded `/_app`, `/_error`, `/globals.css` (not real App Router files) + `favicon.ico`, `manifest.json`, SVG icons.
+- `self.skipWaiting()` + `self.clients.claim()` on install/activate (aggressive takeover).
+- Hardcoded cache name `attendancedash-pro-v1` (no version constant).
+
+### Problems found
+1. Cache-first navigation keeps returning users on an obsolete HTML shell indefinitely after deployment.
+2. `/_app`, `/_error`, `/globals.css` are not literal files produced by the current Next.js App Router build; `cache.addAll` rejects on a failed fetch and the whole install can fail.
+3. `skipWaiting()` can activate a fresh worker whose HTML references old JS/CSS (HTML/JS mismatch).
+4. Navigation branch matched by `url.pathname.startsWith("/")` — effectively every same-origin GET, including JS/CSS subresources.
+
+### New strategy
+- **Navigation: network-first with cache fallback** via `request.mode === "navigate"`; fetched HTML is written to the versioned cache with `cache.put`; cached shell is only a fallback when the network is unavailable. Fresh shell is always preferred after deployment.
+- **API: network-only, never cached** (preserved). `/student/me`, dashboard summary, attendance, notifications, calendar and all user-specific data stay network-driven; no shared cache that could leak one user's authenticated data to another.
+- **Static precache**: verified paths only (`/`, `/favicon.ico` from `src/app/favicon.ico`, `/manifest.json`, `/icons/icons-192.svg`, `/icons/icons-512.svg`); invalid hardcoded paths removed; `cache.addAll` errors are swallowed so installation never depends on a guessed Next.js filename. Hashed `/_next/static/*` artifacts are not enumerated (content-addressed, browser HTTP cache handles them).
+- **Subresources** (JS/CSS/images/fonts) are no longer intercepted.
+
+### Cache version
+- `CACHE_VERSION = "v2"` ? cache `attendancedash-pro-v2`. `activate` deletes every cache not matching the current version, so bumping the constant invalidates all old caches and the new cache becomes authoritative.
+
+### Update lifecycle
+- `skipWaiting` **removed** — the new worker waits for reload (no fresh-HTML-with-stale-JS pairing). `clients.claim()` retained; safe because navigation is network-first.
+- Registration hook: `onupdatefound` ? console notice; hourly `registration.update()`; update check on window focus — deployed updates reach active clients without an unsafe immediate takeover.
+- No aggressive unregister; old caches are cleaned by the versioned activate handler.
+
+### Offline behavior
+- Offline navigation serves the last cached HTML shell (reasonable offline shell).
+- Offline API returns a truthful 503 JSON (`{offline:true}`).
+- Offline support never serves stale application code while the network is up (network-first).
+
+### Auth safety
+- Login responses / authenticated API data are never cached; logout is untouched; no credential interception; SW never redirects; no auth logic moved into the SW.
+
+### Files changed
+- `frontend/public/service-worker.js`
+- `frontend/src/components/pwa/useServiceWorker.ts`
+
+### Validation
+- `node --check frontend/public/service-worker.js` — PASS.
+- `npx tsc --noEmit` — PASS (0 errors).
+- ESLint `useServiceWorker.ts` — clean.
+- Static asset paths verified against the repo.
+- No backend/DB/migration/API/auth/JWT/Admin changes. No commit/push.

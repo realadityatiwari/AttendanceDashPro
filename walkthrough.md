@@ -8766,3 +8766,152 @@ clean. No backend/DB/schema/.env changes. No commit/push.
    self-heal on focus.
 5. Logout ? token removed, no `/student/me` after redirect to /login.
 6. Incorrect credentials ? remaining contract unchanged.
+
+---
+
+# Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
+
+## Previous flow (problem)
+NotificationBell (authenticated shell) -> useNotifications(!!token) ->
+GET /api/v1/notifications -> NotificationService.get_notifications regenerated
+ALL projection kinds (class reminders / quiz approaching / attendance items /
+academic events) and upserted each row on EVERY request. STANDARD_CACHE has
+revalidateOnFocus: true, so shell mount, every PWA background/foreground, and
+panel open each triggered full engine work.
+
+## New architecture
+Backend-only per-user in-process TTL cache (60s) keyed by user UUID:
+- Fresh entry -> serve cached NotificationsResponse (no regen, no writes).
+- Expired/missing -> regenerate + upsert once, then cache.
+- read/dismiss PATCH -> invalidate that user's entry (badge correctness).
+- Deterministic TTL via time.monotonic; expired entries evicted on access.
+
+Security: cache key is the authenticated user UUID from get_current_user —
+never a client-supplied identity — so one user can never receive another
+user's notifications or unread count. Multi-worker limitation documented
+(each worker independent per-user cache; no leak, just duplicate regen =1/TTL).
+
+Frontend: no changes needed. NotificationCenter already gates its fetch on
+`open`; NotificationBell calls mutate() on open; SWR dedupingInterval (60s)
+dedupes rapid fetches. Panel-open fresh GET now costs at most one
+regeneration per 60s per user.
+
+## Freshness guarantees
+- Badge: updated at shell mount and on any GET; regeneration =1 per 60s/user.
+- Panel: opened -> mutate() -> GET; regenerates if TTL expired, else cached.
+- Read/dismiss: immediate (PATCH invalidates cache; SWR local cache updated).
+- Eventually-consistent new notifications (class/quiz/attendance/event): yes —
+  regeneration still runs once per TTL; nothing removed.
+
+## Validation
+Backend compileall + import OK. In-memory cache mechanics test PASS (hit,
+per-user isolation, invalidate, TTL expiry/eviction). Frontend tsc PASS.
+git diff --check clean. No migration, no new infra, no Admin/JWT/engine change.
+No commit/push.
+
+## Manual notification test checklist
+1. Fresh login -> bell badge appears (one regeneration).
+2. Within 60s: focus/foreground the PWA repeatedly -> no DB upsert storm;
+   badge unchanged/stale-free (single cheap GETs from cache).
+3. After 60s idle: next GET regenerates once -> new events/classes reflected.
+4. Open panel -> current notifications + unread count.
+5. Mark read / dismiss -> badge decrements immediately; re-open stays correct.
+6. User A's badge/panel never shows User B's notifications (login as B to check).
+
+---
+
+# Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
+
+## Previous refetch storm mechanism
+Universal STANDARD_CACHE = { revalidateOnFocus: true, dedupingInterval: 60000 } applied to profile, dashboard summary, analytics overview, notifications, calendar, events, history, lab, preferences — all hooks mounted on the dashboard simultaneously refetched on every PWA foreground transition.
+
+## Resource-aware cache strategy
+Created three new policies and assigned per hook (see task.md for the table).
+
+## Attendance freshness preserved
+- Targeted invalidation: lab page calls mutate() + mutateDashboard() after marking.
+- Dashboard summary: revalidates on focus (DASHBOARD_CACHE, 2 min dedupe).
+- Analytics overview: revalidates on navigation to subjects/dashboard (SEMI_STATIC, revalidateIfStale).
+- Calendar month: revalidates on navigtion (SEMI_STATIC, revalidateIfStale); has manual refresh button.
+
+## Cross-user isolation
+AuthContext.logout and refreshUser call `globalMutate(() => true, () => undefined, { revalidate: false })` to clear all SWR cache, preventing any stale per-user data from surviving into the next session.
+
+## Validation
+npx tsc --noEmit PASS. ESLint: AuthContext pre-existing only. git diff --check clean. No backend/DB/migration/Admin changes. No commit/push.
+
+## Manual PWA foreground/background checklist
+1. Open dashboard — observe profile + dashboard summary fetched (INTERACTIVE/DASHBOARD).
+2. Switch to another app (background) then return (foreground) — only profile + dashboard summary refetch (not analytics, calendar, events, history, lab, or preferences).
+3. Navigate to Subjects page — analytics overview refetches (SEMI_STATIC, revalidateIfStale on mount).
+4. Mark attendance on Track page — daily sessions + dashboard summary revalidate (targeted invalidation), analytics refreshed on next navigation.
+5. Log out ? log in as a different user — no previous user data visible (cache cleared).
+6. Open calendar — month grid fetches; switching tabs doesn't refetch it on focus.
+
+---
+
+# Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
+
+## Previous service-worker behavior
+1. **Navigation = cache-first**: `caches.match(event.request)` was checked before the network, so a returning PWA user could remain on an obsolete HTML application shell indefinitely after deployment.
+2. **Invalid precache paths**: `STATIC_ASSETS` listed `/_app`, `/_error`, `/globals.css` — none of these are literal files produced by the current Next.js App Router build. `cache.addAll` rejects if any fetch fails, so installation could partially fail purely because a guessed path 404s.
+3. **Aggressive update lifecycle**: `self.skipWaiting()` on install forced immediate worker takeover — a new HTML shell could be paired with old JS/CSS still referenced by the old page (HTML/JS mismatch), and `clients.claim()` amplified it.
+4. **Broad navigation matching**: the navigation branch matched `url.pathname.startsWith("/")` — effectively every same-origin GET, so JS/CSS subresources were also routed through cache-first handling.
+5. **API handling was safe but noisy**: `/api/*` was network-first with a clone-but-not-cache no-op; it never stored authenticated responses (correct), but the clone was pointless.
+6. **No cache-version constant**: the cache name was hardcoded (`attendancedash-pro-v1`); there was no deliberate versioning mechanism to trigger global invalidation.
+
+## Problems found
+- Stale-shell risk after deployments (cache-first navigation) — confirmed issue #1.
+- Installation fragility: `cache.addAll(STATIC_ASSETS)` with non-existent `/ _app` etc. can reject and fail the whole install.
+- `skipWaiting` can create a fresh-HTML / stale-JS mismatch.
+- Subresource requests (JS/CSS) were being cached by the SW unnecessarily.
+- No versioning constant; invalidation depended on manually renaming one hardcoded string.
+
+## New caching strategy
+- **Navigation (network-first with cache fallback)**: `event.request.mode === "navigate"` — try the network first, store the fetched HTML into the versioned cache with `cache.put`, and only fall back to the cached shell when the network is unavailable. After deployment, users get the current application shell.
+- **API (network-only)**: preserved — `/api/*` is never cached. `/student/me`, dashboard summary, attendance, notifications, calendar and all user-specific data remain network-driven; no shared cache exists that could expose one user's authenticated data to another. Offline API returns a truthful 503 `{offline:true}` JSON.
+- **Static precache (verified paths only)**: `/`, `/favicon.ico` (served from `src/app/favicon.ico`), `/manifest.json`, `/icons/icons-192.svg`, `/icons/icons-512.svg`. Invalid `/_app`, `/_error`, `/globals.css` removed. `cache.addAll` errors are swallowed so a single missing path can never fail installation. Hashed `/_next/static/*` artifacts are intentionally NOT enumerated — they are content-addressed and the browser HTTP cache handles them.
+- **Subresources**: JS/CSS/images/fonts are no longer intercepted; the browser HTTP cache is sufficient (content-addressed filenames).
+
+## Cache invalidation behavior
+- New constant `CACHE_VERSION = "v2"` ? cache `attendancedash-pro-v2`.
+- `activate` deletes every cache whose name does not match the current version, so old caches are cleaned up and the new cache becomes authoritative whenever the SW (and version constant) changes.
+- No aggressive unregistration; no forcing of activation.
+
+## Update lifecycle
+- `skipWaiting` **removed** — the new worker waits for reload; this avoids pairing a fresh HTML shell with stale JS/CSS.
+- `clients.claim()` retained — safe because navigation is network-first (a claiming worker fetches the latest HTML).
+- Registration hook (`useServiceWorker.ts`): `onupdatefound` logs "New content available; reload page to apply update"; hourly `registration.update()`; update check on window focus — active clients eventually receive the deployed worker without an unsafe immediate takeover.
+- Effect cleanup added (listeners/interval removed on unmount).
+
+## Offline behavior
+- Offline navigation: last cached HTML shell served (reasonable shell offline).
+- Offline API: 503 JSON `{offline:true}` — truthful, never stale data.
+- Offline support never overrides fresh application code while the network is up (network-first).
+
+## Authentication / data-isolation considerations
+- Login responses are never cached.
+- Authenticated API data is never stored in the SW cache (network-only for all `/api/*`).
+- Logout is untouched; no credential interception; the SW never redirects users; no auth logic moved into the SW.
+
+## Files changed
+- `frontend/public/service-worker.js` (rewritten)
+- `frontend/src/components/pwa/useServiceWorker.ts` (update lifecycle + cleanup)
+
+Not changed: manifest.json, layout.tsx, next.config.ts, registration wiring (hook not mounted — pre-existing gap), backend, DB, migrations, API, auth, JWT, Admin Portal.
+
+## Validation
+- `node --check frontend/public/service-worker.js` — syntax PASS.
+- `npx tsc --noEmit` (frontend) — PASS, 0 errors.
+- ESLint `useServiceWorker.ts` — clean.
+- Static asset paths verified against the repo (`public/` + `src/app/favicon.ico`).
+- `git diff --check` clean. No commit/push.
+
+## Manual PWA test checklist
+1. Load the app (DevTools ? Application ? Service Workers): SW script `service-worker.js` installs without errors; Cache Storage shows `attendancedash-pro-v2` containing `/`, `/favicon.ico`, `/manifest.json`, and both SVG icons.
+2. Navigate between pages while online — each navigation shows the current HTML (network-first); the versioned cache gains one entry per visited navigation URL.
+3. Deploy/change a page, bump `CACHE_VERSION`, reload — old caches (`attendancedash-pro-v1`) are deleted on activate; navigating again serves the new HTML.
+4. Go offline (DevTools ? Network ? Offline) — navigation still loads the last cached shell; API calls return the 503 `{offline:true}` JSON and no stale user data is displayed.
+5. DevTools ? Application ? Service Workers ? "Update": with the app open, the new SW installs and waits ("Waiting"); closing all tabs activates it; with the app open, focus + hourly `registration.update()` triggers the update check.
+6. API isolation: while logged in, confirm `/api/v1/student/me` and dashboard requests never appear in Cache Storage.
+7. Log out / log in as another user — no cached responses cross users (SW never caches API data).

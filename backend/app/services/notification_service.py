@@ -1,5 +1,7 @@
 from datetime import date, timedelta
+import time
 from typing import List, Optional
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.user_repo import UserRepository
@@ -16,6 +18,34 @@ from app.repositories.notification_repo import NotificationRepository
 
 # Human-readable class-type labels for notification messages (presentation only).
 _CLASS_TYPE_LABELS = {"L": "Lecture", "T": "Tutorial", "P": "Practical"}
+
+# Phase B (2026-08-31): short-lived, per-user, in-process TTL cache for the
+# notification inbox response.
+#
+# Why: every GET /api/v1/notifications previously regenerated ALL notification
+# projections (class reminders, quiz approaching, attendance items, academic
+# events) and upserted each into the database — even for a routine shell-mount
+# read of the unread badge. On Render free-tier cold starts and on every PWA
+# background/foreground focus this meant expensive engine work for a single
+# badge read.
+#
+# Design:
+# - Cache key is the authenticated user's UUID — strictly per-user, so one
+#   user can never receive another user's notifications or unread count.
+# - TTL is short (60s) and deterministic (monotonic clock). After expiry the
+#   next read regenerates + upserts exactly once; repeated reads within the
+#   window are served from the cache (no regeneration, no writes).
+# - Invalidation: a read/dismiss PATCH (update_state) removes the user's entry
+#   so the very next GET reflects the new state (badge stays correct).
+# - The cached value is the final NotificationsResponse (items + as_of +
+#   unread_count); FastAPI re-serializes it without mutating the model.
+#
+# Limitations (documented): in-process only. A single uvicorn worker (the
+# project's deployment) gets full benefit; N workers would run N independent
+# caches (still per-user keyed — never a leak — just duplicated regeneration
+# at most once per TTL per worker). No Redis or new infrastructure is used.
+_NOTIFICATION_CACHE_TTL_SECONDS = 60.0
+_notification_cache: dict[UUID, tuple[float, NotificationsResponse]] = {}
 
 
 class NotificationService:
@@ -39,6 +69,13 @@ class NotificationService:
     client is the persisted inbox, newest first, with the unread count; a
     previously generated notification stays in the inbox (until dismissed) even
     after its source condition passes.
+
+    Phase B (2026-08-31): the expensive regeneration is throttled by a
+    per-user in-process TTL cache (see module docstring) so shell-mount reads
+    and PWA foreground transitions serve a cached response instead of
+    regenerating projections on every request. Generation still runs — at most
+    once per TTL per user — so new class/quiz/attendance/event notifications
+    are eventually reflected. Read/dismiss PATCH invalidates the user's entry.
     """
 
     def __init__(self, db: AsyncSession):
@@ -51,7 +88,35 @@ class NotificationService:
         self.eligibility_service = EligibilityService(db)
         self.notification_repo = NotificationRepository(db)
 
+    @classmethod
+    def _cache_get(cls, user_id: UUID) -> Optional[NotificationsResponse]:
+        """Return the user's cached inbox response if fresh, else None."""
+        entry = _notification_cache.get(user_id)
+        if entry is None:
+            return None
+        stored_at, response = entry
+        if time.monotonic() - stored_at >= _NOTIFICATION_CACHE_TTL_SECONDS:
+            _notification_cache.pop(user_id, None)
+            return None
+        return response
+
+    @classmethod
+    def _cache_put(cls, user_id: UUID, response: NotificationsResponse) -> None:
+        """Store the user's inbox response with the current monotonic time."""
+        _notification_cache[user_id] = (time.monotonic(), response)
+
+    @classmethod
+    def _cache_invalidate(cls, user_id: UUID) -> None:
+        """Remove the user's cache entry (read/dismiss PATCH)."""
+        _notification_cache.pop(user_id, None)
+
     async def get_notifications(self, user) -> NotificationsResponse:
+        # Phase B: serve a fresh cached response without regenerating. The
+        # cache is keyed by user UUID — never cross-user.
+        cached = self._cache_get(user.id)
+        if cached is not None:
+            return cached
+
         as_of = institution_today()
         subjects = await self.user_repo.get_enrolled_subjects(user.id)
 
@@ -80,11 +145,14 @@ class NotificationService:
 
         rows = await self.notification_repo.get_inbox(user.id)
         unread_count = await self.notification_repo.count_unread(user.id)
-        return NotificationsResponse(
+        response = NotificationsResponse(
             items=[self._to_item(r) for r in rows],
             as_of=as_of,
             unread_count=unread_count,
         )
+        # Phase B: cache the fresh response for subsequent cheap reads.
+        self._cache_put(user.id, response)
+        return response
 
     async def update_state(
         self,
@@ -102,6 +170,9 @@ class NotificationService:
             is_read=is_read,
             is_dismissed=is_dismissed,
         )
+        # Phase B: a state change must be visible on the next GET (badge
+        # correctness) — drop the user's cached response.
+        self._cache_invalidate(user.id)
         return self._to_item(row) if row is not None else None
 
     @staticmethod

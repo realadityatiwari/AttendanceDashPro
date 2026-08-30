@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 let serviceWorkerRegistered = false;
 
 /**
  * Service worker registration for AttendanceDash Pro PWA.
- * 
+ *
  * Policy:
  * - Registers only in the browser (client component)
  * - Does not break SSR (client-only execution)
- * - Uses conservative caching: static assets cached on install,
- *   network-first for all API requests
+ * - Caching strategy (Phase D): network-first navigation with cache
+ *   fallback, network-only API (never caches authenticated data),
+ *   precached verified static assets, versioned caches
  * - Does not cache personalized/authenticated data
  * - Does not interfere with beforeinstallprompt or useInstallPrompt
+ * - Update lifecycle: the SW waits for reload (no skipWaiting), so a
+ *   fresh shell is never paired with stale JS/CSS; when a new SW is
+ *   installed we notify the user to reload, and while a page is open we
+ *   check for updates on focus so clients eventually receive the new
+ *   worker after deployment.
  */
 export function useServiceWorker() {
   const [swRegistered, setSwRegistered] = useState(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     // Skip if already registered
@@ -32,7 +39,6 @@ export function useServiceWorker() {
       .then((registration) => {
         serviceWorkerRegistered = true;
         setSwRegistered(true);
-        console.log("SW registered: scope = ", registration.scope);
 
         // Listen for update found events
         registration.onupdatefound = () => {
@@ -41,20 +47,47 @@ export function useServiceWorker() {
           installingWorker.onstatechange = () => {
             if (installingWorker.state === "installed") {
               if (navigator.serviceWorker.controller) {
-                // New content is available
-                console.log("New content available; reload page recommended");
+                // New content is available; the new SW is waiting (no
+                // skipWaiting) and will activate once tabs are closed.
+                console.log(
+                  "New content available; reload page to apply update",
+                );
               } else {
-                // Content cached for offline use
                 console.log("Content cached for offline use");
               }
             }
           };
         };
+
+        // Periodically check for a newer SW while a page is open, so
+        // deployed updates reach active clients without forcing an
+        // immediate (unsafe) takeover.
+        const checkForUpdates = () => {
+          registration.update().catch((error) => {
+            console.error("SW update check failed: ", error);
+          });
+        };
+
+        const handleFocus = () => checkForUpdates();
+        window.addEventListener("focus", handleFocus);
+        const intervalId = window.setInterval(checkForUpdates, 60 * 60 * 1000);
+
+        cleanupRef.current = () => {
+          window.removeEventListener("focus", handleFocus);
+          window.clearInterval(intervalId);
+        };
       })
       .catch((error) => {
         console.error("SW registration failed: ", error);
       });
-  }, [serviceWorkerRegistered]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, []);
 
   return { swRegistered };
 }

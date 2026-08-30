@@ -4767,3 +4767,102 @@ Duplicate request root cause: AuthContext used `apiFetch("/api/v1/student/me")` 
 Architecture chosen: shared SWR profile resource. AuthContext consumes the same `PROFILE_KEY` (`/api/v1/student/me`) via `useSWR`, gated on token presence. SWR coalesces AuthContext and useProfile() into one logical request. The shared key is defined in `lib/api.ts` (neutral leaf both modules import). Auth invariants preserved: token gating prevents stale profile authentication; derived user (no setUser state) ensures immediate null on token removal; cache cleared on logout/401/403; global mutate used for refreshUser cross-key; self-heal retry via `mutate()` on focus/visibility; SWR dedup replaces manual in-flight guard.
 
 Validation: `npx tsc --noEmit` PASS. ESLint: AuthContext has 2 `set-state-in-effect` errors (1 pre-existing pattern, 1 new — same class, CI informational). No eslint changes in useApi.ts/api.ts. git diff --check clean. No backend/DB/schema/.env changes. No commit/push.
+
+---
+
+## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+### Previous flow
+Every GET /api/v1/notifications called NotificationService.get_notifications,
+which ALWAYS regenerated all projection kinds (class reminders, quiz
+approaching, attendance items, academic events) and upserted each into the DB
+— even for a routine shell-mount unread-badge read. NotificationBell calls
+useNotifications(!!token) at shell mount with STANDARD_CACHE
+(revalidateOnFocus: true) so every mount + focus + panel open triggered full
+regeneration; worst on Render cold starts / PWA foreground transitions.
+
+### New architecture (backend, minimal)
+Short-lived per-user in-process TTL cache in NotificationService:
+- Key = authenticated user UUID (strictly per-user, no cross-user leak).
+- TTL = 60s monotonic; after expiry the next read regenerates + upserts once.
+- get_notifications serves cached response within TTL (no regeneration, no writes).
+- update_state (read/dismiss PATCH) invalidates the user entry so badge stays correct.
+- No Redis/new infra; in-process limitation documented (single-worker deployment
+  fully benefits; N workers would run N independent per-user caches — no leak).
+
+Frontend untouched: NotificationCenter already gates fetch on `open`; bell
+mutate() on open forces a fresh GET; SWR dedupingInterval 60s dedupes rapid
+fetches. Backend TTL makes all these cheap.
+
+### Validation
+Backend compile + import OK. In-memory cache mechanics test PASS (hit,
+per-user isolation, invalidate, TTL expiry/eviction). Frontend tsc PASS.
+git diff --check clean. No DB/migration/engine/JWT/Admin changes. No commit/push.
+
+---
+
+## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+### Previous behavior
+Universal STANDARD_CACHE = { revalidateOnFocus: true, dedupingInterval: 60000 } was used by profile, dashboard summary, analytics overview, notifications, calendar, events, history, lab, preferences — all on every authenticated page. On PWA foreground transition, every mounted hook refetched simultaneously (a "refetch storm"), worst on cold Render instances.
+
+### New cache policies (resource-aware)
+- INTERACTIVE_CACHE: revalidateOnFocus true, revalidateIfStale true, dedupingInterval 60s. Used for profile, daily sessions, subject summary, quiz eligibility, current quiz cycle, calendar day.
+- DASHBOARD_CACHE: revalidateOnFocus true, revalidateIfStale true, dedupingInterval 120s (moderate dedupe, controlled focus). Used for dashboard summary.
+- SEMI_STATIC_CACHE: revalidateOnFocus false, revalidateIfStale true, dedupingInterval 5 min. Used for analytics overview, calendar month, events, attendance history, lab records/summary/activity, preferences.
+- STANDARD_CACHE unchanged: notifications (Phase B backend TTL) + all admin hooks (out of scope).
+- LONG_CACHE unchanged: subjects, timetable, lab experiments.
+
+### Cross-user cache isolation
+AuthContext.logout and refreshUser now clear the entire SWR cache via `globalMutate(() => true, () => undefined, { revalidate: false })` — a new login can never flash stale data from the previous user.
+
+### Attendance freshness
+After attendance mutations (lab/Track page), mutate() + mutateDashboard() revalidate daily sessions and dashboard summary. Analytics overview revalidates on navigation (revalidateIfStale); dashboard summary refetches on focus (DASHBOARD_CACHE). Targeted invalidation is preserved.
+
+### Files changed
+frontend/src/hooks/useApi.ts (cache policies + hook assignments),
+frontend/src/contexts/AuthContext.tsx (cross-user cache clear on logout/refreshUser).
+
+### Validation
+npx tsc --noEmit PASS. ESLint: AuthContext has 2 pre-existing set-state-in-effect errors (same class as committed baseline). useApi.ts clean. git diff --check clean. No backend/DB/migration/Admin changes. No commit/push.
+
+---
+
+## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+
+### Old service-worker behavior
+- Navigation requests served **cache-first** (`caches.match` before network) — stale HTML application shell could persist indefinitely after deployment.
+- `/api/*` handled network-first with a **clone-but-not-cache** no-op and a 503 JSON offline fallback.
+- `STATIC_ASSETS` hardcoded invalid paths `/_app`, `/_error`, `/globals.css` — these are NOT produced as literal files by the App Router build; `cache.addAll` could reject and fail installation.
+- `self.skipWaiting()` on install + `self.clients.claim()` on activate — forced immediate worker takeover (HTML/JS mismatch risk).
+- No cache-version constant (hardcoded `attendancedash-pro-v1`).
+- Navigation branch matched by pathname (`startsWith("/")`) — effectively every same-origin GET; JS/CSS fell into cache-first handling.
+
+### New caching strategy
+- **Navigation: network-first with cache fallback** (`request.mode === "navigate"`): always fetch the latest HTML, store a copy in the versioned cache via `cache.put`, and fall back to the cached shell only when the network is unavailable. A returning PWA user gets the current shell after deployment instead of an obsolete one.
+- **API: network-only, never cached** — preserved; authenticated/personalized data (`/student/me`, dashboard summary, attendance, notifications, calendar, etc.) stays strictly network-driven; no shared cache that could cross-user leak. Offline JSON 503 fallback retained.
+- **Static precache**: `STATIC_ASSETS` reduced to verified paths (`/`, `/favicon.ico` [served from `src/app/favicon.ico`], `/manifest.json`, `/icons/icons-192.svg`, `/icons/icons-512.svg`); invalid `/_app`, `/_error`, `/globals.css` removed. `cache.addAll` errors swallowed so a single missing path cannot fail installation. Hashed `/_next/static/*` artifacts are NOT enumerated (browser HTTP cache handles content-addressed assets).
+- **Non-navigation, non-API requests** (JS/CSS/images/fonts) no longer intercepted — content-addressed build artifacts are served by the browser cache.
+
+### Cache versioning & update lifecycle
+- `CACHE_VERSION = "v2"` constant ? `attendancedash-pro-v2`; activate deletes all non-current caches. Bumping the constant invalidates everything on next SW update.
+- `skipWaiting` **removed**: the new worker waits for reload instead of force-takeover, avoiding fresh-HTML-with-stale-JS/CSS pairing. `clients.claim()` retained (safe under network-first navigation).
+- Registration hook (`useServiceWorker.ts`) adds: update-notice logging on `onupdatefound`, hourly `registration.update()` check, and an update check on window focus — active clients eventually receive the deployed worker without an unsafe immediate takeover.
+- Note: the hook is currently **not mounted** anywhere in the app (pre-existing wiring gap; SW never registered at runtime). Not changed in this phase — documented for a follow-up.
+
+### Files changed
+- `frontend/public/service-worker.js` (rewritten)
+- `frontend/src/components/pwa/useServiceWorker.ts` (update lifecycle + cleanup)
+
+### Validation
+- `node --check frontend/public/service-worker.js` — syntax PASS.
+- `npx tsc --noEmit` (frontend) — PASS, 0 errors.
+- ESLint on `useServiceWorker.ts` — clean.
+- Static asset paths verified against repo (`public/` + `src/app/favicon.ico`).
+- No backend/DB/migration/API/auth/JWT/Admin changes. No commit/push.

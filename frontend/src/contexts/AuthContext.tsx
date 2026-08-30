@@ -125,12 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Re-sync token state and revalidate the shared profile. Used by the
-  // login/signup flow right after persisting a fresh token. Clearing stale
-  // cached data prevents a previous session's profile from flashing after a
-  // new login.
+  // login/signup flow right after persisting a fresh token. Clearing ALL
+  // cached SWR data first prevents any previous user's session data from
+  // flashing after a new login (cross-user isolation).
   const refreshUser = async () => {
     const token = localStorage.getItem("access_token");
     if (token) {
+      globalMutate(() => true, () => undefined, { revalidate: false });
       setTokenStatus("present");
       await globalMutate(PROFILE_KEY);
     } else {
@@ -140,9 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("access_token");
+    // Clear the ENTIRE SWR cache so no stale per-user data survives into the
+    // next session (cross-user isolation); the profile can never re-authenticate.
+    globalMutate(() => true, () => undefined, { revalidate: false });
     setTokenStatus("absent");
-    // Clear the shared profile cache so a stale profile cannot re-authenticate.
-    globalMutate(PROFILE_KEY, () => undefined, { revalidate: false });
     router.push("/login");
   };
 
