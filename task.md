@@ -4017,3 +4017,36 @@ Only remaining minor audit issues. No Calendar/notification redesign, no backend
 - [x] Metadata: manifest.json icons ? brand PNGs (any + maskable); layout.tsx metadata.icons (icon + apple); service-worker.js precache ? brand icons (v2?v3)
 - [x] Removed stale `public/icons/icons-192.svg` + `icons-512.svg`
 - [x] Brand name + dark tokens preserved; frozen phases untouched; no commit/push
+
+---
+
+## Investigation: Dashboard date/time consistency bug (2026-08-31)
+
+**Status: INVESTIGATION COMPLETE — no code change made (fix pending separate authorization).**
+
+- [x] Root cause identified: `date.today()` (server UTC) vs `new Date()` (browser IST) — two independent "today" values; backend cards lag by one day during 00:00–05:30 IST
+- [x] 31 Aug path: `GreetingHeader.tsx:22` `formatLongDate(new Date())` (browser-local IST)
+- [x] 30 Aug path: `dashboard_service.py:63` `date.today()` ? `_build_today` / `_build_weekly` (week 24?30 Aug)
+- [x] Canonical helper exists: `institution_today()` (`attendance_service.py:32-34`, `INSTITUTION_TIMEZONE=Asia/Kolkata`)
+- [x] Not SWR/cache, not hydration, not backend stale data (values are live UTC-now)
+- [x] Systemic: same pattern in analytics_service.py:44, endpoints/calendar.py:63, eligibility_service.py:233, attendance_service.py:263, laboratory_service.py:120, calendar_repo.py:38 (+ Admin files out of scope)
+- [x] Recommended fix (authorized separately): replace `date.today()` ? `institution_today()` in student-facing read paths
+- [x] No auth/performance/cache/DB/migration changes
+
+---
+
+## Hotfix: Dashboard Date/Time Consistency (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+- [x] Created `backend/app/core/timezone.py` (authoritative `INSTITUTION_TZ` + `institution_today()`; lowest-level utility)
+- [x] `attendance_service.py`: helper re-exported from core (backward compatible); history `range_end` uses `institution_today()`
+- [x] `dashboard_service.py`: summary today, weekly range, quiz filter, upcoming events ? `institution_today()`
+- [x] `analytics_service.py`: as-of ? `institution_today()`
+- [x] `endpoints/calendar.py`: `/calendar/today` ? `institution_today()`
+- [x] `eligibility_service.py`: timeline commencement fallback + next-cycle filter ? `institution_today()`
+- [x] `laboratory_service.py`: as_of ? `institution_today()`
+- [x] `repositories/calendar_repo.py`: upcoming event filter ? `institution_today()` (repository imports core, not a service — no layering inversion/cycle)
+- [x] Boundary: 31 Aug 02:27 IST ? today 2026-08-31, week 2026-08-31 ? 2026-09-06 (verified)
+- [x] Unchanged: Admin Portal, frozen Phase 7 eligibility-engine placeholders, attendance/eligibility/calendar/event math, schemas, DB, migrations, auth/JWT, SWR/cache, frontend date utilities, GreetingHeader
+- [x] Verification: compileall + import-cycle check PASS; no DB-touching verifier run; no commit/push/deploy

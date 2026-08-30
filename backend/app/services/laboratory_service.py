@@ -1,11 +1,11 @@
 from uuid import UUID
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
+from app.core.timezone import institution_today
 from app.models.enums import ClassType, SessionDesignation
 from app.models.timetable import ClassSession
 from app.models.user import User
@@ -117,7 +117,7 @@ class LaboratoryService:
         await self._guard_read(user, subject)
 
         att_summary = await AttendanceService(self.db).get_summary(
-            user.id, subject.id, subject.code, date.today()
+            user.id, subject.id, subject.code, institution_today()
         )
         p = att_summary.practical
         practical = PracticalAttendanceSummary(

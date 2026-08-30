@@ -4957,3 +4957,36 @@ New brand: a bold geometric "A" monogram whose crossbar is an attendance checkma
 - Stale assets removed: `public/icons/icons-192.svg`, `public/icons/icons-512.svg`.
 - Preserved: brand name "AttendanceDash Pro", existing dark design tokens (no color-system changes), login/signup text branding (no logo image was present there — no change), frozen phases untouched.
 - Known limitation: PWA/SW registration hook remains unmounted (pre-existing) — icons are correctly referenced but the service worker does not register at runtime until wired.
+
+---
+
+## Investigation: Dashboard date/time consistency bug (2026-08-31)
+
+**Status: INVESTIGATION COMPLETE — no code change made (fix pending separate authorization).**
+
+Observed: header "Monday · 31 Aug 2026" (browser IST) vs Today's Attendance "Sunday · 30 Aug 2026" and This Week "2026-08-24 ? 2026-08-30" (backend).
+
+Root cause: the dashboard/analytics/calendar/history/quiz/lab/event services use Python's `date.today()` (server OS-local clock). The server runs in UTC, so at 31 Aug 02:27 IST (= 30 Aug 20:57 UTC) `date.today()` returns 2026-08-30. The GreetingHeader renders `new Date()` in the browser's IST timezone ? 2026-08-31. Two independent "today" values disagree.
+
+- 31 Aug: `frontend/src/components/dashboard/home/GreetingHeader.tsx:22` ? `formatLongDate(new Date())` (browser-local).
+- 30 Aug: `backend/app/services/dashboard_service.py:63` `today = date.today()` ? `_build_today` (Today's Attendance `date`), `_build_weekly` (week_start 24 Aug, week_end 30 Aug), `generated_at`, quiz-snapshot future filter (line 306), upcoming events (line 361).
+- The repo already has the canonical IST helper `institution_today()` (`backend/app/services/attendance_service.py:32-34`, driven by `INSTITUTION_TIMEZONE = "Asia/Kolkata"` in `app/core/config.py:18`) — used by notifications, the attendance mutation guard, and admin analytics, but NOT by the dashboard/analytics/calendar/history/quiz/lab/event paths.
+- SWR/cache NOT involved: the observed week range is the live UTC week (a stale cache would show an earlier week); `DASHBOARD_CACHE` (revalidateOnFocus, 120 s dedupe) and `SEMI_STATIC` analytics only determine freshness, not which date is computed.
+- No hydration mismatch: both values are live-computed (browser vs server), not stale renders.
+- Systemic: same `date.today()` pattern exists in `analytics_service.py:44`, `api/v1/endpoints/calendar.py:63`, `eligibility_service.py:233`, `attendance_service.py:263` (history range_end), `laboratory_service.py:120`, `calendar_repo.py:38`, plus Admin `admin_dashboard_service.py:45,186,225` and `admin_dashboard_repo.py:274,289` (out of scope). Notifications and the attendance future-date mutation guard already use `institution_today()`.
+- Recommended fix (not yet applied): replace `date.today()` with `institution_today()` in the student-facing read paths listed above. No DB/migration/auth/attendance-math change. Risks: none to auth/performance/cache; read/mutation "today" become the same IST clock. Regression tests: assert dashboard `today`/week range equals IST date during the 00:00–05:30 IST UTC-overlap window; assert weekly.week_start is the Monday of the IST week; verify analytics series last week matches dashboard week_start.
+
+---
+
+## Hotfix: Dashboard Date/Time Consistency (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+Targeted hotfix for the investigation above. Reused the authoritative institutional clock (`institution_today()`, Asia/Kolkata) across the student-facing read paths that were still using server-local `date.today()`:
+
+- Extracted the helper to the lowest-level shared utility `backend/app/core/timezone.py` (`INSTITUTION_TZ` + `institution_today()`); `attendance_service.py` re-exports it (backward compatible for `notification_service`, `admin_attendance_service`, verify scripts).
+- Replaced with `institution_today()`: `dashboard_service.py` (summary today, weekly range, quiz filter, upcoming events), `analytics_service.py` (as-of), `endpoints/calendar.py` (`/calendar/today`), `eligibility_service.py` (timeline commencement fallback + next-cycle filter), `attendance_service.py` (history default range_end), `laboratory_service.py` (as-of), `calendar_repo.py` (upcoming event filter).
+- Circular-import handling: repositories no longer import a service module — `calendar_repo.py` imports from `app.core.timezone`; all modules import cleanly (verified).
+- Boundary verified: at 31 Aug 02:27 IST, `institution_today()` = 2026-08-31, weekly week_start = 2026-08-31, week_end = 2026-09-06 (Monday-start semantics unchanged).
+- Out of scope / unchanged: Admin Portal (`admin_dashboard_service.py`, `admin_dashboard_repo.py`), frozen Phase 7 eligibility engine placeholders (`eligibility_engine.py:140-141`, invalid-window only), attendance/eligibility/calendar/event math, schemas, DB, migrations, auth/JWT, SWR/cache, all frontend date handling, GreetingHeader.
+- Verification: `compileall` PASS on backend app; all 8 changed modules import without circular-import errors; py_compile PASS. No DB-touching verifier run (quota-efficient static verification only). No commit/push/deploy.

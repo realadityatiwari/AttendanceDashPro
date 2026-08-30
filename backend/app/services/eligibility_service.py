@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
+from app.core.timezone import institution_today
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.subject_repo import SubjectRepository
@@ -155,7 +156,7 @@ class EligibilityService:
             category=subject_model.category,
             quiz_applicable=subject_model.quiz_applicable,
             attendance_applicable=subject_model.attendance_applicable,
-            timeline=Timeline(commencement_date=semester_start or date.today(), milestones=milestones)
+            timeline=Timeline(commencement_date=semester_start or institution_today(), milestones=milestones)
         )
         # Single source of truth from the calendar engine (JS getDay() indices:
         # 0=Sunday, 6=Saturday). Previously a local [5, 6] (Python weekday
@@ -230,7 +231,7 @@ class EligibilityService:
             [s.id for s in quiz_applicable], elective_scope=elective_scope
         )
         resolved = [(cycle, quiz_date) for lst in effective_by_subject.values() for cycle, quiz_date in lst]
-        future = [(cycle, quiz_date) for cycle, quiz_date in resolved if quiz_date >= date.today()]
+        future = [(cycle, quiz_date) for cycle, quiz_date in resolved if quiz_date >= institution_today()]
 
         if future:
             cycle, quiz_date = min(future, key=lambda x: x[1])

@@ -9105,4 +9105,28 @@ Diff on calendar files since 859b1f7 contains only classNames, indicator spans, 
 
 New AttendanceDash Pro brand: bold geometric "A" monogram with an attendance-check crossbar (primary blue legs, light check on slate tile). One authoritative generator (`frontend/scripts/generate_brand_icons.py`) emits the SVG masters and all raster sizes; `public/brand/` is the single source for icon assets. Mark used in TopNav + AdminShell headers; manifest/metadata/service-worker updated; old `public/icons/*` SVGs removed. Regenerate with `python frontend/scripts/generate_brand_icons.py` (requires Pillow, dev-time only). No frozen phase, auth, API, or admin logic touched.
 
-Hard stop.
+---
+
+## Investigation: Dashboard date/time consistency bug (2026-08-31)
+
+**Status: INVESTIGATION COMPLETE — no code change made (fix pending separate authorization).**
+
+Production symptom (31 Aug 2026, 02:27 IST): header "Monday · 31 Aug 2026", Today's Attendance "Sunday · 30 Aug 2026", This Week "2026-08-24 ? 2026-08-30". Walkthrough of both values:
+
+1. **31 Aug** — browser side: `GreetingHeader` renders `formatLongDate(new Date())` in the visitor's IST timezone. Correct for the user.
+2. **30 Aug** — server side: `DashboardService.get_summary` uses `today = date.today()`. The deployed server runs in UTC; at 31 Aug 02:27 IST the UTC date is still 30 Aug 20:57, so `date.today()` = 2026-08-30. This one value drives Today's Attendance (`_build_today` ? `TodaySection.date`), This Week (`_build_weekly` ? week_start 2026-08-24, week_end 2026-08-30), `generated_at`, and the quiz-snapshot/upcoming-events "today" filters.
+
+The repo's authoritative clock is `institution_today()` (`attendance_service.py:32`, `Asia/Kolkata` from `config.py`), which the dashboard path does not use. SWR caching, hydration, and backend stale data are all excluded: the week range is the live UTC week, and both values are freshly computed. The same `date.today()` pattern is repeated in analytics, calendar `/today`, quiz eligibility, history range_end, laboratory summary, and the event `upcoming` filter — so the issue is systemic (student-facing) and the fix is a single-clock substitution. Notifications and the future-date mutation guard already use the IST helper.
+
+---
+
+## Hotfix: Dashboard Date/Time Consistency — IMPLEMENTED (2026-08-31)
+
+Authorized implementation of the investigation's recommended fix:
+
+- **New authoritative utility:** `backend/app/core/timezone.py` — `INSTITUTION_TZ = ZoneInfo(settings.INSTITUTION_TIMEZONE)` and `institution_today()` moved here from `attendance_service.py` (which re-exports both, keeping `notification_service`, `admin_attendance_service`, and verify scripts working unchanged).
+- **Why extract:** `calendar_repo.py` is a repository; importing a service module would invert layering and risk cycles. The core utility is the lowest-level appropriate home (repositories ? core ? config only).
+- **Replaced `date.today()` ? `institution_today()`:** `dashboard_service.py` (3 sites: summary today, quiz-snapshot future filter, upcoming events), `analytics_service.py` (as-of), `endpoints/calendar.py` (`/calendar/today`), `eligibility_service.py` (2 sites: timeline commencement fallback, next-cycle filter), `attendance_service.py` (history default `range_end`), `laboratory_service.py` (as-of), `calendar_repo.py` (upcoming filter).
+- **Boundary walkthrough (31 Aug 02:27 IST):** `institution_today()` = 2026-08-31 ? dashboard `today.date` = 2026-08-31, `weekly.week_start` = 2026-08-31 (Monday), `weekly.week_end` = 2026-09-06; calendar `/today` and history default `date_to` = 2026-08-31. Monday-start weekly semantics unchanged.
+- **Verification:** `compileall` PASS on the whole backend app; all changed modules import with no circular-import errors; `py_compile` PASS on every changed file. No DB-touching verifier run (static verification only per hotfix scope).
+- **Unchanged:** Admin Portal (`admin_dashboard_service.py`, `admin_dashboard_repo.py`), frozen Phase 7 `eligibility_engine.py` placeholders (invalid-window only), all math/schema/DB/migration/auth/JWT/SWR-cache/frontend date handling, GreetingHeader, branding. No commit/push/deploy.

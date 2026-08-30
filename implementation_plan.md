@@ -4853,3 +4853,25 @@ Implemented:
 - `manifest.json`, `layout.tsx` metadata.icons, `service-worker.js` precache updated; `public/icons/*` stale SVGs removed.
 
 Validation: tsc PASS; lint = pre-existing baseline; build PASS (with production API URL per 99f6619 guard). No commit/push.
+
+---
+
+## Investigation: Dashboard date/time consistency bug (2026-08-31)
+
+**Status: INVESTIGATION COMPLETE — no code change made (fix pending separate authorization).**
+
+Finding: `date.today()` (server-local) is used instead of the canonical IST helper `institution_today()` in the dashboard/analytics/calendar/history/quiz/lab/event read paths. With the server in UTC, backend "today" lags IST by a day during 00:00–05:30 IST, producing the observed header 31 Aug vs cards 30 Aug split. SWR/cache and hydration are not involved. Planned fix (authorized separately): substitute `institution_today()` in the listed services. No auth/performance/cache/DB changes.
+
+---
+
+## Hotfix: Dashboard Date/Time Consistency (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+Plan executed: single-clock substitution of server-local `date.today()` with the authoritative `institution_today()` (Asia/Kolkata) in all student-facing read paths. Implementation:
+
+1. `backend/app/core/timezone.py` (new) — authoritative `INSTITUTION_TZ` + `institution_today()`; lowest-level shared utility so repositories never import a service module.
+2. `backend/app/services/attendance_service.py` — removed local helper definition; re-exports from `app.core.timezone`; history `range_end` now uses `institution_today()`.
+3. `dashboard_service.py`, `analytics_service.py`, `endpoints/calendar.py`, `eligibility_service.py`, `laboratory_service.py`, `repositories/calendar_repo.py` — import from `app.core.timezone` and use `institution_today()`.
+
+Result at 31 Aug 02:27 IST: dashboard `today.date` = 2026-08-31, weekly `week_start` = 2026-08-31, `week_end` = 2026-09-06; calendar `/today`, history default `date_to`, analytics as-of, quiz eligibility boundary, laboratory as_of, and event upcoming filter all use the IST date. Monday-start weekly semantics unchanged. Admin Portal and the frozen Phase 7 eligibility-engine placeholders intentionally untouched. Verification: compileall + import-cycle check PASS. No commit/push.

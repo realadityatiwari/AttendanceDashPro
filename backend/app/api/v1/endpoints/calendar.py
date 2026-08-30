@@ -2,6 +2,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, get_current_user
+from app.core.timezone import institution_today
 from app.models.user import User
 from app.services.calendar_service import CalendarService
 from app.services.elective_resolver import ElectiveResolver
@@ -60,7 +61,7 @@ async def get_today_calendar(
     Returns the resolved academic day for today.
     """
     service = CalendarService(db)
-    return await _day_response(service, current_user, date.today())
+    return await _day_response(service, current_user, institution_today())
 
 @router.get("/{target_date}", response_model=AcademicDayResponse)
 async def get_calendar_by_date(

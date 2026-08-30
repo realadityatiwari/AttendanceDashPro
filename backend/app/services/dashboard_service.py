@@ -6,6 +6,7 @@ from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.calendar_repo import CalendarRepository
+from app.core.timezone import institution_today
 from app.services.attendance_service import AttendanceService
 from app.services.eligibility_service import EligibilityService
 from app.services.calendar_service import CalendarService
@@ -60,7 +61,7 @@ class DashboardService:
         self.calendar_service = CalendarService(db)
 
     async def get_summary(self, user) -> DashboardSummaryResponse:
-        today = date.today()
+        today = institution_today()
         subjects = await self.user_repo.get_enrolled_subjects(user.id)
 
         # Phase 23.4: authoritative placement from the student-context service
@@ -303,7 +304,7 @@ class DashboardService:
             [s.id for s in quiz_applicable], elective_scope=elective_scope
         )
         resolved = [(cyc, d) for lst in effective_by_subject.values() for cyc, d in lst]
-        future = [(cyc, d) for cyc, d in resolved if d >= date.today()]
+        future = [(cyc, d) for cyc, d in resolved if d >= institution_today()]
         pick = min(future, key=lambda x: x[1]) if future else (max(resolved, key=lambda x: x[0]) if resolved else None)
         if pick is None:
             return empty
@@ -358,7 +359,7 @@ class DashboardService:
         return items
 
     async def _build_upcoming_events(self, user, subjects: List[Subject]) -> List[UpcomingEventItem]:
-        today = date.today()
+        today = institution_today()
         enrolled_ids = {s.id for s in subjects}
         subject_by_id = {s.id: s for s in subjects}
 

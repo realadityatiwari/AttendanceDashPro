@@ -1,7 +1,7 @@
-from datetime import date, datetime
+from datetime import date
 from uuid import UUID
 from typing import Optional, Dict, Any, List
-from zoneinfo import ZoneInfo
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,6 @@ from app.models.attendance import AttendanceRecord
 from app.models.timetable import TimetableEntry
 from app.models.academic import StudentElectiveChoice
 from app.models.enums import AttendanceStatus, ElectiveSlot, OccurrenceOutcomeType
-from app.core.config import settings
 from app.engines.attendance_engine import (
     compute_subject_stats,
     normalize_class_type,
@@ -22,16 +21,11 @@ from app.engines.attendance_engine import (
 from app.schemas.attendance import SubjectAttendanceSummary, DailySessionsResponse, DailySessionResponse
 from app.services.student_context_service import StudentContextService
 
-# Institutional timezone (settings.INSTITUTION_TIMEZONE, Asia/Kolkata) is the
-# canonical local clock for "today". Attendance mutation is rejected for any
-# session dated after this local date — future dates are view-only (Track
-# renders them, but Present/Absent cannot be recorded before the date).
-INSTITUTION_TZ = ZoneInfo(settings.INSTITUTION_TIMEZONE)
-
-
-def institution_today() -> date:
-    """The canonical institution-local current date (single source of truth)."""
-    return datetime.now(INSTITUTION_TZ).date()
+# Canonical institution-local "today" (Asia/Kolkata) — the authoritative
+# helper is defined in the low-level timezone utility so that repositories
+# can resolve it without importing a service module. Re-exported here for
+# existing importers (notification_service, admin_attendance_service, etc.).
+from app.core.timezone import INSTITUTION_TZ, institution_today
 
 # Subject-level optimizer target (Phase 8.0 contract): the documented academic
 # attendance requirement for the general (non-quiz-window) subject optimizer.
@@ -260,7 +254,7 @@ class AttendanceService:
         ctx = await StudentContextService(self.db).get_placement(user)
         semester_start = ctx.semester_start
         semester_end = ctx.semester_end
-        today = date.today()
+        today = institution_today()
 
         # Effective query range: clamped to the student's semester and today.
         if semester_start is not None:

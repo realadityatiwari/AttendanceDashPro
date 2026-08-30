@@ -3,6 +3,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.user_repo import UserRepository
 from app.repositories.attendance_repo import AttendanceRepository
+from app.core.timezone import institution_today
 from app.services.attendance_service import AttendanceService
 from app.schemas.analytics import (
     AnalyticsOverviewResponse,
@@ -41,7 +42,7 @@ class AnalyticsService:
         self.attendance_service = AttendanceService(db)
 
     async def get_overview(self, user: User) -> AnalyticsOverviewResponse:
-        today = date.today()
+        today = institution_today()
         # Phase 23.4: authoritative placement from the student-context service.
         ctx = await StudentContextService(self.db).get_placement(user)
         semester_start: Optional[date] = ctx.semester_start

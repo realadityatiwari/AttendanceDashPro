@@ -2,6 +2,7 @@ from typing import List, Optional
 from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from app.core.timezone import institution_today
 from app.models.event import AcademicEvent
 
 class CalendarRepository:
@@ -35,6 +36,6 @@ class CalendarRepository:
         if date_to is not None:
             stmt = stmt.where(AcademicEvent.start_date <= date_to)
         if upcoming:
-            stmt = stmt.where(AcademicEvent.end_date >= date.today())
+            stmt = stmt.where(AcademicEvent.end_date >= institution_today())
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
