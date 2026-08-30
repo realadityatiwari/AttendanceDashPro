@@ -1,5 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
+import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +37,8 @@ from app.schemas.admin_subjects import (
     UpdateSubjectRequest,
     SubjectMutationResponse,
 )
-from app.models.enums import ElectiveSlot
+from app.models.enums import ElectiveSlot, EventType, ClassType
+from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
 from app.schemas.admin_timetable import (
     TimetableEntryAdminListResponse,
     TimetableEntryAdminResponse,
@@ -44,6 +46,33 @@ from app.schemas.admin_timetable import (
     CreateTimetableEntryRequest,
     UpdateTimetableEntryRequest,
     DuplicateTimetableEntryRequest,
+)
+from app.schemas.admin_quizzes import (
+    AdminQuizCycleListResponse,
+    AdminQuizCycleResponse,
+    AdminQuizScheduleListResponse,
+    AdminQuizScheduleMutationResponse,
+    AdminQuizScheduleResponse,
+    CreateQuizScheduleRequest,
+    UpdateQuizScheduleRequest,
+)
+from app.schemas.admin_events import (
+    AdminEventListResponse,
+    AdminEventMutationResponse,
+    AdminEventResponse,
+)
+from app.services.admin_quiz_service import (
+    AdminQuizService,
+    AdminQuizError,
+    AdminQuizNotFoundError,
+    AdminQuizInvalidScopeError,
+    AdminQuizValidationError,
+    AdminQuizConflictError,
+)
+from app.services.admin_event_service import (
+    AdminEventService,
+    AdminEventDomainError,
+    AdminEventQuizManagedError,
 )
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
@@ -707,3 +736,228 @@ async def duplicate_admin_timetable_entry(
         return TimetableEntryMutationResponse(entry=entry)
     except TimetableDomainError as exc:
         _raise_timetable_error(exc)
+
+# ===========================================================================
+# Phase 24.8 — Admin Quiz Schedule Manager
+# ===========================================================================
+
+def _raise_quiz_error(exc: AdminQuizError) -> None:
+    """Map the admin-quiz domain errors to the project's HTTP conventions:
+    404 not-found, 403 insufficient scope, 409 conflict, 422 invalid data."""
+    if isinstance(exc, AdminQuizNotFoundError):
+        raise HTTPException(status_code=404, detail=exc.detail)
+    if isinstance(exc, AdminQuizInvalidScopeError):
+        raise HTTPException(status_code=403, detail=exc.detail)
+    if isinstance(exc, AdminQuizConflictError):
+        raise HTTPException(status_code=409, detail=exc.detail)
+    if isinstance(exc, AdminQuizValidationError):
+        raise HTTPException(status_code=422, detail=exc.detail)
+    raise HTTPException(status_code=400, detail=exc.detail)
+
+
+@router.get("/quizzes", response_model=AdminQuizScheduleListResponse)
+async def list_admin_quiz_schedules(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+    cycle_number: Optional[int] = Query(None, description="Filter by quiz cycle number"),
+    semester_id: Optional[UUID] = Query(None, description="Filter by semester"),
+    session_id: Optional[UUID] = Query(None, description="Filter by academic session"),
+):
+    """
+    Phase 24.8: scoped quiz schedule list (the admin configuration/plan).
+
+    Authorization: ``require_any_admin`` + server-side subject scope — HEAD
+    all, CLASS assigned section's semester, ELECTIVE exact subject,
+    SUBSECTION inert. Read-only. Filters only NARROW the scope-derived set.
+    """
+    try:
+        return await AdminQuizService(db).list_quiz_schedules(
+            current_user,
+            cycle_number=cycle_number,
+            semester_id=semester_id,
+            session_id=session_id,
+        )
+    except AdminQuizError as exc:
+        _raise_quiz_error(exc)
+
+
+@router.get("/quizzes/{schedule_id}", response_model=AdminQuizScheduleResponse)
+async def get_admin_quiz_schedule(
+    schedule_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.8: scoped quiz schedule detail.  Out-of-scope/nonexistent -> 404
+    (no existence leak).
+    """
+    try:
+        return await AdminQuizService(db).get_quiz_schedule(current_user, schedule_id)
+    except AdminQuizError as exc:
+        _raise_quiz_error(exc)
+
+
+@router.get("/quiz-cycles", response_model=AdminQuizCycleListResponse)
+async def list_admin_quiz_cycles(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.8: quiz cycle + policy read model (thresholds shown as the
+    persisted configuration; no mutation of eligibility policy here).
+    """
+    try:
+        return await AdminQuizService(db).list_quiz_cycles(current_user)
+    except AdminQuizError as exc:
+        _raise_quiz_error(exc)
+
+
+@router.post("/quizzes", response_model=AdminQuizScheduleMutationResponse, status_code=201)
+async def create_admin_quiz_schedule(
+    request: CreateQuizScheduleRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.8: create a quiz schedule (HEAD_ADMIN only).
+
+    Validates subject/cycle/elective relationship/date, rejects duplicate
+    (subject, cycle) with 409, and synchronizes the derived QUIZ_DAY
+    AcademicEvent atomically — the schedule and its event reality commit
+    together (or roll back together).
+    """
+    try:
+        return await AdminQuizService(db).create_quiz_schedule(_admin, request)
+    except AdminQuizError as exc:
+        _raise_quiz_error(exc)
+
+
+@router.patch("/quizzes/{schedule_id}", response_model=AdminQuizScheduleMutationResponse)
+async def update_admin_quiz_schedule(
+    schedule_id: UUID,
+    request: UpdateQuizScheduleRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.8: update a quiz schedule (HEAD_ADMIN only).
+
+    Explicit-PATCH: omitted fields unchanged; explicit null clears the date
+    (→ UNRESOLVED). The resulting state is validated and the QUIZ_DAY event
+    reality is synchronized atomically (old event retired when the date moves
+    or the schedule is cancelled; new event created when scheduled+dated).
+    Idempotent — no duplicate events.
+    """
+    try:
+        return await AdminQuizService(db).update_quiz_schedule(_admin, schedule_id, request)
+    except AdminQuizError as exc:
+        _raise_quiz_error(exc)
+
+# ===========================================================================
+# Phase 24.9 — Admin Event Manager
+# ===========================================================================
+
+def _raise_event_admin_error(exc: AdminEventDomainError) -> None:
+    """Map admin-event domain failures to HTTP: 403/404/409/422 (401 handled
+    by the dependency layer)."""
+    raise HTTPException(status_code=exc.http_status, detail=exc.detail)
+
+
+@router.get("/events", response_model=AdminEventListResponse)
+async def list_admin_events(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+    active: Optional[bool] = Query(None, description="True=active only; False=inactive only; omitted=all"),
+    event_type: Optional[EventType] = Query(None, description="Filter by event type"),
+    subject_id: Optional[UUID] = Query(None, description="Filter by subject"),
+    elective_slot: Optional[ElectiveSlot] = Query(None, description="Filter by elective slot"),
+    class_type: Optional[ClassType] = Query(None, description="Filter by class type"),
+    date_from: Optional[datetime.date] = Query(None, description="Inclusive lower bound"),
+    date_to: Optional[datetime.date] = Query(None, description="Inclusive upper bound"),
+):
+    """
+    Phase 24.9: scoped admin event list over the EXISTING AcademicEvent
+    architecture.  Reads are server-scoped (HEAD all, CLASS own semester,
+    ELECTIVE exact subject, global events HEAD-only, SUBSECTION inert).
+    QUIZ_DAY events backed by a quiz schedule are labeled
+    ``quiz_schedule_managed`` and must be edited through /admin/quizzes.
+    """
+    try:
+        return await AdminEventService(db).list_events(
+            current_user,
+            active=active,
+            event_type=event_type,
+            subject_id=subject_id,
+            elective_slot=elective_slot,
+            class_type=class_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)
+
+
+@router.get("/events/{event_id}", response_model=AdminEventResponse)
+async def get_admin_event(
+    event_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 24.9: scoped admin event detail.  Out-of-scope/nonexistent -> 404."""
+    try:
+        return await AdminEventService(db).get_event(current_user, event_id)
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)
+
+
+@router.post("/events", response_model=AdminEventMutationResponse, status_code=201)
+async def create_admin_event(
+    payload: AcademicEventCreate,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.9: create an event through the canonical EventService (registry
+    validation + duplicate guard + EventSessionSynchronizer + one transaction).
+    QUIZ_DAY events that would be quiz-schedule managed are refused (409) —
+    quiz dates belong to /admin/quizzes.
+    """
+    try:
+        return await AdminEventService(db).create_event(current_user, payload)
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)
+
+
+@router.patch("/events/{event_id}", response_model=AdminEventMutationResponse)
+async def update_admin_event(
+    event_id: UUID,
+    payload: AcademicEventUpdate,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.9: partial event update through EventService (PATCH semantics;
+    absent = unchanged; canonical revalidation + session reconciliation).
+    A quiz-schedule-managed QUIZ_DAY event is refused (409).
+    """
+    try:
+        return await AdminEventService(db).update_event(current_user, event_id, payload)
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)
+
+
+@router.delete("/events/{event_id}", response_model=AdminEventMutationResponse)
+async def deactivate_admin_event(
+    event_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.9: safe event deactivation (reversible lifecycle — no physical
+    deletion; the row is preserved and the engine stops considering it).
+    A quiz-schedule-managed QUIZ_DAY event is refused (409).
+    """
+    try:
+        return await AdminEventService(db).deactivate_event(current_user, event_id)
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)

@@ -738,3 +738,80 @@ export function useAdminTimetableMutations() {
 
   return { createEntry, updateEntry, deactivateEntry, duplicateEntry };
 }
+
+// ===========================================================================
+// Phase 24.8 — Admin Quiz Schedule Manager
+// ===========================================================================
+
+import type {
+  AdminQuizScheduleListResponse,
+  AdminQuizCycleListResponse,
+  CreateQuizScheduleRequest,
+  UpdateQuizScheduleRequest,
+  QuizScheduleMutationResponse,
+} from '@/types/api';
+
+export function useAdminQuizSchedules(params?: Record<string, string>) {
+  const query = params ? new URLSearchParams(params).toString() : '';
+  const key = query ? `/api/v1/admin/quizzes?${query}` : '/api/v1/admin/quizzes';
+  const { data, error, isLoading, mutate } = useSWR<AdminQuizScheduleListResponse>(
+    key,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { schedules: data?.items, total: data?.total ?? 0, isLoading, isError: error, mutate };
+}
+
+export function useAdminQuizCycles() {
+  const { data, error, isLoading } = useSWR<AdminQuizCycleListResponse>(
+    '/api/v1/admin/quiz-cycles',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { cycles: data?.items, total: data?.total ?? 0, isLoading, isError: error };
+}
+
+export function useAdminQuizMutations() {
+  const createSchedule = async (payload: CreateQuizScheduleRequest): Promise<QuizScheduleMutationResponse> =>
+    apiFetch('/api/v1/admin/quizzes', { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateSchedule = async (scheduleId: string, payload: UpdateQuizScheduleRequest): Promise<QuizScheduleMutationResponse> =>
+    apiFetch(`/api/v1/admin/quizzes/${scheduleId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  return { createSchedule, updateSchedule };
+}
+
+// ===========================================================================
+// Phase 24.9 — Admin Event Manager
+// ===========================================================================
+
+import type {
+  AdminEventListResponse,
+  AdminEventMutationResponse,
+  CreateAdminEventRequest,
+  UpdateAdminEventRequest,
+} from '@/types/api';
+
+export function useAdminEvents(params?: Record<string, string>) {
+  const query = params ? new URLSearchParams(params).toString() : '';
+  const key = query ? `/api/v1/admin/events?${query}` : '/api/v1/admin/events';
+  const { data, error, isLoading, mutate } = useSWR<AdminEventListResponse>(
+    key,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { events: data?.items, total: data?.total ?? 0, isLoading, isError: error, mutate };
+}
+
+export function useAdminEventMutations() {
+  const createEvent = async (payload: CreateAdminEventRequest): Promise<AdminEventMutationResponse> =>
+    apiFetch('/api/v1/admin/events', { method: 'POST', body: JSON.stringify(payload) });
+
+  const updateEvent = async (eventId: string, payload: UpdateAdminEventRequest): Promise<AdminEventMutationResponse> =>
+    apiFetch(`/api/v1/admin/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+  const deactivateEvent = async (eventId: string): Promise<AdminEventMutationResponse> =>
+    apiFetch(`/api/v1/admin/events/${eventId}`, { method: 'DELETE' });
+
+  return { createEvent, updateEvent, deactivateEvent };
+}

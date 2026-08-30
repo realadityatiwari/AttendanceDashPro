@@ -30,15 +30,14 @@ import { AdminDashboardResponse } from "@/types/api";
 // Planned portal areas (Phase 24.0 sequence). PRESENTATION ONLY — these are
 // NOT implemented and no route exists; the phase hint is the discovery
 // sequence, never a claim of availability.
-// NOTE: Phase 24.5 (Academic Structure), Phase 24.6 (Curriculum) and Phase
-// 24.7 (Timetable) are NOW implemented and have been removed from this list
-// and added to the "Available now" section.
+// NOTE: Phase 24.5 (Academic Structure), Phase 24.6 (Curriculum), Phase
+// 24.7 (Timetable), Phase 24.8 (Quiz Schedules) and Phase 24.9 (Events) are
+// NOW implemented and have been removed from this list and added to the
+// "Available now" section.
 const FUTURE_AREAS: { label: string; phase: string }[] = [
-  { label: "Sessions & Occurrences", phase: "Phase 24.8" },
-  { label: "Quiz Management", phase: "Phase 24.10" },
-  { label: "Events", phase: "Phase 24.11" },
-  { label: "Admin & Scope Management", phase: "Phase 24.12" },
-  { label: "Attendance & Analytics", phase: "Phase 24.13" },
+  { label: "Sessions & Occurrences", phase: "Phase 24.10" },
+  { label: "Admin & Scope Management", phase: "Phase 24.11" },
+  { label: "Attendance & Analytics", phase: "Phase 24.12" },
 ] as const;
 
 /**
@@ -298,6 +297,61 @@ function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) 
               className="self-start sm:self-auto"
               nativeButton={false}
               render={<Link href="/admin/timetable" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.8: Quiz Schedules (scoped reads; writes HEAD_ADMIN only) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <ClipboardList
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Quiz Schedules
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Quiz cycles, dates, and targets — synchronized with the
+                  authoritative QUIZ_DAY events (management is global only).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/quizzes" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.9: Events (scoped reads; global/closure writes HEAD-only) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <CalendarClock
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Events
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Holidays, extras, cancellations, and quizzes — through the
+                  canonical event architecture (quiz-schedule-managed QUIZ_DAY
+                  events stay in Quiz Schedules).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/events" />}
             >
               Open
             </Button>

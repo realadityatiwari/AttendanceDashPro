@@ -1248,3 +1248,121 @@ export interface TimetableConflictResponse {
     conflicts: TimetableConflict[];
   };
 }
+
+// ===========================================================================
+// Phase 24.8 — Admin Quiz Schedule Manager
+// ===========================================================================
+
+export enum ScheduleStatus {
+  SCHEDULED = "SCHEDULED",
+  UNRESOLVED = "UNRESOLVED",
+  CANCELLED = "CANCELLED",
+}
+
+export interface AdminQuizCycleResponse {
+  id: string;
+  cycle_number: number;
+  label: string;
+  lecture_threshold: number;
+  combined_threshold: number | null;
+}
+
+export interface AdminQuizCycleListResponse {
+  items: AdminQuizCycleResponse[];
+  total: number;
+}
+
+export interface AdminQuizScheduleResponse {
+  id: string;
+  subject_id: string;
+  subject_code: string;
+  subject_name: string;
+  cycle_number: number;
+  cycle_label: string;
+  elective_slot: ElectiveSlot | null;
+  date: string | null;
+  schedule_status: ScheduleStatus;
+  has_active_event: boolean;
+  is_elective: boolean;
+}
+
+export interface AdminQuizScheduleListResponse {
+  items: AdminQuizScheduleResponse[];
+  total: number;
+}
+
+export interface CreateQuizScheduleRequest {
+  subject_id: string;
+  quiz_cycle_id: string;
+  date?: string | null;
+  schedule_status?: ScheduleStatus;
+  elective_slot?: ElectiveSlot | null;
+}
+
+export interface UpdateQuizScheduleRequest {
+  date?: string | null;
+  schedule_status?: ScheduleStatus;
+}
+
+export interface QuizScheduleMutationResponse {
+  schedule: AdminQuizScheduleResponse;
+  event_created?: boolean;
+  event_deactivated?: boolean;
+}
+
+// ===========================================================================
+// Phase 24.9 — Admin Event Manager
+// ===========================================================================
+
+export interface AdminEventResponse {
+  id: string;
+  event_type: EventType;
+  active: boolean;
+  start_date: string;
+  end_date: string;
+  subject_id: string | null;
+  subject_code: string | null;
+  subject_name: string | null;
+  elective_slot: ElectiveSlot | null;
+  class_type: ClassType | null;
+  is_working_day: boolean | null;
+  substitution_schedule_override: string | null;
+  note: string | null;
+  quiz_schedule_managed: boolean;
+  target_summary: string;
+}
+
+export interface AdminEventListResponse {
+  items: AdminEventResponse[];
+  total: number;
+}
+
+export interface AdminEventMutationResponse {
+  event: AdminEventResponse;
+}
+
+export interface CreateAdminEventRequest {
+  event_type: EventType;
+  start_date: string;
+  end_date: string;
+  subject_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  class_type?: ClassType | null;
+  is_working_day?: boolean | null;
+  substitution_schedule_override?: string | null;
+  note?: string | null;
+  active?: boolean;
+}
+
+export interface UpdateAdminEventRequest {
+  event_type?: EventType;
+  start_date?: string;
+  end_date?: string;
+  subject_id?: string | null;
+  elective_slot?: ElectiveSlot | null;
+  class_type?: ClassType | null;
+  is_working_day?: boolean | null;
+  substitution_schedule_override?: string | null;
+  note?: string | null;
+  active?: boolean;
+}

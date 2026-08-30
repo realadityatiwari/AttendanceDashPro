@@ -3367,4 +3367,94 @@ verified. Next: Phase 24.8 — Quiz Schedule Manager.
 - **Phase 24.7 is FROZEN.** No further changes to the timetable domain,
   conflict detection, admin CRUD API, admin UI, student resolution, or scope
   enforcement without a new explicit phase.
-- Phase 24.8 (Quiz Schedule Manager) requires a fresh execution prompt.
+- Phase 24.8 (Quiz Schedule Manager) COMPLETE (2026-08-30).
+Phase 24.9 (Event Manager) COMPLETE (2026-08-30).
+Phase 24.10 (Subject-Specific Elective Events) requires a fresh execution prompt.
+
+## PHASE 24.9 - EVENT MANAGER (COMPLETE, 2026-08-30)
+
+## Objective
+
+Admin Portal management of the existing AcademicEvent system through a
+dedicated control-plane API. All mutations flow through the canonical
+EventService / validation registry / EventSessionSynchronizer.
+
+## Delivered
+
+### Backend (additive)
+- [x] `schemas/admin_events.py` (NEW): admin event read model with `quiz_schedule_managed` + `target_summary`
+- [x] `services/admin_event_service.py` (NEW): scope-filtered reads; create/update/deactivate through EventService; QUIZ_DAY ownership guard (schedule-backed QUIZ_DAY -> 409)
+- [x] `endpoints/admin.py` (additive): GET/POST/PATCH/DELETE /admin/events; DELETE = safe deactivation; reads require_any_admin + scope; writes per Phase 24.0 capability matrix
+
+### Frontend (additive, inside AdminShell)
+- [x] `/admin/events` page (NEW): table, event-type/state filters, quiz-managed badge, create/edit/deactivate dialogs
+- [x] CreateEventDialog + EditEventDialog (NEW): field visibility per eventRules (shared frontend mirror; backend authoritative)
+- [x] AdminShell nav (Events) + dashboard "Available now" promotion
+
+### Verifier
+- [x] `scripts/verify_phase_24_9.py` (NEW): PASS **40/40**
+
+## Hard scope (respected)
+- [x] NO second event engine/registry/synchronizer (EventService reused)
+- [x] NO direct class_sessions/occurrence_outcomes writes from API/UI
+- [x] NO Phase 24.10 divergent elective-event editor
+- [x] NO per-student event copies; NO anchor leakage; NO desync of QUIZ_DAY from Phase 24.8
+- [x] NO schema/migration; NO hard event deletion; NO student events page redesign
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_9.py` PASS **40/40** (auth, scope, registry validation, synchronizer, QUIZ_DAY guard, isolation, idle potency, baseline)
+- [x] Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS · 24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27 · 24.8 34/34
+- [x] `compileall` PASS; `tsc --noEmit` PASS; ESLint PASS; `git diff --check` clean; alembic head unchanged
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.9 event manager is frozen; the QUIZ_DAY ownership guard is the authoritative boundary between generic event management and quiz schedule management
+- Phase 24.10 (Subject-Specific Elective Events) requires a fresh execution prompt
+
+## PHASE 24.8 - QUIZ SCHEDULE MANAGER (COMPLETE, 2026-08-30)
+
+Status: **✅ COMPLETE.** No schema/migration (alembic head `c4d5e6f7a8b9`
+unchanged). Git state: implemented but NOT committed.
+
+## Objective
+
+Admin can configure quiz cycles, dates, subjects, DE-I/DE-II, and relevant
+eligibility settings via the canonical quiz architecture — no new quiz
+engine, no eligibility rewrite, no duplicate schedule source, no per-student
+quiz rows, existing current-semester data preserved.
+
+## Delivered
+
+### Backend (additive)
+- [x] `schemas/admin_quizzes.py` (NEW): cycle/policy reads, schedule read model with `has_active_event` parity indicator, create/update/mutation responses
+- [x] `repositories/admin_quiz_repo.py` (NEW): bounded queries, duplicate guard, QUIZ_DAY event identity lookup
+- [x] `services/admin_quiz_service.py` (NEW): scope resolution (HEAD/CLASS/ELECTIVE/SUBSECTION), validation (subject quiz-applicable theory, date-in-semester, cycle, elective-slot relationship, duplicate), single-transaction atomic QUIZ_DAY sync (create/deactivate/date-move, idempotent)
+- [x] `endpoints/admin.py` (additive): GET/POST/PATCH /quizzes, GET /quiz-cycles; reads `require_any_admin` + scope; writes `require_head_admin`; 401/403/404/409/422
+
+### Frontend (additive, inside AdminShell)
+- [x] `/admin/quizzes` page (NEW): table, cycle/session/semester filters, target/date/status/QUIZ_DAY badges
+- [x] CreateQuizScheduleDialog + EditQuizScheduleDialog (NEW): PATCH semantics, no close on 409/422, no fake success
+- [x] AdminShell nav (Quiz Schedules) + dashboard "Available now" promotion
+
+### Verifier
+- [x] `scripts/verify_phase_24_8.py` (NEW): PASS **34/34**
+
+## Hard scope (respected)
+- [x] NO eligibility mathematics rewritten; NO React-side eligibility
+- [x] NO second quiz schedule source; NO duplicate quiz events
+- [x] NO per-student quiz schedule rows; no anchor leakage
+- [x] NO hardcoded subject/date lists; catalog from backend
+- [x] NO DELETE endpoint (status/deactivation only)
+- [x] NO schema/migration; NO attendance/choice/event/history mutation
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_8.py` PASS **34/34** (auth, scope, CRUD, sync, isolation, idempotency, baseline)
+- [x] Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS · 24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27
+- [x] `compileall` PASS; `tsc --noEmit` PASS; ESLint PASS; `git diff --check` clean; alembic head unchanged
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.8 quiz schedule API + QUIZ_DAY sync is frozen behavior
+- Phase 24.9 (Event Manager) requires a fresh execution prompt

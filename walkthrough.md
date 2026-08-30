@@ -7985,132 +7985,161 @@ modified. No commit/push/PR made during implementation.
 
 ---
 
-# Phase 24.7 - Timetable Management (COMPLETE — FROZEN, 2026-08-30)
+# Phase 24.8 - Quiz Schedule Manager (COMPLETE, 2026-08-30)
 
 ## Summary
 
-Phase 24.7 delivered the full timetable management domain across 8 controlled
-slices: domain foundation, repository/service/conflict detection, admin CRUD
-API, admin builder UI, mutation workflows, conflict-aware UX, student
-resolution, and a completion gate. The timetable represents the EXPECTED
-academic schedule — it is NOT collapsed into actual `class_sessions`.
+Admin can configure quiz cycles, dates, subjects, DE-I/DE-II, and relevant
+eligibility settings via the canonical quiz architecture (Phases 7/22/23) —
+no new quiz engine, no eligibility rewrite, no duplicate schedule source, no
+per-student quiz rows, existing current-semester data preserved.
 
-## Implementation summary
+## Canonical authority (repository evidence)
 
-- **24.7-A (Domain Foundation):** extended `timetable_entries` with
-  `subsection_id`, `room`, `is_active`, `sort_order`; CHECK guards
-  (end>start, day 0–6); composite FK (section_id, subsection_id) →
-  subsections; `uq_subsections_section_id`; admin read schemas. Additive
-  migration `c4d5e6f7a8b9` (28 rows preserved; upgrade/downgrade verified).
-- **24.7-B (Repo/Service/Conflict):** `AdminTimetableRepository` (scope-aware
-  list/detail/conflict-candidate queries with deterministic ordering) and
-  `AdminTimetableService` (academic-context/subsection/elective-slot/time
-  validation, deterministic conflict predicate, domain-error hierarchy,
-  server-side scope resolution). Verifier 29/29.
-- **24.7-C (CRUD API):** six additive `/api/v1/admin/timetable` endpoints
-  (list/detail/create/PATCH/deactivate/duplicate); reads `require_any_admin`
-  + service scope; writes HEAD + CLASS (assigned section) only; domain errors
-  mapped to 401/403/404/409/422. Verifier 30/30.
-- **24.7-D (Builder UI):** `/admin/timetable` page — scoped filters, weekly
-  grid grouped by day with per-entry cards, create/edit/deactivate/duplicate
-  dialogs, reusable `TimetableEntryForm`, AdminShell nav, dashboard promotion.
-  `tsc` + ESLint clean.
-- **24.7-E (Mutation Workflows):** create/edit dialogs close only after
-  backend accept + revalidation; edit sends ONLY changed fields (PATCH
-  preserve-omitted); duplicate preserves source active state and states
-  copied-vs-overridable fields; deactivate surfaces errors; 409 keeps form
-  values open (no fake success).
-- **24.7-F (Conflict-Aware UX):** structured 409 contract (`detail.message`
-  with scope context + `detail.conflicts` list of backend-resolved entries);
-  `apiFetch` attaches response body (additive); form/duplicate dialogs render
-  the conflict list verbatim; concurrency is backend-authoritative; entry
-  cards show a time-position bar.
-- **24.7-G (Student Resolution):** `get_weekly_entries_for_student` —
-  active-only, section-wide + own-subsection entries (other subsections
-  excluded); DE-I/DE-II slots resolve to locked choices; slots with NO locked
-  choice are omitted (no anchor leakage); common subjects visible. Verifier
-  25/25.
-- **24.7-H (Completion Gate):** full conflict matrix (9/9), security matrix
-  (9/9), academic matrix (6/6), data integrity (3/3). Verifier 27/27. One dead
-  frontend hook removed.
+- `QuizSchedule` = the admin configuration/plan (subject, cycle, elective_slot,
+  date, status).
+- **ACTIVE QUIZ_DAY AcademicEvents = the canonical runtime quiz-date authority**
+  (eligibility reads them via `QuizRepository.get_effective_quiz_dates_for_subjects`);
+  `QuizSchedule` is the derived projection this service manages.
+- `EventSessionSynchronizer` (Phase 6.6) reconciles class_sessions quiz-day
+  occurrences from events — reused, not re-implemented.
+- `EligibilityPolicy` thresholds remain persisted configuration (read-only here).
 
-## Authorization matrix (verified via direct API)
+## What was implemented
 
-| Actor | Read | Write |
-|---|---|---|
-| HEAD_ADMIN | all sections | any section |
-| CLASS_ADMIN | assigned section(s) only | assigned section(s) only |
-| SUBSECTION_ADMIN | own subsection's section | 403 |
-| ELECTIVE_ADMIN | exact concrete subject only | 403 |
-| STUDENT | 403 | 403 |
+### Backend (additive)
 
-Cross-scope attempts (section_id query param, cross-section POST, subject-id
-forging) are rejected server-side; frontend hiding is not authorization.
+- `schemas/admin_quizzes.py` (NEW): cycle/policy reads, schedule read model
+  with `has_active_event` derivation parity indicator, create/update/mutation
+  responses.
+- `repositories/admin_quiz_repo.py` (NEW): bounded schedule/cycle/policy
+  queries, duplicate guard, QUIZ_DAY event identity lookup.
+- `services/admin_quiz_service.py` (NEW): scope resolution (HEAD all, CLASS
+  own semester, ELECTIVE exact subject, SUBSECTION inert); validation (subject
+  quiz-applicable theory, date-in-semester, cycle exists, elective-slot
+  relationship, duplicate identity); **single-transaction atomic QUIZ_DAY sync**
+  (create/deactivate/date-move via `EventSessionSynchronizer`; idempotent; no
+  partial reality).
+- `endpoints/admin.py` (additive): `GET /api/v1/admin/quizzes`,
+  `GET /api/v1/admin/quizzes/{id}`, `GET /api/v1/admin/quiz-cycles`,
+  `POST /api/v1/admin/quizzes`, `PATCH /api/v1/admin/quizzes/{id}`.
+  Reads `require_any_admin` + scope; writes `require_head_admin`;
+  errors 401/403/404/409/422.
 
-## Conflict matrix (verified)
+### Frontend (additive, inside AdminShell)
 
-Exact overlap rejected · partial overlap rejected · containing overlap
-rejected · contained overlap rejected · adjacent allowed · different day
-allowed · different section (unrelated scope) allowed · inactive conflicting
-row allowed · editing a row does not conflict with itself.
+- `app/(admin)/admin/quizzes/page.tsx` (NEW): table overview,
+  cycle/session/semester filters, target/date/status/QUIZ_DAY badges,
+  create/edit dialogs.
+- `components/CreateQuizScheduleDialog.tsx`, `EditQuizScheduleDialog.tsx`
+  (NEW): fields from real backend capability; PATCH semantics; no close on
+  409/422; no fake success.
+- `AdminShell.tsx` nav (Quiz Schedules), dashboard "Available now" promotion.
 
-## Migration
+### Verifier
 
-`c4d5e6f7a8b9` — additive only; 28 existing rows preserved; deterministic
-backfill (is_active=true via server default); upgrade/downgrade verified
-locally; alembic single linear head.
+- `scripts/verify_phase_24_8.py` (NEW): PASS **34/34** (×2 runs, idempotent).
 
-## Data integrity
+## Verification performed
 
-Baseline counts restored after every verifier run; attendance_records,
-class_sessions, quiz_schedules, academic_events, student_elective_choices and
-student accounts unchanged; no DELETE routes (405); no per-student timetable
-rows; no attendance/session/quiz/event mutation.
-
-## Known limitations
-
-- `verify_phase_22_1.py` "response fields match" was corrected (2026-08-30):
-  its `expected_fields` set now includes the canonical `elective_slot` field;
-  the verifier PASSES 19/19. No application code was changed.
-- `get_class_sessions_for_subject` in `timetable_repo.py` may be unused;
-  pre-existing, not a 24.7 concern.
-- No browser/E2E run performed (operator responsibility).
-
-## Manual browser checklist for the operator
-
-1. As HEAD_ADMIN: `/admin/timetable` loads the weekly grid; filters by
-   session/semester/section/day/state/subject/elective narrow correctly.
-2. Create an entry (with a conflict) → verify the 409 banner lists the
-   conflicting entry with day/time/subject/scope; the dialog stays open with
-   values intact.
-3. Edit an entry (change room only) → verify only changed fields sent and the
-   row updates; edit an INACTIVE entry's scheduling fields → verify the
-   INACTIVE_PARENT message.
-4. Duplicate an entry with a day/time override → verify the copy appears and
-   respects conflicts.
-5. Deactivate an entry → explicit confirmation; after deactivate the row
-   leaves the active view; no delete.
-6. As CLASS_ADMIN: verify only the assigned section's entries are visible and
-   writable; cross-section attempts fail.
-7. As ELECTIVE_ADMIN: verify only the own-subject entries appear; create is
-   hidden and rejected server-side.
-8. As SUBSECTION_ADMIN: verify own-section entries only; writes rejected.
-9. Student dashboard (or `/api/v1/timetable`): Student A sees DE-I
-   BCS-054 + DE-II BCS-058; Student B sees DE-I BCS-052 + DE-II BCS-055; no
-   anchor leakage; no cross-student leakage; common subjects visible.
-10. After another admin changes a timetable entry while you are editing,
-    saving your stale copy returns 409 (backend-authoritative concurrency).
+- `verify_phase_24_8.py` PASS **34/34**: auth 401/403/scope; baseline 18
+  schedules; create common/elective; duplicate 409; invalid subject 404;
+  elective-slot 422; date move → old event deactivated + new event created;
+  cancel → deactivated; idempotent no-churn; reactivate → created; elective
+  schedule isolation; student elective isolation A=BCS-058 200 / B=BCS-058
+  404 (no cross-leakage); baseline restored; active session unchanged.
+- Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS · 24.7b
+  29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27.
+- `compileall` PASS · `tsc --noEmit` PASS · ESLint PASS · `git diff --check`
+  clean · **alembic head `c4d5e6f7a8b9` unchanged (no migration)**.
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
 
 ## Governance
 
 - MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
-  blockquote updated — **Phase 24.7 ✅ FROZEN**, next pointer set to Phase
-  24.8 — Quiz Schedule Manager.
-- implementation_plan.md: final authoritative Phase 24.7 state (architecture,
-  slices, verification, limitations).
-- task.md: 24.7 tasks closed; completion-gate checklist recorded.
+  blockquote updated (24.8 COMPLETE, verifier 34/34, git state), Phase 24.8
+  record appended with the canonical architecture and QUIZ_DAY sync semantics.
+- implementation_plan.md: Phase 24.8 section (executed).
+- task.md: Phase 24.8 checklist.
 - walkthrough.md: this entry.
 
-**PHASE 24.7 - ✅ COMPLETE / FROZEN.** Next: Phase 24.8 — Quiz Schedule
-Manager (NOT STARTED). No production system was intentionally contacted or
+**PHASE 24.8 - ✅ COMPLETE.** Next: Phase 24.9 — Event Manager (NOT STARTED).
+No production system was intentionally contacted or modified. No commit/push/PR
+made during implementation.
+
+
+# Phase 24.9 - Event Manager (COMPLETE, 2026-08-30)
+
+## Summary
+
+The Admin Portal now manages the existing AcademicEvent system through a
+dedicated control-plane API. All mutations flow through the canonical
+EventService / validation registry / EventSessionSynchronizer - no second
+event engine, no direct class_sessions/occurrence_outcomes writes.
+
+## What was implemented
+
+### Backend (additive)
+
+- `schemas/admin_events.py` (NEW): admin event read model (event type, active,
+  dates, subject, elective_slot, class_type, substitution day, note,
+  `quiz_schedule_managed` classification, `target_summary`).
+- `services/admin_event_service.py` (NEW): scope-filtered reads (HEAD all,
+  CLASS own-semester subjects, ELECTIVE exact subject, global HEAD-only,
+  SUBSECTION inert, STUDENT 403); create/update/deactivate through the
+  canonical `EventService`; **QUIZ_DAY ownership guard** - a QUIZ_DAY event
+  backed by a SCHEDULED QuizSchedule row is refused any generic mutation (409)
+  so Phase 24.8 quiz<->QUIZ_DAY parity can never be desynchronized through the
+  Event Manager.
+- `endpoints/admin.py` (additive): `GET /api/v1/admin/events`,
+  `POST /api/v1/admin/events`, `GET /api/v1/admin/events/{id}`,
+  `PATCH /api/v1/admin/events/{id}`, `DELETE /api/v1/admin/events/{id}`
+  (DELETE = safe deactivation, reversible; no physical deletion).
+  Reads `require_any_admin` + scope; writes per the Phase 24.0 capability
+  matrix (HEAD global/closure, CLASS own-semester subject events,
+  ELECTIVE own-subject events).
+
+### Frontend (additive, inside AdminShell)
+
+- `app/(admin)/admin/events/page.tsx` (NEW): table overview, event-type/state
+  filters, quiz-managed badge, create/edit/deactivate dialogs.
+- `components/CreateEventDialog.tsx`, `EditEventDialog.tsx` (NEW): field
+  visibility mirrors the shared `eventRules` map (one frontend mirror -
+  backend authoritative); QUIZ_DAY ownership warning; PATCH semantics; no
+  close on 409/422; no fake success.
+- `AdminShell.tsx` nav (Events) + dashboard "Available now" promotion.
+
+### Verifier
+
+- `scripts/verify_phase_24_9.py` (NEW): PASS **40/40** (x2 runs, idempotent).
+
+## Verification performed
+
+- `verify_phase_24_9.py` PASS **40/40**: auth 401/403/scope; baseline events
+  load; CLASS/ELECTIVE scoped reads + matrix-authorized writes; global closure
+  403 for scoped admins; registry validation (invalid subject/class-type,
+  inverted dates, missing fields, duplicate) -> 422/409; synchronizer
+  extra-session effect; PATCH; DELETE = deactivation + reactivate; QUIZ_DAY
+  ownership guard (PATCH/DELETE/create on scheduled dates -> 409, standalone
+  QUIZ_DAY allowed); arbitrary UUID 404; client spoofing 403; baseline
+  restored; active session unchanged.
+- Regressions: 24.3 40/40 - 24.5 46/46 - 24.6 46/46 - 24.7a PASS - 24.7b
+  29/29 - 24.7c 30/30 - 24.7g 25/25 - 24.7h 27/27 - 24.8 34/34.
+- `compileall` PASS - `tsc --noEmit` PASS - ESLint PASS - `git diff --check`
+  clean - alembic head `c4d5e6f7a8b9` unchanged (no migration).
+- No browser/E2E run performed (operator responsibility). Production untouched;
+  `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  blockquote updated (24.9 COMPLETE, verifier 40/40, git state), Phase 24.9
+  record appended.
+- implementation_plan.md: Phase 24.9 section (executed).
+- task.md: Phase 24.9 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.9 - ✅ COMPLETE.** Next: Phase 24.10 - Subject-Specific Elective
+Events (NOT STARTED). No production system was intentionally contacted or
 modified. No commit/push/PR made during implementation.
