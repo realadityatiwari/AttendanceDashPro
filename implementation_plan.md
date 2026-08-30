@@ -4837,3 +4837,19 @@ Reconciliation: all Phase A–E "uncommitted" statuses above are now marked commit
 - Scope creep: none (13-file diff, backend = notification_service.py only; no deps/DB/migrations/Admin).
 
 Validation: tsc PASS; lint = exact pre-existing baseline; build PASS 25/25; node --check SW PASS; py_compile backend PASS. No browser automation, no commit/push of this audit.
+
+---
+
+## Branding & Logo System (2026-08-31)
+
+**Status: COMPLETE — new AttendanceDash Pro brand system implemented (uncommitted).**
+
+Plan: introduce a coherent brand system (standalone "A" monogram + wordmark identity) that works at header scale and stays clean at PWA/app-icon sizes; replace all generic Gauge/ShieldCheck placeholders and old icons with the new mark.
+
+Implemented:
+- `frontend/scripts/generate_brand_icons.py` — single authoritative generator (Pillow only, dev-time): geometry ? `logo-mark.svg` / `logo-mark-tile.svg` + all PNG rasters + `favicon.ico`.
+- New `frontend/public/brand/` assets (SVG masters + PNG any/maskable/apple/mark/tile).
+- `TopNav.tsx` + `AdminShell.tsx` headers use the mark; fixed AdminShell broken `Gauge` reference (? LayoutDashboard).
+- `manifest.json`, `layout.tsx` metadata.icons, `service-worker.js` precache updated; `public/icons/*` stale SVGs removed.
+
+Validation: tsc PASS; lint = pre-existing baseline; build PASS (with production API URL per 99f6619 guard). No commit/push.

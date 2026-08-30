@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -12,7 +13,6 @@ import {
   History,
   CalendarDays,
   CalendarRange,
-  Gauge,
   MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -64,11 +64,16 @@ export function TopNav() {
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6 lg:px-8">
       <Link
         href="/dashboard"
-        className="flex shrink-0 items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        className="flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
       >
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <Gauge className="size-4" aria-hidden="true" />
-        </span>
+        <Image
+          src="/brand/logo-mark.png"
+          alt="AttendanceDash Pro"
+          width={28}
+          height={28}
+          className="size-7 shrink-0"
+          priority
+        />
         <span className="text-[0.95rem] font-semibold tracking-tight text-foreground">
           AttendanceDash <span className="font-normal text-muted-foreground">Pro</span>
         </span>

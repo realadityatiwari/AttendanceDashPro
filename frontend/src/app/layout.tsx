@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: "AttendanceDash Pro",
   description: "Advanced Academic Management System",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/brand/icon-192.png",
+    apple: "/brand/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

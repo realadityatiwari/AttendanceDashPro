@@ -4003,3 +4003,17 @@ Only remaining minor audit issues. No Calendar/notification redesign, no backend
 - [x] Governance reconciled: Phase A–E statuses updated to "committed as 2c90240"; obsolete uncommitted statuses removed
 - [x] Validation: tsc PASS; lint = pre-existing baseline only; build PASS 25/25; node --check SW PASS; py_compile backend PASS
 - [x] No browser automation, no deploy, no commit/push of this audit
+
+---
+
+## Branding & Logo System (2026-08-31)
+
+**Status: COMPLETE (uncommitted).**
+
+- [x] Authoritative generator: `frontend/scripts/generate_brand_icons.py` (Pillow-only, dev-time)
+- [x] Vector masters: `public/brand/logo-mark.svg`, `logo-mark-tile.svg`
+- [x] Rasters: icon-512/192 (any), icon-maskable-512/192 (maskable), apple-touch-icon-180, logo-mark-256 (transparent), logo-mark-tile-256, regenerated favicon.ico (16/32/48)
+- [x] Headers: TopNav + AdminShell render `/brand/logo-mark.png`; fixed AdminShell Gauge ? LayoutDashboard
+- [x] Metadata: manifest.json icons ? brand PNGs (any + maskable); layout.tsx metadata.icons (icon + apple); service-worker.js precache ? brand icons (v2?v3)
+- [x] Removed stale `public/icons/icons-192.svg` + `icons-512.svg`
+- [x] Brand name + dark tokens preserved; frozen phases untouched; no commit/push

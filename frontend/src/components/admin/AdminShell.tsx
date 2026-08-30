@@ -2,9 +2,9 @@
 
 import { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Gauge,
   LogOut,
   MessageSquareText,
   ShieldCheck,
@@ -90,9 +90,14 @@ export function AdminShell({
       <header className="shrink-0 border-b border-border bg-background">
         <div className="flex h-14 items-center gap-4 px-4 sm:px-6 lg:px-8">
           <span className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
-              <ShieldCheck className="size-4" aria-hidden="true" />
-            </span>
+            <Image
+              src="/brand/logo-mark.png"
+              alt="AttendanceDash Pro"
+              width={28}
+              height={28}
+              className="size-7 shrink-0"
+              priority
+            />
             <span className="text-[0.95rem] font-semibold tracking-tight text-foreground">
               AttendanceDash{" "}
               <span className="font-normal text-muted-foreground">
@@ -108,7 +113,7 @@ export function AdminShell({
               nativeButton={false}
               render={<Link href="/dashboard" />}
             >
-              <Gauge className="size-4" aria-hidden="true" />
+              <LayoutDashboard className="size-4" aria-hidden="true" />
               Student app
             </Button>
             <Avatar className="h-8 w-8 border border-border bg-surface2">

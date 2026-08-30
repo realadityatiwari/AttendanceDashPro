@@ -7,7 +7,7 @@
  * - Update lifecycle: wait for reload (no skipWaiting) to avoid HTML/JS mismatch
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `attendancedash-pro-${CACHE_VERSION}`;
 
 // Only precache assets that are verified to exist as static files.
@@ -19,8 +19,8 @@ const STATIC_ASSETS = [
   "/",
   "/favicon.ico",
   "/manifest.json",
-  "/icons/icons-192.svg",
-  "/icons/icons-512.svg",
+  "/brand/icon-192.png",
+  "/brand/icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {

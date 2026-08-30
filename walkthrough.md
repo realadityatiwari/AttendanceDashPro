@@ -9099,4 +9099,10 @@ Diff on calendar files since 859b1f7 contains only classNames, indicator spans, 
 2. Login as user B: no user A data flash; one fresh /student/me; counts/lists match user B.
 3. Repeated logout/login cycles: no state bleed; bell badge correct for each user.
 
+---
+
+## Branding & Logo System (2026-08-31)
+
+New AttendanceDash Pro brand: bold geometric "A" monogram with an attendance-check crossbar (primary blue legs, light check on slate tile). One authoritative generator (`frontend/scripts/generate_brand_icons.py`) emits the SVG masters and all raster sizes; `public/brand/` is the single source for icon assets. Mark used in TopNav + AdminShell headers; manifest/metadata/service-worker updated; old `public/icons/*` SVGs removed. Regenerate with `python frontend/scripts/generate_brand_icons.py` (requires Pillow, dev-time only). No frozen phase, auth, API, or admin logic touched.
+
 Hard stop.

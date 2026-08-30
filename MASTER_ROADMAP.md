@@ -4940,3 +4940,20 @@ Diff 859b1f7..HEAD: 13 files (4 governance docs + 9 code). Backend: only notific
 - `node --check frontend/public/service-worker.js` — PASS.
 - `python -m py_compile backend/app/services/notification_service.py` — PASS.
 - No browser automation, no deploy, no commit/push of this audit.
+
+---
+
+## Branding & Logo System (2026-08-31)
+
+**Status: COMPLETE — new AttendanceDash Pro brand system implemented (uncommitted).**
+
+New brand: a bold geometric "A" monogram whose crossbar is an attendance checkmark — primary-blue legs on the slate tile with a light check. Reads as a distinct glyph at 16px and stays clean on masked PWA icons.
+
+- Authoritative source: `frontend/scripts/generate_brand_icons.py` (one geometry spec ? SVG masters + all rasters).
+- Vector masters: `frontend/public/brand/logo-mark.svg` (transparent), `logo-mark-tile.svg` (on tile).
+- Rasters: `icon-512/192.png` (any), `icon-maskable-512/192.png` (maskable, full-bleed), `apple-touch-icon.png` (180), `logo-mark.png` (256 transparent), `logo-mark-tile.png` (256 tile), plus regenerated `src/app/favicon.ico` (16/32/48).
+- In-app usage: TopNav + AdminShell headers now render the mark (`/brand/logo-mark.png`); AdminShell "Student app" button icon switched to LayoutDashboard (was broken Gauge reference after import removal).
+- Metadata: `manifest.json` icons updated to brand PNGs (any + maskable purposes); `layout.tsx` metadata.icons adds icon + apple touch; `service-worker.js` precache updated to brand icons (CACHE_VERSION v2?v3).
+- Stale assets removed: `public/icons/icons-192.svg`, `public/icons/icons-512.svg`.
+- Preserved: brand name "AttendanceDash Pro", existing dark design tokens (no color-system changes), login/signup text branding (no logo image was present there — no change), frozen phases untouched.
+- Known limitation: PWA/SW registration hook remains unmounted (pre-existing) — icons are correctly referenced but the service worker does not register at runtime until wired.
