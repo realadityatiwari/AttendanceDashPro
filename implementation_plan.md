@@ -4178,9 +4178,75 @@ baseline restored). Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 ·
 (operator responsibility). Production untouched; `.env` unchanged (local dev
 target).
 
-**Next:** Phase 24.10 (Subject-Specific Elective Events) — NOT STARTED;
-requires fresh execution prompts. All 12 Phase 24.0 decision gates remain
-open.
+**Next:** Phase 24.10 (Subject-Specific Elective Events) **COMPLETE
+(2026-08-30 — see the Phase 24.10 section below)**; Phase 24.11 (Admin &
+Scope Management) NOT STARTED — requires fresh execution prompts. All 12
+Phase 24.0 decision gates remain open.
+
+## Phase 24.10 - Subject-Specific Elective Events (CURRENT PLAN - EXECUTED, 2026-08-30)
+
+**Status: ✅ COMPLETE.** No schema/migration (alembic head `c4d5e6f7a8b9`
+unchanged). Git state: implemented but NOT committed.
+
+**DISCOVERED GAP (documented before implementation):** the divergent
+elective-event capability was ALREADY canonical — Phase 23.6/23.7/23.8
+implemented it inside `EventSessionSynchronizer` (`_desired_schedule`
+computes `desired_outcomes[subject_id]` for subject-scoped events whose
+slot has a timetable session; `_reconcile_outcomes` materializes
+`occurrence_outcomes` rows keyed (anchor session, subject), state-based and
+idempotent; cancellation wins over modification). The discovery doc
+confirmed "[C] works today: subject-scoped events → OccurrenceOutcome on the
+anchor session. No direct outcome API to be created" and the sequence row
+requires "none new (reuse /events)". The ACTUAL gaps were:
+  1. the Phase 24.9 admin read model did not distinguish a concrete
+     subject's catalog slot from a slot-wide event marker;
+  2. it exposed no server-computed mutation capability;
+  3. the Create dialog did not offer slot-wide targeting (existing Phase
+     22.4 HEAD-only semantics);
+  4. no verifier proved the divergence matrix through the admin API.
+
+**Minimal architecture implemented (no second engine):**
+- `schemas/admin_events.py`: `AdminEventResponse` gains `subject_slot` (the
+  concrete subject's catalog elective_slot — distinct from the event's own
+  elective_slot marker) and `can_mutate` (server-computed via the same
+  `can_mutate_event` semantics EventService enforces).
+- `services/admin_event_service.py`: `_to_response` enriches both fields.
+- Frontend `/admin/events`: the Create dialog now offers BOTH concrete
+  subjects (labeled "affects this subject only") AND slot-wide targets
+  ("entire slot — HEAD only", using the shared `eventRules` slot-option
+  convention); the page shows a "DE-I/DE-II member" badge and gates Edit by
+  the backend `can_mutate` metadata; the dialog carries an explicit
+  slot-vs-concrete warning.
+- `scripts/verify_phase_24_10.py` (NEW): the divergence matrix.
+
+**No new endpoints, no new engine, no schema change** — the existing
+AcademicEvent -> EventService -> event_registry -> EventSessionSynchronizer
+path produces the divergence exactly as designed.
+
+**Verification:** `verify_phase_24_10.py` PASS **35/35** (x2, idempotent):
+ELECTIVE_ADMIN (BCS-058) creates a subject-specific SURPRISE_QUIZ; a
+CLASS_CANCELLED for BCS-056 coexists on the SAME slot/date (divergence);
+BCS-058 outcome SURPRISE_QUIZ + BCS-056 outcome CANCELLED + BCS-055 NO
+outcome (normal lecture); anchor session itself NOT cancelled; exactly 2
+outcome rows (no per-student duplication); duplicate guard (same
+subject/type/date 409) while legitimate divergence is allowed; EXTRA
+fallback (no slot session) materializes an extra session ONLY for the
+targeted subject; no-op PATCH idempotent; PATCH move removes only the moved
+subject's outcome; DELETE = deactivation with isolated per-subject reversal;
+QUIZ_DAY ownership guard intact; standalone QUIZ_DAY unchanged;
+ELECTIVE_ADMIN cannot read/mutate BCS-055 events; spoofed role cannot
+elevate; ElectiveResolver resolution intact; baseline restored.
+
+**Verification defect fixed (narrow):** `verify_phase_24_9.py` E4 (BCS-058
+EXTRA_LECTURE on a DE-II slot weekday) composes an outcome row that its raw
+event deletion did not reverse — a latent 24.9 verifier-cleanup defect
+surfaced by 24.10's exercise of the outcome pipeline. Fixed by deactivating
+outcome-composing fixture events through the canonical DELETE path
+(synchronizer reversal) plus a defensive outcome cleanup. NOT an application
+defect; `verify_phase_24_9.py` now PASS 40/40 again.
+
+**Next:** Phase 24.11 (Admin & Scope Management) — NOT STARTED; requires
+fresh execution prompts. All 12 Phase 24.0 decision gates remain open.
 
 
 ## Phase 24.7-F - Conflict-Aware UX (CURRENT PLAN - EXECUTED, 2026-08-30)

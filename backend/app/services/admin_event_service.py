@@ -1,5 +1,5 @@
-"""
-Phase 24.9 — Admin Event Manager service.
+﻿"""
+Phase 24.9 â€” Admin Event Manager service.
 
 Additive admin control-plane over the EXISTING event architecture:
   - reads: scoped admin event list/detail with subject + quiz-management
@@ -11,7 +11,7 @@ QUIZ_DAY OWNERSHIP GUARD (critical):
   Phase 24.8 owns QuizSchedule <-> QUIZ_DAY synchronization.  A QUIZ_DAY
   AcademicEvent that is backed by a SCHEDULED QuizSchedule row (same subject,
   elective_slot, date) is "quiz-schedule managed" and must NOT be created,
-  edited, or deactivated through the generic Event Manager — doing so would
+  edited, or deactivated through the generic Event Manager â€” doing so would
   desynchronize quiz schedule reality.  The generic manager refuses such
   mutations with 409 and directs the admin to /admin/quizzes.  Standalone
   QUIZ_DAY events NOT backed by a QuizSchedule remain editable.  There are no
@@ -134,15 +134,36 @@ class AdminEventService:
             return None, None
         return subject.code, subject.name
 
-    async def _to_response(self, event: AcademicEvent) -> AdminEventResponse:
+    async def _to_response(self, event: AcademicEvent, user: Optional[User] = None) -> AdminEventResponse:
         subject_code, subject_name = await self._subject_info(event.subject_id)
         managed = await self._is_quiz_schedule_managed(
             event.event_type, event.subject_id, event.elective_slot, event.start_date
         )
         rule = get_rule(event.event_type)
+        # Phase 24.10: the concrete subject's catalog elective slot (None for
+        # common subjects and slot-wide events) â€” makes slot-vs-concrete
+        # targeting unambiguous in the admin UI.
+        subject_slot = None
+        if event.subject_id is not None:
+            subject = await self.event_repo.get_subject(event.subject_id)
+            if subject is not None:
+                subject_slot = subject.elective_slot
+        # Phase 24.10: server-computed mutation capability for the acting
+        # admin (the same can_mutate_event semantics EventService enforces).
+        can_mutate = False
+        if user is not None:
+            decision = await self.authz.can_mutate_event(
+                user,
+                subject_id=event.subject_id,
+                elective_slot_is_set=event.elective_slot is not None,
+                student_creatable=False,
+            )
+            can_mutate = decision == "authorized"
         if event.subject_id is not None and subject_code:
             if event.elective_slot is not None:
                 summary = f"{event.elective_slot.value.replace('_','-')} slot"
+            elif subject_slot is not None:
+                summary = f"{subject_code} ({subject_slot.value.replace('_','-')})"
             else:
                 summary = subject_code
         else:
@@ -163,6 +184,8 @@ class AdminEventService:
             note=event.note,
             quiz_schedule_managed=managed,
             target_summary=summary,
+            subject_slot=subject_slot,
+            can_mutate=can_mutate,
         )
 
     async def _visible(self, user: User, event: AcademicEvent) -> bool:
@@ -207,7 +230,7 @@ class AdminEventService:
             if class_type is not None and event.class_type != class_type:
                 continue
             if await self._visible(user, event):
-                items.append(await self._to_response(event))
+                items.append(await self._to_response(event, user))
         items.sort(key=lambda e: (e.start_date, e.event_type.value))
         return AdminEventListResponse(items=items, total=len(items))
 
@@ -215,7 +238,7 @@ class AdminEventService:
         event = await self.event_repo.get_by_id(event_id)
         if event is None or not await self._visible(user, event):
             raise AdminEventDomainError("Event not found", http_status=404)
-        return await self._to_response(event)
+        return await self._to_response(event, user)
 
     # ------------------------------------------------------------------
     # Writes (endpoint: require_any_admin; EventService enforces scope)
@@ -237,7 +260,7 @@ class AdminEventService:
             raise AdminEventDomainError(str(exc), http_status=409)
         except EventValidationError as exc:
             raise AdminEventDomainError(str(exc), http_status=422)
-        return AdminEventMutationResponse(event=await self._to_response(event))
+        return AdminEventMutationResponse(event=await self._to_response(event, user))
 
     async def update_event(self, user: User, event_id: UUID, payload: AcademicEventUpdate) -> AdminEventMutationResponse:
         event = await self.event_repo.get_by_id(event_id)
@@ -263,7 +286,7 @@ class AdminEventService:
             raise AdminEventDomainError(str(exc), http_status=409)
         except EventValidationError as exc:
             raise AdminEventDomainError(str(exc), http_status=422)
-        return AdminEventMutationResponse(event=await self._to_response(updated))
+        return AdminEventMutationResponse(event=await self._to_response(updated, user))
 
     async def deactivate_event(self, user: User, event_id: UUID) -> AdminEventMutationResponse:
         event = await self.event_repo.get_by_id(event_id)
@@ -276,4 +299,4 @@ class AdminEventService:
             raise AdminEventDomainError(str(exc), http_status=403)
         except EventNotFound as exc:
             raise AdminEventDomainError(str(exc), http_status=404)
-        return AdminEventMutationResponse(event=await self._to_response(deactivated))
+        return AdminEventMutationResponse(event=await self._to_response(deactivated, user))

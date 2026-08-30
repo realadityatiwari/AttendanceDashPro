@@ -32,7 +32,8 @@ from app.models.admin_scope import AdminScope
 from app.models.academic import AcademicSession, Semester, Subject, StudentElectiveChoice
 from app.models.enums import AdminRole, ElectiveSlot, UserRole
 from app.models.event import AcademicEvent
-from app.models.timetable import ClassSession
+from app.models.timetable import TimetableEntry, ClassSession
+from app.models.occurrence import OccurrenceOutcome
 from app.core.security import create_access_token
 
 results = []; _BASELINE = {}; _ACTIVE_SESSION_ID = None
@@ -308,6 +309,23 @@ async def main() -> int:
             r = await c.get(P, params={"role": "HEAD_ADMIN"}, headers={"Authorization": f"Bearer {t_stu}"})
             check("M1. query role cannot elevate STUDENT -> 403", r.status_code == 403, str(r.status_code))
 
+            # ---- Canonical cleanup of outcome-composing fixture events ----
+            # Phase 24.10 discovery: a subject-scoped event for a catalog
+            # elective subject composes an occurrence_outcomes row on the
+            # slot's anchor session. Raw event deletion would leave that row
+            # behind — deactivate through the canonical DELETE path so the
+            # synchronizer reverses composed outcomes/sessions first.
+            async with AsyncSessionLocal() as db:
+                admin2 = (await db.execute(
+                    select(User).where(User.role == UserRole.ADMIN)
+                )).scalars().first()
+            tok_cleanup = create_access_token(subject=str(admin2.id), roll_number=admin2.roll_number)
+            async with AsyncClient(transport=transport, base_url="http://test") as cc:
+                for k in ("elec_extra_id", "class_extra_id", "extra_id", "holiday_id", "standalone_qd"):
+                    eid = fx.get(k)
+                    if eid:
+                        await cc.delete(f"{P}/{eid}", headers={"Authorization": f"Bearer {tok_cleanup}"})
+
         passed = sum(1 for _, ok in results if ok)
         print(f"\nPhase 24.9 verifier (core): {passed}/{len(results)} PASS")
         return 0 if passed == len(results) else 1
@@ -322,6 +340,17 @@ async def main() -> int:
                         ClassSession.date.in_([fx["ED"], fx["ED2"], fx["ED3"], datetime.date(2026, 11, 24)]),
                         ClassSession.timetable_entry_id.is_(None),
                     ))
+                    # Defensive: remove any outcome rows the fixture events composed
+                    # on real anchor sessions (canonical deactivation above already
+                    # reverses them; this guards against partial-failure residue).
+                    if fx.get("bcs58"):
+                        await db.execute(delete(OccurrenceOutcome).where(
+                            OccurrenceOutcome.subject_id == fx["bcs58"],
+                            OccurrenceOutcome.class_session_id.in_(
+                                select(ClassSession.id).where(
+                                    ClassSession.date == datetime.date(2026, 11, 24))
+                            )
+                        ))
                 for k in ("extra_id", "holiday_id", "standalone_qd", "class_extra_id", "elec_extra_id"):
                     if fx.get(k):
                         await db.execute(delete(AcademicEvent).where(AcademicEvent.id == fx[k]))

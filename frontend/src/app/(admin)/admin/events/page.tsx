@@ -159,6 +159,11 @@ export default function EventsPage() {
                   <td className="px-4 py-3">
                     <span className="text-sm">{ev.target_summary}</span>
                     {ev.subject_code && <span className="ml-1 text-xs text-muted-foreground">({ev.subject_code})</span>}
+                    {ev.subject_slot && (
+                      <Badge variant="outline" className="ml-1 text-[10px]">
+                        {ev.subject_slot === "ELECTIVE_I" ? "DE-I" : "DE-II"} member
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {ev.start_date === ev.end_date ? ev.start_date : `${ev.start_date} \u2013 ${ev.end_date}`}
@@ -174,7 +179,7 @@ export default function EventsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {isGlobal && !ev.quiz_schedule_managed && (
+                    {isGlobal && !ev.quiz_schedule_managed && ev.can_mutate && (
                       <Button variant="outline" size="sm" onClick={() => setEditing(ev)}>Edit</Button>
                     )}
                   </td>
@@ -189,6 +194,7 @@ export default function EventsPage() {
         <CreateEventDialog
           key={createOpen ? "open" : "closed"}
           open={createOpen}
+          isGlobal={isGlobal}
           isSubmitting={mutationLoading}
           onOpenChange={setCreateOpen}
           onCreate={(payload: CreateAdminEventRequest) =>

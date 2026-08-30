@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAdminSessions, useAdminSemesters, useAdminSubjects } from "@/hooks/useApi";
-import { CreateAdminEventRequest, ClassType, EventType } from "@/types/api";
-import { getRule, defaultDurationMode, CLASS_TYPE_LABELS, SUBSTITUTION_DAYS, ELECTIVE_SLOT_LABELS } from "@/components/events/eventRules";
+import { CreateAdminEventRequest, ClassType, ElectiveSlot, EventType } from "@/types/api";
+import { getRule, defaultDurationMode, CLASS_TYPE_LABELS, SUBSTITUTION_DAYS, ELECTIVE_SLOT_LABELS, slotOptionValue, parseSlotOption, SLOT_OPTION_PREFIX } from "@/components/events/eventRules";
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   EXTRA_LECTURE: "Extra Lecture", EXTRA_TUTORIAL: "Extra Tutorial",
@@ -30,15 +30,20 @@ function supportsNote(eventType: EventType): boolean {
 }
 
 /**
- * Phase 24.9 — Create Event dialog (HEAD_ADMIN only; backend authoritative).
+ * Phase 24.9/24.10 — Create Event dialog (backend authoritative).
  * Field visibility mirrors the shared eventRules map; the backend registry is
- * the final validator. QUIZ_DAY creation is allowed for standalone quiz-day
- * events; schedule-managed quiz dates belong to /admin/quizzes.
+ * the final validator. Phase 24.10: the target selector distinguishes
+ * CONCRETE subjects (subject-specific effect — only that elective subject's
+ * students are affected) from SLOT-WIDE targets (existing Phase 22.4
+ * HEAD-only semantics — one shared event every slot member resolves).
+ * QUIZ_DAY creation is allowed for standalone quiz-day events;
+ * schedule-managed quiz dates belong to /admin/quizzes.
  */
 export function CreateEventDialog({
-  open, isSubmitting, onCreate, onOpenChange,
+  open, isGlobal, isSubmitting, onCreate, onOpenChange,
 }: {
   open: boolean;
+  isGlobal: boolean;
   isSubmitting: boolean;
   onCreate: (payload: CreateAdminEventRequest) => Promise<void>;
   onOpenChange: (open: boolean) => void;
@@ -68,18 +73,22 @@ export function CreateEventDialog({
 
   const handleSubmit = async () => {
     if (!startDate) { setError("Start date is required"); return; }
-    if (rule.requiresSubject && !subjectId) { setError("This event type requires a subject"); return; }
+    if (rule.requiresSubject && !subjectId) { setError("This event type requires a subject or slot target"); return; }
     if (rule.requiresClassType && !classType) { setError("This event type requires a class type"); return; }
     const effectiveEnd = durationMode === "single" ? startDate : (endDate || startDate);
     if (effectiveEnd < startDate) { setError("End date must not be before start date"); return; }
     setError(null);
+    // Phase 24.10: parse the target. "slot:<SLOT>" = slot-wide event
+    // (HEAD-only on the backend); anything else is a concrete subject
+    // (subject-specific effect for that elective/common subject).
+    const slot = parseSlotOption(subjectId);
     try {
       await onCreate({
         event_type: eventType,
         start_date: startDate,
         end_date: effectiveEnd,
-        subject_id: rule.requiresSubject ? subjectId : null,
-        elective_slot: null,
+        subject_id: slot === null ? (rule.requiresSubject ? subjectId : null) : null,
+        elective_slot: slot,
         class_type: rule.requiresClassType ? (classType as ClassType) : null,
         substitution_schedule_override: subDay || null,
         note: supportsNote(eventType) && note ? note : null,
@@ -149,16 +158,33 @@ export function CreateEventDialog({
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Subject</label>
+                <label className="text-sm font-medium">Target</label>
                 <select className={selectClass} value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
                   <option value="">Select subject</option>
+                  {isGlobal && (
+                    <>
+                      <option value={slotOptionValue(ElectiveSlot.ELECTIVE_I)}>
+                        {ELECTIVE_SLOT_LABELS[ElectiveSlot.ELECTIVE_I]} (entire slot — HEAD only)
+                      </option>
+                      <option value={slotOptionValue(ElectiveSlot.ELECTIVE_II)}>
+                        {ELECTIVE_SLOT_LABELS[ElectiveSlot.ELECTIVE_II]} (entire slot — HEAD only)
+                      </option>
+                    </>
+                  )}
                   {scopedSubjects.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.code} — {s.name}
-                      {s.elective_slot ? ` (${ELECTIVE_SLOT_LABELS[s.elective_slot]})` : ""}
+                      {s.elective_slot ? ` (${ELECTIVE_SLOT_LABELS[s.elective_slot]} member — affects this subject only)` : ""}
                     </option>
                   ))}
                 </select>
+                {subjectId.startsWith(SLOT_OPTION_PREFIX) && (
+                  <p className="text-xs text-warning">
+                    Slot-wide target: ONE shared event that every student in the slot resolves to
+                    (existing Phase 22.4 semantics). To affect only one elective subject, pick the
+                    concrete subject instead.
+                  </p>
+                )}
               </div>
             </>
           )}

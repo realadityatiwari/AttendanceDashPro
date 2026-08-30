@@ -1330,6 +1330,13 @@ export interface AdminEventResponse {
   note: string | null;
   quiz_schedule_managed: boolean;
   target_summary: string;
+  /** Phase 24.10: the concrete subject's catalog elective slot (null for
+   *  common subjects and slot-wide events). Distinct from the event's own
+   *  elective_slot marker (set only on slot-wide events). */
+  subject_slot: ElectiveSlot | null;
+  /** Phase 24.10: server-computed mutation capability for the acting admin
+   *  (backend remains the authorization boundary). */
+  can_mutate: boolean;
 }
 
 export interface AdminEventListResponse {

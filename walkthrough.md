@@ -8143,3 +8143,92 @@ event engine, no direct class_sessions/occurrence_outcomes writes.
 **PHASE 24.9 - ✅ COMPLETE.** Next: Phase 24.10 - Subject-Specific Elective
 Events (NOT STARTED). No production system was intentionally contacted or
 modified. No commit/push/PR made during implementation.
+
+
+# Phase 24.10 - Subject-Specific Elective Events (COMPLETE, 2026-08-30)
+
+## Summary
+
+Divergent event outcomes for concrete elective subjects sharing one elective
+slot/date are fully representable through the EXISTING event architecture.
+The Phase 23.6/23.7/23.8 pipeline (synchronizer `desired_outcomes` ->
+`occurrence_outcomes` on the shared anchor session) already implemented the
+semantics; Phase 24.10 closed the admin-surface gaps and proved the divergence
+matrix end-to-end. No second engine, no per-student event copies, no schema
+change.
+
+## Discovered gap (documented before implementation)
+
+- Phase 24.9 admin read model did not distinguish a concrete subject's
+  catalog slot from a slot-wide event marker, and exposed no mutation
+  capability.
+- The Create dialog did not offer slot-wide targeting (existing Phase 22.4
+  HEAD-only semantics).
+- No verifier proved the divergence matrix through the admin API.
+
+## What was implemented
+
+### Backend (additive enrichment)
+
+- `AdminEventResponse.subject_slot`: the concrete subject's catalog
+  elective_slot (distinct from the event's own elective_slot marker).
+- `AdminEventResponse.can_mutate`: server-computed via the same
+  `can_mutate_event` semantics EventService enforces (UX hint only).
+
+### Frontend (additive, inside /admin/events)
+
+- Create dialog: slot-wide targets ("entire slot - HEAD only", using the
+  shared `eventRules` slot-option convention) AND concrete subjects
+  ("affects this subject only"); explicit slot-vs-concrete warning.
+- Page: "DE-I/DE-II member" badge; Edit gated by backend `can_mutate`.
+
+### Verifier
+
+- `scripts/verify_phase_24_10.py` (NEW): PASS **35/35** (x2, idempotent).
+
+## Verification performed
+
+- Divergence matrix: ELECTIVE_ADMIN (BCS-058) SURPRISE_QUIZ + HEAD
+  CLASS_CANCELLED for BCS-056 on the SAME DE-II slot/date -> BCS-058 outcome
+  SURPRISE_QUIZ, BCS-056 outcome CANCELLED, BCS-055 NO outcome (normal
+  lecture), anchor session NOT cancelled, exactly 2 outcome rows (no
+  per-student duplication).
+- Duplicate guard: same subject/type/date 409; legitimate divergence allowed.
+- EXTRA fallback (weekday without a slot session): extra session ONLY for the
+  targeted subject.
+- Idempotency: no-op PATCH -> no outcome churn. PATCH move: only the moved
+  subject's outcome removed; other subjects' outcomes untouched.
+- DELETE = safe deactivation with isolated per-subject reversal; row
+  preserved.
+- QUIZ_DAY ownership guard intact (Phase 24.9); standalone QUIZ_DAY
+  unchanged; ELECTIVE_ADMIN cannot read/mutate BCS-055 events; spoofed role
+  cannot elevate; ElectiveResolver resolution intact; baseline restored.
+- Regressions: 24.3 40/40 - 24.5 46/46 - 24.6 46/46 - 24.7a PASS - 24.7b
+  29/29 - 24.7c 30/30 - 24.7g 25/25 - 24.7h 27/27 - 24.8 34/34 - 24.9 40/40.
+- `compileall` PASS - `tsc --noEmit` PASS - ESLint PASS - `git diff --check`
+  clean - alembic head `c4d5e6f7a8b9` unchanged (no migration).
+- No browser/E2E run performed (operator responsibility). Production
+  untouched; `.env` unchanged (local dev target).
+
+## Verification defect fixed (narrow)
+
+- `verify_phase_24_9.py` E4 (BCS-058 EXTRA_LECTURE on a DE-II slot weekday)
+  composes an outcome row that its raw event deletion did not reverse - a
+  latent 24.9 verifier-cleanup defect surfaced by 24.10's exercise of the
+  outcome pipeline. Fixed by deactivating outcome-composing fixture events
+  through the canonical DELETE path (synchronizer reversal) plus a defensive
+  outcome cleanup. NOT an application defect; `verify_phase_24_9.py` PASS
+  40/40 restored.
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar updated
+  (24.10 COMPLETE, verifier 35/35), Phase 24.10 record appended.
+- implementation_plan.md: Phase 24.10 section with the pre-implementation
+  gap analysis.
+- task.md: Phase 24.10 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.10 - ✅ COMPLETE.** Next: Phase 24.11 - Admin & Scope Management
+(NOT STARTED). No production system was intentionally contacted or modified.
+No commit/push/PR made during implementation.

@@ -3369,7 +3369,60 @@ verified. Next: Phase 24.8 — Quiz Schedule Manager.
   enforcement without a new explicit phase.
 - Phase 24.8 (Quiz Schedule Manager) COMPLETE (2026-08-30).
 Phase 24.9 (Event Manager) COMPLETE (2026-08-30).
-Phase 24.10 (Subject-Specific Elective Events) requires a fresh execution prompt.
+Phase 24.10 (Subject-Specific Elective Events) COMPLETE (2026-08-30).
+Phase 24.11 (Admin & Scope Management) requires a fresh execution prompt.
+
+## PHASE 24.10 - SUBJECT-SPECIFIC ELECTIVE EVENTS (COMPLETE, 2026-08-30)
+
+## Objective
+
+Subject-specific elective events: divergent outcomes for concrete elective
+subjects sharing one elective slot/date (e.g. BCS-058 Surprise Quiz,
+BCS-055 normal, BCS-056 Cancelled on the same DE-II date) - through the
+EXISTING event architecture, no per-student event copies.
+
+## Discovered gap (documented before implementation)
+
+The divergence capability was ALREADY canonical (Phase 23.6/23.7/23.8:
+synchronizer `desired_outcomes` -> `occurrence_outcomes` on the shared
+anchor session). Actual gaps: admin read model lacked subject-slot context +
+mutation-capability metadata; the Create dialog lacked slot-wide targeting;
+no divergence verifier.
+
+## Delivered
+
+### Backend (additive enrichment, no new endpoints/engine)
+- [x] `schemas/admin_events.py`: `subject_slot` (concrete subject's catalog slot) + `can_mutate` (server-computed)
+- [x] `services/admin_event_service.py`: `_to_response` enrichment
+
+### Frontend (additive, inside /admin/events)
+- [x] Create dialog: slot-wide targets ("entire slot - HEAD only") AND concrete subjects ("affects this subject only") - unambiguous distinction; shared eventRules slot conventions
+- [x] Page: "DE-I/DE-II member" badge; Edit gated by backend `can_mutate`
+- [x] Slot-vs-concrete warning in the dialog
+
+### Verifier
+- [x] `scripts/verify_phase_24_10.py` (NEW): PASS **35/35** (x2, idempotent)
+
+## Hard scope (respected)
+- [x] NO second event engine/registry/synchronizer
+- [x] NO direct class_sessions/occurrence_outcomes writes from the feature
+- [x] NO per-student event rows; NO anchor leakage
+- [x] NO schema/migration (alembic head `c4d5e6f7a8b9` unchanged)
+- [x] NO Phase 24.9 QUIZ_DAY guard weakening; NO student-surface redesign
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_10.py` PASS **35/35**: divergent same-slot/same-date events; per-subject outcomes (BCS-058 SURPRISE_QUIZ / BCS-056 CANCELLED / BCS-055 none); anchor session intact; no per-student duplication; EXTRA fallback session only for the targeted subject; duplicate guard; idempotency; PATCH-move isolated reversal; DELETE = deactivation; QUIZ_DAY guard intact; ELECTIVE_ADMIN isolation (BCS-055 events 404/403); spoofing 403; ElectiveResolver intact; baseline restored
+- [x] Regressions: 24.3 40/40 - 24.5 46/46 - 24.6 46/46 - 24.7a PASS - 24.7b 29/29 - 24.7c 30/30 - 24.7g 25/25 - 24.7h 27/27 - 24.8 34/34 - 24.9 40/40
+- [x] `compileall` PASS; `tsc --noEmit` PASS; ESLint PASS; `git diff --check` clean; alembic head unchanged
+- [x] No browser/E2E run (operator responsibility); production untouched; `.env` unchanged
+
+## Verification defect fixed (narrow)
+- [x] `verify_phase_24_9.py` E4 outcome residue: outcome-composing fixture events now deactivated through the canonical DELETE path (synchronizer reversal) - 24.9 verifier PASS 40/40 restored
+
+## Do Not Touch Again
+- Phase 24.10 divergence semantics are the canonical Phase 23.6 pipeline - frozen
+- Phase 24.11 (Admin & Scope Management) requires a fresh execution prompt.
 
 ## PHASE 24.9 - EVENT MANAGER (COMPLETE, 2026-08-30)
 
