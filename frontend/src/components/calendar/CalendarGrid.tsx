@@ -9,6 +9,7 @@ import { formatLongDate, getLocalDateString, parseLocalDate } from "@/lib/date";
 // (matches DEFAULT_WEEKENDS in the Python calendar engine). Weekday headers are
 // pure layout; whether a day is working comes only from the API read model.
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
 const MONTH_NAME_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "long" });
 
@@ -36,7 +37,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
 
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < leadingBlanks; i++) {
-    cells.push(<div key={`placeholder-leading-${i}`} className="aspect-square rounded-lg" aria-hidden />);
+    cells.push(<div key={`placeholder-leading-${i}`} className="min-h-12 rounded-lg sm:min-h-16" aria-hidden />);
   }
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -51,7 +52,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
           onSelect={onSelect}
         />
       ) : (
-        <div key={dateStr} className="aspect-square rounded-lg" aria-hidden />
+        <div key={dateStr} className="min-h-12 rounded-lg sm:min-h-16" aria-hidden />
       )
     );
   }
@@ -59,27 +60,34 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
   return (
     <div aria-label={`${monthLabel} academic calendar`}>
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-        {WEEKDAY_LABELS.map(label => (
+        {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={label}
-            className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            className="pb-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs"
           >
-            {label}
+            <span className="sm:hidden">{WEEKDAY_SHORT[i]}</span>
+            <span className="hidden sm:inline">{label}</span>
           </div>
         ))}
       </div>
-      <div className="mt-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">{cells}</div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">{cells}</div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+          <span className="size-2 rounded-full bg-accent" aria-hidden />
           Event
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-accent/10 ring-1 ring-accent" aria-hidden />
+          <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[9px] leading-none font-bold text-primary-foreground" aria-hidden>
+            {parseLocalDate(todayStr).getDate()}
+          </span>
+          Today
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-3 rounded-sm bg-accent/15 ring-1 ring-accent" aria-hidden />
           Selected
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-muted/40" aria-hidden />
+          <span className="size-3 rounded-sm bg-muted/30" aria-hidden />
           Non-working
         </span>
       </div>
@@ -118,17 +126,17 @@ function DayCell({
       aria-label={ariaLabel}
       onClick={() => onSelect(item.date)}
       className={cn(
-        "flex aspect-square h-auto w-full flex-col items-stretch justify-between rounded-lg p-1.5",
+        "flex min-h-12 w-full flex-col items-stretch justify-between gap-0.5 rounded-lg p-1.5 sm:min-h-16 sm:p-2",
         working ? "bg-card hover:bg-muted/70" : "bg-muted/25 text-muted-foreground hover:bg-muted/40",
         isSelected && "bg-accent/10 ring-2 ring-accent hover:bg-accent/15",
         isToday && !isSelected && "ring-1 ring-primary/50"
       )}
     >
-      <span className="flex items-center justify-between">
+      <span className="flex items-center justify-between gap-1">
         <span
           className={cn(
-            "text-sm leading-none font-semibold",
-            isToday ? "text-primary" : working ? "text-foreground" : "text-muted-foreground"
+            "flex size-5 items-center justify-center rounded-full text-xs leading-none font-semibold sm:size-6 sm:text-sm",
+            isToday ? "bg-primary text-primary-foreground" : working ? "text-foreground" : "text-muted-foreground"
           )}
         >
           {parseLocalDate(item.date).getDate()}
@@ -140,7 +148,7 @@ function DayCell({
           </span>
         )}
       </span>
-      <span className="mt-auto min-h-0">
+      <span className="min-h-0">
         {working ? (
           item.session_count > 0 && (
             <span className="block truncate text-[10px] leading-tight font-medium text-success/90">{classLabel}</span>

@@ -3718,3 +3718,30 @@ selected `users.is_active` and `users.subsection_id`, absent in production →
 
 ### Remaining operator action
 - [ ] Browser verification: https://attendance-dash-pro.vercel.app/login — invalid credentials → "Incorrect roll number or password"; real-account login → `/dashboard`
+
+---
+
+## Student Portal Usability & Session Recovery Fixes � 2026-08-31
+
+**Status: IMPLEMENTED (frontend, uncommitted).** No schema/DB/backend changes.
+
+### Session stability (root cause of repeated logout)
+- [x] `AuthContext.tsx`: token destroyed only on genuine 401/403; transient network/cold-start failures no longer log out or redirect
+- [x] Redirect to /login only when no token exists; self-healing profile refetch on focus/visibility; in-flight guard
+- [x] `login/page.tsx` + `signup/page.tsx`: transient profile-refresh failure no longer blocks post-login navigation
+
+### Mobile navigation
+- [x] Bottom nav 4th tab: "Profile" -> "More" (Menu icon)
+- [x] Profile entry removed from the More bottom sheet (profile is in the top-right avatar)
+- [x] Notification bell breathing space (TopNav + NotificationBell)
+
+### Notifications
+- [x] NotificationCenter renders as a mobile bottom sheet; actions wrap below content on small screens
+
+### Calendar
+- [x] CalendarGrid: mobile-friendly min-height cells, short weekday headers, today badge, clearer legend
+- [x] calendar/page: sticky day detail on desktop; DayDetail: event count + spacing
+
+### Verification
+- [x] `npx tsc --noEmit` PASS; ESLint: only pre-existing errors; `git diff --check` clean
+- [ ] Operator browser verification (login persistence, mobile nav/notifications/calendar)

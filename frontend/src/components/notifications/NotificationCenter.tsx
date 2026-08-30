@@ -157,6 +157,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           : "You're all caught up"
       }
       width="md"
+      mobileSheet
     >
       {isLoading && !notifications ? (
         <div className="space-y-3 py-1" aria-label="Loading notifications">
@@ -192,7 +193,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           </p>
         </div>
       ) : (
-        <div className="flex max-h-[50dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
+        <div className="flex max-h-[60dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
           {actionError && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
@@ -211,33 +212,35 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                 key={item.id}
                 className={item.is_read ? "rounded-lg border border-border bg-background p-3" : "rounded-lg border border-border bg-muted/40 p-3"}
               >
-                <div className="flex items-start gap-3">
-                  <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${meta.iconClass}`}
-                  >
-                    <Icon className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={meta.badge}>{meta.label}</Badge>
-                      {!item.is_read && (
-                        <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
-                      )}
-                    </div>
-                    <p
-                      className={`mt-1.5 text-sm leading-snug ${
-                        item.is_read ? "text-muted-foreground" : "font-medium text-foreground"
-                      }`}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                  <div className="flex items-start gap-3 sm:min-w-0 sm:flex-1">
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${meta.iconClass}`}
                     >
-                      {item.message}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {[item.subject_code, formatLongDate(item.date)]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
+                      <Icon className="size-4" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={meta.badge}>{meta.label}</Badge>
+                        {!item.is_read && (
+                          <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
+                        )}
+                      </div>
+                      <p
+                        className={`mt-1.5 text-sm leading-snug ${
+                          item.is_read ? "text-muted-foreground" : "font-medium text-foreground"
+                        }`}
+                      >
+                        {item.message}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {[item.subject_code, formatLongDate(item.date)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center justify-end gap-1 sm:items-start">
                     {!item.is_read && (
                       <Button
                         variant="ghost"

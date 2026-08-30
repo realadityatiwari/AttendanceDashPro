@@ -37,7 +37,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
       : `${day.session_count} ${day.session_count === 1 ? "class" : "classes"}`;
 
   return (
-    <GlassCard className="flex h-full flex-col p-5">
+    <GlassCard className="flex h-full flex-col p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-foreground">{formatLongDate(day.date)}</h3>
         <div className="flex flex-wrap gap-1.5">
@@ -72,8 +72,13 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 flex-col">
-        <div className="mb-2 flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Events</h4>
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Events
+            {day.events.length > 0 && (
+              <span className="ml-1.5 text-muted-foreground/70">({day.events.length})</span>
+            )}
+          </h4>
           <Link
             href="/tools/events"
             className="rounded-sm text-xs font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"

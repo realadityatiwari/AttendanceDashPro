@@ -4663,3 +4663,21 @@ prompts. All 12 Phase 24.0 decision gates remain open.
 - Data safety (read-only): users 5, enrollments 45, records 190, class_sessions 721, timetable_entries 28, quiz_schedules 18, academic_events 63, subjects 13 â€” additive migrations cannot reduce counts.
 
 **Safety:** production DB mutated ONLY by the authorized `alembic upgrade head`; no manual ALTER, no reset/truncate, no seed/provision scripts, no `.env` change, no credentials printed, no commit/push. Regression guard added: `backend/scripts/verify_prod_reachability.py` (CI informational job).
+
+---
+
+## Student Portal Usability & Session Recovery Fixes — 2026-08-31
+
+**Status: IMPLEMENTED (frontend only, uncommitted).**
+
+- Session stability: AuthContext no longer destroys the JWT on transient
+  failures (only genuine 401/403); redirect-to-login gated on token absence;
+  focus/visibility self-heal retry; login/signup navigate after login even
+  if the profile refresh hiccups.
+- Mobile nav: "Profile" bottom tab -> "More"; Profile removed from the More
+  sheet; bell spacing improved.
+- Notifications: mobile bottom-sheet layout via ShellDialog mobileSheet.
+- Calendar: cleaner grid + sticky day detail + DayDetail polish.
+- Verification: tsc PASS; ESLint only pre-existing errors; git diff --check
+  clean. No backend/DB/schema/.env changes. Operator browser verification
+  pending.

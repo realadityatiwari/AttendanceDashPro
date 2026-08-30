@@ -4727,3 +4727,19 @@ cancelled on the same DE-II date). NOT STARTED.
 ## Next slice (recommended)
 
 Phase 24.9 � Event Manager (holidays/closures/overrides + scoped event UX consolidation; reuses the existing `/events` surface). NOT STARTED.
+
+---
+
+## Student Portal Usability & Session Recovery Fixes (2026-08-31)
+
+Frontend-only fixes after the 2026-08-30 production recovery, addressing
+real-world usage issues (PWA + web): repeated auto-logout, perceived
+slowness, calendar UI, mobile navigation. Root cause of the logout loop was
+AuthContext clearing the JWT on ANY transient profile-fetch failure (Render
+cold starts / flaky mobile networks); the session is now destroyed only on
+genuine 401/403, with focus-based self-healing retry. Also: mobile bottom
+nav "Profile" -> "More" (Profile entry removed from the sheet), notification
+bell breathing space, notifications as a mobile bottom sheet, and a cleaner
+calendar grid. No backend/schema/DB/.env changes; `tsc` PASS; ESLint only
+pre-existing errors; `git diff --check` clean; uncommitted for operator
+review. Operator browser verification pending.

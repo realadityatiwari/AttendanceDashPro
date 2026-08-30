@@ -8532,7 +8532,6 @@ made during implementation.
 ---
 
 # Production Student Portal Reachability Recovery â€” 2026-08-30
-
 ## Verdict
 
 **RECOVERED â€” operator-authorized production migration executed successfully
@@ -8618,3 +8617,64 @@ browser fetch failure) the translated network message the operator reported.
 3. Log in with a legitimate student account â†’ expect navigation to
    `/dashboard`.
 4. No real passwords recorded or reported in this document.
+
+---
+
+# Student Portal Usability & Session Recovery Fixes — 2026-08-31
+
+## Scope
+Post-recovery student portal fixes reported by the operator after a day of
+real usage (PWA + web): session drops, perceived slowness, calendar UI,
+mobile navigation. Student-facing surfaces only; no Admin Portal, no Phase 25,
+no auth redesign, no schema/DB changes.
+
+## Root cause — repeated auto-logout / re-login loop
+`AuthContext.loadUser()` cleared the JWT on ANY profile-fetch failure,
+including transient network errors (Render free-tier cold starts, flaky
+mobile networks, brief 5xx blips). Result: dashboard briefly renders, then
+`apiFetch` 401/error path redirected to /login and dropped the session —
+"logged out again and again".
+
+## Fixes (frontend only)
+1. `AuthContext.tsx` — session is destroyed ONLY on genuine 401/403 auth
+   rejection; transient failures keep the token, no redirect. Redirect to
+   /login only when no token exists at all. Self-healing retry of the
+   profile fetch on window focus/visibilitychange (no reload, no re-login).
+   In-flight guard prevents duplicate profile fetches.
+2. `login/page.tsx` + `signup/page.tsx` — a transient profile-refresh
+   failure no longer blocks navigation after a successful login; the token
+   is already stored and the shell self-heals.
+3. Slowness: the cold-start latency is Render free-tier infra; the
+   session-drop loop previously multiplied it (every hiccup forced a full
+   re-login + reload). The session fix removes that compounding effect.
+4. `MobileBottomNav.tsx` — the 4th bottom tab changed from "Profile" to
+   "More" (Menu icon); Profile entry removed from the More bottom sheet
+   (profile already lives in the top-right avatar on every viewport).
+5. `TopNav.tsx` + `NotificationBell.tsx` — breathing space around the
+   notification bell (gap-2/gap-3 cluster, larger tap target, badge moved
+   inside the button edge).
+6. `NotificationCenter.tsx` + `ShellDialog.tsx` — notifications now render
+   as a mobile bottom sheet (full-width, rounded top, 60dvh list) instead of
+   a cramped centered dialog; item actions wrap below content on small
+   screens.
+7. `CalendarGrid.tsx` + `calendar/page.tsx` + `DayDetail.tsx` — cleaner
+   calendar: short weekday headers on mobile, min-height day cells (no
+   cramped aspect-square), today badge circle, clearer legend (Today added),
+   sticky day-detail column on desktop, event count in the detail header.
+
+## Verification
+- `npx tsc --noEmit` PASS (0 errors).
+- ESLint on changed files: only 4 PRE-EXISTING errors (login/signup `any`,
+  unescaped apostrophe, AuthContext setState-in-effect pattern) — unchanged
+  by this work; CI lint job is informational/non-blocking.
+- `git diff --check` clean.
+- No backend/schema/DB changes; no migrations; no .env changes; no
+  commit/push made.
+
+## Operator verification still required
+- Login ? dashboard stays logged in across backend cold starts and PWA
+  background/foreground cycles.
+- Mobile: bottom nav shows Home/Attendance/History/More; More sheet has no
+  Profile entry; notifications open as a bottom sheet; calendar grid
+  readable on a phone.
+- Desktop: calendar + day detail look correct.

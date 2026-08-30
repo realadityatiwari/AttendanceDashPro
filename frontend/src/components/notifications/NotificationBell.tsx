@@ -35,11 +35,11 @@ export function NotificationBell({ onOpenModal }: NotificationBellProps) {
       type="button"
       aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"}
       onClick={handleOpen}
-      className="relative -m-2.5 flex items-center rounded-md p-2.5 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 sm:-m-1.5 sm:p-1.5"
+      className="relative -m-1.5 flex items-center rounded-md p-2 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 sm:-m-1.5 sm:p-2"
     >
       <Bell className="size-5" aria-hidden="true" />
       {unreadCount > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-semibold text-white">
+        <span className="absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-semibold text-white">
           {badge}
         </span>
       )}

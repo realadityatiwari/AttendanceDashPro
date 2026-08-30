@@ -24,6 +24,10 @@ interface ShellDialogProps {
   title: string;
   description?: string;
   width?: ShellDialogWidth;
+  /** Render as a bottom sheet on mobile (full-width, rounded top) and a
+   * centered dialog from `sm` up. Used for surfaces that benefit from a
+   * thumbs-friendly layout on phones (e.g. the notification center). */
+  mobileSheet?: boolean;
   children: ReactNode;
 }
 
@@ -40,6 +44,11 @@ interface ShellDialogProps {
  * EventFormDialog). On desktop viewports the cap only engages for content
  * taller than 90% of the viewport, so existing dialog appearance is
  * preserved.
+ *
+ * `mobileSheet`: on mobile the popup is anchored to the bottom edge as a
+ * full-width sheet with rounded top corners; from `sm` up it becomes the
+ * normal centered dialog. Positioning utilities are overridden via
+ * tailwind-merge (later classes win).
  */
 export function ShellDialog({
   open,
@@ -47,11 +56,19 @@ export function ShellDialog({
   title,
   description,
   width = "sm",
+  mobileSheet = false,
   children,
 }: ShellDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-h-[90dvh] gap-0 overflow-y-auto p-0", WIDTH_CLASSES[width])}>
+      <DialogContent
+        className={cn(
+          "max-h-[90dvh] gap-0 overflow-y-auto p-0",
+          WIDTH_CLASSES[width],
+          mobileSheet &&
+            "left-0 right-0 bottom-0 top-auto w-full max-w-full translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
+        )}
+      >
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{title}</DialogTitle>
           {description && (

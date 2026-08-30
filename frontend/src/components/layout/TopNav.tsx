@@ -99,7 +99,7 @@ export function TopNav() {
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <NotificationBell onOpenModal={setActiveModal} />
         <UserMenu onOpenModal={setActiveModal} />
       </div>

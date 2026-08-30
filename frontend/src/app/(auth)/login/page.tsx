@@ -39,10 +39,16 @@ export default function LoginPage() {
 
       const data = await response.json();
       localStorage.setItem("access_token", data.access_token);
-      
-      // Update auth context state
-      await refreshUser();
-      
+
+      // Update auth context state. A transient profile fetch failure must
+      // not block navigation — the session token is already stored and the
+      // dashboard retries through SWR.
+      try {
+        await refreshUser();
+      } catch {
+        // Profile refresh failed transiently; navigate anyway.
+      }
+
       router.push("/dashboard");
     } catch (err: any) {
       // Network-level failures surface as TypeError with the browser's raw

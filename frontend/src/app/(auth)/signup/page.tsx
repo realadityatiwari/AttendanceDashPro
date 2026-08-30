@@ -110,7 +110,13 @@ export default function SignupPage() {
       localStorage.setItem("access_token", data.access_token);
 
       // Authenticate through the existing flow, then enter the app shell.
-      await refreshUser();
+      // A transient profile fetch failure must not block navigation — the
+      // session token is already stored and the shell retries through SWR.
+      try {
+        await refreshUser();
+      } catch {
+        // Profile refresh failed transiently; navigate anyway.
+      }
       router.push("/dashboard");
     } catch (err: any) {
       // Network-level failures surface as TypeError with the browser's raw

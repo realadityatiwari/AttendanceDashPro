@@ -180,7 +180,7 @@ export default function CalendarPage() {
           icon={<CalendarX2 className="mb-4 size-10 text-muted-foreground" aria-hidden />}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <GlassCard className={cn("p-2 sm:p-4", switching && "pointer-events-none opacity-70")}>
             {switching && (
               <div className="mb-2 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
@@ -196,13 +196,15 @@ export default function CalendarPage() {
               onSelect={handleSelect}
             />
           </GlassCard>
-          {selectedDay ? (
-            <DayDetail day={selectedDay} />
-          ) : (
-            <GlassCard className="p-5">
-              <p className="text-sm text-muted-foreground">Select a day to see its details.</p>
-            </GlassCard>
-          )}
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
+            {selectedDay ? (
+              <DayDetail day={selectedDay} />
+            ) : (
+              <GlassCard className="p-5">
+                <p className="text-sm text-muted-foreground">Select a day to see its details.</p>
+              </GlassCard>
+            )}
+          </div>
         </div>
       )}
     </div>
