@@ -8528,3 +8528,93 @@ mirroring what the dashboard's `count_students` already does.
 Next: Production migration gate (operator action; Phase 23.12 procedure). No
 production system was intentionally contacted or modified. No commit/push/PR
 made during implementation.
+
+---
+
+# Production Student Portal Reachability Recovery — 2026-08-30
+
+## Verdict
+
+**RECOVERED — operator-authorized production migration executed successfully
+(2026-08-30).** Deployed login now returns HTTP 401 for invalid credentials
+(previously HTTP 500). Operator browser verification of a real-account login
+remains the final step.
+
+## Incident
+
+https://attendance-dash-pro.vercel.app/login loads, but submitting
+credentials failed ("Unable to reach the server..." / HTTP 500) — the
+Student Portal was unusable.
+
+## Evidence (read-only probes, 2026-08-30)
+
+| Layer | Expected | Actual | Status |
+|---|---|---|---|
+| Vercel /login page | loads | HTTP 200, title "AttendanceDash Pro" | ✅ |
+| Deployed frontend API URL | Render URL inlined | `https://attendancedash-api.onrender.com` in deployed chunk `3fw-d7ypqqo5e.js` with fail-loud guard; no localhost fallback in prod build | ✅ |
+| Render /health | 200 | HTTP 200 `{"status":"ok",...}` | ✅ |
+| Render startup | healthy | root 200; openapi.json exposes ALL Phase 24.13 routes → deployed backend is current HEAD code (6e4242a) | ✅ |
+| CORS | Vercel origin allowed | preflight 200; `access-control-allow-origin: https://attendance-dash-pro.vercel.app`, credentials true, POST allowed | ✅ |
+| Login endpoint (pre-migration) | reachable | POST /api/v1/auth/login with invalid credentials → HTTP 500 `{"detail":"Internal server error"}` | ❌ |
+| Production revision | operator-verified | `b7c8d9e0f1a2` (read-only `alembic current` confirmed) | ✅ |
+| Current backend code | schema-compatible | queries `users.is_active` (`eb880e108f19`) + `users.subsection_id` (`c8d9e0f1a2b3`) — absent in production pre-migration | ❌ |
+
+## Root cause (single, primary)
+
+**Production schema lag.** The deployed backend (current HEAD `6e4242a`,
+alembic head `c4d5e6f7a8b9`) models `users.is_active` and
+`users.subsection_id`. Production Supabase was at `b7c8d9e0f1a2`. The login
+query `select(User).filter_by(roll_number=...)` selected those columns →
+`UndefinedColumnError` → global 500 handler → `{"detail":"Internal server error"}`.
+The frontend shows either that 500 detail or (during Render cold start /
+browser fetch failure) the translated network message the operator reported.
+
+## Production migration executed (operator-authorized)
+
+- Backup prerequisite CONFIRMED: `production-backups/AttendanceDashPro_production_2026-08-30.dump` (390,660 bytes).
+- Pre-migration revision: `b7c8d9e0f1a2` (10 revisions behind head).
+- Migration chain applied linearly, all additive (no row deletion anywhere):
+  `b7c8d9e0f1a2 → c8d9e0f1a2b3` (23.1 subsections + `users.subsection_id`) →
+  `d0e1f2a3b4c5` (23.2 UNIQUE subjects code/semester) → `e3f4a5b6c7d8`
+  (23.3 enrollment_type) → `f5a6b7c8d9e0` (23.5 subjects.elective_slot) →
+  `f6a7b8c9d0e1` (23.6 occurrence_outcomes) → `f7a8b9c0d1e2` (23.7 enum
+  MODIFIED) → `f8a9b0c1d2e3` (23.7 enum CLASS_MODIFIED) →
+  `f9a0b1c2d3e4` (23.11 admin_scopes) → `eb880e108f19` (24.7
+  `users.is_active`) → `c4d5e6f7a8b9` (24.7-A timetable domain).
+- Post-migration `alembic current`: `c4d5e6f7a8b9 (head)` ✓
+- Post-migration schema (read-only): `users.is_active` ✓ `users.subsection_id` ✓
+- Reachability guard `verify_prod_reachability.py`: **5/5 PASS**; invalid
+  login → **HTTP 401** `{"detail":"Incorrect roll number or password"}`
+- Data safety (read-only): users 5, student_enrollments 45, attendance_records
+  190, class_sessions 721, timetable_entries 28, quiz_schedules 18,
+  academic_events 63, subjects 13. All applied migrations are additive —
+  none can reduce row counts. Documented 21D.3 baseline used as context only.
+
+## What was done
+
+- Executed the authorized `alembic upgrade head` against production (sole
+  production mutation).
+- Read-only preflight (revision + chain), post-migration schema verification,
+  reachability guard, and data-safety counts.
+- Regression guard `backend/scripts/verify_prod_reachability.py` + CI
+  informational job added during the incident (unchanged here).
+- Governance records updated (MASTER_ROADMAP.md, implementation_plan.md,
+  task.md, walkthrough.md).
+
+## What was NOT done (deliberately)
+
+- No manual SQL ALTER; no `alembic stamp`; no downgrade; no reset/truncate.
+- No seed/provision/fixture/verifier-with-mutation scripts run against
+  production; no application code changes; no `.env` change; no Vercel/Render
+  redeploy; no commit/push.
+- No Admin Portal work; no Phase 25 work; no auth redesign; no student
+  functionality rewrite.
+
+## Operator action required (final)
+
+1. Open https://attendance-dash-pro.vercel.app/login in a browser.
+2. Enter an obviously invalid roll number and a password meeting the frontend
+   minimum → expect "Incorrect roll number or password".
+3. Log in with a legitimate student account → expect navigation to
+   `/dashboard`.
+4. No real passwords recorded or reported in this document.

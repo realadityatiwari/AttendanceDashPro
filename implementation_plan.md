@@ -4637,3 +4637,29 @@ responsibility). Production untouched; `.env` unchanged (local dev target).
 
 **Next:** Phase 24.7-C (HTTP CRUD API) — NOT STARTED; requires fresh execution
 prompts. All 12 Phase 24.0 decision gates remain open.
+
+---
+
+## Production Student Portal Reachability Recovery — 2026-08-30
+
+**Verdict: RECOVERED — operator-authorized production migration executed successfully (2026-08-30).** Deployed login now returns HTTP 401 for invalid credentials (previously HTTP 500). Operator browser verification of a real-account login remains.
+
+**Incident:** Deployed Student Portal login (https://attendance-dash-pro.vercel.app/login) unusable — "Unable to reach the server" / login failed.
+
+**Evidence (read-only probes):**
+- Vercel /login loads: 200; deployed bundle inlines `https://attendancedash-api.onrender.com` with the fail-loud guard; no localhost API fallback in the deployed build. Frontend is correct.
+- Render /health: 200; root 200; full openapi.json exposed showing ALL Phase 24.13 routes → deployed backend is current HEAD code (6e4242a).
+- CORS: preflight from `https://attendance-dash-pro.vercel.app` returns 200 with `access-control-allow-origin: https://attendance-dash-pro.vercel.app`, credentials true, POST allowed. CORS is correct.
+- POST /api/v1/auth/login with invalid credentials (no real creds used): HTTP 500 `{"detail":"Internal server error"}` consistently — a server-side exception, NOT a network failure and NOT a 401.
+- Production revision (operator-verified + read-only `alembic current`): `b7c8d9e0f1a2`. Local alembic head: `c4d5e6f7a8b9`.
+
+**Root cause:** production schema behind the deployed backend. The login query `select(User)` references `users.is_active` (migration `eb880e108f19`, committed 2026-08-29) and `users.subsection_id` (migration `c8d9e0f1a2b3`, Phase 23.1), both absent in production → UndefinedColumnError → 500.
+
+**Production migration executed (operator-authorized):**
+- Backup prerequisite CONFIRMED: `production-backups/AttendanceDashPro_production_2026-08-30.dump` (390,660 bytes).
+- Pre-migration revision: `b7c8d9e0f1a2` → target `c4d5e6f7a8b9` (10 revisions applied linearly, all additive).
+- Post-migration `alembic current`: `c4d5e6f7a8b9 (head)`; `users.is_active`/`users.subsection_id` present (read-only).
+- Reachability guard: 5/5 PASS; invalid login → HTTP 401 `{"detail":"Incorrect roll number or password"}`.
+- Data safety (read-only): users 5, enrollments 45, records 190, class_sessions 721, timetable_entries 28, quiz_schedules 18, academic_events 63, subjects 13 — additive migrations cannot reduce counts.
+
+**Safety:** production DB mutated ONLY by the authorized `alembic upgrade head`; no manual ALTER, no reset/truncate, no seed/provision scripts, no `.env` change, no credentials printed, no commit/push. Regression guard added: `backend/scripts/verify_prod_reachability.py` (CI informational job).

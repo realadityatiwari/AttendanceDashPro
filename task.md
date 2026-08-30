@@ -3679,3 +3679,42 @@ quiz rows, existing current-semester data preserved.
 ## Do Not Touch Again
 - Phase 24.8 quiz schedule API + QUIZ_DAY sync is frozen behavior
 - Phase 24.9 (Event Manager) requires a fresh execution prompt
+
+---
+
+## Production Student Portal Reachability Recovery — 2026-08-30
+
+**Verdict: RECOVERED — operator-authorized production migration executed successfully (2026-08-30).**
+
+### Incident
+Deployed Student Portal (https://attendance-dash-pro.vercel.app/login) loads,
+but login failed ("Unable to reach the server..." / HTTP 500). Root cause:
+production Supabase schema (`b7c8d9e0f1a2`, operator-verified) behind the
+deployed backend code (head `c4d5e6f7a8b9`, Phase 24.13). The login query
+selected `users.is_active` and `users.subsection_id`, absent in production →
+500 on every login.
+
+### Evidence (read-only probes, 2026-08-30)
+- [x] Vercel /login: HTTP 200; deployed bundle inlines `https://attendancedash-api.onrender.com` (chunk `3fw-d7ypqqo5e.js`) with fail-loud guard; no localhost API fallback
+- [x] Render /health: HTTP 200; openapi.json exposes ALL Phase 24.13 routes → deployed backend = current HEAD (6e4242a)
+- [x] CORS preflight from exact Vercel origin: 200, exact origin echoed, credentials true, POST allowed
+- [x] Pre-migration POST /api/v1/auth/login (invalid creds): HTTP 500 `{"detail":"Internal server error"}` — server-side defect, NOT network, NOT 401
+- [x] Production `alembic current`: `b7c8d9e0f1a2` (operator-verified + preflight)
+
+### Production migration (operator-authorized, executed)
+- [x] Backup prerequisite CONFIRMED: `production-backups/AttendanceDashPro_production_2026-08-30.dump` (390,660 bytes)
+- [x] Pre-migration production revision: `b7c8d9e0f1a2`
+- [x] Target revision: `c4d5e6f7a8b9` (single linear head)
+- [x] `alembic upgrade head` applied 10 revisions: `b7c8d9e0f1a2 → c8d9e0f1a2b3 → d0e1f2a3b4c5 → e3f4a5b6c7d8 → f5a6b7c8d9e0 → f6a7b8c9d0e1 → f7a8b9c0d1e2 → f8a9b0c1d2e3 → f9a0b1c2d3e4 → eb880e108f19 → c4d5e6f7a8b9`
+- [x] Post-migration `alembic current`: `c4d5e6f7a8b9 (head)`
+- [x] Schema verified (read-only): `users.is_active` ✓, `users.subsection_id` ✓, `alembic_version = c4d5e6f7a8b9`
+- [x] Reachability guard `verify_prod_reachability.py`: **5/5 PASS**; invalid login → **HTTP 401** `{"detail":"Incorrect roll number or password"}`
+- [x] Data safety (read-only): users 5, enrollments 45, records 190, class_sessions 721, timetable_entries 28, quiz_schedules 18, academic_events 63, subjects 13 — additive migrations cannot reduce counts; 21D.3 baseline context only
+
+### Production safety (absolute)
+- [x] production DB mutated ONLY by the authorized `alembic upgrade head`
+- [x] no manual SQL ALTER / no reset / no truncate / no seed or provision scripts
+- [x] no `.env` change; no credentials printed or exposed; no commit/push
+
+### Remaining operator action
+- [ ] Browser verification: https://attendance-dash-pro.vercel.app/login — invalid credentials → "Incorrect roll number or password"; real-account login → `/dashboard`

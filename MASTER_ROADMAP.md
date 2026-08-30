@@ -4333,6 +4333,28 @@ Batch student management / CSV import is explicitly NOT part of this phase and r
 
 **HARD STOP: Phase 24.5 complete.**
 
+---
+
+## Production Student Portal Reachability Recovery — 2026-08-30
+
+**Verdict: RECOVERED — operator-authorized production migration executed successfully. Deployed login verified returning HTTP 401 (invalid credentials), not 500.** Operator browser verification of a real-account login remains the final step.
+
+**Root cause:** Production schema lag. The deployed Render backend (current HEAD, all Phase 24.13 routes present in openapi.json) runs code where the `User` ORM model maps columns `is_active` (added in migration `eb880e108f19`, committed 2026-08-29) and `subsection_id` (added in migration `c8d9e0f1a2b3`, Phase 23.1). Production Supabase was at revision `b7c8d9e0f1a2` (operator-verified directly). The `select(User).filter_by(roll_number=...)` query in the login endpoint generated SQL referencing both columns → PostgreSQL raised `UndefinedColumnError` → the global exception handler returned HTTP 500.
+
+**Production migration executed (operator-authorized, 2026-08-30):**
+- Backup prerequisite: **CONFIRMED** — operator-verified `production-backups/AttendanceDashPro_production_2026-08-30.dump` (390,660 bytes).
+- Pre-migration production revision (read-only `alembic current`): `b7c8d9e0f1a2`
+- Target: `c4d5e6f7a8b9`
+- `alembic upgrade head` applied 10 revisions linearly: `b7c8d9e0f1a2 → c8d9e0f1a2b3 (23.1) → d0e1f2a3b4c5 (23.2) → e3f4a5b6c7d8 (23.3) → f5a6b7c8d9e0 (23.5) → f6a7b8c9d0e1 (23.6) → f7a8b9c0d1e2 (23.7) → f8a9b0c1d2e3 (23.7c) → f9a0b1c2d3e4 (23.11) → eb880e108f19 (24.7) → c4d5e6f7a8b9 (24.7-A)`.
+- Post-migration `alembic current`: `c4d5e6f7a8b9 (head)` — confirmed.
+- Post-migration schema (read-only): `users.is_active` ✓ and `users.subsection_id` ✓ present; `alembic_version = c4d5e6f7a8b9` ✓.
+- Reachability guard `verify_prod_reachability.py`: **5/5 PASS**, including `POST /api/v1/auth/login` (invalid credentials) → **HTTP 401** with `{"detail":"Incorrect roll number or password"}` (previously HTTP 500).
+- Data safety (read-only counts): users 5, student_enrollments 45, attendance_records 190, class_sessions 721, timetable_entries 28, quiz_schedules 18, academic_events 63, subjects 13. The applied migrations are additive only (no row deletion), so no counts could have been reduced; documented 21D.3 baseline (31 users / 35 enrollments / 165 records) used as context only.
+
+**Production safety:** production DB contacted read-only for preflight/schema/data checks; mutated ONLY by the authorized `alembic upgrade head`; no manual SQL ALTER, no reset/truncate, no seed/provision/verifier-with-mutation scripts, no `.env` change, no credentials printed/exposed, no commit/push made.
+
+**Remaining operator action:** browser-level verification — open https://attendance-dash-pro.vercel.app/login, confirm invalid credentials show "Incorrect roll number or password", then log in with a legitimate student account and confirm navigation to `/dashboard`. No passwords recorded here.
+
 ## Phase 24.6 - Curriculum & Subject Management
 
 **Status: COMPLETE (2026-08-29).** Local development only. No schema changes or migrations (alembic single head `eb880e108f19` unchanged). Git state: implemented but NOT committed (per operator instruction, no commit made during implementation).

@@ -318,6 +318,36 @@ jobs:
         run: docker build -t attendancedash-backup:ci ./deploy/backup
 
   # ────────────────────────────────────────────────────────────────────────
+  # JOB 9 — Production reachability regression guard (INFORMATIONAL)
+  #
+  # Added during the 2026-08-30 Student Portal recovery incident. Probes the
+  # deployed chain (Vercel -> Render -> Supabase) read-only and flags the
+  # exact failure that took the portal down: deployed backend returning 500
+  # on login because the production schema is behind the deployed code
+  # (login queries users.is_active / users.subsection_id, which are absent
+  # at production revision f2e3d4c5b6a7).
+  #
+  # NON-BLOCKING by design: the deployed endpoints are external production
+  # services with cold starts, and this job must not gate ordinary PRs on
+  # production availability. It exists to make reachability regressions
+  # visible on every push/PR against main.
+  # ────────────────────────────────────────────────────────────────────────
+  prod-reachability:
+    name: Production Reachability (informational)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Probe deployed Student Portal chain (read-only)
+        run: python backend/scripts/verify_prod_reachability.py
+
+  # ────────────────────────────────────────────────────────────────────────
   # DEPLOYMENT GATE — DESIGN ONLY. Disabled until production infrastructure
   # exists (Phase 18D blockers: no VPS/cloud host, no credentials, no
   # domain/DNS/TLS, no off-host destination). It is impossible for an
