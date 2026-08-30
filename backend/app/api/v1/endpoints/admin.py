@@ -61,6 +61,11 @@ from app.schemas.admin_events import (
     AdminEventMutationResponse,
     AdminEventResponse,
 )
+from app.schemas.admin_attendance import (
+    AdminSectionAttendanceListResponse,
+    AdminSubjectAttendanceListResponse,
+    AdminStudentAttendanceResponse,
+)
 from app.schemas.admin_admins import (
     AdminUserListResponse,
     AdminUserDetail,
@@ -68,6 +73,7 @@ from app.schemas.admin_admins import (
     AssignScopeRequest,
     UpdateScopeActiveRequest,
 )
+from app.services.admin_attendance_service import AdminAttendanceService
 from app.services.admin_admin_service import (
     AdminAdminService,
     AdminAdminDomainError,
@@ -1056,3 +1062,56 @@ async def set_admin_scope_active(
         return await AdminAdminService(db).set_scope_active(scope_id, request.active, user_id=user_id)
     except AdminAdminDomainError as exc:
         _raise_admin_admin_error(exc)
+
+# ===========================================================================
+# Phase 24.12 — Attendance admin & analytics (READ-ONLY)
+# ===========================================================================
+
+@router.get("/attendance/sections", response_model=AdminSectionAttendanceListResponse)
+async def admin_attendance_sections(
+    admin: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.12: per-section attendance aggregates (occurrence-level, ERP
+    current/forecast) over the active academic session.
+
+    Authorization (capability matrix "View analytics"): HEAD_ADMIN -> all
+    sections; CLASS_ADMIN -> own assigned sections; ELECTIVE_ADMIN /
+    SUBSECTION_ADMIN -> empty (no section scope). STUDENT -> 403.
+    """
+    return await AdminAttendanceService(db).get_section_analytics(admin)
+
+
+@router.get("/attendance/subjects", response_model=AdminSubjectAttendanceListResponse)
+async def admin_attendance_subjects(
+    admin: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.12: per-subject attendance aggregates (roster, occurrence-level)
+    over the active academic session.
+
+    Authorization: HEAD_ADMIN -> all subjects; CLASS_ADMIN -> subjects of own
+    sections' semesters; ELECTIVE_ADMIN -> own assigned subjects; SUBSECTION_ADMIN
+    -> empty. STUDENT -> 403.
+    """
+    return await AdminAttendanceService(db).get_subject_analytics(admin)
+
+
+@router.get("/attendance/students/{student_id}", response_model=AdminStudentAttendanceResponse)
+async def admin_student_attendance(
+    student_id: UUID,
+    admin: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.12: per-student attendance read — the student's canonical
+    analytics overview (overall + weekly + subject summaries) as viewed by an
+    in-scope admin. Attendance CORRECTION is a §25 gate; this is READ-ONLY.
+
+    Authorization: HEAD_ADMIN -> any student; CLASS_ADMIN -> own section
+    students; ELECTIVE_ADMIN -> own-subject roster members; SUBSECTION_ADMIN /
+    out-of-scope / nonexistent -> 404 (no existence leak). STUDENT -> 403.
+    """
+    return await AdminAttendanceService(db).get_student_attendance(admin, student_id)

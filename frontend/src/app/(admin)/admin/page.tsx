@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   AlertCircle,
+  BarChart3,
   BookOpen,
   CalendarClock,
   CalendarDays,
@@ -31,12 +32,13 @@ import { AdminDashboardResponse } from "@/types/api";
 // NOT implemented and no route exists; the phase hint is the discovery
 // sequence, never a claim of availability.
 // NOTE: Phase 24.5 (Academic Structure), Phase 24.6 (Curriculum), Phase
-// 24.7 (Timetable), Phase 24.8 (Quiz Schedules), Phase 24.9 (Events) and
-// Phase 24.10 (Subject-Specific Elective Events) are NOW implemented and have
-// been removed from this list and added to the "Available now" section.
+// 24.7 (Timetable), Phase 24.8 (Quiz Schedules), Phase 24.9 (Events),
+// Phase 24.10 (Subject-Specific Elective Events), Phase 24.11 (Admin &
+// Scope Management) and Phase 24.12 (Attendance Admin & Analytics) are NOW
+// implemented and have been removed from this list and added to the
+// "Available now" section.
 const FUTURE_AREAS: { label: string; phase: string }[] = [
-  { label: "Sessions & Occurrences", phase: "Phase 24.12" },
-  { label: "Attendance & Analytics", phase: "Phase 24.13" },
+  { label: "Integration & Hardening", phase: "Phase 24.13" },
 ] as const;
 
 /**
@@ -378,6 +380,34 @@ function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) 
               className="self-start sm:self-auto"
               nativeButton={false}
               render={<Link href="/admin/admins" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.12: Attendance analytics (scoped reads) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <BarChart3
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Attendance
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Read-only attendance analytics by section and subject, scoped
+                  to the viewer&apos;s authority (global / class / elective).
+
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/attendance" />}
             >
               Open
             </Button>

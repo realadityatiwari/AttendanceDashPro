@@ -3371,6 +3371,8 @@ verified. Next: Phase 24.8 — Quiz Schedule Manager.
 Phase 24.9 (Event Manager) COMPLETE (2026-08-30).
 Phase 24.10 (Subject-Specific Elective Events) COMPLETE (2026-08-30).
 Phase 24.11 (Admin & Scope Management) COMPLETE / FROZEN (2026-08-30).
+Phase 24.12 (Attendance Admin & Analytics) COMPLETE / FROZEN (2026-08-30).
+Phase 24.13 (Integration & Hardening) COMPLETE / FROZEN (2026-08-30).
 
 ## PHASE 24.10 - SUBJECT-SPECIFIC ELECTIVE EVENTS (COMPLETE, 2026-08-30)
 
@@ -3465,6 +3467,114 @@ EventService / validation registry / EventSessionSynchronizer.
 - Phase 24.9 event manager is frozen; the QUIZ_DAY ownership guard is the authoritative boundary between generic event management and quiz schedule management
 - Phase 24.10 (Subject-Specific Elective Events) COMPLETE / FROZEN
 - Phase 24.11 (Admin & Scope Management) COMPLETE / FROZEN
+
+## PHASE 24.12 - ATTENDANCE ADMIN & ANALYTICS (COMPLETE / FROZEN, 2026-08-30)
+
+## Objective
+
+Read-only scoped attendance analytics: per-section aggregates, per-subject
+roster aggregates, and per-student canonical attendance reads — all computed
+server-side over the canonical class_sessions + attendance_records pipeline
+(occurrence collapse, elective resolution, outcome application). Attendance
+CORRECTION is a §25 gate and intentionally NOT implemented.
+
+## Discovered gap (documented before implementation)
+- No admin attendance/analytics endpoints existed (only self-scoped student
+  reads and HEAD-only dashboard counts).
+- Canonical pipeline (AttendanceService.get_sessions_with_status,
+  AnalyticsService, group_practical_occurrences) fully reusable.
+- Schema sufficient: no migration. attendance_admin is READ-ONLY.
+
+## What was implemented (additive, read-only, scope-checked)
+- [x] Schemas: AdminSectionAttendanceSummary/List, AdminSubjectAttendanceSummary/List,
+      AdminStudentAttendanceResponse (extends AnalyticsOverviewResponse)
+- [x] Repository: admin_attendance_repo.py (multi-user occurrence query with
+      canonical elective/outcome joins, section/subject lookups)
+- [x] Service: admin_attendance_service.py (scope resolution + per-section
+      per-subject aggregation + per-student scope-gated read reusing AnalyticsService)
+- [x] Endpoints: GET /admin/attendance/sections, /admin/attendance/subjects,
+      /admin/attendance/students/{student_id}
+- [x] Frontend: /admin/attendance page (section + subject tables, scope-aware),
+      AdminShell nav (Attendance, globalOnly: false), dashboard card,
+      FUTURE_AREAS update
+- [x] Verifier verify_phase_24_12.py PASS **30/30** x2 (self-healing cleanup)
+
+## Hard scope (respected)
+- [x] NO attendance correction (decision gate — NOT in scope)
+- [x] NO migration or schema change
+- [x] NO frozen event/session/attendance engine changes
+- [x] NO Phase 24.10 elective semantics changes
+- [x] NO Phase 24.11 scope model changes
+- [x] NO frontend attendance math (all server-side)
+- [x] NO fake controls or placeholder success states
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] verify_phase_24_12.py PASS **30/30** x2 (auth matrix, scope, aggregates,
+      per-student, spoof, cross-scope, inactive scope, baseline restoration)
+- [x] Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS ·
+      24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27 · 24.8 34/34 ·
+      24.9 40/40 · 24.10 35/35 · 24.11 31/31
+- [x] compileall PASS; tsc --noEmit PASS; ESLint PASS; git diff --check clean;
+      alembic head c4d5e6f7a8b9 unchanged (no migration)
+
+## Do Not Touch Again
+- Phase 24.12 attendance admin/analytics is frozen. Attendance correction
+  (mutation) is a §25 decision-gate item, not a Phase 24.12 change.
+
+## PHASE 24.13 - INTEGRATION & HARDENING (COMPLETE / FROZEN, 2026-08-30)
+
+## Objective
+
+Cross-phase integration audit and hardening of the Phase 24 Admin Portal:
+outcome-application fix in admin aggregates, roster role filter, cross-module
+consistency verification, and integration verifier. PHASE 24 (ADMIN PORTAL) IS
+NOW COMPLETE.
+
+## What was implemented (hardening fixes)
+
+- [x] `admin_attendance_repo.py`: apply `_apply_outcome_to_row` to returned rows
+      (subject-specific CANCELLED/EXTRA outcomes now correctly counted in admin
+      section/subject aggregates; previously the outcome was silently ignored).
+- [x] `admin_attendance_service.py`: STUDENT-role filter in subject roster query
+      (excludes the legacy ADMIN account's 165 attendance records from inflating
+      student attendance analytics — mirroring the dashboard's role-filtered counts).
+- [x] `verify_phase_24_13.py`: PASS **30/30** x2 (auth boundary, outcome fix,
+      roster fix, scope isolation, dashboard counts, baseline restoration).
+
+## Hard scope (respected)
+- [x] NO frozen architecture rewrites (attendance engines, quiz engines, calendar,
+      event synchronizer, Phase 23 models, authorization architecture)
+- [x] NO migration (alembic head `c4d5e6f7a8b9` unchanged)
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+- [x] NO invented functionality (subsection scheduling, audit-log schema, room/
+      faculty semantics, destructive deletes, elective-switching)
+
+## Defects classified (not fixed)
+- [x] B — Dashboard `count_class_sessions_cancelled` counts anchor-level only
+      (docstring documents this; occurrence outcomes reported separately)
+- [x] B — Student list `is_placed` is weaker than detail (FK-equivalent)
+- [x] B — 2 stale attendance records on cancelled LECTURE sessions (canonical-safe)
+- [x] B — `useAdminStudentAttendance` hook orphan (kept for future UI)
+- [x] C — `first_quiz_date` misses slot quiz dates for non-anchor elective
+      choosers (latent; pre-Phase-24 core; deferred as decision gate)
+
+## Validation
+- [x] `verify_phase_24_13.py` PASS **30/30** x2 (idempotent, self-cleaning)
+- [x] Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS ·
+      24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27 · 24.8 34/34 ·
+      24.9 40/40 · 24.10 35/35 · 24.11 31/31 · 24.12 30/30
+- [x] `compileall` PASS; `tsc --noEmit` PASS; ESLint PASS; `git diff --check`
+      clean; alembic head `c4d5e6f7a8b9` unchanged (no migration)
+- [x] Data consistency: 22 checks (orphans, duplicates, FK violations) all clean
+- [x] Cross-module integration: elective resolution, event→session, quiz→eligibility,
+      attendance→analytics, dashboard semantics all verified consistent
+- [x] No browser/E2E run; production untouched; `.env` unchanged
+
+## Do Not Touch Again
+- Phase 24 Admin Portal is complete. The next step is the production migration
+  gate (operator action following the Phase 23.12 procedure). No further code
+  work is expected in this execution sequence.
 
 ## PHASE 24.11 - ADMIN & SCOPE MANAGEMENT (COMPLETE / FROZEN, 2026-08-30)
 

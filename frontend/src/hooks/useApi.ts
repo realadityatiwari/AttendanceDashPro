@@ -846,6 +846,42 @@ export function useAdminUserDetail(userId: string | null) {
   return { admin: data, isLoading, isError: error, mutate };
 }
 
+// ===========================================================================
+// Phase 24.12 — Attendance admin & analytics (READ-ONLY)
+// ===========================================================================
+
+import type {
+  AdminSectionAttendanceListResponse,
+  AdminSubjectAttendanceListResponse,
+} from '@/types/api';
+
+export function useAdminAttendanceSections() {
+  const { data, error, isLoading, mutate } = useSWR<AdminSectionAttendanceListResponse>(
+    '/api/v1/admin/attendance/sections',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { data, isLoading, isError: error, mutate };
+}
+
+export function useAdminAttendanceSubjects() {
+  const { data, error, isLoading, mutate } = useSWR<AdminSubjectAttendanceListResponse>(
+    '/api/v1/admin/attendance/subjects',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { data, isLoading, isError: error, mutate };
+}
+
+export function useAdminStudentAttendance(studentId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<AnalyticsOverviewResponse>(
+    studentId ? `/api/v1/admin/attendance/students/${studentId}` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { data, isLoading, isError: error, mutate };
+}
+
 export function useAdminScopeMutations() {
   const assignScope = async (userId: string, payload: AssignScopeRequest): Promise<AdminScopeMutationResponse> =>
     apiFetch(`/api/v1/admin/admins/${userId}/scopes`, { method: 'POST', body: JSON.stringify(payload) });

@@ -8313,6 +8313,218 @@ was intentionally NOT implemented.
 - task.md: Phase 24.11 checklist.
 - walkthrough.md: this entry.
 
-**PHASE 24.11 - COMPLETE / FROZEN.** Next: Phase 24.12 - Attendance admin &
-analytics (NOT STARTED). No production system was intentionally contacted or
-modified. No commit/push/PR made during implementation.
+# Phase 24.12 - Attendance Admin & Analytics (COMPLETE / FROZEN, 2026-08-30)
+
+## Summary
+
+Read-only scoped attendance analytics for the Admin Portal: per-section
+aggregates, per-subject roster aggregates, and per-student canonical
+attendance reads — all computed server-side over the canonical
+class_sessions + attendance_records pipeline (occurrence collapse, elective
+resolution, Phase 23.6 occurrence outcomes). Attendance CORRECTION is a
+decision gate (§25) and intentionally NOT implemented; the phase is read-only.
+
+## Discovered gap (documented before implementation)
+
+- No admin attendance/analytics endpoints existed (only self-scoped student
+  reads and HEAD-only dashboard counts).
+- The canonical pipeline was fully reusable: `AttendanceService`/
+  `AttendanceRepository.get_sessions_with_status` (elective + outcome +
+  practical collapse), `AnalyticsService` (ERP current/forecast), and
+  `app/engines/practical_occurrence.py` (`group_practical_occurrences`,
+  `occurrence_is_cancelled`). No attendance mathematics was reproduced.
+- AuthorizationService + admin_scopes already provide the scope model.
+- Schema sufficient: **no migration** (alembic head `c4d5e6f7a8b9` unchanged).
+
+## What was implemented (additive, read-only, scope-checked)
+
+### Backend
+
+- `schemas/admin_attendance.py`: AdminSectionAttendanceSummary/List,
+  AdminSubjectAttendanceSummary/List, AdminStudentAttendanceResponse
+  (extends AnalyticsOverviewResponse with identity).
+- `repositories/admin_attendance_repo.py`: ONE multi-user occurrence query
+  (canonical elective/outcome joins, per-user scoping, identity columns) —
+  no N+1 per student; section/subject/roster lookups.
+- `services/admin_attendance_service.py`: scope resolution (AuthorizationService),
+  per-section aggregation, per-subject aggregation (roster-scoped), and a
+  per-student scope-gated read that reuses `AnalyticsService.get_overview`.
+- Endpoints in `api/v1/endpoints/admin.py` (require_any_admin):
+  - `GET /api/v1/admin/attendance/sections`
+  - `GET /api/v1/admin/attendance/subjects`
+  - `GET /api/v1/admin/attendance/students/{student_id}`
+
+### Frontend
+
+- `/admin/attendance` page: section + subject aggregate tables (scope-aware),
+  truthful loading/error/empty states, no client-side attendance math.
+- AdminShell nav (Attendance, globalOnly: false) + dashboard card;
+  FUTURE_AREAS updated (next: Integration & Hardening).
+
+### Verifier
+
+- `scripts/verify_phase_24_12.py` (NEW): PASS **30/30** x2, with self-healing
+  prefix-based cleanup (a crash mid-run can never corrupt the baseline).
+
+## Authorization matrix (verified)
+
+| Operation | unauth | STUDENT | HEAD | CLASS | SUBSECTION | ELECTIVE |
+|---|---|---|---|---|---|---|
+| sections | 401 | 403 | all | own | empty | empty |
+| subjects | 401 | 403 | all | own-semester | empty | own roster |
+| student read | 401 | 403 | any | own-section | 404 | own-roster |
+
+Inactive/revoked scopes behave as nonexistent (revoked ELECTIVE -> 403, no
+admin authority). Spoofed role/scope query params cannot elevate. Out-of-scope
+and nonexistent students -> 404 (no existence leak). Cross-scope section
+access denied.
+
+## Verification performed
+
+- Auth matrix 401/403/200 across roles; scope resolution; aggregates over the
+  canonical pipeline; per-student identity + overall; spoof resistance;
+  cross-scope denial; inactive-scope behavior; baseline restoration.
+- Regressions: 24.3 40/40 - 24.5 46/46 - 24.6 46/46 - 24.7a PASS - 24.7b
+  29/29 - 24.7c 30/30 - 24.7g 25/25 - 24.7h 27/27 - 24.8 34/34 - 24.9 40/40 -
+  24.10 35/35 - 24.11 31/31.
+- compileall PASS - tsc --noEmit PASS - ESLint PASS - git diff --check clean -
+  alembic head `c4d5e6f7a8b9` unchanged (no migration).
+- No browser/E2E run performed (operator responsibility). Production
+  untouched; `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  pointer updated (24.12 COMPLETE / FROZEN, verifier 30/30).
+- implementation_plan.md: Phase 24.12 section with the pre-implementation gap
+  analysis + executed record.
+- task.md: Phase 24.12 checklist.
+- walkthrough.md: this entry.
+
+# Phase 24.13 - Integration & Hardening (COMPLETE / FROZEN, 2026-08-30)
+
+## Summary
+
+Cross-phase integration audit and hardening of the entire Phase 24 Admin
+Portal. Two genuine defects were found and fixed (outcome application in admin
+attendance aggregates; STUDENT-role filter in admin subject roster). All
+remaining findings were classified as intended (B), decision-gate deferred (C),
+or production-only (D). The Phase 24 Admin Portal is now COMPLETE.
+
+## Discovery findings
+
+Detailed audit across 10 areas per the Phase 24.13 specification:
+
+### Route audit (39 admin paths)
+All endpoints registered with explicit auth deps (require_any_admin /
+require_head_admin). No dead or duplicated routes. One orphan module
+(backend/app/api/v1/router.py — placeholder, not imported anywhere;
+harmless, documented).
+
+### Authorization integration
+Full matrix verified: HEAD global, CLASS own sections, SUBSECTION
+conservative-empty, ELECTIVE own-roster, STUDENT 403, unauth 401. Inactive
+scopes behave as nonexistent. Spoofed role/scope params cannot elevate.
+
+### Cross-module integration (confirmed correct)
+- **Student→placement→enrollment→timetable→sessions→attendance→analytics:**
+  consistent single source of truth (StudentContextService, same elective
+  resolution, same enrollment scope).
+- **Elective resolution:** all surfaces use `COALESCE(choice.subject_id,
+  ClassSession.subject_id)` — no slot-anchor leakage.
+- **Event→session:** EventSessionSynchronizer is the sole in-app ClassSession
+  writer (SessionRepository.add_session invoked only by the synchronizer).
+- **Quiz→eligibility:** canonical `get_effective_quiz_dates_for_subjects` with
+  elective_scope — consistent across eligibility, dashboard, calendar.
+- **Attendance→analytics:** admin per-student read reuses AnalyticsService
+  (canonical pipeline). Admin aggregates now apply the same outcome transform.
+
+### Dashboard truthfulness
+All counts role-filtered (STUDENT role only) and documented. Counts verified
+against independent SQL queries. The `count_class_sessions_cancelled` metric
+counts anchor-level cancellations only (docstring documents this; occurrence
+outcomes reported separately).
+
+### Data consistency
+22 read-only checks: no orphan records, no duplicate logical records, no FK
+violations, no enrollment mismatches, no timetable/session inconsistencies.
+Two stale attendance records on cancelled LECTURE sessions (2026-07-29/30,
+pre-date cancellation) — canonical reads correctly present them as cancelled
+(occurrence_is_cancelled — LECTURE always cancelled).
+
+### API/frontend contract
+No field mismatches, nullable/non-nullable issues, or inconsistent 404/403
+behavior found. One orphan hook (`useAdminStudentAttendance` — defined but
+unused; kept as the canonical per-student read surface for future UI).
+
+### Performance
+No N+1, no duplicate aggregate queries, no frontend request storms identified
+in the cross-module integration chains.
+
+### Security hardening
+Unauth 401, STUDENT 403, cross-scope isolation verified, spoofed params
+cannot elevate, inactive scopes have no effect.
+
+## Genuine defects found and fixed
+
+### A-1: Outcome application missing in admin aggregates (Phase 24.12 fix)
+
+**File:** `repositories/admin_attendance_repo.py:147`
+**Root cause:** `get_sessions_with_status_for_users` returned raw rows without
+applying `_apply_outcome_to_row`, so Phase 23.6 subject-specific CANCELLED
+occurrence outcomes silently read as pending/attended/missed in the admin
+section/subject aggregates (and EXTRA outcomes were never counted as extra).
+The canonical per-user pipeline applies this transform in every read path.
+**Fix:** apply `AttendanceRepository._apply_outcome_to_row(dict(row._mapping))`
+to each returned row, matching the canonical per-user query exactly.
+**Verification:** 24.13 verifier B2 (cancelled rises by >=1), B3 (missed not
+inflated by stale mark on cancelled-outcome session), B4 (scheduled drops by
+exactly the STUDENT roster count). 24.12 verifier still 30/30.
+
+### A-2: Admin subject roster included legacy ADMIN account (Phase 24.12 fix)
+
+**File:** `services/admin_attendance_service.py:222-228`
+**Root cause:** the subject schedule query (StudentEnrollment) had no role
+filter, so the legacy ADMIN account (role=ADMIN, enrolled in all subjects,
+holding all 165 attendance records) was counted in the student roster and its
+records inflated the attendance percentages.
+**Fix:** add `User.role == UserRole.STUDENT` filter to the roster query —
+mirroring what the dashboard's `count_students` already does.
+**Verification:** 24.13 verifier passes; 24.12 verifier still 30/30 (the
+24.12 verifier's assertions use >= thresholds, so they remain valid).
+
+## Classification summary
+
+| ID | File | Description | Class |
+|---|---|---|---|
+| A-1 | admin_attendance_repo.py | Outcome application missing | **A — FIXED** |
+| A-2 | admin_attendance_service.py | ADMIN in student roster | **A — FIXED** |
+| B-1 | admin_dashboard_repo.py | Dashboard counts anchor-level cancellations | **B — Intended** |
+| B-2 | admin_student_repo.py | List is_placed weaker than detail | **B — FK-equivalent** |
+| B-3 | attendance_records | 2 stale records on cancelled LECTUREs | **B — Canonical-safe** |
+| B-4 | useApi.ts | useAdminStudentAttendance orphan hook | **B — Harmless orphan** |
+| C-1 | student_context_service.py | first_quiz_date misses slot quiz dates | **C — Deferred gate** |
+| D-1 | app/api/v1/router.py | Dead placeholder module | **B — Harmless orphan** |
+
+## Verification performed
+
+- 24.13 verifier: PASS **30/30** x2 (idempotent, self-cleaning)
+- Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS ·
+  24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27 · 24.8 34/34 ·
+  24.9 40/40 · 24.10 35/35 · 24.11 31/31 · 24.12 30/30
+- compileall PASS · tsc --noEmit PASS · ESLint PASS · git diff --check clean
+- Alembic head `c4d5e6f7a8b9` unchanged (no migration)
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row updated (24.13 COMPLETE / FROZEN);
+  operating-state bar + next-phase pointer updated (PHASE 24 COMPLETE).
+- implementation_plan.md: Phase 24.13 section with discovery findings, fixes,
+  verifier, and classification of all defects.
+- task.md: Phase 24.13 checklist with fixed/classified items.
+- walkthrough.md: this entry.
+
+**PHASE 24.13 - COMPLETE / FROZEN.** Phase 24 Admin Portal is now COMPLETE.
+Next: Production migration gate (operator action; Phase 23.12 procedure). No
+production system was intentionally contacted or modified. No commit/push/PR
+made during implementation.

@@ -15,6 +15,7 @@ import {
   CalendarClock,
   ClipboardList,
   CalendarDays,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +47,10 @@ const ADMIN_NAV_ITEMS = [
   // scoped admins). Shown for global administrators only (presentation filter;
   // the backend is authoritative).
   { label: "Admins", href: "/admin/admins", icon: ShieldCheck, globalOnly: true },
+  // Phase 24.12: Attendance analytics (scoped reads — HEAD all, CLASS own
+  // sections, ELECTIVE own subject; backend-enforced). Shown for all admins;
+  // the page renders only in-scope data (presentation; backend authoritative).
+  { label: "Attendance", href: "/admin/attendance", icon: BarChart3, globalOnly: false },
   // Phase 24.5: Academic Structure (HEAD_ADMIN only — backend enforces 403).
   // Shown for global administrators only (presentation filter; backend is authoritative).
   { label: "Structure", href: "/admin/structure", icon: FolderTree, globalOnly: true },

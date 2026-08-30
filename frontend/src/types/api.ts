@@ -1430,3 +1430,50 @@ export interface UpdateScopeActiveRequest {
 export interface AdminScopeMutationResponse {
   scope: AdminScopeRow;
 }
+
+// ===========================================================================
+// Phase 24.12 — Attendance admin & analytics (READ-ONLY)
+// ===========================================================================
+
+export interface AdminSectionAttendanceSummary {
+  section_id: string;
+  section_name: string;
+  students: number;
+  scheduled: number;
+  cancelled: number;
+  extra: number;
+  attended: number;
+  missed: number;
+  pending: number;
+  current_pct: number | null;
+  forecast_pct: number | null;
+}
+
+export interface AdminSectionAttendanceListResponse {
+  items: AdminSectionAttendanceSummary[];
+  total: number;
+  range_start: string | null;
+  range_end: string | null;
+}
+
+export interface AdminSubjectAttendanceSummary {
+  subject_id: string;
+  code: string;
+  name: string;
+  roster: number;
+  scheduled: number;
+  cancelled: number;
+  extra: number;
+  attended: number;
+  missed: number;
+  pending: number;
+  current_pct: number | null;
+  forecast_pct: number | null;
+}
+
+export interface AdminSubjectAttendanceListResponse {
+  items: AdminSubjectAttendanceSummary[];
+  total: number;
+  range_start: string | null;
+  range_end: string | null;
+}
