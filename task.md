@@ -3723,7 +3723,7 @@ selected `users.is_active` and `users.subsection_id`, absent in production â†’
 
 ## Student Portal Usability & Session Recovery Fixes — 2026-08-31
 
-**Status: IMPLEMENTED (frontend, uncommitted).** No schema/DB/backend changes.
+**Status: IMPLEMENTED (frontend, committed as 2c90240).** No schema/DB/backend changes.
 
 ### Session stability (root cause of repeated logout)
 - [x] `AuthContext.tsx`: token destroyed only on genuine 401/403; transient network/cold-start failures no longer log out or redirect
@@ -3782,7 +3782,7 @@ No files modified in this phase.
 
 ## Phase A — Deduplicate /student/me Requests (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted, working tree).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 ### Root cause
 AuthContext called `apiFetch("/api/v1/student/me")` directly (line 47 of committed AuthContext.tsx), while TopNav/UserMenu/MobileBottomNav/GreetingHeader consumed `useProfile()` (SWR same key). AuthContext was outside SWR's dedup ? 2 network requests per authenticated load.
@@ -3818,7 +3818,7 @@ Shared SWR profile resource. AuthContext consumes the same `PROFILE_KEY` constan
 
 ## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Backend-only, minimal.**
+**Status: IMPLEMENTED (committed as 2c90240). Backend-only, minimal.**
 
 ### Root cause
 NotificationService.get_notifications regenerated + upserted ALL projection
@@ -3859,7 +3859,7 @@ Per-user in-process TTL cache (60s) in `backend/app/services/notification_servic
 
 ## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 ### Root cause
 Universal STANDARD_CACHE revalidateOnFocus caused every mounted hook (profile, dashboard summary, analytics, notifications, calendar, events, history, lab, preferences) to refetch simultaneously on PWA foreground transitions.
@@ -3890,7 +3890,7 @@ Universal STANDARD_CACHE revalidateOnFocus caused every mounted hook (profile, d
 
 ## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal PWA only.**
 
 ### Scope
 Repair ONLY the existing Student Portal service worker behavior. No PWA redesign, no backend/API/auth/JWT/DB/migration changes, no Admin Portal, no deploy, no commit.
@@ -3948,7 +3948,7 @@ Repair ONLY the existing Student Portal service worker behavior. No PWA redesign
 
 ## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal only.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal only.**
 
 ### Scope
 Only remaining minor audit issues. No Calendar/notification redesign, no backend/API/DB/migration/Admin changes, no business-logic changes, no deploy, no commit.
@@ -3985,3 +3985,21 @@ Only remaining minor audit issues. No Calendar/notification redesign, no backend
 3. Open notification bell on a phone (or DevTools mobile viewport with simulated notch): sheet is full-width at the bottom, drag handle centered at top, last notification/button not hidden behind the home indicator.
 4. Long notification message wraps and remains readable; Read + Dismiss usable; unread dot present.
 5. Desktop (>= sm): dialogs centered as before, no drag handle visible, calendar cells show truncated reason text as before.
+
+---
+
+## Final Integration & Performance Regression Audit (2026-08-31)
+
+**Status: COMPLETE (code-level audit, no code changes). Phases A–E committed as 2c90240.**
+
+- [x] Auth intact: loading vs unauthenticated hydration; transient failures keep token; genuine 401/403 destroys session; focus/visibility self-heal; no redirect loops; no accidental hard logout
+- [x] /student/me deduplicated (shared PROFILE_KEY; no circular dependency; token-gated so stale profile cannot authenticate)
+- [x] Notifications: shell mount cheap (per-user TTL cache backend + shared SWR key); open-time revalidation; PATCH invalidates cache; no polling; no cross-user leakage
+- [x] SWR: no focus refetch storm; dashboard 2-min dedupe; attendance mutations propagate; calendar keys include year+month; no cache-key collisions; profile coherent
+- [x] Service worker: v2 caches cleaned on activate; network-first navigation; network-only API; valid precache list; no skipWaiting mismatch (registration hook still unmounted — pre-existing, documented)
+- [x] Calendar Phase 6 frozen: presentation-only diffs since 859b1f7
+- [x] Mobile nav: More is 4th item; Profile not duplicated; top-right avatar + bell spacing intact
+- [x] Scope creep: none (no Admin/DB/migration/dependency/dead-code/timeout/overflow-hidden changes)
+- [x] Governance reconciled: Phase A–E statuses updated to "committed as 2c90240"; obsolete uncommitted statuses removed
+- [x] Validation: tsc PASS; lint = pre-existing baseline only; build PASS 25/25; node --check SW PASS; py_compile backend PASS
+- [x] No browser automation, no deploy, no commit/push of this audit

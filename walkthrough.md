@@ -8920,7 +8920,7 @@ Not changed: manifest.json, layout.tsx, next.config.ts, registration wiring (hoo
 
 # Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal only.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal only.**
 
 This phase addressed only the minor residual mobile issues left after the major Calendar/notification fixes in 859b1f7. Areas reviewed but found already sufficiently polished were left unchanged.
 
@@ -8982,5 +8982,121 @@ Not changed: backend, DB, migrations, APIs, Admin Portal, NotificationCenter.tsx
 6. Long notification message: wraps, readable, no clipping.
 7. Read and Dismiss actions usable (touch targets unchanged); unread dot visible.
 8. Desktop spot-check: dialogs centered, no handle bar, calendar cells show reason text as before — zero layout change at `sm+`.
+
+Hard stop.
+
+---
+
+# Final Integration & Performance Regression Audit (2026-08-31)
+
+**Status: COMPLETE (code-level audit, no code changes). Phases A–E are committed as 2c90240.**
+
+## What was audited
+The full diff 859b1f7..HEAD (Phases A–E): 13 files — 4 governance docs plus frontend/src/contexts/AuthContext.tsx, frontend/src/hooks/useApi.ts, frontend/src/lib/api.ts, frontend/src/components/pwa/useServiceWorker.ts, frontend/public/service-worker.js, frontend/src/components/shell/ShellDialog.tsx, frontend/src/components/calendar/CalendarGrid.tsx, frontend/src/components/calendar/DayDetail.tsx, backend/app/services/notification_service.py.
+
+## Findings by area
+
+### 1. Authentication — INTACT
+- Token lifecycle states "unknown" ? "present"/"absent": `loading` is true while token state is unknown or the first profile fetch is in flight, and no redirect fires while loading — the loading state is never mistaken for unauthenticated.
+- The error effect removes the token ONLY on `error.status === 401 || 403`; transient network/5xx failures keep the token, and the focus/visibility listener retries the shared profile fetch (SWR dedupes, so no stacking).
+- Redirects: authenticated user on /login|/signup ? /dashboard; unauthenticated (`tokenStatus === "absent"`) on a protected route ? /login. Both are gated on `!loading` and on token absence, so a transient profile failure can never bounce the user, and there is no cycle.
+- `logout` remains explicit-only, and both logout and refreshUser clear the entire SWR cache (cross-user isolation). No accidental hard logout exists.
+- Note: apiFetch still performs a hard redirect on any 401 (removes token + `window.location.href = '/login'`); AuthContext additionally cleans local state. These agree — no loop because both check current-path/login state.
+- ESLint flags the two intentional `setTokenStatus` calls as set-state-in-effect; this is the documented, deliberate hydration pattern (baseline finding, not a regression).
+
+### 2. /student/me — DEDUPLICATED
+- AuthContext and useProfile() both read SWR key PROFILE_KEY (`/api/v1/student/me`), so one logical request serves both. PROFILE_KEY is defined once in lib/api.ts — no hook/provider circular dependency.
+- The key is null when no token exists, so a cached profile can never surface as `user` while logged out; `user` is derived as `tokenStatus === "present" ? (data ?? null) : null`.
+
+### 3. Notifications — CONSISTENT
+- The bell mounts `useNotifications(!!token)`; the center mounts `useNotifications(open)`. Same SWR key ? deduped; the center's fetch fires on open, and the bell's `mutate()` on open triggers exactly one revalidation. No polling anywhere.
+- Backend (notification_service.py): per-user UUID-keyed in-process TTL cache (60s, monotonic clock); GET serves the cached NotificationsResponse without regenerating projections; read/dismiss PATCH calls `_cache_invalidate` so the badge stays correct. Keyed per user — cross-user leakage impossible. Deployment is single-uvicorn-worker, so the cache is fully effective (N workers would merely duplicate regeneration, still per-user).
+- STANDARD_CACHE for notifications is deliberate and consistent with Phase B (backend TTL absorbs focus revalidation).
+
+### 4. SWR — VERIFIED
+- No global focus storm: focus revalidation only for INTERACTIVE/DASHBOARD resources; SEMI_STATIC/LONG never refetch on focus.
+- Dashboard summary: DASHBOARD_CACHE (2-min dedupe) — freshness acceptable on return; attendance mutations propagate via targeted `mutate()` of daily sessions + dashboard summary in the Track/lab mutation flows.
+- Calendar month key embeds year+month (`/api/v1/calendar?year=..&month=..`) with `keepPreviousData` — one key per month, no collisions; calendar day uses the date-bearing key.
+- Profile: same key/config family in AuthContext (PROFILE_CACHE) and useProfile (INTERACTIVE_CACHE) — revalidateOnFocus + 60s dedupe are equivalent, so behavior is coherent.
+- No excessive polling (no setInterval-based fetching anywhere in the changed code).
+
+### 5. Service worker — VERIFIED (with one known pre-existing gap)
+- Navigation network-first + `cache.put` into `attendancedash-pro-v2` ? fresh shell after deployment; fallback to cached shell only when offline; minimal offline HTML as last resort.
+- `CACHE_VERSION` constant; activate deletes all non-current caches; `/api/*` network-only (503 `{offline:true}` fallback) — authenticated APIs are never cached.
+- Precache list contains only real files; `cache.addAll` errors swallowed; no skipWaiting ? no shell/asset mismatch.
+- KNOWN GAP (pre-existing, previously documented, unchanged): `useServiceWorker()` is not mounted in any component, so no SW registers at runtime. All SW behavior is inert until that wiring is added — a deliberate feature decision kept out of these phases.
+
+### 6. Calendar — FROZEN CONTRACT INTACT
+Diff on calendar files since 859b1f7 contains only classNames, indicator spans, and comments. No engine/API/event-semantic/EventSessionSynchronizer/persistence changes. The SEMI_STATIC month policy + keepPreviousData matches the page's existing selection-survival logic (page derives everything from the returned read model).
+
+### 7. Mobile navigation/header — INTACT
+- MobileBottomNav: grid-cols-4 with Home/Attendance/History/More; More sheet lists Track, Laboratory, Quiz Eligibility, Calendar, Events (+ Feedback only for ADMIN role). Profile is deliberately absent (top-right avatar path). Safe-area padding present on both nav and More sheet.
+- TopNav: `ml-auto flex items-center gap-2 sm:gap-3` contains NotificationBell then UserMenu avatar — spacing unchanged.
+
+### 8. Governance reconciliation
+- All four docs updated: every Phase A–E "uncommitted" status now reads "committed as 2c90240". No obsolete active implementation plans remain; historical (pre-Phase-A) uncommitted notes describe their own point in time and were left as historical record.
+- This audit introduces no code changes; only governance doc updates.
+
+## Scope-creep audit — CLEAN
+- No Admin Portal changes; no DB schema changes; no migrations; no auth rewrite beyond the planned Phase A dedupe; no new dependencies (package.json and requirements untouched); no duplicate caching systems (one SWR policy family + one backend TTL cache); no unnecessary abstractions; no timeout hacks; no overflow:hidden hacks introduced; no fake loading optimizations; no security weakening; no dead code introduced.
+
+## Validation results
+- `npx tsc --noEmit` (frontend): PASS, 0 errors.
+- `npm run lint`: 10 errors / 2 warnings — byte-for-byte the pre-existing baseline (3 admin student dialogs `any`, login/signup `any` + unescaped entity, history page set-state-in-effect x2, AuthContext intentional hydration set-state x2, GlassCard unused import, api.ts location-assign warning). No findings in any Phase A–E file beyond the two documented AuthContext baseline items.
+- `npm run build`: PASS — 25/25 routes prerendered (production NEXT_PUBLIC_API_URL supplied per the intentional 99f6619 guard).
+- `node --check frontend/public/service-worker.js`: PASS.
+- `python -m py_compile backend/app/services/notification_service.py`: PASS.
+- `git diff --check`: clean.
+- No browser automation, no deploy; no commit/push of this audit (per constraints).
+
+## Remaining known limitations
+1. Service-worker registration hook is not mounted — SW features (offline shell, update notices) are inert at runtime until wired. Deliberate follow-up decision.
+2. Notification TTL cache is in-process; multi-worker deployments would duplicate (never leak) regeneration.
+3. `useSWRConfig`-based cache clears on logout/login are client-side only; server-side sessions are unaffected by design.
+4. Admin student dialogs' `any` types and history page set-state-in-effect are pre-existing lint debt, out of scope.
+5. Calendar month data is SEMI_STATIC (5-min dedupe, no focus revalidation): a backend-side calendar change becomes visible on next navigation/mount at worst.
+
+## Manual test checklist
+
+### Desktop web
+1. Login ? dashboard: exactly ONE /student/me request in Network tab (AuthContext + useProfile deduped).
+2. Idle 2+ min, refocus window: only profile + dashboard summary refetch (one each); analytics/history/events do NOT refetch on focus.
+3. Bell badge shows unread count; open panel ? one GET /api/v1/notifications; Read/Dismiss update badge instantly; error banner appears on simulated failure with list unchanged.
+4. Calendar: month switch retains grid (keepPreviousData), selection survives revalidation, DayDetail matches selected day; desktop dialog centered with no drag handle.
+5. Simulate backend 500 on /student/me: user stays on page (no logout, no redirect); on recovery + focus, profile self-heals.
+
+### Mobile PWA
+1. Install prompt works; after install, app opens standalone.
+2. Bottom nav: Home/Attendance/History/More; More sheet shows Track/Laboratory/Quiz Eligibility/Calendar/Events (no Profile); avatar top-right opens profile.
+3. Notification sheet: full-width bottom sheet, drag handle at top, content clears home-indicator safe area; long messages wrap.
+4. Calendar at 320px: no horizontal overflow; non-working days show dot; tap shows full reason in DayDetail; touch targets usable.
+5. No horizontal overflow on any primary page.
+
+### Cold start
+1. Fresh tab with valid token: loading state (no redirect flash), then dashboard; single /student/me + dashboard summary fetch; no /login bounce.
+2. Cold start with backend waking (transient failure): page stays, retry on first focus heals session without re-login.
+3. Cold start without token: redirect to /login; no protected-page flash.
+4. (After SW wiring ships) offline navigation serves cached shell; API returns 503 JSON without stale user data.
+
+### Background ? foreground
+1. PWA reforeground after 3+ min: at most profile + dashboard summary refetch (deduped within their windows); calendar/history/events/analytics do NOT refetch; no request storm in Network tab.
+2. Notification bell badge remains correct after foreground (TTL = 60s).
+3. Attendance marked in Track ? dashboard summary reflects the change immediately (targeted mutate).
+
+### Notification panel
+1. Open panel: fresh fetch (one request); unread rows emphasized with dot.
+2. Read action: row de-emphasizes, unread count decrements; repeat GET reflects state (cache invalidated).
+3. Dismiss action: row disappears; badge updates; backend PATCH idempotent.
+4. Failure path: banner shows backend detail; nothing changes in list; retry works.
+
+### Calendar
+1. Today highlighted; events dot + count on event days; selected day ringed; non-working days muted with dot (mobile) / reason text (desktop).
+2. DayDetail: working/non-working badge, teaching-day badge, substitution override, complete non-working reason, scheduled-classes count, event list — all from backend read model.
+3. Month navigation respects backend semester bounds; Today button disabled in current month; no blank grid during switches.
+
+### Logout/login
+1. Logout: token removed, full SWR cache cleared, redirect to /login; badge and all pages empty of previous user data.
+2. Login as user B: no user A data flash; one fresh /student/me; counts/lists match user B.
+3. Repeated logout/login cycles: no state bleed; bell badge correct for each user.
 
 Hard stop.

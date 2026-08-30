@@ -4668,7 +4668,7 @@ prompts. All 12 Phase 24.0 decision gates remain open.
 
 ## Student Portal Usability & Session Recovery Fixes — 2026-08-31
 
-**Status: IMPLEMENTED (frontend only, uncommitted).**
+**Status: IMPLEMENTED (frontend only, committed as 2c90240).**
 
 - Session stability: AuthContext no longer destroys the JWT on transient
   failures (only genuine 401/403); redirect-to-login gated on token absence;
@@ -4716,7 +4716,7 @@ Risks: notification badge freshness, SW cache staleness testing, AuthContext ini
 
 ## Phase A — Deduplicate /student/me Requests (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 Duplicate root cause: AuthContext independent apiFetch.
 Architecture: shared SWR profile resource (same PROFILE_KEY).
@@ -4729,7 +4729,7 @@ Validation: tsc PASS, ESLint informational (pre-existing class), diff clean.
 
 ## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (backend-only, uncommitted).**
+**Status: IMPLEMENTED (backend-only, committed as 2c90240).**
 
 Previous: GET /api/v1/notifications regenerated all projections on every read.
 New: per-user in-process 60s TTL cache in NotificationService; PATCH
@@ -4741,7 +4741,7 @@ mechanics test PASS, frontend tsc PASS, git diff clean.
 
 ## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 Previous: universal STANDARD_CACHE revalidateOnFocus caused refetch storm on PWA foreground.
 New: INTERACTIVE, DASHBOARD, SEMI_STATIC, STANDARD, LONG — per-resource cache policies.
@@ -4752,7 +4752,7 @@ Files: useApi.ts (hooks), AuthContext.tsx (cache clear). Validation: tsc PASS, e
 
 ## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal PWA only.**
 
 ### Old cache strategy
 - Navigation: **cache-first** (`caches.match` before network) ? stale HTML application shell after deploys.
@@ -4804,7 +4804,7 @@ Files: useApi.ts (hooks), AuthContext.tsx (cache clear). Validation: tsc PASS, e
 
 ## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 Scope: only the remaining minor audit items for the student calendar and notification center. No Calendar redesign, no notification architecture change, no backend/API/DB/Admin changes.
 
@@ -4819,3 +4819,21 @@ Notifications:
 
 Files: ShellDialog.tsx, CalendarGrid.tsx, DayDetail.tsx.
 Validation: tsc PASS; lint errors all pre-existing elsewhere; build PASS (with production API URL set, per repo guard). No commit/push.
+
+---
+
+## Final Integration & Performance Regression Audit (2026-08-31)
+
+**Status: COMPLETE (code-level audit, no code changes). Phases A–E committed as 2c90240.**
+
+Reconciliation: all Phase A–E "uncommitted" statuses above are now marked committed as 2c90240. Final state:
+- Auth: hydration loading/unauthenticated split, transient-failure safety, genuine 401/403 handling, focus/visibility self-heal, no redirect loops — INTACT.
+- /student/me: one shared PROFILE_KEY request via AuthContext + useProfile() — DEDUPLICATED.
+- Notifications: shared gated SWR key, open-time revalidation, backend 60s per-user TTL cache with PATCH invalidation — consistent with Phase B.
+- SWR: INTERACTIVE/DASHBOARD/SEMI_STATIC/LONG/STANDARD policies verified; no focus storm; calendar keys include year+month; attendance mutations propagate via targeted mutate.
+- Service worker: v2 versioned caches, network-first navigation, network-only API, cleaned precache list, no skipWaiting. Known gap (unchanged, documented): registration hook not mounted.
+- Calendar: Phase 6 frozen contract untouched (presentation-only diffs).
+- Mobile nav: More is 4th tab; Profile only via top-right avatar; bell/avatar spacing intact.
+- Scope creep: none (13-file diff, backend = notification_service.py only; no deps/DB/migrations/Admin).
+
+Validation: tsc PASS; lint = exact pre-existing baseline; build PASS 25/25; node --check SW PASS; py_compile backend PASS. No browser automation, no commit/push of this audit.

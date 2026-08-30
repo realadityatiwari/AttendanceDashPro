@@ -4760,7 +4760,7 @@ review. Operator browser verification pending.
 
 ## Phase A — Deduplicate /student/me Requests (2026-08-31)
 
-**Status: IMPLEMENTED (committed to clean tree? no — uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 Duplicate request root cause: AuthContext used `apiFetch("/api/v1/student/me")` directly (not via SWR), while TopNav/UserMenu/MobileBottomNav/GreetingHeader consumed `useProfile()` (SWR with same key). SWR deduped its own consumers but AuthContext was outside that cache — net 2 requests per authenticated load.
 
@@ -4772,7 +4772,7 @@ Validation: `npx tsc --noEmit` PASS. ESLint: AuthContext has 2 `set-state-in-eff
 
 ## Phase B — Notification Fetch & Regeneration Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 ### Previous flow
 Every GET /api/v1/notifications called NotificationService.get_notifications,
@@ -4805,7 +4805,7 @@ git diff --check clean. No DB/migration/engine/JWT/Admin changes. No commit/push
 
 ## Phase C — SWR Cache & Refetch-Storm Optimization (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: IMPLEMENTED (committed as 2c90240).**
 
 ### Previous behavior
 Universal STANDARD_CACHE = { revalidateOnFocus: true, dedupingInterval: 60000 } was used by profile, dashboard summary, analytics overview, notifications, calendar, events, history, lab, preferences — all on every authenticated page. On PWA foreground transition, every mounted hook refetched simultaneously (a "refetch storm"), worst on cold Render instances.
@@ -4834,7 +4834,7 @@ npx tsc --noEmit PASS. ESLint: AuthContext has 2 pre-existing set-state-in-effec
 
 ## Phase D — Service Worker Reliability & Cache Strategy (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal PWA only.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal PWA only.**
 
 ### Old service-worker behavior
 - Navigation requests served **cache-first** (`caches.match` before network) — stale HTML application shell could persist indefinitely after deployment.
@@ -4871,7 +4871,7 @@ npx tsc --noEmit PASS. ESLint: AuthContext has 2 pre-existing set-state-in-effec
 
 ## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
 
-**Status: IMPLEMENTED (uncommitted). Student Portal only. No redesign of Calendar or notification architecture; no backend/API/DB/Admin changes; no business-logic changes.**
+**Status: IMPLEMENTED (committed as 2c90240). Student Portal only. No redesign of Calendar or notification architecture; no backend/API/DB/Admin changes; no business-logic changes.**
 
 ### Calendar remaining issues
 1. Non-working reason text truncated inside small day cells — replaced on mobile (<sm) with a compact dot indicator; the full reason remains in the cell's aria-label (already present) and is rendered completely in DayDetail. On sm+ the truncated reason text with `title` tooltip is preserved.
@@ -4896,3 +4896,47 @@ Full-width mobile sheet, desktop centered dialog, vertical scrolling (max-h caps
 - npm run lint — 10 errors / 2 warnings, all pre-existing in files not touched by this phase (admin dialogs, login/signup, history, AuthContext, GlassCard, api.ts). Changed files lint-clean.
 - npm run build — PASS (25/25 static pages). Note: the build requires NEXT_PUBLIC_API_URL to be a production HTTPS URL (intentional guard from commit 99f6619); verified with a placeholder value.
 - No commit/push, no deploy, no browser automation.
+
+---
+
+## Final Integration & Performance Regression Audit (2026-08-31)
+
+**Status: COMPLETE (code-level audit). No code changes made. Phases A–E committed as 2c90240.**
+
+### 1. Authentication — INTACT
+- Hydration distinguishes loading (`tokenStatus "unknown"` or in-flight first profile fetch) from unauthenticated (`"absent"`); loading never redirects to /login.
+- Transient failures (no status / 5xx) keep the token; only genuine 401/403 removes the token and clears the cached profile (AuthContext.tsx:80-89).
+- Focus/visibility self-healing retry intact (AuthContext.tsx:95-107); SWR dedupes.
+- Redirect logic: /login only when `tokenStatus === "absent"`; /dashboard when authenticated on a public route. No loop possible (loading gates all redirects).
+- No accidental hard logout; logout is explicit-only (plus full-cache clear).
+
+### 2. /student/me — DEDUPLICATED
+- Single shared SWR key PROFILE_KEY ("/api/v1/student/me") consumed by both AuthContext and useProfile() — one logical request; no provider/hook circular dependency; key gated on token presence so a stale cached profile can never surface while logged out.
+
+### 3. Notifications — CONSISTENT WITH PHASE B
+- Bell and center share one SWR key (gated on token presence / center `open`); open triggers one revalidation; no polling. Backend: per-user UUID-keyed 60s TTL in-process cache; PATCH read/dismiss invalidates; never cross-user. STANDARD_CACHE retained for notifications deliberately (backend TTL makes focus revalidation cheap).
+
+### 4. SWR — NO REFETCH STORM
+- INTERACTIVE (profile, dashboard-adjacent reads, daily sessions, quiz, calendar day), DASHBOARD (summary, 2-min dedupe), SEMI_STATIC (analytics, calendar month incl. `keepPreviousData`, events, history, lab, preferences), LONG (subjects, timetable, lab experiments), STANDARD (admin + notifications). Attendance mutations revalidate daily sessions + dashboard summary via mutateAttendance callers. Calendar month keys include year+month. No cache-key collisions (distinct paths per resource); profile coherent across context and hooks.
+
+### 5. Service worker — CONSISTENT
+- Network-first navigation + versioned `cache.put` fallback; CACHE_VERSION "v2" constant; activate deletes non-current caches; `/api/*` network-only (never caches authenticated data); invalid `/_app`/`/_error`/`/globals.css` precache entries removed; no skipWaiting (no shell/asset mismatch); syntax check PASS.
+- Known pre-existing gap (documented, unchanged): the `useServiceWorker()` hook is not mounted, so no SW registers at runtime until wired. Not changed in this audit (mounting is a feature/wiring decision, out of scope).
+
+### 6. Calendar — FROZEN CONTRACT INTACT
+Diff since 859b1f7 touches only presentation classNames/indicators in CalendarGrid/DayDetail/ShellDialog; zero changes to calendar engine semantics, API contract, event semantics, EventSessionSynchronizer, or persistence. `useCalendarMonth` key includes year+month; SEMI_STATIC + keepPreviousData preserves grid behavior.
+
+### 7. Mobile navigation/header — INTACT
+- Bottom nav: Home, Attendance, History + More (4th, grid-cols-4). More sheet lists Track/Laboratory/Quiz Eligibility/Calendar/Events (+ Feedback for ADMIN role) — Profile NOT duplicated.
+- TopNav: NotificationBell then UserMenu avatar in `ml-auto flex gap-2 sm:gap-3` — top-right avatar and bell spacing unchanged.
+
+### 8. Scope-creep audit — CLEAN
+Diff 859b1f7..HEAD: 13 files (4 governance docs + 9 code). Backend: only notification_service.py. NO admin changes, NO DB/migration changes, NO auth rewrite (AuthContext change is the planned Phase A dedupe), NO new dependencies (package.json/requirements unchanged), NO duplicate caching systems, NO timeout hacks, NO overflow:hidden hacks, NO fake loading states, NO security weakening, NO dead code introduced. `py_compile` on notification_service.py PASS.
+
+### Validation
+- `npx tsc --noEmit` — PASS (0 errors).
+- `npm run lint` — 10 errors / 2 warnings; the exact pre-existing baseline (admin student dialogs `any`, login/signup, history set-state-in-effect, AuthContext intentional hydration setState, GlassCard unused import, api.ts location warning). No new findings from Phases A–E.
+- `npm run build` — PASS 25/25 (with production NEXT_PUBLIC_API_URL per the 99f6619 guard).
+- `node --check frontend/public/service-worker.js` — PASS.
+- `python -m py_compile backend/app/services/notification_service.py` — PASS.
+- No browser automation, no deploy, no commit/push of this audit.
