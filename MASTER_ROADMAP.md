@@ -4743,3 +4743,27 @@ bell breathing space, notifications as a mobile bottom sheet, and a cleaner
 calendar grid. No backend/schema/DB/.env changes; `tsc` PASS; ESLint only
 pre-existing errors; `git diff --check` clean; uncommitted for operator
 review. Operator browser verification pending.
+
+---
+
+## Student Portal Audit — Phase 1 Root-Cause Investigation (2026-08-31)
+
+**Status: AUDIT COMPLETE — no code changes in this phase.**
+
+### Findings summary
+- **Auth redirect/logout loop — ROOT CAUSE FOUND and ALREADY FIXED (commit 859b1f7).** AuthContext previously cleared the JWT on ANY profile-fetch error, including transient network/cold-start failures. Trace: dashboard renders ? parallel /student/me (or any) request fails transiently ? token removed + setUser(null) ? redirect effect pushes /login ? re-login loop. Fixed: token cleared only on genuine 401/403; redirect gated on token absence; focus/visibility self-healing retry added.
+- **Remaining perf findings:** duplicate `/api/v1/student/me` (AuthContext direct apiFetch + SWR useProfile); NotificationBell fetches `/notifications` on every shell mount AND the backend regenerates notifications on every read (expensive); STANDARD_CACHE revalidateOnFocus triggers parallel refetches on every mobile focus; service-worker navigation is cache-first (stale-shell risk); Render free cold start is the primary "slow" driver.
+- **UI items 6-10 (mobile nav Profile?More, bell spacing, notification panel, More-sheet Profile removal) — ALREADY FIXED in 859b1f7.** Calendar grid mobile layout improved in 859b1f7.
+- No Admin Portal, DB, migration, or deployment work in this phase.
+
+---
+
+## Phase A — Deduplicate /student/me Requests (2026-08-31)
+
+**Status: IMPLEMENTED (committed to clean tree? no — uncommitted).**
+
+Duplicate request root cause: AuthContext used `apiFetch("/api/v1/student/me")` directly (not via SWR), while TopNav/UserMenu/MobileBottomNav/GreetingHeader consumed `useProfile()` (SWR with same key). SWR deduped its own consumers but AuthContext was outside that cache — net 2 requests per authenticated load.
+
+Architecture chosen: shared SWR profile resource. AuthContext consumes the same `PROFILE_KEY` (`/api/v1/student/me`) via `useSWR`, gated on token presence. SWR coalesces AuthContext and useProfile() into one logical request. The shared key is defined in `lib/api.ts` (neutral leaf both modules import). Auth invariants preserved: token gating prevents stale profile authentication; derived user (no setUser state) ensures immediate null on token removal; cache cleared on logout/401/403; global mutate used for refreshUser cross-key; self-heal retry via `mutate()` on focus/visibility; SWR dedup replaces manual in-flight guard.
+
+Validation: `npx tsc --noEmit` PASS. ESLint: AuthContext has 2 `set-state-in-effect` errors (1 pre-existing pattern, 1 new — same class, CI informational). No eslint changes in useApi.ts/api.ts. git diff --check clean. No backend/DB/schema/.env changes. No commit/push.

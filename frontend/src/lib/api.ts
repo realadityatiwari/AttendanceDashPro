@@ -21,6 +21,11 @@ const API_BASE_URL = configuredApiUrl || DEV_API_URL;
  * uses the same guard and the same base URL. */
 export { API_BASE_URL };
 
+/** Shared SWR cache key for the authenticated student profile endpoint.
+ * AuthContext and useProfile() consume the same key so SWR coalesces them
+ * into one /student/me request. */
+export const PROFILE_KEY = "/api/v1/student/me";
+
 interface FetchOptions extends RequestInit {
   requireAuth?: boolean;
 }

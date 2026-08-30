@@ -4681,3 +4681,46 @@ prompts. All 12 Phase 24.0 decision gates remain open.
 - Verification: tsc PASS; ESLint only pre-existing errors; git diff --check
   clean. No backend/DB/schema/.env changes. Operator browser verification
   pending.
+
+---
+
+## Student Portal Audit — Phase 1 Root-Cause Investigation (2026-08-31)
+
+**Status: AUDIT COMPLETE — no code changes (per scope).**
+
+### Authentication (trace result)
+Lifecycle traced: RootLayout mounts AuthProvider (loading=true) ? loadUser() reads token from localStorage ? GET /student/me via apiFetch ? success sets user ? redirect effect evaluates. On ANY failure the OLD code cleared the token + setUser(null) ? redirect to /login. Root cause of the reported "dashboard appears briefly then redirects / re-login loop": transient request failures (Render cold start, mobile network blips) destroyed the session. FIXED in 859b1f7 (only 401/403 destroys; redirect gated on token absence; focus/visibility self-heal; in-flight guard). Remaining: duplicate /student/me (AuthContext + SWR), no refresh token, apiFetch 401 does a hard page redirect.
+
+### Performance bottlenecks (initial dashboard load)
+1. Duplicate /student/me (AuthContext.loadUser + useProfile SWR consumers).
+2. /notifications fetched on every shell mount + every focus; backend NotificationService regenerates all projections on every read.
+3. /dashboard/summary and /analytics/overview both run semester-scoped session scans + per-subject summaries (heavy but already N+1-optimized).
+4. STANDARD_CACHE revalidateOnFocus=true -> parallel refetch burst on every mobile focus.
+5. Render free-tier cold start (primary "slow" driver) — infra, not code.
+6. service-worker.js serves navigation HTML cache-first (stale-shell risk after deploys).
+
+### Calendar
+Original: aspect-square day cells (cramped on 7-col mobile), full weekday labels at 10px, truncated labels, no Today legend. FIXED in 859b1f7 (min-h cells, short weekday letters on mobile, Today badge, clearer legend, sticky desktop day-detail). Remaining: optional DayDetail mobile polish.
+
+### Mobile nav / header / notifications
+All user-reported items 6-10 FIXED in 859b1f7: bottom tab Profile->More, Profile removed from More sheet, bell spacing (gap-2/gap-3, larger tap target), notification center as mobile bottom sheet (ShellDialog mobileSheet) with wrapping action row.
+
+### Recommended minimal implementation (NOT executed)
+- Dedupe /student/me (share SWR cache with AuthContext).
+- Gate notification fetch to bell-open + throttled interval, or server-side daily regeneration cache.
+- Add focusOnly/throttle to STANDARD_CACHE for slow endpoints; switch SW navigation to network-first/stale-while-revalidate.
+- Optional DayDetail mobile polish.
+Risks: notification badge freshness, SW cache staleness testing, AuthContext initial-user timing.
+
+---
+
+## Phase A — Deduplicate /student/me Requests (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+Duplicate root cause: AuthContext independent apiFetch.
+Architecture: shared SWR profile resource (same PROFILE_KEY).
+Auth invariants: see walkthrough.md.
+Files: lib/api.ts (PROFILE_KEY export), useApi.ts (useProfile uses PROFILE_KEY),
+AuthContext.tsx (SWR-based rewrite, derived user, no loadUser).
+Validation: tsc PASS, ESLint informational (pre-existing class), diff clean.

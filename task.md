@@ -3745,3 +3745,71 @@ selected `users.is_active` and `users.subsection_id`, absent in production â†’
 ### Verification
 - [x] `npx tsc --noEmit` PASS; ESLint: only pre-existing errors; `git diff --check` clean
 - [ ] Operator browser verification (login persistence, mobile nav/notifications/calendar)
+
+---
+
+## Student Portal Audit — Phase 1 Root-Cause Investigation (2026-08-31)
+
+**Status: AUDIT COMPLETE. No fixes implemented in this phase (per scope).**
+
+### Auth
+- [x] Traced full lifecycle: mount ? loadUser ? token restore ? parallel initial requests ? 401/error ? redirect decision
+- [x] ROOT CAUSE (logout loop): token destroyed on ANY error (cold start/network) — FIXED in 859b1f7 (401/403 only; redirect only when no token; focus self-heal)
+- [x] apiFetch 401 = hard `window.location.href=/login` + token removal (genuine-expiry path; full reload)
+- [x] JWT expiry 480 min, no refresh token — hard re-login every ~8h (expected)
+- [ ] REMAINING: duplicate /student/me (AuthContext + useProfile SWR) — dedupe recommended
+- [ ] REMAINING: no silent token refresh (future)
+
+### Performance
+- [x] Initial dashboard request set: /student/me x2 (duplicate), /dashboard/summary, /analytics/overview, /notifications — 5 calls, 2 heavy engines (dashboard+analytics both scan semester sessions + per-subject summaries), notifications regenerate on every read
+- [x] Render free cold start = primary slow-load driver; old logout-on-error compounded it (forced reload each cold start)
+- [x] STANDARD_CACHE revalidateOnFocus=true ? refetch burst on every mobile focus
+- [x] SW navigation cache-first for HTML (stale-shell risk)
+- [ ] REMAINING: gate/throttle notifications fetch; fix SW navigation strategy; consider cache tuning
+
+### Calendar / mobile nav / notifications
+- [x] Calendar original issues (aspect-square cramped cells, full weekday labels, no Today legend) — FIXED in 859b1f7
+- [x] Mobile nav Profile?More + More-sheet Profile removal — FIXED in 859b1f7
+- [x] Notification bell breathing space — FIXED in 859b1f7
+- [x] Notification panel mobile bottom-sheet layout — FIXED in 859b1f7
+
+### Files examined (read-only)
+AuthContext, api.ts, login/signup, layout.tsx, AppShell, TopNav, UserMenu, MobileBottomNav, NotificationBell/Center, ShellDialog, CalendarGrid/DayDetail, calendar page, dashboard page + 6 home cards, useApi.ts, service-worker.js, useServiceWorker.ts, next.config.ts, globals.css, backend deps.py, student/dashboard/calendar/notifications endpoints + services, config.py, attendance_repo, student_context_service.
+
+No files modified in this phase.
+
+---
+
+## Phase A — Deduplicate /student/me Requests (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted, working tree).**
+
+### Root cause
+AuthContext called `apiFetch("/api/v1/student/me")` directly (line 47 of committed AuthContext.tsx), while TopNav/UserMenu/MobileBottomNav/GreetingHeader consumed `useProfile()` (SWR same key). AuthContext was outside SWR's dedup ? 2 network requests per authenticated load.
+
+### Architecture
+Shared SWR profile resource. AuthContext consumes the same `PROFILE_KEY` constant via `useSWR`, gated on token presence. SWR coalesces AuthContext and useProfile() into one request for the same key.
+
+### Auth invariants preserved
+- [x] Token gating: key active only when `tokenStatus === "present"`; no token ? no fetch, user = null
+- [x] Stale profile protection: user derived (not state), cache cleared on logout (`globalMutate(……, () => undefined, {revalidate:false})`); refreshUser clears+revalidates on login
+- [x] Hydration: `tokenStatus="unknown"` ? loading=true ? no redirect
+- [x] Transient failure: error without status ? token preserved, no redirect, SWR revalidateOnFocus retries + manual visibility listener
+- [x] 401/403: apiFetch hard-redirects + effect clears state and cache
+- [x] Self-heal: `mutate()` on focus/visibility when token present but user null
+- [x] In-flight guard: SWR dedupingInterval (60s) replaces manual useRef
+- [x] Login/signup: `refreshUser` sets present + `globalMutate(PROFILE_KEY)` revalidates
+
+### Files changed
+- `frontend/src/lib/api.ts` — added `PROFILE_KEY` export
+- `frontend/src/hooks/useApi.ts` — useProfile uses `PROFILE_KEY`
+- `frontend/src/contexts/AuthContext.tsx` — entire rewrite: SWR-based, derived user, no loadUser
+
+### Files NOT changed
+- Backend, DB, migrations, Admin Portal, api.ts 401 semantics, next.config, render.yaml, vercel.json
+
+### Validation
+- `npx tsc --noEmit` PASS
+- ESLint: AuthContext 2 errors (same `react-hooks/set-state-in-effect` rule, 1 pre-existing, 1 new — CI informational, no change in useApi/api.ts)
+- `git diff --check` clean
+- No commit/push

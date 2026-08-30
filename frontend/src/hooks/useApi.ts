@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, PROFILE_KEY } from '@/lib/api';
 import {
   StudentProfile,
   SubjectResponse,
@@ -61,7 +61,7 @@ const STANDARD_CACHE = {
 };
 
 export function useProfile() {
-  const { data, error, isLoading, mutate } = useSWR<StudentProfile>('/api/v1/student/me', fetcher, STANDARD_CACHE);
+  const { data, error, isLoading, mutate } = useSWR<StudentProfile>(PROFILE_KEY, fetcher, STANDARD_CACHE);
   return {
     profile: data,
     isLoading,

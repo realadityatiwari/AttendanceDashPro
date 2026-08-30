@@ -8678,3 +8678,91 @@ mobile networks, brief 5xx blips). Result: dashboard briefly renders, then
   Profile entry; notifications open as a bottom sheet; calendar grid
   readable on a phone.
 - Desktop: calendar + day detail look correct.
+
+---
+
+# Student Portal Audit — Phase 1 Root-Cause Investigation (2026-08-31)
+
+## Verdict
+Audit-only phase. No code changes, no DB, no migration, no deployment.
+
+## Auth root cause (already fixed in 859b1f7)
+The reported "dashboard flashes then redirects to /login" + repeated re-login
+was caused by AuthContext destroying the JWT on ANY profile-fetch error —
+including transient Render cold-start and mobile-network failures. On cold
+start the first /student/me (or parallel) request fails, the token is
+removed, user is nulled, and the redirect effect sends the user to /login.
+Fix (859b1f7): session destroyed only on genuine 401/403; redirect only when
+no token exists; focus/visibility self-healing retry; in-flight guard.
+
+## Remaining performance findings (not fixed)
+1. Duplicate /api/v1/student/me per load (AuthContext direct apiFetch +
+   useProfile SWR across TopNav/UserMenu/MobileBottomNav/GreetingHeader).
+2. NotificationBell fetches /notifications on shell mount + every focus; the
+   backend regenerates all notification projections on every read (heavy).
+3. Dashboard initial load = /student/me x2 + /dashboard/summary +
+   /analytics/overview + /notifications; the summary and analytics endpoints
+   each scan semester sessions + per-subject summaries.
+4. STANDARD_CACHE revalidateOnFocus=true -> refetch burst on every mobile
+   PWA focus/background-foreground switch.
+5. Render free-tier cold start is the dominant "loads very slowly" cause
+   (infra; the old logout-on-error made it compound with forced reloads).
+6. service-worker.js navigation = cache-first HTML (stale shell after
+   deploy; SWV network-first only for /api/*).
+
+## Calendar / nav / notifications
+User-reported UI items 5-10 were already fixed in 859b1f7 (calendar grid
+mobile layout + legend, Profile->More bottom tab, Profile removed from More
+sheet, notification bell spacing, notification center as mobile bottom
+sheet). Verified present in current HEAD.
+
+## Files examined (read-only)
+See implementation_plan.md / task.md audit record. No source files modified
+in this phase.
+
+## Recommended next phase (minimal)
+Dedupe profile fetch; gate/throttle notifications; tune SWR revalidation;
+fix SW navigation caching; optional DayDetail polish. Operator to confirm
+priority before implementation.
+
+---
+
+# Phase A — Deduplicate /student/me Requests (2026-08-31)
+
+## Root cause
+AuthContext issued an independent `apiFetch("/api/v1/student/me")` while
+TopNav/UserMenu/MobileBottomNav/GreetingHeader consumed `useProfile()` (SWR
+with the same key). SWR deduped its own consumers, but AuthContext was
+outside that cache — producing 2 requests per authenticated load.
+
+## Architecture chosen
+Shared SWR profile resource. AuthContext now consumes the same `PROFILE_KEY`
+via `useSWR`, gated on `tokenStatus` (present/absent/unknown). SWR coalesces
+AuthContext and useProfile() into one logical request. The key is defined in
+`lib/api.ts` (neutral leaf, both modules already import it).
+
+## How auth invariants were preserved
+| Invariant | Mechanism |
+|---|---|
+| Stale profile after logout | Cache cleared via `globalMutate(…, () => undefined, {revalidate:false})`; user derived (not state) — null immediately when token absent |
+| Hydration flash | `tokenStatus="unknown"` ? loading=true, no redirect until resolved |
+| Transient error | Error without status ? token kept, user null, no redirect, SWR retry on focus |
+| 401/403 | apiFetch hard-redirects (existing contract); effect synchronizes state + clears cache |
+| Self-heal | `mutate()` on focus/visibility when token present but user null |
+| In-flight guard | SWR dedupingInterval (60s) replaces manual ref |
+| Login/signup | `refreshUser` sets present + `globalMutate(PROFILE_KEY)` revalidates |
+
+## Validation
+`npx tsc --noEmit` PASS. ESLint: AuthContext 2 set-state-in-effect errors
+(1 pre-existing, 1 new — same class, CI informational). git diff --check
+clean. No backend/DB/schema/.env changes. No commit/push.
+
+## Manual test checklist
+1. Open /dashboard with a valid token ? exactly one `/api/v1/student/me`
+   request in DevTools Network tab.
+2. Open /login (no token) ? zero `/student/me` requests.
+3. Log in ? token stored, `/student/me` fetched once, navigate to dashboard.
+4. After a transient network failure (offline briefly) ? stay logged in,
+   self-heal on focus.
+5. Logout ? token removed, no `/student/me` after redirect to /login.
+6. Incorrect credentials ? remaining contract unchanged.
