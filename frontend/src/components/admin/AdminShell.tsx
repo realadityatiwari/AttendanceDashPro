@@ -42,6 +42,10 @@ const ADMIN_NAV_ITEMS = [
   // HEAD-only, backend-enforced). Shown for all admins; the page hides write
   // controls for non-global admins (presentation; backend authoritative).
   { label: "Events", href: "/admin/events", icon: CalendarDays, globalOnly: false },
+  // Phase 24.11: Admins & Scopes (HEAD_ADMIN only — backend enforces 403 for
+  // scoped admins). Shown for global administrators only (presentation filter;
+  // the backend is authoritative).
+  { label: "Admins", href: "/admin/admins", icon: ShieldCheck, globalOnly: true },
   // Phase 24.5: Academic Structure (HEAD_ADMIN only — backend enforces 403).
   // Shown for global administrators only (presentation filter; backend is authoritative).
   { label: "Structure", href: "/admin/structure", icon: FolderTree, globalOnly: true },

@@ -3370,7 +3370,7 @@ verified. Next: Phase 24.8 — Quiz Schedule Manager.
 - Phase 24.8 (Quiz Schedule Manager) COMPLETE (2026-08-30).
 Phase 24.9 (Event Manager) COMPLETE (2026-08-30).
 Phase 24.10 (Subject-Specific Elective Events) COMPLETE (2026-08-30).
-Phase 24.11 (Admin & Scope Management) requires a fresh execution prompt.
+Phase 24.11 (Admin & Scope Management) COMPLETE / FROZEN (2026-08-30).
 
 ## PHASE 24.10 - SUBJECT-SPECIFIC ELECTIVE EVENTS (COMPLETE, 2026-08-30)
 
@@ -3463,7 +3463,65 @@ EventService / validation registry / EventSessionSynchronizer.
 
 ## Do Not Touch Again
 - Phase 24.9 event manager is frozen; the QUIZ_DAY ownership guard is the authoritative boundary between generic event management and quiz schedule management
-- Phase 24.10 (Subject-Specific Elective Events) requires a fresh execution prompt
+- Phase 24.10 (Subject-Specific Elective Events) COMPLETE / FROZEN
+- Phase 24.11 (Admin & Scope Management) COMPLETE / FROZEN
+
+## PHASE 24.11 - ADMIN & SCOPE MANAGEMENT (COMPLETE / FROZEN, 2026-08-30)
+
+## Objective
+
+Expose and manage administrative ownership and scope across the existing
+admin/event architecture: admin user list/detail (effective roles + scopes)
+and scope assign/revoke/activate — HEAD_ADMIN only — reusing the canonical
+`admin_scopes` table (Phase 23.11) as the authoritative scope store.
+
+## Discovered gap (documented before implementation)
+- `admin_scopes` table ALREADY EXISTS with CHECK `ck_admin_scopes_role_scope`
+  (HEAD_ADMIN all-NULL / CLASS_ADMIN section / SUBSECTION_ADMIN subsection /
+  ELECTIVE_ADMIN subject) and the `active` DB toggle.
+- `AuthorizationService` already resolves effective admin roles (legacy
+  ADMIN -> HEAD_ADMIN + active scopes) — reused unchanged.
+- Scope assign/revoke/activate semantics are **[C] confirmed** by the
+  capability matrix; revoke = `active=false` (canonical deprovisioning).
+- Account creation / password bootstrap is a DECISION GATE (§25 gate 8)
+  — intentionally NOT implemented.
+- The ONLY gap was the missing admin-management read model + endpoints + UI.
+- Schema: "none (table exists)". NO migration.
+
+## What was implemented (HEAD_ADMIN only; matrix FULL | NO | NO | NO)
+- [x] Schemas: `AdminUserSummary/List`, `AdminUserDetail`, `AdminScopeRow`,
+      `AssignScopeRequest`, `UpdateScopeActiveRequest` (`admin_admins.py`)
+- [x] Repository: `admin_admin_repo.py` (bounded admin/scope queries + names)
+- [x] Service: `admin_admin_service.py` (list/detail, assign, deactivate/
+      reactivate; role-shape + duplicate + ownership validation)
+- [x] Endpoints: `GET /api/v1/admin/admins`, `GET /admins/{user_id}`,
+      `POST /admins/{user_id}/scopes` (201), `PATCH /admins/{user_id}/scopes/{id}`
+- [x] Frontend: `/admin/admins` list + detail dialog + `AssignScopeDialog`,
+      AdminShell nav (Admins, globalOnly), dashboard card + FUTURE_AREAS update
+- [x] Verifier `verify_phase_24_11.py` PASS **31/31** x2 (idempotent)
+
+## Hard scope (respected)
+- [x] NO new role system; NO parallel authorization; backend authoritative
+- [x] NO account creation / password bootstrap (decision gate deferred)
+- [x] NO physical scope deletion (revoke = deactivate)
+- [x] NO migration / schema change; NO change to frozen event architecture
+- [x] NO decision gate resolved (all 12 Phase 24.0 gates remain open)
+
+## Validation
+- [x] `verify_phase_24_11.py` PASS **31/31** x2 (auth matrix, scope CRUD,
+      spoof resistance, cross-user 404, baseline restoration)
+- [x] Regressions: 24.3 40/40 · 24.5 46/46 · 24.6 46/46 · 24.7a PASS ·
+      24.7b 29/29 · 24.7c 30/30 · 24.7g 25/25 · 24.7h 27/27 · 24.8 34/34 ·
+      24.9 40/40 · **24.10 35/35**
+- [x] `compileall` PASS; `tsc --noEmit` PASS; ESLint PASS; `git diff --check`
+      clean; alembic head `c4d5e6f7a8b9` unchanged
+- [x] No browser/E2E run (operator responsibility); production untouched;
+      `.env` unchanged (local dev target)
+
+## Do Not Touch Again
+- Phase 24.11 admin/scope manager is frozen; `admin_scopes` remains the
+  authoritative scope store; any account-provisioning design is a §25
+  decision-gate item, not a Phase 24.11 change.
 
 ## PHASE 24.8 - QUIZ SCHEDULE MANAGER (COMPLETE, 2026-08-30)
 

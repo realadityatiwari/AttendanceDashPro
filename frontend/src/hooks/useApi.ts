@@ -815,3 +815,45 @@ export function useAdminEventMutations() {
 
   return { createEvent, updateEvent, deactivateEvent };
 }
+
+// ===========================================================================
+// Phase 24.11 — Admin & Scope Management (HEAD_ADMIN only)
+// ===========================================================================
+
+import type {
+  AdminUserListResponse,
+  AdminUserDetail,
+  AdminScopeMutationResponse,
+  AssignScopeRequest,
+  UpdateScopeActiveRequest,
+} from '@/types/api';
+
+export function useAdminUsers() {
+  const { data, error, isLoading, mutate } = useSWR<AdminUserListResponse>(
+    '/api/v1/admin/admins',
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { admins: data?.items, total: data?.total ?? 0, isLoading, isError: error, mutate };
+}
+
+export function useAdminUserDetail(userId: string | null) {
+  const { data, error, isLoading, mutate } = useSWR<AdminUserDetail>(
+    userId ? `/api/v1/admin/admins/${userId}` : null,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return { admin: data, isLoading, isError: error, mutate };
+}
+
+export function useAdminScopeMutations() {
+  const assignScope = async (userId: string, payload: AssignScopeRequest): Promise<AdminScopeMutationResponse> =>
+    apiFetch(`/api/v1/admin/admins/${userId}/scopes`, { method: 'POST', body: JSON.stringify(payload) });
+
+  const setScopeActive = async (userId: string, scopeId: string, active: boolean): Promise<AdminScopeMutationResponse> =>
+    apiFetch(`/api/v1/admin/admins/${userId}/scopes/${scopeId}`, {
+      method: 'PATCH', body: JSON.stringify({ active } satisfies UpdateScopeActiveRequest),
+    });
+
+  return { assignScope, setScopeActive };
+}

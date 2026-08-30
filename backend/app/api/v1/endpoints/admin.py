@@ -61,6 +61,19 @@ from app.schemas.admin_events import (
     AdminEventMutationResponse,
     AdminEventResponse,
 )
+from app.schemas.admin_admins import (
+    AdminUserListResponse,
+    AdminUserDetail,
+    AdminScopeMutationResponse,
+    AssignScopeRequest,
+    UpdateScopeActiveRequest,
+)
+from app.services.admin_admin_service import (
+    AdminAdminService,
+    AdminAdminDomainError,
+    AdminAdminNotFoundError,
+    AdminAdminConflictError,
+)
 from app.services.admin_quiz_service import (
     AdminQuizService,
     AdminQuizError,
@@ -961,3 +974,85 @@ async def deactivate_admin_event(
         return await AdminEventService(db).deactivate_event(current_user, event_id)
     except AdminEventDomainError as exc:
         _raise_event_admin_error(exc)
+
+# ===========================================================================
+# Phase 24.11 — Admin & Scope Management
+# ===========================================================================
+
+def _raise_admin_admin_error(exc: AdminAdminDomainError) -> None:
+    raise HTTPException(status_code=exc.http_status, detail=exc.detail)
+
+
+@router.get("/admins", response_model=AdminUserListResponse)
+async def list_admin_users(
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.11: list users holding administrative authority (legacy ADMIN
+    or active admin_scopes rows) with their effective roles + scope counts.
+    Authorization: HEAD_ADMIN only (matrix FULL | NO | NO | NO).
+    """
+    try:
+        return await AdminAdminService(db).list_admins()
+    except AdminAdminDomainError as exc:
+        _raise_admin_admin_error(exc)
+
+
+@router.get("/admins/{user_id}", response_model=AdminUserDetail)
+async def get_admin_user_detail(
+    user_id: UUID,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.11: admin user detail — effective roles + ALL scope rows
+    (active + inactive). Authorization: HEAD_ADMIN only. Nonexistent user
+    -> 404.
+    """
+    try:
+        return await AdminAdminService(db).get_admin(user_id)
+    except AdminAdminDomainError as exc:
+        _raise_admin_admin_error(exc)
+
+
+@router.post("/admins/{user_id}/scopes", response_model=AdminScopeMutationResponse, status_code=201)
+async def assign_admin_scope(
+    user_id: UUID,
+    request: AssignScopeRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.11: assign a scope to an admin user (HEAD_ADMIN only).
+
+    The role-scope shape is validated server-side (mirror of the DB CHECK
+    ck_admin_scopes_role_scope; the DB is the backstop). HEAD_ADMIN scope
+    rows are never created (HEAD authority comes from the legacy
+    users.role). Duplicate active scope for (user, role, target) -> 409.
+    """
+    try:
+        return await AdminAdminService(db).assign_scope(user_id, request)
+    except AdminAdminDomainError as exc:
+        _raise_admin_admin_error(exc)
+
+
+@router.patch("/admins/{user_id}/scopes/{scope_id}", response_model=AdminScopeMutationResponse)
+async def set_admin_scope_active(
+    user_id: UUID,
+    scope_id: UUID,
+    request: UpdateScopeActiveRequest,
+    _admin: User = Depends(require_head_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 24.11: deactivate (revoke) or reactivate a scope (HEAD_ADMIN only).
+
+    The canonical path is `active=false` (revoke) / `active=true`
+    (reactivate) — never physical deletion. The row must belong to the
+    target user (404 otherwise).
+    """
+    try:
+        return await AdminAdminService(db).set_scope_active(scope_id, request.active, user_id=user_id)
+    except AdminAdminDomainError as exc:
+        _raise_admin_admin_error(exc)

@@ -8229,6 +8229,90 @@ change.
 - task.md: Phase 24.10 checklist.
 - walkthrough.md: this entry.
 
-**PHASE 24.10 - ✅ COMPLETE.** Next: Phase 24.11 - Admin & Scope Management
-(NOT STARTED). No production system was intentionally contacted or modified.
-No commit/push/PR made during implementation.
+# Phase 24.11 - Admin & Scope Management (COMPLETE / FROZEN, 2026-08-30)
+
+## Summary
+
+Exposed and managed administrative ownership and scope across the existing
+admin architecture: admin user list/detail (effective roles + scopes) and
+scope assign/revoke/activate - HEAD_ADMIN only - reusing the canonical
+`admin_scopes` table (Phase 23.11) as the authoritative scope store. The
+capability matrix classifies every admin-management operation FULL | NO | NO |
+NO; account creation / password bootstrap is a decision gate (§25 gate 8) and
+was intentionally NOT implemented.
+
+## Discovered gap (documented before implementation)
+
+- `admin_scopes` ALREADY EXISTS with CHECK `ck_admin_scopes_role_scope`
+  (HEAD_ADMIN all-NULL / CLASS_ADMIN section / SUBSECTION_ADMIN subsection /
+  ELECTIVE_ADMIN subject) and the `active` DB toggle.
+- `AuthorizationService` already resolves effective admin roles (legacy
+  `users.role == ADMIN` -> HEAD_ADMIN + active scopes); `is_head_admin`,
+  `can_access_subject`, `can_mutate_event`, `get_active_scopes` reused as-is.
+- Scope assign/revoke/activate semantics are [C] confirmed; revoke =
+  `active=false` (canonical deprovisioning, never physical deletion).
+- The ONLY gap was the missing admin-management read model + endpoints + UI.
+- Schema: "none (table exists)". NO migration required.
+
+## What was implemented (HEAD_ADMIN only; backend authoritative)
+
+### Backend (additive)
+
+- `schemas/admin_admins.py`: `AdminUserSummary/List`, `AdminUserDetail`,
+  `AdminScopeRow` (resolved names), `AssignScopeRequest`, `UpdateScopeActiveRequest`.
+- `repositories/admin_admin_repo.py`: bounded admin/scope queries + name lookups.
+- `services/admin_admin_service.py`: list/detail, assign, deactivate/reactivate;
+  role-shape validation (mirror of the DB CHECK), duplicate-scope 409, cross-user
+  scope 404, HEAD_ADMIN scope-row 409, nonexistent target 404.
+- Endpoints in `api/v1/endpoints/admin.py`:
+  - `GET /api/v1/admin/admins` - admin user list (legacy ADMIN OR active scope)
+  - `GET /api/v1/admin/admins/{user_id}` - detail with all scope rows
+  - `POST /api/v1/admin/admins/{user_id}/scopes` (201) - assign a scope
+  - `PATCH /api/v1/admin/admins/{user_id}/scopes/{scope_id}` - deactivate/reactivate
+
+### Frontend (minimal, inside the existing AdminShell)
+
+- `/admin/admins` page: admin user table (effective roles, active scope
+  counts), detail dialog (per-scope Revoke/Reactivate), AssignScopeDialog
+  (CLASS_ADMIN section / ELECTIVE_ADMIN subject targets).
+- AdminShell nav entry (Admins, globalOnly) + dashboard card; FUTURE_AREAS
+  renumbered (24.12 Sessions & Occurrences, 24.13 Attendance & Analytics).
+
+### Verifier
+
+- `scripts/verify_phase_24_11.py` (NEW): PASS **31/31** x2 (idempotent).
+
+## Verification performed
+
+- Auth matrix: unauth 401; STUDENT 403; CLASS_ADMIN/ELECTIVE_ADMIN 403
+  (matrix FULL | NO | NO | NO); HEAD_ADMIN 200.
+- Reads: list includes legacy ADMIN (global) + scoped fixtures; detail roles +
+  resolved scope names; nonexistent user 404.
+- Writes: assign CLASS_ADMIN + ELECTIVE_ADMIN (201); duplicate active scope
+  409; wrong role-shape 422; HEAD_ADMIN scope-row 409; nonexistent
+  section/subject 404; revoke (active=false, row preserved) then reactivate;
+  cross-user scope ID 404 (no leak).
+- Spoof resistance: query `role`/`scope` params cannot elevate scoped admins
+  or students (403).
+- Baseline restored: `admin_scopes` back to 0 after cleanup; active session
+  unchanged.
+- Regressions: 24.3 40/40 - 24.5 46/46 - 24.6 46/46 - 24.7a PASS - 24.7b
+  29/29 - 24.7c 30/30 - 24.7g 25/25 - 24.7h 27/27 - 24.8 34/34 - 24.9 40/40 -
+  24.10 35/35.
+- `compileall` PASS - `tsc --noEmit` PASS - ESLint PASS - `git diff --check`
+  clean - alembic head `c4d5e6f7a8b9` unchanged (no migration).
+- No browser/E2E run performed (operator responsibility). Production
+  untouched; `.env` unchanged (local dev target).
+
+## Governance
+
+- MASTER_ROADMAP.md: Phase 24 status row + operating-state bar + next-phase
+  pointer updated (24.11 COMPLETE / FROZEN, verifier 31/31).
+- implementation_plan.md: Phase 24.11 section with the pre-implementation gap
+  analysis.
+- task.md: Phase 24.11 checklist.
+- walkthrough.md: this entry.
+
+**PHASE 24.11 - COMPLETE / FROZEN.** Next: Phase 24.12 - Attendance admin &
+analytics (NOT STARTED). No production system was intentionally contacted or
+modified. No commit/push/PR made during implementation.

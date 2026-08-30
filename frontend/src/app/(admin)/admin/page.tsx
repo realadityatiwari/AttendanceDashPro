@@ -31,13 +31,12 @@ import { AdminDashboardResponse } from "@/types/api";
 // NOT implemented and no route exists; the phase hint is the discovery
 // sequence, never a claim of availability.
 // NOTE: Phase 24.5 (Academic Structure), Phase 24.6 (Curriculum), Phase
-// 24.7 (Timetable), Phase 24.8 (Quiz Schedules) and Phase 24.9 (Events) are
-// NOW implemented and have been removed from this list and added to the
-// "Available now" section.
+// 24.7 (Timetable), Phase 24.8 (Quiz Schedules), Phase 24.9 (Events) and
+// Phase 24.10 (Subject-Specific Elective Events) are NOW implemented and have
+// been removed from this list and added to the "Available now" section.
 const FUTURE_AREAS: { label: string; phase: string }[] = [
-  { label: "Sessions & Occurrences", phase: "Phase 24.10" },
-  { label: "Admin & Scope Management", phase: "Phase 24.11" },
-  { label: "Attendance & Analytics", phase: "Phase 24.12" },
+  { label: "Sessions & Occurrences", phase: "Phase 24.12" },
+  { label: "Attendance & Analytics", phase: "Phase 24.13" },
 ] as const;
 
 /**
@@ -352,6 +351,33 @@ function DashboardContent({ dashboard }: { dashboard: AdminDashboardResponse }) 
               className="self-start sm:self-auto"
               nativeButton={false}
               render={<Link href="/admin/events" />}
+            >
+              Open
+            </Button>
+          </div>
+          {/* Phase 24.11: Admins & Scopes (HEAD_ADMIN only) */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <ShieldCheck
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Admins
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Administrative accounts and their scopes — assignment,
+                  revocation (deactivation), and reactivation (global only).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              nativeButton={false}
+              render={<Link href="/admin/admins" />}
             >
               Open
             </Button>

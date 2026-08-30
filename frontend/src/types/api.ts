@@ -1373,3 +1373,60 @@ export interface UpdateAdminEventRequest {
   note?: string | null;
   active?: boolean;
 }
+
+// ===========================================================================
+// Phase 24.11 — Admin & Scope Management
+// ===========================================================================
+
+export enum AdminRole {
+  HEAD_ADMIN = "HEAD_ADMIN",
+  CLASS_ADMIN = "CLASS_ADMIN",
+  SUBSECTION_ADMIN = "SUBSECTION_ADMIN",
+  ELECTIVE_ADMIN = "ELECTIVE_ADMIN",
+}
+
+export interface AdminScopeRow {
+  id: string;
+  role: AdminRole;
+  active: boolean;
+  section_id: string | null;
+  section_name: string | null;
+  subsection_id: string | null;
+  subsection_name: string | null;
+  subject_id: string | null;
+  subject_code: string | null;
+  subject_name: string | null;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  display_name: string;
+  roll_number: string | null;
+  is_global: boolean;
+  roles: string[];
+  active_scope_count: number;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserSummary[];
+  total: number;
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  scopes: AdminScopeRow[];
+}
+
+export interface AssignScopeRequest {
+  role: AdminRole;
+  section_id?: string | null;
+  subsection_id?: string | null;
+  subject_id?: string | null;
+}
+
+export interface UpdateScopeActiveRequest {
+  active: boolean;
+}
+
+export interface AdminScopeMutationResponse {
+  scope: AdminScopeRow;
+}

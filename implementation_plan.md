@@ -4245,7 +4245,49 @@ outcome-composing fixture events through the canonical DELETE path
 (synchronizer reversal) plus a defensive outcome cleanup. NOT an application
 defect; `verify_phase_24_9.py` now PASS 40/40 again.
 
-**Next:** Phase 24.11 (Admin & Scope Management) — NOT STARTED; requires
+**Next:** Phase 24.11 (Admin & Scope Management) **IN PROGRESS — see the
+Phase 24.11 section below**; Phase 24.12 NOT STARTED — requires fresh
+execution prompts. All 12 Phase 24.0 decision gates remain open.
+
+## Phase 24.11 - Admin & Scope Management (COMPLETE / FROZEN — see walkthrough.md for the full implementation record)
+
+## PRE-IMPLEMENTATION DISCOVERY / GAP ANALYSIS (recorded before coding)
+
+Authoritative mapping: the operator's Phase 24.11 = discovery row 24.12
+"Admin management & scopes | admin accounts, scope assign/revoke/activate,
+provisioning workflow | 24.1, gates §25 | none (table exists) | admin-mgmt
+endpoints | admins area | verifier | additive".
+
+Discovery findings (read-only, grounded in code + discovery doc):
+
+1. `admin_scopes` table ALREADY EXISTS (Phase 23.11, migration
+   `f9a0b1c2d3e4_add_admin_scopes.py`) with:
+   - one row per (user, role, scope-target);
+   - CHECK `ck_admin_scopes_role_scope` enforcing role-scope consistency
+     (HEAD_ADMIN: all NULL; CLASS_ADMIN: section only; SUBSECTION_ADMIN:
+     subsection only; ELECTIVE_ADMIN: subject only);
+   - `active` boolean (DB toggle; inactive scopes are treated as
+     nonexistent by every authorization gate).
+2. `AuthorizationService` already resolves effective admin roles as the
+   union of the legacy `users.role == ADMIN` (HEAD_ADMIN) and ACTIVE
+   admin_scopes rows; `is_head_admin`, `can_access_subject`,
+   `can_mutate_event`, `get_active_scopes` are all present and correct.
+3. Scope assign/revoke/activate semantics are **[C] confirmed** by the
+   capability matrix (Assign scopes FULL-only [P] with CHECK backstop [C];
+   Revoke = `active=false` [C]; Activate/deactivate = same toggle [C]).
+4. Admin account creation / provisioning is a DECISION GATE (§25 gate 8:
+   "invite flow vs admin-set password"); today it is script-only
+   (`provision_admin.py` / `set_initial_password.py`). NOT implemented here.
+5. No API path currently grants roles or scopes — the ONLY gap is the
+   missing admin-management read model + endpoints + UI.
+6. Schema: "none (table exists)". NO migration required.
+
+Phase 24.11 therefore delivers: admin user list/detail (effective roles +
+scopes) and scope assign/deactivate/reactivate endpoints (HEAD_ADMIN-only),
+plus the minimal admins area UI. No account creation, no password flow, no
+scope-model changes, no new role system.
+
+**Next:** Phase 24.12 (Attendance admin & analytics) — NOT STARTED; requires
 fresh execution prompts. All 12 Phase 24.0 decision gates remain open.
 
 
