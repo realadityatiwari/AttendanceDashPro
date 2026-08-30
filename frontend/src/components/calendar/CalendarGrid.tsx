@@ -155,12 +155,21 @@ function DayCell({
           )
         ) : (
           item.non_working_reason && (
-            <span
-              className="block truncate text-[10px] leading-tight text-muted-foreground/80"
-              title={item.non_working_reason}
-            >
-              {item.non_working_reason}
-            </span>
+            <>
+              {/* Small cells: compact dot only — the full reason stays in the
+                  aria-label and in the DayDetail card, never crammed into the
+                  cell. Larger screens show the truncated reason text. */}
+              <span
+                className="block size-1.5 rounded-full bg-muted-foreground/50 sm:hidden"
+                aria-hidden
+              />
+              <span
+                className="hidden truncate text-[10px] leading-tight text-muted-foreground/80 sm:block"
+                title={item.non_working_reason}
+              >
+                {item.non_working_reason}
+              </span>
+            </>
           )
         )}
       </span>

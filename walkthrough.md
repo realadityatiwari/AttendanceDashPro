@@ -8915,3 +8915,72 @@ Not changed: manifest.json, layout.tsx, next.config.ts, registration wiring (hoo
 5. DevTools ? Application ? Service Workers ? "Update": with the app open, the new SW installs and waits ("Waiting"); closing all tabs activates it; with the app open, focus + hourly `registration.update()` triggers the update check.
 6. API isolation: while logged in, confirm `/api/v1/student/me` and dashboard requests never appear in Cache Storage.
 7. Log out / log in as another user — no cached responses cross users (SW never caches API data).
+
+---
+
+# Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal only.**
+
+This phase addressed only the minor residual mobile issues left after the major Calendar/notification fixes in 859b1f7. Areas reviewed but found already sufficiently polished were left unchanged.
+
+## Context
+- Calendar page: `CalendarGrid` (month grid) + `DayDetail` (selected-day card) in a responsive two-column layout (`lg:grid-cols-[minmax(0,1fr)_340px]`); stacked single column on mobile.
+- Notifications: `NotificationCenter` renders inside the shared `ShellDialog` with `mobileSheet` (full-width bottom sheet on mobile, centered dialog from `sm` up).
+- Backend remains authoritative for all calendar semantics; no business logic was moved into React.
+
+## Changes made
+
+### 1. Small day cells: compact non-working indicator (frontend/src/components/calendar/CalendarGrid.tsx)
+Before: the non-working reason string was rendered truncated inside every small day cell — on a 320px screen cells are ~40px wide, so reasons like "Public Holiday" were clipped to near-nothing while consuming cell height.
+After: on mobile (`sm:hidden`) a small muted dot indicator is shown instead; the full reason is already in the cell's `aria-label` (e.g. "…, non-working day (Public Holiday), …") and is rendered completely in DayDetail when the day is selected. On `sm+` the previous truncated text with a `title` tooltip is preserved. A comment in the cell explains the intent.
+
+### 2. DayDetail mobile rhythm + wrapping (frontend/src/components/calendar/DayDetail.tsx)
+- Section spacing tightened on mobile: `mt-4` to `mt-3 sm:mt-4`, events header `mb-3` to `mb-2 sm:mb-3` — reduces the "long stacked card" feel without redesigning the card.
+- Non-working reason paragraph now wraps properly on mobile: `items-start` (icon aligns with first line) + `leading-relaxed`, so multi-line reasons stay readable instead of clipping.
+
+### 3. Event row spacing + long subject wrapping (frontend/src/components/calendar/DayDetail.tsx)
+- Row padding reduced on mobile: `px-3 py-2` to `px-2.5 py-1.5 sm:px-3 sm:py-2`.
+- Subject-code + subject-name row is now `flex-wrap`, so a long subject name wraps under the code chip instead of overflowing the card (horizontal-overflow guard).
+
+### 4. Notification sheet drag handle + safe area (frontend/src/components/shell/ShellDialog.tsx)
+- Drag handle: when `mobileSheet` is set, a centered 40px handle bar (`h-1 w-10 rounded-full bg-muted-foreground/30`) renders above the header, `sm:hidden`, `aria-hidden`. Purely visual affordance (standard bottom-sheet cue) — no gesture/JS logic, no drag-to-dismiss.
+- Safe area: the mobile sheet adds `pb-[env(safe-area-inset-bottom)] sm:pb-0` using the CSS `env()` safe-area variable. On notched/home-indicator devices the sheet content clears the system gesture area; on devices without an inset `env()` resolves to 0 and the existing `py-4` content padding applies. No JavaScript viewport detection was introduced.
+- Desktop is untouched: handle is hidden and padding override resets at `sm`, so the centered dialog renders exactly as before.
+
+## Reviewed, no change justified
+- Long notification message spacing (NotificationCenter.tsx): messages already render as wrapping `text-sm leading-snug` paragraphs with `mt-1.5` spacing inside `p-3` cards; adding more spacing would reduce visible message density without improving readability. The handle + safe-area work materially improves the sheet; the text styling is already correct.
+- Notification content width/scrolling: `max-h-[60dvh] overflow-y-auto` list with `pr-1` scrollbar gutter is adequate.
+
+## Preserved behavior (no regressions)
+- Full-width mobile bottom sheet; centered dialog from `sm` up.
+- Vertical scrolling in dialogs and DayDetail (`lg:max-h`/`lg:overflow-y-auto` sticky detail).
+- Read + Dismiss actions, optimistic-free cache updates, unread indicator dot, action-error banner.
+- Calendar backend read model and event semantics: no new calculations, no changed semantics; today/selected/event/non-working indicators unchanged.
+- Calendar grid cell touch targets unchanged (`min-h-12` mobile).
+
+## Files changed
+- frontend/src/components/shell/ShellDialog.tsx — drag handle + safe-area padding (mobileSheet mode only)
+- frontend/src/components/calendar/CalendarGrid.tsx — mobile compact non-working indicator
+- frontend/src/components/calendar/DayDetail.tsx — mobile spacing + wrapping
+
+Not changed: backend, DB, migrations, APIs, Admin Portal, NotificationCenter.tsx, NotificationBell.tsx, calendar page logic.
+
+## Validation
+- `npx tsc --noEmit` (frontend): PASS, 0 errors.
+- `npm run lint`: 10 errors / 2 warnings — ALL pre-existing in files not touched by this phase (AssignSubsectionDialog, CorrectElectiveDialog, SetStudentStatusDialog, login, signup, history, AuthContext, GlassCard, api.ts). The three changed files produce no lint findings.
+- `npm run build`: PASS — 25/25 pages prerendered. First run failed only at prerender due to the intentional production guard added in 99f6619 (NEXT_PUBLIC_API_URL must be a production HTTPS URL); rerun with a placeholder value completed cleanly. Compilation + TypeScript had already passed in the first run.
+- No browser automation, no deploy, no commit/push (per phase constraints).
+- `git diff --check` clean (no whitespace errors).
+
+## Manual mobile checklist
+1. Calendar at 320–390px width: no horizontal overflow; weekday single-letter headers; 7-column grid intact.
+2. Non-working day cells: show a small dot (not clipped text); tap the cell and confirm DayDetail shows the complete reason, wrapped and readable.
+3. Working day cells: "N classes" label still visible/truncated as before.
+4. DayDetail on mobile: sections evenly spaced, event rows compact, long subject names wrap under the code chip.
+5. Notification sheet on a device/viewport with a home indicator: drag handle centered at top, content and Dismiss button clear of the bottom system area.
+6. Long notification message: wraps, readable, no clipping.
+7. Read and Dismiss actions usable (touch targets unchanged); unread dot visible.
+8. Desktop spot-check: dialogs centered, no handle bar, calendar cells show reason text as before — zero layout change at `sm+`.
+
+Hard stop.

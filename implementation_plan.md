@@ -4799,3 +4799,23 @@ Files: useApi.ts (hooks), AuthContext.tsx (cache clear). Validation: tsc PASS, e
 - ESLint `useServiceWorker.ts` — clean.
 - Static asset paths verified against the repo.
 - No backend/DB/migration/API/auth/JWT/Admin changes. No commit/push.
+
+---
+
+## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted).**
+
+Scope: only the remaining minor audit items for the student calendar and notification center. No Calendar redesign, no notification architecture change, no backend/API/DB/Admin changes.
+
+Calendar:
+- DayCell: mobile shows a compact dot for non-working days instead of truncated reason text (reason stays in aria-label and DayDetail); sm+ keeps truncated text + title.
+- DayDetail: tighter mobile rhythm (mt-3/mb-2 on mobile, sm+ unchanged); non-working reason wraps with leading-relaxed.
+- EventRow: reduced mobile padding (px-2.5 py-1.5); subject row wraps.
+
+Notifications:
+- ShellDialog mobileSheet: centered drag-handle bar (mobile only, visual) + `pb-[env(safe-area-inset-bottom)] sm:pb-0` on the sheet.
+- Long message spacing reviewed — already sufficient, no change.
+
+Files: ShellDialog.tsx, CalendarGrid.tsx, DayDetail.tsx.
+Validation: tsc PASS; lint errors all pre-existing elsewhere; build PASS (with production API URL set, per repo guard). No commit/push.

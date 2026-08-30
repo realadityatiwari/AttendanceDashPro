@@ -4866,3 +4866,33 @@ npx tsc --noEmit PASS. ESLint: AuthContext has 2 pre-existing set-state-in-effec
 - ESLint on `useServiceWorker.ts` — clean.
 - Static asset paths verified against repo (`public/` + `src/app/favicon.ico`).
 - No backend/DB/migration/API/auth/JWT/Admin changes. No commit/push.
+
+---
+
+## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal only. No redesign of Calendar or notification architecture; no backend/API/DB/Admin changes; no business-logic changes.**
+
+### Calendar remaining issues
+1. Non-working reason text truncated inside small day cells — replaced on mobile (<sm) with a compact dot indicator; the full reason remains in the cell's aria-label (already present) and is rendered completely in DayDetail. On sm+ the truncated reason text with `title` tooltip is preserved.
+2. DayDetail long stacked card on mobile — reduced vertical rhythm on mobile (`mt-4` sections to `mt-3 sm:mt-4`, events header `mb-3` to `mb-2 sm:mb-3`); non-working reason line now wraps (`items-start` + `leading-relaxed`) instead of clipping.
+3. Event rows excessive mobile spacing — row padding `px-3 py-2` to `px-2.5 py-1.5 sm:px-3 sm:py-2`; subject-code + name row now wraps (`flex-wrap`) so long names cannot overflow.
+
+### Notification remaining issues
+1. Bottom sheet drag handle — ShellDialog (mobileSheet mode) renders a centered visual handle bar above the header, mobile-only (`sm:hidden`), purely visual; no gesture/JS added.
+2. Safe-area bottom padding — mobileSheet content adds `pb-[env(safe-area-inset-bottom)] sm:pb-0` (pure CSS env(), no JS viewport detection), so the sheet content clears the home-indicator area; desktop unchanged.
+3. Long notification message spacing — reviewed; existing `text-sm leading-snug` with `mt-1.5` and wrapping paragraphs is sufficient; no change made.
+
+### Preserved (no regression)
+Full-width mobile sheet, desktop centered dialog, vertical scrolling (max-h caps + overflow-y-auto), Read/Dismiss actions, unread indicator, calendar backend read model and event semantics (all values still rendered directly from API data; no business rules in React).
+
+### Files changed
+- frontend/src/components/shell/ShellDialog.tsx (drag handle + safe-area padding for mobileSheet)
+- frontend/src/components/calendar/CalendarGrid.tsx (mobile compact non-working indicator)
+- frontend/src/components/calendar/DayDetail.tsx (mobile spacing + wrapping)
+
+### Validation
+- npx tsc --noEmit (frontend) — PASS, 0 errors.
+- npm run lint — 10 errors / 2 warnings, all pre-existing in files not touched by this phase (admin dialogs, login/signup, history, AuthContext, GlassCard, api.ts). Changed files lint-clean.
+- npm run build — PASS (25/25 static pages). Note: the build requires NEXT_PUBLIC_API_URL to be a production HTTPS URL (intentional guard from commit 99f6619); verified with a placeholder value.
+- No commit/push, no deploy, no browser automation.

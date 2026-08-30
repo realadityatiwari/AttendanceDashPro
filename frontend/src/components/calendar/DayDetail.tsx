@@ -51,28 +51,28 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
       </div>
 
       {day.substitution_schedule_override && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-accent">
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-accent sm:mt-3">
           <CalendarRange className="size-3.5 shrink-0" aria-hidden />
           Follows {day.substitution_schedule_override.toLowerCase()} schedule
         </p>
       )}
 
       {!day.is_working_day && day.non_working_reason && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="size-3.5 shrink-0" aria-hidden />
+        <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground sm:mt-3">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           {day.non_working_reason}
         </p>
       )}
 
-      <div className="mt-4 flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2">
+      <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 sm:mt-4">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Scheduled classes
         </span>
         <span className="text-sm font-bold text-foreground">{sessionLabel}</span>
       </div>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col sm:mt-4">
+        <div className="mb-2 flex items-center justify-between sm:mb-3">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Events
             {day.events.length > 0 && (
@@ -109,7 +109,7 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
   const classLabel = classTypeLabel(event.class_type);
 
   return (
-    <li className="rounded-lg border-l-2 border-accent bg-muted/30 px-3 py-2">
+    <li className="rounded-lg border-l-2 border-accent bg-muted/30 px-2.5 py-1.5 sm:px-3 sm:py-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm font-medium text-foreground">{humanizeEventType(event.event_type)}</span>
         {isHoliday && <Badge variant="success" className="h-4 py-0 text-[10px]">Holiday</Badge>}
@@ -118,7 +118,7 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
         )}
       </div>
       {event.resolved_subject_code && (
-        <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+        <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-foreground/80">
           <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px] tracking-wide">
             {event.resolved_subject_code}
           </span>

@@ -3943,3 +3943,45 @@ Repair ONLY the existing Student Portal service worker behavior. No PWA redesign
 
 ### Known follow-up (out of scope)
 - `useServiceWorker()` hook is not mounted anywhere in the app (pre-existing wiring gap — the SW is never registered at runtime). Mounting it (e.g., in a client layout component) is a separate wiring decision, not a SW behavior repair.
+
+---
+
+## Phase E — Targeted Mobile Calendar & Notification Polish (2026-08-31)
+
+**Status: IMPLEMENTED (uncommitted). Student Portal only.**
+
+### Scope
+Only remaining minor audit issues. No Calendar/notification redesign, no backend/API/DB/migration/Admin changes, no business-logic changes, no deploy, no commit.
+
+### Calendar
+- [x] Non-working reason no longer crammed into small day cells: compact dot indicator on mobile (`sm:hidden`); full reason remains in the cell aria-label and rendered completely in DayDetail; sm+ keeps truncated text + title tooltip
+- [x] DayDetail mobile rhythm tightened (mt-3/mb-2 mobile, sm+ unchanged); non-working reason line wraps (items-start, leading-relaxed)
+- [x] Event rows: mobile padding reduced (px-2.5 py-1.5, sm+ unchanged); subject-code/name row wraps (flex-wrap)
+- [x] Calendar semantics untouched: all values still from backend read model, no business rules in React
+
+### Notifications
+- [x] Drag handle: centered visual handle bar in ShellDialog mobileSheet mode, mobile-only (`sm:hidden`), no JS/gesture logic
+- [x] Safe area: `pb-[env(safe-area-inset-bottom)] sm:pb-0` on the mobile sheet (pure CSS env(), no JS viewport detection)
+- [x] Long message spacing reviewed — existing styles sufficient, no change made
+- [x] Preserved: full-width mobile sheet, desktop centered dialog, vertical scrolling, wrapping, Read/Dismiss actions, unread indicator
+
+### Files changed
+- frontend/src/components/shell/ShellDialog.tsx
+- frontend/src/components/calendar/CalendarGrid.tsx
+- frontend/src/components/calendar/DayDetail.tsx
+
+### Files NOT changed
+- Backend, DB, migrations, API endpoints, Admin Portal, NotificationBell.tsx, NotificationCenter.tsx (no justified change beyond ShellDialog)
+
+### Validation
+- [x] npx tsc --noEmit — PASS (0 errors)
+- [x] npm run lint — 10 pre-existing errors/2 warnings in untouched files; changed files clean
+- [x] npm run build — PASS 25/25 pages (NEXT_PUBLIC_API_URL production guard satisfied with placeholder)
+- [x] git diff --check clean; no commit/push
+
+### Manual mobile checklist (no automation run)
+1. /calendar at 320-390px: no horizontal overflow; non-working days show a dot, full reason visible after tap in DayDetail; touch targets >= 44px (min-h-12 cells).
+2. Tap a non-working day: DayDetail shows the complete reason with wrapping.
+3. Open notification bell on a phone (or DevTools mobile viewport with simulated notch): sheet is full-width at the bottom, drag handle centered at top, last notification/button not hidden behind the home indicator.
+4. Long notification message wraps and remains readable; Read + Dismiss usable; unread dot present.
+5. Desktop (>= sm): dialogs centered as before, no drag handle visible, calendar cells show truncated reason text as before.

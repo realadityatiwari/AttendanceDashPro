@@ -66,9 +66,14 @@ export function ShellDialog({
           "max-h-[90dvh] gap-0 overflow-y-auto p-0",
           WIDTH_CLASSES[width],
           mobileSheet &&
-            "left-0 right-0 bottom-0 top-auto w-full max-w-full translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
+            "left-0 right-0 bottom-0 top-auto w-full max-w-full translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl pb-[env(safe-area-inset-bottom)] sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:pb-0"
         )}
       >
+        {mobileSheet && (
+          <div className="flex justify-center pt-2 sm:hidden" aria-hidden>
+            <span className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+          </div>
+        )}
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{title}</DialogTitle>
           {description && (
