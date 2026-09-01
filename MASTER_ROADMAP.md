@@ -4978,9 +4978,136 @@ Root cause: the dashboard/analytics/calendar/history/quiz/lab/event services use
 
 ---
 
-## Hotfix: Dashboard Date/Time Consistency (2026-08-31)
+## Investigation: Student Portal Auto-Logout After Several Hours (2026-09-02)
 
-**Status: IMPLEMENTED (uncommitted).**
+**Status: INVESTIGATION COMPLETE — NO CODE CHANGES MADE.** Static/code inspection
+only; no browser/E2E runs; no backend, frontend, schema, migration, deployment,
+or auth-behavior modification. This is a follow-up to the 2026-08-31 audit: the
+transient-failure logout loop was already fixed (commits `859b1f7`, `2c90240`),
+but the user still reports being logged out after being logged in for several
+hours (web + PWA).
+
+### Root cause (exact)
+
+**The reported logout is EXPECTED JWT access-token expiration.**
+
+- Exact configured lifetime: **480 minutes = 8 hours** — `backend/app/core/config.py:23`
+  (`JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480`, env-overridable), and pinned to
+  `"480"` in `render.yaml:33` (production). No other lifetime exists in the repo.
+- `create_access_token` (`backend/app/core/security.py:48-60`) sets
+  `exp = now(UTC) + 480min`, with claims `sub` (user UUID), `roll_number`, `type="access"`.
+- `get_current_user` (`backend/app/api/dependencies/deps.py:21-54`) verifies the
+  JWT via `jwt.decode(..., algorithms=["HS256"])`; `jwt.ExpiredSignatureError` ?
+  **HTTP 401 `{"detail": "Token has expired"}`**. Invalid signature/bad claims also
+  ? 401; `HTTPBearer()` returns 403 for a missing Authorization header.
+- **No refresh token, no `/auth/refresh`, no `/auth/logout`, no token revocation,
+  no blacklist, no session store exists anywhere in the repository.** The JWT is
+  stateless; once issued it is valid until `exp`. Confirmed by repo-wide search.
+
+### Exact logout path (end-to-end)
+
+1. Login/signup stores the token: `localStorage.setItem("access_token", ...)`
+   (`frontend/src/app/(auth)/login/page.tsx:41`, `signup/page.tsx:110`).
+2. `apiFetch` attaches `Authorization: Bearer <token>` on every authenticated
+   request (`frontend/src/lib/api.ts:43-49`).
+3. After 8h the token is expired. The next authenticated request — typically the
+   shared SWR profile (`/api/v1/student/me`) or any revalidating resource after a
+   focus/visibility return — hits the backend.
+4. `get_current_user` raises 401 `Token has expired` (`deps.py:36-37`).
+5. `apiFetch` receives the 401: `localStorage.removeItem("access_token")` +
+   `window.location.href = "/login"` hard redirect (`api.ts:72-78`).
+6. `AuthContext`'s 401/403 effect (`AuthContext.tsx:80-89`) also removes the
+   token, sets `tokenStatus="absent"`, clears the cached profile; the route-guard
+   effect (`AuthContext.tsx:109-121`) redirects to `/login`. **The token is
+   removed in exactly two places: `api.ts:73` (on 401) and `AuthContext.tsx:84/143`
+   (on 401/403 and explicit logout).**
+
+### Expected or defect?
+
+- **Expected behavior (B):** the 8h expiry is deliberate, documented Phase 16
+  hardening ("JWT expiry bounded 8h env-configurable"), and matches the user's
+  "several hours" report. No defect in the expiry path itself.
+- **No premature-logout path exists in the current code:** transient network
+  failures (no status) and 5xx preserve the token (hardened, unchanged);
+  Render cold starts produce network errors/5xx/503, never token deletion; the
+  service worker is network-only for `/api/*` (returns `503 {offline:true}` on
+  failure — status present but not 401/403 ? token preserved) and is **not even
+  registered at runtime** (the `useServiceWorker` hook is never mounted, a
+  documented pre-existing gap) so it cannot contribute to token loss; there are
+  NO timers, NO client-side `exp` checks, NO JWT decoding in the frontend; no
+  `setTimeout`/`setInterval` tied to auth.
+- **Multi-tab/PWA:** `localStorage` is shared across tabs. A genuine 401 in one
+  tab removes the shared token, so other tabs lose the session on their next
+  request — this is consistent with genuine expiry, not a premature logout.
+
+### Classification
+
+| Class | Finding |
+|---|---|
+| A. Genuine bug | **NONE FOUND.** No premature logout path exists in the committed code. |
+| B. Expected behavior | The 8h JWT expiry logout itself — configured, deliberate, documented. |
+| C. UX limitation | Abrupt hard redirect to `/login` at expiry with no warning/countdown/renewal. |
+| D. Architectural limitation | **No refresh-token/session-renewal mechanism exists** — mandatory re-login every ~8h by design. **Refresh-token/session renewal is REQUIRED to fix the user-facing complaint.** |
+| E. Unknown (needs production evidence) | Whether any user sees logout before 8h: possible contributors would be server clock skew (Render) or a changed `JWT_SECRET_KEY` (invalidates ALL tokens immediately — would log everyone out at once, not "after several hours"). Both unconfirmed; would require production logs/evidence. |
+
+### Proposed refresh-token architecture (DESIGN ONLY — NOT IMPLEMENTED)
+
+Safest minimal design (D-class resolution), additive and non-breaking:
+
+- **Access token:** keep the existing `type="access"` JWT; recommended lifetime
+  **30–60 minutes** (shorter exposure window) with silent renewal, or keep 8h as
+  an interim fallback. Configure via `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (already
+  env-overridable). Verification/401 semantics in `get_current_user` unchanged.
+- **Refresh token:** **opaque, DB-backed, high-entropy** (NOT a JWT) so it can be
+  revoked. Lifetime **30 days absolute** (env-configurable). Issued at
+  login/register alongside the access token; returned in the login response and/or
+  as an `HttpOnly` + `Secure` + `SameSite=Lax/None` cookie (cross-site
+  Vercel?Render means `SameSite=None; Secure` + CORS `allow_credentials=true`,
+  already configured in `main.py`).
+- **Storage strategy:** access token stays in `localStorage` (current behavior,
+  no change to the hardened path); refresh token in an `HttpOnly` cookie to
+  reduce XSS theft, with `SameSite`/`Secure` set correctly for the cross-site
+  deployment.
+- **Rotation/revocation:** rotating refresh tokens — every `/auth/refresh`
+  validates the presented token, issues a new access + new refresh, marks the old
+  one used/rotated. **Reuse detection:** if a previously-rotated/revoked refresh
+  token is presented again ? revoke the user's entire token family (theft
+  indicator). New table `refresh_tokens` (user_id FK, token_hash SHA-256,
+  family_id, created_at, expires_at, used/revoked flags, replaced_by). Logout
+  revokes all of the user's active refresh tokens.
+- **Logout behavior:** `logout()` now also calls `POST /api/v1/auth/logout`
+  (best-effort) to revoke refresh tokens server-side and clear the cookie, then
+  preserves the existing localStorage/`tokenStatus`/cache-clear behavior.
+- **Token theft considerations:** short access lifetime limits exposure;
+  HttpOnly cookie reduces XSS surface; refresh rotation + family revocation
+  limits replay; refresh endpoint rate-limited like login; `sub`/user
+  still validated per request.
+- **Multi-tab/PWA behavior:** single-flight refresh (one in-flight refresh shared
+  across concurrent requests/tabs) + `storage`/`broadcast` event so one tab's
+  refresh updates the others; a focus/visibility refresh before profile
+  revalidation.
+- **Backward compatibility:** access tokens issued before deploy remain valid
+  until their 8h `exp`; `/auth/login` + `/auth/register` keep returning
+  `access_token` (additive `refresh_token`/cookie); old frontend continues to
+  work against the new backend (new fields ignored); new frontend gracefully
+  falls back to a direct login when refresh is unavailable.
+- **Production migration requirements (future):** additive Alembic migration for
+  `refresh_tokens`; new `/auth/refresh` + `/auth/logout` endpoints; Render env:
+  no new secret strictly required (refresh tokens are DB-random), CORS already
+  credentials-enabled; Vercel/Render cookie policy verified over HTTPS.
+- **Regression risks (must be respected when implemented):** 401 handling,
+  JWT verification, authorization, token expiry, and transient-error handling
+  must NOT be weakened; refresh must be attempted ONLY on genuine 401 (never on
+  403/5xx/network), must never mask real auth failures, and must never clear the
+  token on transient failures; no change to attendance calculations or schema
+  beyond the additive `refresh_tokens` table; Admin Portal untouched.
+- **Independence:** refresh-token/session-renewal implementation is **fully
+  independent of the performance work** (SWR/cache/notification/service-worker
+  phases). It touches only the auth client/endpoints + one additive table. It
+  requires a separate, explicitly-authorized execution phase — NOT started.
+
+**HARD STOP: Investigation only. No code, schema, migration, deployment, or
+auth-behavior change was made.**
 
 Targeted hotfix for the investigation above. Reused the authoritative institutional clock (`institution_today()`, Asia/Kolkata) across the student-facing read paths that were still using server-local `date.today()`:
 
@@ -4990,3 +5117,201 @@ Targeted hotfix for the investigation above. Reused the authoritative institutio
 - Boundary verified: at 31 Aug 02:27 IST, `institution_today()` = 2026-08-31, weekly week_start = 2026-08-31, week_end = 2026-09-06 (Monday-start semantics unchanged).
 - Out of scope / unchanged: Admin Portal (`admin_dashboard_service.py`, `admin_dashboard_repo.py`), frozen Phase 7 eligibility engine placeholders (`eligibility_engine.py:140-141`, invalid-window only), attendance/eligibility/calendar/event math, schemas, DB, migrations, auth/JWT, SWR/cache, all frontend date handling, GreetingHeader.
 - Verification: `compileall` PASS on backend app; all 8 changed modules import without circular-import errors; py_compile PASS. No DB-touching verifier run (quota-efficient static verification only). No commit/push/deploy.
+
+---
+
+## Investigation: Student Portal Content-Load Performance (2026-09-02)
+
+**Status: INVESTIGATION COMPLETE — NO CODE CHANGES MADE.** Static code + query
+analysis only; no browser/E2E automation, no backend/frontend/schema/migration/
+deployment modification. Follow-up to the Phases A–E performance work
+(committed `2c90240`). The observed symptom persists: **the app shell loads
+quickly, but dashboard content appears much later** (worst on the deployed PWA
+on mobile).
+
+### 1. What fires on dashboard load (exact request set)
+
+After hydration, the dashboard route mounts exactly **four** authenticated API
+requests, all client-side (SWR), all issued in parallel:
+
+| Request | SWR policy | Blocks visible content? |
+|---|---|---|
+| `GET /api/v1/student/me` | INTERACTIVE (shared PROFILE_KEY, deduped with AuthContext) | No — skeleton only (greeting, avatar, nav role) |
+| `GET /api/v1/dashboard/summary` | DASHBOARD (focus-revalidate, 120 s dedupe) | **YES — ALL 6 cards** (page renders skeletons until `summary` arrives) |
+| `GET /api/v1/analytics/overview` | SEMI_STATIC (no focus revalidate, 5 min dedupe) | No — cards degrade gracefully (forecast/weekly series enrich only) |
+| `GET /api/v1/notifications` | STANDARD (focus-revalidate; backend 60 s TTL cache) | No — bell badge only |
+
+**Critical path = `/api/v1/dashboard/summary` alone.** Every other request is
+non-blocking decoration. The dashboard page (`frontend/src/app/(authenticated)/dashboard/page.tsx`)
+renders the entire card grid behind `isLoading || !summary`.
+
+### 2. Request waterfall (measured by code trace, not instrumentation)
+
+```text
+Shell (static HTML + client JS from Vercel edge, fast)
+  ? hydration (App Router, client component)
+  ? token read (AuthContext: localStorage, one-time)
+  ? four parallel fetches against the SINGLE uvicorn worker:
+  /student/me          ~9 light queries      (profile/context resolution)
+  /notifications       ~12 queries + N upserts/commits  (badge; backend 60s TTL)
+  /analytics/overview  ~9 queries incl. 2 heavy range scans (duplicated work)
+  /dashboard/summary   ~15 queries + 2N window scans + 3 full event scans  ? BLOCKS CONTENT
+  ? cards render only after /dashboard/summary returns
+```
+
+### 3. Backend query trace per endpoint
+
+**`/student/me`** (~9 queries, all light, none heavy):
+JWT decode ? `get_current_user` (User + section, 1 query) ?
+`StudentContextService.get_context`: placement (?4 point lookups: Section,
+Semester, AcademicSession, Subsection), enrollments (1), elective choices
+(1 + 1 catalog query), first quiz date (1). Not a bottleneck.
+
+**`/dashboard/summary`** (~15 fixed + 2N queries; N = quiz-applicable subjects;
+?31 queries for a typical N=8):
+- `get_current_user` (1), `get_enrolled_subjects` (1), placement (?4)
+- `get_sessions_with_status(user, semester_start?today)` — **1 heavy 6-table
+  join range scan** (class_sessions × timetable_entries × elective choices ×
+  occurrence_outcomes × subjects × enrollments × attendance_records); no
+  index on `class_sessions.date` ? sequential scan
+- `get_subject_summaries` ? `get_subject_counts_for_user` — **1 more heavy
+  full-semester scan**, same joins (2nd scan)
+- `get_mid_sem_sessions` (1)
+- `_build_today` ? `get_day_schedule` ? `get_all_events` — **full table scan
+  of academic_events (no filter!)**
+- `_build_quiz_snapshot` ? `chosen_elective_map` (1) +
+  `get_effective_quiz_dates_for_subjects` (1) + `get_quiz_cycle_with_policy` (1)
+  ? `get_quiz_eligibility_for_subjects`:
+  - re-fetches `get_quiz_cycle_with_policy` (**duplicate**)
+  - re-fetches `get_all_events` (**duplicate full scan**)
+  - re-fetches `chosen_elective_map` (**duplicate**)
+  - re-fetches `get_effective_quiz_dates_for_subjects` (**duplicate**)
+  - per subject: `_evaluate_subject` ? **2× `get_subject_counts_between`
+    (window + cumulative) — 2N additional heavy 6-table scans**
+- `_build_upcoming_events` ? `load_choices` (**duplicate**) +
+  `anchor_subjects` ? `get_all_subjects` (full scan) +
+  `get_all_events` (**3rd full scan of academic_events**)
+
+**`/analytics/overview`** (~9 queries):
+placement (?4), `get_sessions_with_status` (**duplicate of dashboard's heavy
+scan**), `get_enrolled_subjects` (duplicate), `get_subject_summaries` ?
+`get_subject_counts_for_user` (**duplicate of dashboard's heavy scan**) +
+`get_mid_sem_sessions` (duplicate). **Entirely overlapping work with
+`/dashboard/summary`.**
+
+**`/notifications`** on cache miss (~12 + N queries, **N sequential
+upserts each with its own COMMIT**):
+`get_current_user` (1), `get_enrolled_subjects` (1), preferences (1),
+class reminders (1 heavy scan IF enabled — default off), quiz approaching ?
+`get_current_quiz_cycle` (re-fetches enrolled subjects, elective map, quiz
+dates, cycle policy), `_attendance_items` ? `get_subject_summaries` ?
+`get_subject_counts_for_user` (**3rd heavy scan of the semester**) +
+mid-sem (1), `_academic_events` ? `load_choices` (1) + `anchor_subjects`
+(full subjects scan) + `get_all_events` (full scan), then **N upserts, each
+committing separately** (N round trips), then inbox (1) + unread count (1).
+
+### 4. Root-cause summary
+
+**A. Frontend waterfall — MINOR.** Requests are already parallel and correctly
+policied; profile/notifications/analytics do not block content. The only
+blocking dependency is `summary` for the card grid, which is inherent to the
+page design. Hydration is client-side (all pages are `"use client"`), so
+content always waits for a full network round trip — no SSR/streaming.
+
+**B. Backend computation — MAJOR.** The same expensive work is repeated
+across the four parallel requests AND inside `/dashboard/summary` itself:
+- 5+ heavy 6-table range scans per dashboard load (dashboard ×2, analytics ×2,
+  notifications ×1) where 1 would suffice
+- 2N quiz-window scans inside dashboard summary (eligibility re-scans the
+  semester per subject, per window)
+- `get_all_events` full-table scan executed **4×** per cold load (dashboard ×3,
+  notifications ×1) — never filtered at the source
+- quiz cycle policy / elective map / quiz dates fetched **2×** within one request
+- notifications: N sequential upsert+commit round trips
+
+**C. Database/query latency — MODERATE.** No index on
+`class_sessions.date` / `(subject_id, date)` ? every range query is a
+sequential scan; many small queries (?55–70 per cold dashboard load) each pay
+a Supabase-pooler round trip (~5–30 ms each); single uvicorn worker
+(`UVICORN_WORKERS=1`) serializes the Python CPU portions of all four
+concurrent requests on 0.1 CPU.
+
+**D. Render infrastructure/cold start — MAJOR for FIRST load only.** Render
+Free spins down after ~15 min idle; first request after idle pays 30–60 s of
+container boot + Python import before ANY query runs. This is the dominant
+"first open of the day" cost, but it does NOT explain warm reloads.
+
+**E. PWA/service-worker — MINOR.** The service worker is NOT registered at
+runtime (`useServiceWorker` never mounted — pre-existing, documented in
+Phase D); it neither helps nor hurts warm load. Phase C policies already
+prevent focus refetch storms. Mobile simply amplifies every backend round
+trip (cellular RTT).
+
+**F. Combination — the actual observed behavior.** "Shell fast, content slow"
+= static shell (fast) + one heavy blocking endpoint (`/dashboard/summary`)
+executing ~31 queries on a 0.1-CPU single worker over a poolered connection,
+optionally preceded by a Render cold start. Warm latency of summary is
+estimated ~1–2 s (30 queries × 5–30 ms + Python grouping/serialization);
+cold latency is 30–60 s+. Analytics adds ~1 s of parallel non-blocking work;
+notifications ~1–2 s on cache miss.
+
+### 5. Optimization plan (ordered by impact ÷ risk; NOT executed)
+
+1. **Deduplicate queries inside `/dashboard/summary` (HIGH impact, LOW risk,
+   behavior-neutral).** Fetch `get_all_events` once and reuse for day
+   schedule + eligibility windows + upcoming events; fetch cycle policy /
+   elective map / quiz dates once. Cuts ~8 queries and 2–3 full scans with
+   zero semantic change. Files: `dashboard_service.py`.
+2. **Share the semester scan across summary + analytics (HIGH impact,
+   MEDIUM risk).** Compute analytics overview fields from the same
+   enrollment-scoped scan already used by the dashboard (or a small TTL cache
+   keyed by user, mirroring the Phase B notification pattern). Removes 2 heavy
+   scans per load. Files: `dashboard_service.py`, `analytics_service.py`.
+3. **Eliminate 2N quiz-window scans (HIGH impact, MEDIUM risk).** Bucket the
+   existing per-subject counts in memory per quiz window (window start/end are
+   already computed by the calendar engine) instead of re-running
+   `get_subject_counts_between` per subject per window; preserve
+   `exclude_quiz_day` + cancellation semantics exactly. Files:
+   `eligibility_service.py`, `attendance_service.py`, `dashboard_service.py`.
+4. **Batch notification upserts into ONE transaction (MEDIUM impact, LOW
+   risk).** N sequential commits ? 1 commit. Files:
+   `notification_service.py`, `notification_repo.py`.
+5. **Filter `get_all_events` at the source (LOW-MEDIUM impact, LOW risk).**
+   Pass `active=True, date_from, date_to` from dashboard/notifications instead
+   of loading the full table 4× per load. Files: `calendar_repo.py`,
+   `dashboard_service.py`, `notification_service.py`.
+6. **Defer non-blocking requests off the critical path (LOW-MEDIUM impact,
+   LOW risk).** Notifications bell fetch and analytics overview already render
+   non-blocking; optionally lazy-mount analytics after summary renders.
+   Files: `dashboard/page.tsx`, `NotificationBell.tsx`.
+7. **DB indexes on `class_sessions(date)` / `(subject_id, date)` and
+   `academic_events(start_date)` (MEDIUM impact, LOW risk).** Requires a new
+   Alembic migration — **EXCLUDED by this phase's constraints** (no DB schema /
+   migration changes); listed as the natural follow-up execution phase.
+8. **Optional infra follow-up (EXCLUDED here):** `pool_pre_ping=True`,
+   pool-size tuning, direct-Supabase vs pooler trade-offs — production
+   infrastructure configuration, out of scope.
+
+### 6. What can run in parallel
+
+All of 1, 4, 5, 6 are independent and parallelizable immediately. Items 2 and
+3 build on 1 (they deduplicate the same scan family) and are parallelizable
+with 4/5/6. Item 7 requires its own authorized execution (migration).
+Item 2 and 3 must each preserve exact engine semantics (verified by the
+existing verifiers).
+
+### 7. Regression risks (when implemented)
+
+- Item 3 must reproduce `BETWEEN` window bounds, `exclude_quiz_day`, cancelled-
+  exclusion, and practical-block collapse byte-for-byte (eligibility verifiers
+  are the guard).
+- Item 2 must keep analytics/dashboard byte-identical to the canonical
+  attendance engine (Phase 8.0 contract).
+- Item 4 must preserve upsert idempotency and the returned row id.
+- Any backend TTL cache must stay per-user (never cross-user) and invalidate
+  on attendance mutations.
+- None of the above touch auth/JWT, attendance mathematics, elective
+  resolution, Admin Portal, schema, or migrations.
+
+**HARD STOP: Investigation only. No code, schema, migration, deployment, or
+infrastructure change was made.**
