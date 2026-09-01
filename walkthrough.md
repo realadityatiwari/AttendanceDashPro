@@ -9346,3 +9346,42 @@ placement (?4), **duplicate** `get_sessions_with_status` (same heavy scan), **du
 - Nothing here touches auth/JWT, attendance mathematics, elective resolution, Admin Portal, schema, or migrations.
 
 **HARD STOP: Investigation only. No code, schema, migration, deployment, or infrastructure change was made.**
+
+
+---
+
+## Implementation: Backend Refresh-Token Infrastructure (Phase 25.1, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE (backend slice).** Execution of the auto-logout investigation's proposed design. Frontend refresh handling NOT implemented (Phase 25.2). No commit; no deployment; no DB mutation (migration validated offline).
+
+### What was built
+
+- **Table `refresh_tokens`** (migration `a9b8c7d6e5f4`, single head, chains `c4d5e6f7a8b9`): `id` UUID PK, `user_id` FK->users NOT NULL, `token_hash` VARCHAR(64) NOT NULL (SHA-256 hex digest of the opaque secret -- raw secret never persisted), `family_id` UUID NOT NULL, `expires_at` TIMESTAMPTZ NOT NULL, `is_used`/`is_revoked` BOOLEAN NOT NULL DEFAULT false, `replaced_by` UUID NULL (no FK, cleanup-friendly), Base `created_at`/`updated_at`. Indexes: UNIQUE `uq_refresh_tokens_token_hash`, `ix_refresh_tokens_family_id`, `ix_refresh_tokens_user_id`.
+- **Service** `app/services/refresh_token_service.py`: `issue()` (CSPRNG `secrets.token_urlsafe(32)`, new family), `rotate()` (`SELECT ... FOR UPDATE` on the token row -> user re-validation (`is_active`) -> new child token in the same family -> old row `is_used=true` + `replaced_by=child.id` -> commit), reuse detection (used/revoked presented -> whole family revoked + `RefreshTokenError`), natural expiry (401, no revocation), unknown token (401, generic detail), `revoke_by_token()` for logout (idempotent). No raw token is ever persisted, logged, or returned in JSON.
+- **Endpoints** (auth router): `POST /api/v1/auth/refresh` (cookie -> rotate -> `TokenResponse` + new cookie; 401 generic detail + cleared cookie on every failure; rate limit 30/900) and `POST /api/v1/auth/logout` (family revocation + cookie clear; idempotent; no auth dependency). `login`/`register` additionally mint a family and set the cookie; their JSON contract is byte-identical to before.
+- **Cookie**: `refresh_token`; `HttpOnly`; `Secure=true`; `SameSite=None` (correct for the cross-site Vercel/Render production pairing AND the cross-site dev pairing localhost:3100 -> 127.0.0.1:8080 -- localhost and 127.0.0.1 differ, so even dev is cross-site; loopback is a trustworthy origin so Secure works); `Path=/api/v1/auth` (the secret is never attached to ordinary API traffic); `Max-Age=30d`. All five knobs env-driven; the production validator rejects `Secure=false`.
+- **Config**: `REFRESH_TOKEN_EXPIRE_DAYS=30`, `REFRESH_COOKIE_NAME`, `REFRESH_COOKIE_PATH=/api/v1/auth`, `REFRESH_COOKIE_SECURE=true`, `REFRESH_COOKIE_SAMESITE=none`. Access-token lifetime left at 480 min (existing env override `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` retained; deliberately not changed this phase).
+
+### Concurrency
+
+Rotation serializes on a single-row `FOR UPDATE` lock inside one transaction (issue new row + mark old used + commit atomic). Two simultaneous refreshes with the same cookie: exactly one wins; the loser observes `is_used=true` and triggers family revocation -- no double-mint, no torn state.
+
+### Error semantics preserved
+
+Invalid/expired/revoked/reused/missing refresh -> 401 with one generic detail (`Invalid refresh token`), cookie cleared; no existence leakage. 403 semantics, JWT verification, transient-error handling untouched.
+
+### Verification
+
+- `compileall` PASS (app + verifier).
+- `alembic heads` -> single head `a9b8c7d6e5f4`; offline `upgrade --sql` / `downgrade --sql` validated (clean CREATE TABLE + 3 indexes; clean DROP).
+- App import PASS; `verify_routes.py` shows `POST /api/v1/auth/{login,register,refresh,logout}`.
+- `verify_phase_25_1.py` **50/50 PASS** (contract preservation, cookie flags, rotation/reuse/expiry/unknown/user-validation/logout semantics via fake session, production guard).
+- Live HTTP/DB verification intentionally NOT run (dev Docker daemon not running this session); the migration was deliberately not applied anywhere.
+
+### Known limitations / next
+
+- Frontend still logs out on genuine 401 (expected -- Phase 25.2 wires the interceptor + single-flight refresh + `credentials: 'include'`).
+- Migration not applied to the dev DB yet (Docker down) -- apply at next dev session start.
+- SameSite=None requires `credentials: 'include'` on the frontend refresh/logout calls (25.2).
+- Refresh rows are never garbage-collected (no scheduler by design); a future cleanup phase can prune expired rows.
+- Phase 25.2 (recommended next): frontend refresh interceptor + logout wiring; then operator-applied migration on production.

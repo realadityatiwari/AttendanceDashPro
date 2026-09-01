@@ -4988,3 +4988,36 @@ Shell (static HTML + client JS from Vercel edge, fast)
 - No auth/JWT, attendance math, elective resolution, Admin Portal, schema, or migration changes.
 
 **HARD STOP: Investigation only. No code, schema, migration, deployment, or infrastructure change was made.**
+
+
+---
+
+# Phase 25 -- Session Renewal (Refresh Tokens) -- Implementation Plan (2026-09-02)
+
+Execution plan for the confirmed D-class finding (no refresh mechanism; 8h access JWT expiry -> hard logout). Derived from the 2026-09-02 investigation design in MASTER_ROADMAP.md. Phase 25.1 (backend) is COMPLETE; 25.2 (frontend) is the next authorized phase.
+
+## Phase 25.1 -- Backend refresh-token infrastructure -- COMPLETE (2026-09-02)
+
+1. **Schema**: additive `refresh_tokens` via Alembic only -- migration `a9b8c7d6e5f4` (single head, chains `c4d5e6f7a8b9`): `user_id` FK, `token_hash` UNIQUE VARCHAR(64) (SHA-256 of the secret; raw never stored), `family_id`, `expires_at`, `is_used`/`is_revoked` default false, `replaced_by` (plain UUID link), Base timestamps; indexes for hash lookup, family revocation, user revocation.
+2. **Token design**: opaque CSPRNG secrets (`secrets.token_urlsafe(32)`), never JWTs; SHA-256 before lookup; ~30-day expiry config-driven (`REFRESH_TOKEN_EXPIRE_DAYS`); access-JWT contract untouched (480 min kept).
+3. **Endpoints**: `POST /auth/refresh` (rotation; 401 generic on every failure; rate-limited 30/900), `POST /auth/logout` (family revocation, idempotent); login/register mint a family + set the cookie with an unchanged JSON contract.
+4. **Cookie**: HttpOnly, Secure, SameSite=None, `Path=/api/v1/auth`, 30d Max-Age; env-driven (`REFRESH_COOKIE_*`); production guard rejects `Secure=false`; CORS untouched (explicit origins + `allow_credentials=true` already correct).
+5. **Rotation/reuse**: old token -> used + `replaced_by`; child in the same family; reuse of used/revoked -> family revoked + 401; expired/unknown -> 401 (no revocation, no leakage); deactivated/missing user -> family revoked + 401.
+6. **Concurrency**: `SELECT ... FOR UPDATE` row lock + single atomic commit per rotation; the loser takes the reuse path (no double-mint, no torn state).
+7. **Verification**: `compileall`; `alembic heads` single head `a9b8c7d6e5f4`; offline `--sql` upgrade/downgrade validated; app import + route registration; `verify_phase_25_1.py` **50/50 PASS**. No DB applied (dev Docker down), no browser tests, no commit.
+
+## Phase 25.2 -- Frontend refresh integration -- NEXT (not started)
+
+1. `apiFetch`: on a genuine 401 (never 403/5xx/network), attempt ONE `/auth/refresh` with `credentials: 'include'`; single-flight (shared in-flight promise; optionally BroadcastChannel across tabs); retry the original request once; refresh failure -> existing logout path. Preserve all transient-error handling byte-for-byte.
+2. AuthContext: logout adds a best-effort `POST /auth/logout` (`credentials: 'include'`) BEFORE the existing localStorage/tokenStatus/cache-clear sequence (unchanged); token hydration unchanged (localStorage access token remains primary).
+3. Login/signup pages: no JSON change needed (the cookie is set by the backend response); keep storing `access_token` as today.
+4. Guards: refresh attempted only on 401; never on 403; never mask real auth failures; never clear the token on transient failures.
+5. Verification: `tsc --noEmit`, ESLint (changed files), `npm run build`; manual multi-tab + PWA smoke checklist (no browser automation committed).
+
+## Phase 25.3 -- Production rollout (operator-gated, separate)
+
+1. Apply migration `a9b8c7d6e5f4` to the dev DB (next dev session) and then production (operator decision, per the established operator boundary).
+2. Render env check: nothing new strictly required (cookie knobs have safe defaults; `Secure=true`, `SameSite=None` match Vercel/Render). Optionally shorten `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (e.g. 60) AFTER 25.2 is live.
+3. Post-rollout: monitor `/auth/refresh` 401 rates; consider an expired-row cleanup phase later.
+
+**Out of scope for all of Phase 25**: Admin Portal, attendance/eligibility/calendar logic, deployment infrastructure, JWT redesign, dependency additions.

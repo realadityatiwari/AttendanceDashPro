@@ -5315,3 +5315,14 @@ existing verifiers).
 
 **HARD STOP: Investigation only. No code, schema, migration, deployment, or
 infrastructure change was made.**
+
+
+---
+
+# Phase 25 -- Session Renewal (Refresh Tokens)
+
+Resolves the confirmed architectural limitation from the 2026-09-02 auto-logout investigation (mandatory re-login every ~8h; no refresh mechanism existed). Additive only; PostgreSQL + JWT remains authoritative; Firebase stays retired.
+
+- **25.1 Backend refresh-token infrastructure COMPLETE (2026-09-02)** -- additive migration `a9b8c7d6e5f4` (single Alembic head chaining `c4d5e6f7a8b9`): `refresh_tokens` table (`user_id` FK, UNIQUE SHA-256 `token_hash` -- raw secret never persisted, `family_id`, `expires_at`, `is_used`/`is_revoked`, `replaced_by` link, family/user revocation indexes). Opaque CSPRNG refresh secrets (never JWTs); SHA-256 hash lookup; ~30-day config-driven expiry; `POST /api/v1/auth/refresh` (rotation + reuse detection -> family revocation on reuse; generic-401, rate-limited) and `POST /api/v1/auth/logout` (idempotent family revocation + cookie clear); login/register mint a family and set an HttpOnly + Secure + SameSite=None cookie scoped to `Path=/api/v1/auth` with the JSON login/register contract unchanged. Rotation is concurrency-safe (`SELECT ... FOR UPDATE` + single atomic commit; simultaneous refreshes serialize, the loser takes the reuse path). Access-JWT contract, localStorage access-token support, 401/403 semantics, transient-error handling, attendance/eligibility/calendar, Admin Portal: untouched. Verified: `compileall` PASS; single head `a9b8c7d6e5f4` + offline `--sql` upgrade/downgrade validated; app import + 4 auth routes registered; `verify_phase_25_1.py` **50/50 PASS**. Migration NOT applied anywhere yet (dev Docker down this session; operator boundary for production). No commit. **Frontend refresh interceptor NOT implemented (25.2, next).**
+- **25.2 Frontend refresh integration** -- NEXT: `apiFetch` genuine-401-once refresh retry (single-flight, `credentials: 'include'`, never on 403/5xx/network) + best-effort `/auth/logout` in AuthContext logout; localStorage access-token support preserved.
+- **25.3 Production rollout** -- operator-gated: apply migration to dev/prod; optionally shorten `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` after 25.2 is live.

@@ -22,6 +22,19 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours; env-overridable for production
 
+    # Refresh-token sessions (opaque DB-backed rotating tokens)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_COOKIE_NAME: str = "refresh_token"
+    # Cookie path is scoped to the auth endpoints so the refresh secret is
+    # never sent with ordinary API traffic.
+    REFRESH_COOKIE_PATH: str = "/api/v1/auth"
+    # Cross-site architecture (Vercel frontend <-> Render backend; dev
+    # localhost:3100 <-> 127.0.0.1:8080) requires SameSite=None. Loopback
+    # hosts are trustworthy origins, so Secure cookies are permitted in dev;
+    # production is HTTPS-only. Both are env-overridable.
+    REFRESH_COOKIE_SECURE: bool = True
+    REFRESH_COOKIE_SAMESITE: str = "none"
+
     # Security Headers
     SECURITY_HSTS_ENABLED: bool = False  # Enable only when HTTPS is guaranteed in production
 
@@ -66,6 +79,12 @@ class Settings(BaseSettings):
                     "BACKEND_CORS_ORIGINS must not contain localhost origins "
                     "when APP_ENV=production."
                 )
+        if not self.REFRESH_COOKIE_SECURE:
+            raise ValueError(
+                "REFRESH_COOKIE_SECURE must be true when APP_ENV=production; "
+                "the cross-site refresh cookie is rejected by browsers "
+                "without the Secure attribute."
+            )
         return self
 
     class Config:

@@ -1,5 +1,6 @@
 import re
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
@@ -9,9 +10,11 @@ from app.models.user import User, Section
 from app.models.enums import UserRole, ElectiveSlot, EnrollmentType
 from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
 from app.core.security import verify_password, create_access_token, hash_password, DUMMY_PASSWORD_HASH
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
 from app.api.dependencies.deps import get_db
+from app.services.refresh_token_service import RefreshTokenService, RefreshTokenError
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -55,9 +58,31 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+
+# ── Refresh-token cookie helpers (opaque secret, HttpOnly, never in JSON) ──
+
+def _set_refresh_cookie(response: Response, raw_token: str) -> None:
+    response.set_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        value=raw_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path=settings.REFRESH_COOKIE_PATH,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        httponly=True,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        path=settings.REFRESH_COOKIE_PATH,
+    )
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     credentials: LoginRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(rate_limit(10, 900, "login")),
 ):
@@ -93,12 +118,19 @@ async def login(
         
     # 3. Generate JWT
     access_token = create_access_token(subject=str(user.id), roll_number=user.roll_number)
-    
+
+    # 4. Issue the refresh-token session (new family) and deliver it via an
+    #    HttpOnly cookie. The response contract is unchanged (additive only).
+    raw_refresh, _row = await RefreshTokenService(db).issue(user)
+    await db.commit()
+    _set_refresh_cookie(response, raw_refresh)
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(rate_limit(5, 3600, "register")),
 ):
@@ -223,6 +255,68 @@ async def register(
 
     await db.refresh(user)
 
-    # --- Issue the same JWT used by login ---
+    # --- Issue the same JWT used by login + a new refresh-token family ---
     access_token = create_access_token(subject=str(user.id), roll_number=user.roll_number)
+    raw_refresh, _row = await RefreshTokenService(db).issue(user)
+    await db.commit()
+    _set_refresh_cookie(response, raw_refresh)
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(30, 900, "refresh")),
+):
+    """Rotate the refresh-token session presented in the HttpOnly cookie.
+
+    Returns a fresh access token (same TokenResponse contract) and sets a new
+    refresh cookie. Reuse/revocation/expiry → 401 with the SAME generic
+    detail (no information about token existence is leaked); reuse also
+    revokes the whole token family server-side.
+    """
+    raw = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if not raw:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Invalid refresh token"},
+        )
+
+    try:
+        user, raw_new, _new_row = await RefreshTokenService(db).rotate(raw)
+    except RefreshTokenError:
+        # 401 with a cleared cookie. The cookie must be cleared on the actual
+        # error response, so the 401 is returned directly (cookies set on the
+        # injected Response do not survive an HTTPException).
+        error_response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Invalid refresh token"},
+        )
+        _clear_refresh_cookie(error_response)
+        return error_response
+
+    access_token = create_access_token(subject=str(user.id), roll_number=user.roll_number)
+
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"access_token": access_token, "token_type": "bearer"},
+    )
+    _set_refresh_cookie(response, raw_new)
+    return response
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Server-side session revocation. Idempotent: safe when no/invalid
+    refresh cookie exists. Revokes the presented token's family and clears
+    the cookie; existing frontend logout behavior is unaffected."""
+    raw = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if raw:
+        await RefreshTokenService(db).revoke_by_token(raw)
+    _clear_refresh_cookie(response)
+    return {"message": "Logged out"}

@@ -11,3 +11,4 @@ from .laboratory import LaboratoryExperiment, LaboratoryRecord
 from .feedback import Feedback
 from .preference import UserPreference
 from .notification import Notification
+from .refresh_token import RefreshToken
