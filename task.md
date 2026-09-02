@@ -1153,12 +1153,35 @@ Static, read-only trace of the complete notification architecture (`docs/notific
 - [x] **Verification** ó `npx tsc --noEmit` PASS ∑ `npx eslint` on changed files PASS (0 errors) ∑ `node --check public/service-worker.js` PASS ∑ `git diff` review: no backend/schema/migration/auth/engine changes from this phase.
 - [x] **Governance** ó MASTER_ROADMAP.md / implementation_plan.md / task.md / walkthrough.md reconciled. No commit/deploy.
 
-### Remaining (P2ñP5, NOT STARTED)
+### Remaining (P3ñP5, NOT STARTED)
 
-- **P2:** Push subscription creation + persistence (authenticated endpoints, `push_subscriptions` table + migration).
 - **P3:** VAPID keypair generation, `pywebpush`, `PushDispatchService`, 404/410 dead-subscription cleanup.
 - **P4:** Trigger strategy ó move generation off read-only, dispatch push as a side-channel of the canonical in-app notification.
 - **P5:** Bell refresh-interval revalidation for real-time in-app freshness.
+
+## Phase 11C-P2 ó Push Subscription Persistence ó COMPLETE (2026-09-02)
+
+**Scope:** P2 only ó persistent, authenticated, owner-scoped browser push-subscription storage (the layer P3's dispatch reads). No VAPID delivery, no triggers, no in-app notification change.
+
+### Delivered
+
+- [x] **Database model** ó new additive `push_subscriptions` table (migration `f0e1d2c3b4a5`, applied to the **local dev DB only**; alembic head advanced `a9b8c7d6e5f4` ? `f0e1d2c3b4a5`, single head, safe downgrade verified): `id` UUID PK ∑ `user_id` FK ? `users.id` (indexed) ∑ `endpoint` Text with DB-enforced `UNIQUE(endpoint)` (idempotency) ∑ `p256dh`/`auth` String ∑ IST `created_at`/`updated_at`. Multi-device supported: one row per endpoint, many rows per user (user_id is NOT unique).
+- [x] **Layered backend** ó model (`backend/app/models/push_subscription.py`) ∑ schemas (`PushSubscriptionCreate`/`PushSubscriptionKeys`/`PushSubscriptionResponse`; `extra="forbid"` rejects a client-supplied `user_id` with 422; HTTPS-endpoint + key-length validation; keys never returned) ∑ owner-scoped repository (PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` on the endpoint unique constraint + owner-scoped delete) ∑ service (register/unsubscribe/list) ∑ endpoints `POST /api/v1/push-subscriptions` (authenticated, idempotent upsert) and `DELETE /api/v1/push-subscriptions/{subscription_id}` (owner-scoped, cross-user ? 404).
+- [x] **Ownership** ó always the authenticated JWT principal (`get_current_user`); the client can never specify an owner; another user's subscription is indistinguishable from a missing one (404).
+- [x] **Frontend VAPID boundary** ó `frontend/src/lib/push.ts`: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (documented empty placeholder for P3; public-only, never a private key) + `urlBase64ToUint8Array` / `arrayBufferToBase64Url` helpers. No VAPID implementation; missing key ? honest "push setup is incomplete" state.
+- [x] **Frontend subscription flow** ó `frontend/src/hooks/usePushSubscription.ts`: user-gesture-only `enable()` (support ? permission ? SW ready ? **reuse existing `getSubscription()` before `subscribe()`** ? persist to backend); existing browser subscription synced to the backend when Settings opens; `disable()` removes the backend record + browser subscription with per-step honest failures; all errors contained (never breaks auth/dashboard/in-app notifications).
+- [x] **Settings UI distinguishes permission from subscription readiness** ó unsupported (muted) / denied (explanation, no prompt) / default ("Enable browser notifications") / granted + subscribed ("Browser notifications enabled" + Disable) / granted + not configured ("push setup is incomplete" + Enable or honest VAPID-missing note) / setup error (message + Retry).
+- [x] **Verification** ó `python -m compileall backend/app` PASS ∑ migration upgrade/downgrade/re-upgrade PASS on local dev DB ∑ `backend/scripts/verify_phase_11c_p2.py` **24/24 PASS** (structure/constraints, 401, 422s incl. client `user_id`, create, idempotency, multi-device, ownership isolation, cross-user delete 404, DB-level UNIQUE/FK, baseline restore) ∑ `npx tsc --noEmit` PASS ∑ `npx eslint` changed files PASS ∑ `git status`/`git diff` clean of unrelated changes. No browser automation; no commit/deploy; no production migration.
+- [x] **Governance** ó MASTER_ROADMAP.md / implementation_plan.md / task.md / walkthrough.md reconciled.
+
+### NOT in P2 (hard boundary)
+
+- No VAPID keypair generation, no `pywebpush`, no `PushDispatchService`, no 404/410 cleanup (P3).
+- No delivery triggers, no scheduler, no notification records (P4).
+- No bell/refresh changes (P5), no in-app notification generation/cache/TTL changes, no auth/JWT/refresh changes, no attendance/eligibility/calendar engine changes.
+- No production environment changes, no production migration, no commit, no deploy.
+
+### Remaining (P3ñP5, NOT STARTED)
 
 
 ## Phase 12A √¢‚Ç¨‚Äù Responsive Foundation + Mobile Navigation (COMPLETE, 2026-08-21)

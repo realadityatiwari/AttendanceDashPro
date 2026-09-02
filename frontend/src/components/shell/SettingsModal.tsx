@@ -17,7 +17,8 @@ import {
 import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
 import { usePreferences, usePreferenceMutation } from "@/hooks/useApi";
-import { useNotificationPermission } from "@/hooks/useNotificationPermission";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
+import { isVapidConfigured } from "@/lib/push";
 import { UserPreferencesUpdate, WeekStart } from "@/types/api";
 
 interface SettingsModalProps {
@@ -53,14 +54,24 @@ const WEEK_OPTIONS: { value: WeekStart; label: string }[] = [
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   // SWR key is gated on `open` so preferences are fetched when the modal is
   // opened, not unconditionally at shell mount.
-  const { preferences, isLoading, isError, mutate } = usePreferences(open);
+  const {
+    preferences,
+    isLoading,
+    isError,
+    mutate,
+  } = usePreferences(open);
   const { savePreferences } = usePreferenceMutation();
   const {
     supported: browserNotificationsSupported,
+    pushSupported: browserPushSupported,
     permission: browserNotificationPermission,
-    isRequesting: browserNotificationRequesting,
-    requestPermission: requestBrowserNotificationPermission,
-  } = useNotificationPermission();
+    isWorking: browserPushWorking,
+    browserSubscription,
+    error: browserPushError,
+    enable: enableBrowserNotifications,
+    disable: disableBrowserNotifications,
+    clearError: clearBrowserPushError,
+  } = usePushSubscription(open);
 
   const [draft, setDraft] = useState<UserPreferencesUpdate | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
@@ -172,41 +183,76 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                       {!browserNotificationsSupported ? (
                         "Browser notifications are not supported on this device or browser."
-                      ) : browserNotificationPermission === "granted" ? (
-                        "Permission granted. Push subscription will be added in a later phase."
                       ) : browserNotificationPermission === "denied" ? (
                         "Notifications are blocked for this site. Allow them in your browser's site settings."
+                      ) : browserNotificationPermission === "default" ? (
+                        "Allow this site to show browser notifications."
+                      ) : !browserPushSupported ? (
+                        "Browser permission is enabled, but push setup is unavailable on this browser."
+                      ) : browserSubscription ? (
+                        "Browser notifications enabled."
+                      ) : browserPushError ? (
+                        browserPushError
+                      ) : !isVapidConfigured ? (
+                        "Browser permission is enabled, but push setup is incomplete — the server VAPID key is configured in a later phase."
                       ) : (
-                        "Allow this site to show browser notifications. Push subscription will be added in a later phase."
+                        "Browser permission is enabled, but push setup is incomplete."
                       )}
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center">
-                  {browserNotificationsSupported &&
-                    browserNotificationPermission === "default" && (
+                <div className="flex shrink-0 items-center gap-2">
+                  {!browserNotificationsSupported ? null
+                  : browserNotificationPermission === "denied" ? (
+                    <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+                  ) : browserNotificationPermission === "default" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => enableBrowserNotifications()}
+                      disabled={browserPushWorking}
+                    >
+                      {browserPushWorking ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <BellRing className="size-3.5" aria-hidden="true" />
+                      )}
+                      Enable browser notifications
+                    </Button>
+                  ) : browserPushWorking ? (
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                  ) : browserSubscription ? (
+                    <>
+                      <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" />
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => requestBrowserNotificationPermission()}
-                        disabled={browserNotificationRequesting}
+                        onClick={() => disableBrowserNotifications()}
+                        disabled={browserPushWorking}
                       >
-                        {browserNotificationRequesting ? (
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <BellRing className="size-3.5" aria-hidden="true" />
-                        )}
-                        Enable browser notifications
+                        Disable
                       </Button>
-                    )}
-                  {browserNotificationsSupported &&
-                    browserNotificationPermission === "granted" && (
-                      <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" />
-                    )}
-                  {browserNotificationsSupported &&
-                    browserNotificationPermission === "denied" && (
-                      <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
-                    )}
+                    </>
+                  ) : browserPushError ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { clearBrowserPushError(); enableBrowserNotifications(); }}
+                      disabled={browserPushWorking}
+                    >
+                      Retry
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => enableBrowserNotifications()}
+                      disabled={browserPushWorking}
+                    >
+                      <BellRing className="size-3.5" aria-hidden="true" />
+                      Enable push notifications
+                    </Button>
+                  )}
                 </div>
               </div>
             </section>

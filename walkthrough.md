@@ -9627,6 +9627,136 @@ Backend (functional in-app): `notification.py`, `enums.py`, `notification.py` (s
 
 ---
 
+## Phase 11C-P2 — Push Subscription Persistence — Walkthrough
+
+**Status: COMPLETE (2026-09-02).** P2 of the five-phase Web Push delivery plan (`docs/notification_delivery_investigation.md`). This phase establishes the persistent, authenticated, owner-scoped browser push-subscription storage that P3's `PushDispatchService` will read. P2 stops at the subscription-persistence boundary — no VAPID delivery, no notification triggers, no in-app notification changes.
+
+### Scope
+
+- Database-backed `push_subscriptions` registry (endpoint-identified, user-owned, DB-enforced idempotency).
+- Authenticated create/upsert and delete endpoints (owner always from the JWT — client can never specify an owner).
+- Frontend subscription lifecycle: user-gesture-only `enable()` (reuses existing browser subscription, never duplicates), load-time sync, `disable()` with honest failure handling.
+- Settings UI distinguishes permission from actual subscription readiness.
+
+### Architecture
+
+```
+Browser
+  ?
+  ? PushManager.subscribe()  (P2 prepares the code path; P3 provides the VAPID key)
+  ?
+PushSubscription
+  ?
+  ? POST /api/v1/push-subscriptions (authenticated)
+  ?
+FastAPI
+  ?
+  ?
+push_subscriptions
+  ??? user_id    FK ? users.id
+  ??? endpoint   UNIQUE (idempotency)
+  ??? p256dh     (server-side, never exposed)
+  ??? auth       (server-side, never exposed)
+```
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `backend/alembic/versions/f0e1d2c3b4a5_add_push_subscriptions.py` | **NEW** — additive migration, safe downgrade, alembic head `f0e1d2c3b4a5` |
+| `backend/app/models/push_subscription.py` | **NEW** — SQLAlchemy model |
+| `backend/app/models/__init__.py` | Export `PushSubscription` |
+| `backend/app/schemas/push_subscription.py` | **NEW** — `PushSubscriptionCreate` (+ `extra="forbid"`, HTTPS/length validation), `PushSubscriptionResponse` |
+| `backend/app/repositories/push_subscription_repo.py` | **NEW** — owner-scoped upsert/delete (pg `INSERT ... ON CONFLICT DO UPDATE`) |
+| `backend/app/services/push_subscription_service.py` | **NEW** — register/unsubscribe/list |
+| `backend/app/api/v1/endpoints/push_subscriptions.py` | **NEW** — `POST /api/v1/push-subscriptions` + `DELETE /api/v1/push-subscriptions/{id}` |
+| `backend/app/api/api.py` | Router registration under `/push-subscriptions` |
+| `backend/scripts/verify_phase_11c_p2.py` | **NEW** — verifier (24/24 PASS) |
+| `frontend/src/lib/push.ts` | **NEW** — VAPID public-key boundary (empty placeholder for P3) + `urlBase64ToUint8Array`/`arrayBufferToBase64Url` |
+| `frontend/src/hooks/usePushSubscription.ts` | **NEW** — subscription lifecycle hook (enable/disable/load-sync, VAPID-missing graceful degradation) |
+| `frontend/src/hooks/useApi.ts` | `usePushSubscriptionMutations()` (register/delete via `apiFetch`) |
+| `frontend/src/types/api.ts` | `PushSubscriptionKeys`/`PushSubscriptionCreate`/`PushSubscriptionResponse` |
+| `frontend/src/components/shell/SettingsModal.tsx` | "Browser notifications" row: permission-vs-subscription distinction (enabled+Disable / incomplete+Enable / VAPID-missing note / error+Retry) |
+| `frontend/.env.example` | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` documented (empty placeholder, P3) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+### Migration
+
+- **Revision:** `f0e1d2c3b4a5` (down_revision `a9b8c7d6e5f4`)
+- **Table:** `push_subscriptions` (id, created_at, updated_at, user_id FK ? users.id, endpoint UNIQUE, p256dh, auth)
+- **Indexes:** `ix_push_subscriptions_user_id` on user_id; UNIQUE(endpoint) creates its own index
+- **Applied to local dev DB only:** `alembic upgrade head` ? upgrade ? `alembic downgrade -1` ? `alembic upgrade head` cycle verified
+- **Safe downgrade:** drops the index, then the table (no existing table modified)
+
+### API
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `.../push-subscriptions` | `get_current_user` | Idempotent upsert: same endpoint ? updates existing row; owner from JWT, client `user_id` rejected 422 |
+| DELETE | `.../push-subscriptions/{id}` | `get_current_user` | Owner-scoped: another user's subscription ? 404 |
+
+### Frontend subscription flow
+
+1. **Enable** (user gesture, e.g. clicking "Enable browser notifications" or "Enable push notifications"):
+   - Check browser support (`PushManager` in `window`, service worker registered).
+   - Request `Notification.permission` when not already granted.
+   - `navigator.serviceWorker.ready` ? `registration.pushManager.getSubscription()` ? **reuse existing** (never create a duplicate across tabs).
+   - If no subscription exists and a VAPID public key is configured: `subscribe({ userVisibleOnly: true, applicationServerKey })`.
+   - If no VAPID key: show "push setup is incomplete" (honest — P3 provides the key).
+   - Persist to the backend: `POST /api/v1/push-subscriptions` with the endpoint + base64url-encoded p256dh/auth.
+2. **Load-time sync** (when Settings opens): if a browser subscription already exists, synchronize it to the backend. Failures surface honestly, never break the app.
+3. **Disable** (user gesture, e.g. clicking "Disable"):
+   - Remove the backend record (by id, when known); report failure if it fails.
+   - Unsubscribe the browser (via `pushSubscription.unsubscribe()`); report failure if it fails.
+   - No false success claims.
+4. **Failure handling:** every error is contained in the hook — `apiFetch`'s 401/403/network semantics are untouched, no auth invalidation, no logout, no breakage of dashboard/in-app notifications.
+
+### Settings UI states
+
+| Permission | Push state | Control |
+|---|---|---|
+| unsupported | — | Muted "not supported" |
+| denied | — | Warning + "change in browser settings" |
+| default | — | [Enable browser notifications] ? `enable()` |
+| granted | subscribed | "Browser notifications enabled" + [Disable] |
+| granted | not subscribed, VAPID missing | "Setup incomplete — server VAPID key configured in later phase" |
+| granted | not subscribed, VAPID present | "Setup incomplete" + [Enable push notifications] |
+| granted | error | Error message + [Retry] |
+| granted | working | Spinner |
+
+### Verification performed (static/in-process only)
+
+- `npx tsc --noEmit` — **PASS** (0 errors)
+- `npx eslint` on changed frontend files — **PASS** (0 errors)
+- `python -m compileall backend/app` — **PASS**
+- Migration upgrade ? downgrade ? re-upgrade on the local dev DB — **PASS**
+- `backend/scripts/verify_phase_11c_p2.py` — **24/24 PASS** (table structure, UNIQUE/FK/index constraints, 401, 422s incl. client `user_id`, create, idempotency, multi-device, ownership isolation, cross-user delete 404, DB-level UNIQUE/FK enforcement, baseline restore)
+- `git diff`/`git status` — no unrelated auth/attendance/notification-generation/schema changes; no secrets committed
+- **No browser automation, Playwright/Cypress/Selenium, or E2E testing was run** (per scope — the user performs browser/PWA testing)
+
+### Explicit non-goals (NOT in P2)
+
+- No VAPID keypair generation, no `pywebpush`, no `PushDispatchService`, no 404/410 dead-subscription cleanup (P3).
+- No delivery triggers, no background scheduler, no notification delivery records (P4).
+- No bell redesign, no notification-center changes, no `/notifications` API change, no notification generation/cache/TTL change, no SWR policy change, no polling reintroduced (P5).
+- No auth/JWT/login/signup changes, no Admin Portal changes, no attendance/eligibility/calendar engine changes.
+- No production environment changes, no production migration, no commit, no deploy.
+
+### Database mutation status
+
+**ZERO changes to existing tables.** The `push_subscriptions` table is additive — no existing table, row, view, or constraint is modified. The migration was applied to the local dev database only (PostgreSQL on `localhost:55432`). Alembic head: `f0e1d2c3b4a5`.
+
+### Remaining work (P3–P5, NOT STARTED)
+
+- **P3 — VAPID + backend dispatch:** VAPID keypair generation (private key server-side only), `pywebpush`, `PushDispatchService`, 404/410 dead-subscription cleanup, retry policy.
+- **P4 — canonical ? push triggers:** move generation off read-only to post-mutation + optional sweep; dispatch Web Push as a side-channel of the persisted in-app notification (in-app feed remains the source of truth).
+- **P5 — bell/in-app refresh improvements:** e.g., a modest `refreshInterval` on `useNotifications` for real-time freshness (parallelizable with Phase 26 performance work).
+
+**HARD STOP after P2 — no commit, no push, no deploy, no browser automation.**
+
+
+---
+
 ## Implementation: Eliminate 2N Quiz-Window Scans (Phase 26.3, 2026-09-02)
 
 **Status: IMPLEMENTATION COMPLETE.** Optimization #3 from the 2026-09-02 performance investigation. No schema, migration, engine, frontend, auth, or API contract change. No commit.

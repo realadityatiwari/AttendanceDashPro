@@ -730,6 +730,28 @@ export interface NotificationUpdate {
   is_dismissed?: boolean;
 }
 
+// ── Phase 11C-P2 Web Push subscription (POST/DELETE /api/v1/push-subscriptions) ──
+export interface PushSubscriptionKeys {
+  p256dh: string;
+  auth: string;
+}
+
+// POST body — only the browser PushSubscription data (endpoint + keys).
+// user_id is never sent: the backend derives the owner from the JWT.
+export interface PushSubscriptionCreate {
+  endpoint: string;
+  keys: PushSubscriptionKeys;
+}
+
+// Response exposes only the persisted row identity needed for unsubscribe
+// (id + endpoint + server timestamps). Keys are never returned.
+export interface PushSubscriptionResponse {
+  id: string;
+  endpoint: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 // ── Feedback (Phase 10C submission + Phase 21B admin review) ──────────────
 export type FeedbackType = "BUG" | "SUGGESTION" | "QUESTION" | "PRAISE";
 

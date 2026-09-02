@@ -31,6 +31,8 @@ import {
   NotificationsResponse,
   NotificationItem,
   NotificationUpdate,
+  PushSubscriptionCreate,
+  PushSubscriptionResponse,
   FeedbackAdminListResponse,
   AdminFeedbackParams,
   AdminIdentity,
@@ -492,6 +494,30 @@ export function useNotificationMutation() {
   };
 
   return { updateNotification };
+}
+
+// Phase 11C-P2 push-subscription registration/unregistration. Both endpoints
+// are authenticated on the backend and the owner is always derived from the
+// JWT — the client never sends a user_id. Registration is idempotent
+// (DB-enforced UNIQUE(endpoint)): calling it repeatedly for the same browser
+// subscription can never create duplicates.
+export function usePushSubscriptionMutations() {
+  const registerPushSubscription = async (
+    payload: PushSubscriptionCreate
+  ): Promise<PushSubscriptionResponse> => {
+    return apiFetch('/api/v1/push-subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  };
+
+  const deletePushSubscription = async (subscriptionId: string): Promise<void> => {
+    return apiFetch(`/api/v1/push-subscriptions/${subscriptionId}`, {
+      method: 'DELETE'
+    });
+  };
+
+  return { registerPushSubscription, deletePushSubscription };
 }
 
 // Phase 21B admin feedback review (GET /api/v1/feedback/admin).

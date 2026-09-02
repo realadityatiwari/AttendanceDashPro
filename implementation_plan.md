@@ -1124,6 +1124,66 @@ First of five phases (P1–P5) from the delivery investigation. Scope: make the br
 | `frontend/public/service-worker.js` | `push` + `notificationclick` + defensive payload parser; existing behavior preserved |
 | `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
 
+### Phase 11C-P2 — Push subscription persistence COMPLETE (2026-09-02)
+
+Second of five phases (P1–P5) from the delivery investigation. Scope: persistent, authenticated, owner-scoped browser push-subscription storage (the layer P3's dispatch reads). P2 stops at the subscription-persistence boundary — no VAPID delivery, no triggers, no in-app changes.
+
+**Database model (migration `f0e1d2c3b4a5`, applied to the local dev DB only):**
+
+- New additive table `push_subscriptions` (alembic head advanced `a9b8c7d6e5f4` ? `f0e1d2c3b4a5`; single head; safe downgrade verified):
+  - `id` UUID PK (Base mixin), `created_at`/`updated_at` IST timestamptz (Base mixin).
+  - `user_id` UUID, NOT NULL, FK ? `users.id` (`fk_push_subscription_user`), indexed (`ix_push_subscriptions_user_id`) — the P2 user-owned lookup path.
+  - `endpoint` Text, NOT NULL, `UNIQUE(endpoint)` (`uq_push_subscriptions_endpoint`) — the Web Push endpoint URL is the natural identity of a browser subscription; uniqueness is **DB-enforced** so repeated registrations of the same endpoint (multi-tab, page reload, repeated enable) can never create duplicates.
+  - `p256dh` String, NOT NULL; `auth` String, NOT NULL — the browser-generated push keys P3 needs to encrypt payloads. Server-side data only; never logged, never returned to the client.
+- **Multi-device:** the model deliberately does NOT restrict one user to one subscription — `user_id` is indexed but not unique; desktop + mobile + PWA + another browser are independent, independently removable rows.
+- Downgrade drops the index and the table (no existing table modified).
+
+**Backend structure (layered, existing conventions):**
+
+- `backend/app/models/push_subscription.py` — SQLAlchemy model (explicit `__tablename__ = "push_subscriptions"`, Base mixin timestamps, `UniqueConstraint`). Exposed via `backend/app/models/__init__.py`.
+- `backend/app/schemas/push_subscription.py` — `PushSubscriptionCreate` (`endpoint` + `keys.p256dh`/`auth`; `model_config = ConfigDict(extra="forbid")` so a client-supplied `user_id` is **rejected 422**; endpoint must be a valid HTTPS URL with a 2048 cap; key length capped at 1024) and `PushSubscriptionResponse` (`id`/`endpoint`/`created_at`/`updated_at` — keys are never returned).
+- `backend/app/repositories/push_subscription_repo.py` — owner-scoped repository (notification-repo convention, repo-owned commit): `upsert` via PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` on `uq_push_subscriptions_endpoint` (refreshes p256dh/auth/updated_at and reassigns ownership to the current authenticated principal); `get_by_id`/`get_by_user` (owner-scoped); `delete` (owner-scoped, `rowcount > 0`). No client-controlled identity anywhere.
+- `backend/app/services/push_subscription_service.py` — `register` (idempotent upsert), `unsubscribe` (owner-scoped delete, False = 404), `list_for_user`. Storage only — no dispatch, no triggers.
+- `backend/app/api/v1/endpoints/push_subscriptions.py` — `POST /api/v1/push-subscriptions` (authenticated via `get_current_user`; idempotent; returns the persisted row identity) and `DELETE /api/v1/push-subscriptions/{subscription_id}` (owner-scoped; another user's subscription ? 404). Registered in `backend/app/api/api.py` under prefix `/push-subscriptions`.
+
+**Frontend:**
+
+- `frontend/src/lib/push.ts` — the smallest clean VAPID boundary for P3: `VAPID_PUBLIC_KEY` from `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (documented in `frontend/.env.example`; empty placeholder — no real/private keys, and the implementation does not pretend the system is ready until the value exists) + `isVapidConfigured`; `urlBase64ToUint8Array` (WHATWG base64url decoding for `applicationServerKey`, typed `Uint8Array<ArrayBuffer>` for the DOM contract) and `arrayBufferToBase64Url` (serializes `PushSubscription.getKey()` bytes to the URL-safe base64 the backend stores).
+- `frontend/src/hooks/usePushSubscription.ts` — the browser subscription lifecycle:
+  - `enable()` (user gesture only): checks browser support ? requests permission (only when not granted) ? `navigator.serviceWorker.ready` ? **reuses an existing `PushSubscription` (`getSubscription()` before `subscribe()`)** — no duplicate browser subscriptions across tabs ? `subscribe({ userVisibleOnly, applicationServerKey })` only when none exists and a VAPID public key is configured (otherwise an honest "push setup unavailable" state) ? persists to the backend ? updates UI state.
+  - Load-time sync (§12): when the surface becomes active (Settings opens), an EXISTING browser subscription is read (never subscribed on load) and synchronized to the backend, keeping Browser ? Backend aligned; sync failures surface honestly and are never fatal.
+  - `disable()` (§13): removes the persisted backend record (by id) and unsubscribes the browser; each step reports its own failure (missing browser sub / missing backend record / backend request failure / browser unsubscribe failure are all handled; success is never claimed when a required step failed).
+  - Failure containment (§14/§15): every error is contained in the hook — `apiFetch`'s 401/403/network semantics are untouched, no auth invalidation, no logout, no breakage of dashboard/in-app notifications.
+- `frontend/src/hooks/useApi.ts` — `usePushSubscriptionMutations()` (register/delete via `apiFetch`); types in `frontend/src/types/api.ts` (`PushSubscriptionCreate`/`PushSubscriptionKeys`/`PushSubscriptionResponse`).
+- `frontend/src/components/shell/SettingsModal.tsx` — the "Browser notifications" row now **distinguishes permission from subscription readiness** (§20): unsupported (muted) / denied (explanation, no prompt) / default ("Enable browser notifications" ? `enable()`) / granted + subscribed ("Browser notifications enabled" + Disable) / granted + not configured ("push setup is incomplete" + Enable or honest VAPID-missing note) / setup error (message + Retry). `usePushSubscription(open)` replaces the P1 `useNotificationPermission` usage in the modal.
+
+**Security:** ownership is always the authenticated JWT principal (`get_current_user`); the client can never specify an owner (`extra="forbid"` rejects `user_id`); DELETE is owner-scoped (cross-user ? 404); input is validated (HTTPS endpoint, bounded lengths); keys are never exposed in responses; no tokens/JWTs/VAPID private keys stored or logged.
+
+**Verification:** `python -m compileall backend/app` PASS · migration graph single head `f0e1d2c3b4a5` · upgrade ? downgrade ? re-upgrade verified on the local dev DB · `backend/scripts/verify_phase_11c_p2.py` **24/24 PASS** (table structure/constraints, 401, 422s incl. client `user_id`, create, idempotency, multi-device, ownership isolation, cross-user delete 404, DB-level UNIQUE/FK, baseline restore) · `npx tsc --noEmit` PASS · `npx eslint` changed files PASS · `git status`/`git diff` review (no unrelated auth/attendance/notification-generation/schema changes, no secrets). No browser automation; no commit; no deploy; no production migration.
+
+**Files changed (P2):**
+
+| File | Change |
+|---|---|
+| `backend/alembic/versions/f0e1d2c3b4a5_add_push_subscriptions.py` | NEW migration (additive table, safe downgrade) |
+| `backend/app/models/push_subscription.py` | NEW model |
+| `backend/app/models/__init__.py` | Expose `PushSubscription` |
+| `backend/app/schemas/push_subscription.py` | NEW schemas (+ `extra="forbid"`, HTTPS/length validation) |
+| `backend/app/repositories/push_subscription_repo.py` | NEW owner-scoped repository (upsert/delete) |
+| `backend/app/services/push_subscription_service.py` | NEW service |
+| `backend/app/api/v1/endpoints/push_subscriptions.py` | NEW endpoints (POST/DELETE) |
+| `backend/app/api/api.py` | Router registration under `/push-subscriptions` |
+| `backend/scripts/verify_phase_11c_p2.py` | NEW verifier (24/24 PASS) |
+| `frontend/src/lib/push.ts` | NEW — VAPID boundary + base64url helpers |
+| `frontend/src/hooks/usePushSubscription.ts` | NEW — subscription lifecycle hook |
+| `frontend/src/hooks/useApi.ts` | `usePushSubscriptionMutations()` |
+| `frontend/src/types/api.ts` | Push subscription types |
+| `frontend/src/components/shell/SettingsModal.tsx` | Subscription-ready states (enabled/Disable vs incomplete vs error+Retry) |
+| `frontend/.env.example` | Documents `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (empty placeholder, P3) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+**P3 boundary (explicit non-goals of P2):** no VAPID keypair generation, no `pywebpush`, no `PushDispatchService`, no 404/410 dead-subscription cleanup, no delivery triggers (P4), no bell/refresh changes (P5), no in-app notification generation/cache/TTL changes, no auth/JWT/refresh changes, no production environment changes, no production migration.
+
 ### 11.0 â€” Architecture & Discovery Audit (COMPLETE)
 
 Read-only audit establishing the Phase 11 baseline: zero notification substrate exists (no model/table/endpoint, no scheduler, no Web Push/SW/PWA â€” PWA is Phase 13); `class_reminders` is the only preference with an active consumer; `auto_mark_present` and `week_starts_on` remain storage-only (auto-mark must NOT ship without an explicit product decision). Phase 11 = in-app notifications generated on-read; delivery model decision-gated (11C). Report: `docs/phase_11/phase_11_architecture_audit.md`.
