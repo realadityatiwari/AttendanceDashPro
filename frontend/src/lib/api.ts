@@ -26,6 +26,13 @@ export { API_BASE_URL };
  * into one /student/me request. */
 export const PROFILE_KEY = "/api/v1/student/me";
 
+/** Shared SWR cache key for the canonical notification inbox endpoint.
+ * The bell badge, the notification center, the PATCH mutation reconciliation,
+ * the service-worker invalidation signal, and bell-open revalidation all
+ * consume this ONE key so SWR coalesces them into a single request (Phase
+ * 11C-P5 canonical key). GET /api/v1/notifications remains strictly read-only. */
+export const NOTIFICATIONS_KEY = "/api/v1/notifications";
+
 // ── Single-flight refresh-token renewal ───────────────────────────────────
 //
 // Phase 25.2: opaque HttpOnly refresh cookie → POST /api/v1/auth/refresh

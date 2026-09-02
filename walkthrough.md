@@ -9852,6 +9852,170 @@ P1 Service Worker ? showNotification()
 
 ---
 
+## Phase 11C-P4 — Canonical Notification ? Push Triggers — Walkthrough
+
+**Status: COMPLETE (2026-09-02).** P4 of the five-phase Web Push delivery plan (`docs/notification_delivery_investigation.md`). This phase establishes the trigger layer that decides WHEN a canonical in-app notification becomes a Web Push. The in-app notification system remains the source of truth; push is a best-effort side-channel only. **No migration** (alembic head `f0e1d2c3b4a5` unchanged). **No frontend changes.**
+
+### Architecture
+
+```
+AUTHORITATIVE DOMAIN MUTATION
+  (attendance / event / quiz schedule)
+       ? service commits
+NotificationService.emit()
+  race-free INSERT … ON CONFLICT DO NOTHING
+  or refresh-in-place
+       ?
+Notification row COMMITTED
+       ?
+PushDispatchService (best-effort, isolated)
+  only for NEWLY created rows
+```
+
+### Key change: GET /notifications is now read-only
+
+Pre-P4: `NotificationService.get_notifications()` generated projections from four sources (class reminders, quiz approaching, attendance items, academic events), upserted them all, then served the inbox. P4 eliminates this entirely: `get_notifications()` reads only the persisted inbox from the DB (or the 60s TTL cache). Notification rows are created only by mutation triggers (attendance marking, event create/update, quiz schedule change) and by the explicit callable sweep. The historical 11A/11B verifier assertions of generation-on-read are intentionally superseded.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `backend/app/services/notification_service.py` | Read-only `get_notifications()`; `emit()` boundary; `_notify_push`; trigger helpers `after_attendance_mutation`/`after_event_mutation`/`after_quiz_mutation`; `regenerate_user_notifications` sweep; kind deep-link map |
+| `backend/app/repositories/notification_repo.py` | `try_create` (race-free `INSERT … ON CONFLICT DO NOTHING RETURNING`), `get_by_occurrence_key` |
+| `backend/app/repositories/user_repo.py` | `get_enrolled_user_ids`, `get_elective_choices_for_slot`, `get_all_user_ids` |
+| `backend/app/services/attendance_service.py` | Post-commit attendance trigger (lazy import, isolated) |
+| `backend/app/services/event_service.py` | Post-commit event triggers on create/update (lazy import, isolated) |
+| `backend/app/services/admin_quiz_service.py` | Post-commit quiz schedule triggers (`_notify_quiz_users` helper) |
+| `backend/scripts/verify_phase_11c_p4.py` | **NEW** verifier (27/27 PASS) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+### Emission boundary
+
+`NotificationService.emit()` is the single canonical write path:
+
+- **New row:** `NotificationRepository.try_create` uses `INSERT … ON CONFLICT DO NOTHING RETURNING id` — atomic, race-free, never duplicates. The row is committed; `_notify_push` dispatches a best-effort Web Push via `PushDispatchService` (or the injected mock).
+- **Existing row:** refresh `message`/`subject_code`/`subject_name`/`updated_at` in place, preserving `date`, `is_read`, `is_dismissed`, `created_at`. **No re-push** — a repeated trigger or sweep of the same fact never sends a duplicate push.
+- `PushPayload` is derived from the canonical Notification row: `title="AttendanceDash Pro"`, `body=row.message[:400]`, `url=kind-based deep link` (`/history`, `/tools/events`, `/tools/quiz-schedule`, `/dashboard`), `notification_id=str(row.id)`, `kind=row.kind`. No secrets, no JWTs, no subscription keys.
+
+### Mutation triggers
+
+| Trigger | Location | Emitted kinds | Recipient resolution |
+|---|---|---|---|
+| Attendance marked | `AttendanceService.record_attendance` (post-commit) | ATTENDANCE_THRESHOLD, MUST_ATTEND, SAFE_SKIP | The affected user's resolved subject (elective slot ? concrete choice, not anchor) |
+| Event created/updated | `EventService.create_event`/`update_event` (post-commit) | ACADEMIC_EVENT | Concrete-subject events ? enrolled users of that subject only (elective isolation: BCS-058 event ? BCS-058 enrollees only, never BCS-055 students); elective-slot events ? slot choosers + anchor fallback; global events ? all users; past/inactive events skipped |
+| Quiz schedule created/updated | `AdminQuizService.create_quiz_schedule`/`update_quiz_schedule` (post-commit) | QUIZ_APPROACHING | Enrolled users of the schedule subject + (if elective slot) slot choosers |
+
+All triggers:
+- Fire **after** the domain mutation commits (transaction ordering: domain ? notification ? push).
+- Are **fully isolated** — they never raise to the caller. Failures are logged with safe metadata.
+- Use lazy (function-level) imports of `NotificationService` to avoid circular imports.
+
+### Sweep (callable, NOT scheduled)
+
+`NotificationService.regenerate_user_notifications(user)` regenerates all four canonical notification families for a user via `emit()`:
+- `_class_reminders` — gated by the `class_reminders` preference
+- `_quiz_approaching` — next-upcoming quiz cycle
+- `_attendance_items` — per-subject threshold/optimizer state
+- `_academic_events` — upcoming active events (top-4, enrolled-scoped, elective-resolved)
+
+This sweep is callable but **not scheduled** — no cron/Celery/Redis/APScheduler was added. Time-dependent regeneration (primarily CLASS_REMINDER) is explicitly deferred from scheduling. P5 or operations may invoke the sweep when needed.
+
+### Transaction boundary
+
+The ordering invariant is:
+
+```
+domain mutation commits ? NotificationService.emit ? try_create commits ? push dispatch (best-effort)
+```
+
+A push failure never rolls back or deletes the canonical notification row. A domain mutation failure never reaches `emit()`. The notification is persisted in its own transaction after the domain commit.
+
+### Idempotency / duplicate prevention
+
+- `UNIQUE(user_id, kind, occurrence_key)` DB constraint prevents duplicate rows.
+- `emit()` on an existing row refreshes without re-pushing — a repeated trigger produces no duplicate push.
+- `try_create` uses `ON CONFLICT DO NOTHING`: concurrent emits are race-free (only one wins the insert; the loser reads the existing row and refreshes).
+
+### Verification performed
+
+- `python -m compileall backend/app` — **PASS**
+- `python -c "from app.main import app"` — **PASS** (no circular imports)
+- `python scripts/verify_phase_11c_p4.py` — **27/27 PASS** (A: read-only GET, B: emit creates row, C: push-once, D: duplicate suppression, E: push-failure isolation, F: zero-subscription persistence, G: VAPID-missing persistence, H: P3 cleanup decoupling, I: multi-subscription isolation, J: recipient isolation, K: read-only no-write GET, L: PATCH read-state regression)
+- `python scripts/verify_phase_11c_p3.py` — **20/20 PASS** regression
+- `python scripts/verify_phase_11c_p2.py` — **24/24 PASS** regression
+- Alembic head — `f0e1d2c3b4a5` (unchanged, no migration)
+- `git diff --check` — **PASS** (no whitespace errors)
+- **No browser automation, Playwright/Cypress/Selenium, or E2E testing was run**
+
+### Explicit non-goals (NOT in P4)
+
+- No frontend changes (P5 owns bell/in-app refresh).
+- No scheduler/cron/background workers (CLASS_REMINDER sweep is callable but unscheduled).
+- No public send-push endpoint; no auth/JWT changes.
+- No migration/schema change; no production environment changes; no production migration; no commit; no deploy.
+
+### Database mutation status
+
+**ZERO changes to existing tables.** The migration graph is unchanged (alembic head `f0e1d2c3b4a5`). No existing table, row, view, or constraint is modified. The verifier's test rows are created and removed within the same run.
+
+### Remaining work (P5, NOT STARTED)
+
+- **P5 — bell/in-app refresh improvements:** e.g., a modest `refreshInterval` on `useNotifications` for real-time freshness (parallelizable with Phase 26 performance work).
+
+**HARD STOP after P4 — no commit, no push, no deploy, no browser automation.**
+
+**Phase 11C-P4 AUDIT (2026-09-02): REJECTED.** Two CRITICAL defects found (F-1/F-2). **REMEDIATION COMPLETE (2026-09-03)** â€” F-1/F-2 fixed, verifier extended to 38/38 PASS, P2/P3 regressions green. See task.md for full findings.
+
+
+---
+
+## Phase 11C-P5 â€” Notification Bell / In-App Refresh â€” Walkthrough
+
+**Status: COMPLETE (2026-09-03).** P5 of the five-phase Web Push delivery plan. Frontend refresh/presentation only: newly persisted canonical notifications become visible in the bell badge and notification center without a full-page reload. Event-driven revalidation, NOT polling. **No backend change, no migration, no scheduler.**
+
+### Scope
+- Service-worker invalidation signal to controlled clients.
+- Single centralized frontend listener (NotificationRefreshListener).
+- Canonical shared SWR key (NOTIFICATIONS_KEY) for bell, center, SW signal, PATCH.
+- Foreground/focus recovery via the preserved STANDARD_CACHE focus policy (one deduped request per 60s).
+- Bell-open mutate and PATCH local cache reconciliation (unchanged).
+
+### Files changed
+| File | Change |
+|---|---|
+| `frontend/public/service-worker.js` | push handler posts NOTIFICATIONS_UPDATED to controlled clients |
+| `frontend/src/components/pwa/NotificationRefreshListener.tsx` | NEW centralized listener |
+| `frontend/src/components/layout/AppShell.tsx` | mounts the listener |
+| `frontend/src/hooks/useApi.ts` | useNotifications consumes canonical NOTIFICATIONS_KEY |
+| `frontend/src/lib/api.ts` | exports NOTIFICATIONS_KEY |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | governance |
+
+### Request behavior
+- Normal mount: one GET /api/v1/notifications from the always-mounted bell (existing).
+- Push while foreground: SW message -> one targeted mutate (deduped by SWR).
+- Background -> foreground: SWR focus revalidation, one request per 60s window (STANDARD_CACHE).
+- Bell open: mutate() (existing).
+- Mark read / dismiss: local cache update (existing, non-optimistic).
+- **Polling: none.**
+
+### Verification performed
+- `npx tsc --noEmit` PASS - `npx eslint` changed files PASS - `node --check public/service-worker.js` PASS - `python -m compileall backend/app` PASS - `python -m alembic heads` `f0e1d2c3b4a5` - `git diff --check` PASS. **No browser automation run; manual PWA testing is the user responsibility (PENDING).**
+
+### Manual verification checklist (user)
+1. Foreground push -> bell badge refreshes without reload; center shows the row.
+2. Center open -> new push refreshes the open list from canonical GET.
+3. Background -> foreground -> one targeted refresh catches up.
+4. Bell open with stale cache -> latest rows appear.
+5. Mark read -> badge updates; dismiss -> list/badge synchronized.
+6. Offline/transient failure -> refresh recovers without logout.
+7. Installed PWA -> repeat key checks.
+
+### Known limitations
+- CLASS_REMINDER remains sweep-only and unscheduled (separate future phase; not P5).
+- Real Web Push requires valid production VAPID config + a persisted browser subscription.
+- Multi-tab: each tab revalidates its own SWR cache; tabs that miss the SW message catch up on focus/visibility.
+- Manual E2E still pending (user).
+
 ## Implementation: Eliminate 2N Quiz-Window Scans (Phase 26.3, 2026-09-02)
 
 **Status: IMPLEMENTATION COMPLETE.** Optimization #3 from the 2026-09-02 performance investigation. No schema, migration, engine, frontend, auth, or API contract change. No commit.

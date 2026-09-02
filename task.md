@@ -1202,10 +1202,107 @@ Static, read-only trace of the complete notification architecture (`docs/notific
 - No public send-push endpoint; no frontend changes; no auth/JWT changes.
 - No migration/schema change; no production environment changes; no production migration; no commit; no deploy.
 
-### Remaining (P4ñP5, NOT STARTED)
+### Remaining (P5, NOT STARTED)
 
-- **P4:** Canonical notification ? push triggers (move generation off read-only; dispatch as a side-channel of the persisted in-app notification).
 - **P5:** Bell/in-app refresh improvements.
+
+## Phase 11C-P4 - Canonical Notification -> Push Triggers - COMPLETE (2026-09-02)
+
+**Scope:** P4 only - the trigger layer that decides WHEN a canonical in-app notification becomes a Web Push. GET /notifications is now read-only (no generation on read). The in-app notification system remains the source of truth. Push is a best-effort side-channel only.
+
+### Delivered
+
+- [x] **GET /notifications is read-only** - NotificationService.get_notifications() serves only the persisted inbox (or the 60s TTL cache). No generation, no DB writes. The historical 11A/11B generation-on-read contract is intentionally replaced (verify_phase_11b.py assertions superseded).
+- [x] **Emission boundary** - NotificationService.emit(): race-free INSERT ... ON CONFLICT DO NOTHING RETURNING (NotificationRepository.try_create) for new rows; refresh-in-place for existing rows. Push dispatched ONLY for newly created rows - existing-row refresh never re-pushes.
+- [x] **Mutation triggers** (post-commit, fully isolated, best-effort): attendance marking -> ATTENDANCE_THRESHOLD/MUST_ATTEND/SAFE_SKIP for the affected subject; event create/update -> ACADEMIC_EVENT to enrolled-scope recipients (elective-isolated, no slot leakage); quiz schedule create/update -> QUIZ_APPROACHING for enrolled users.
+- [x] **Push payload from canonical row** - body=row.message, notification_id=row.id, kind=row.kind, kind-based same-origin deep link.
+- [x] **Sweep (callable, NOT scheduled)** - regenerate_user_notifications(user) regenerates all four families (including CLASS_REMINDER). No cron/Celery/Redis/APScheduler.
+- [x] **Failure isolation** - push failure never deletes the canonical notification row; domain mutation success + notification success + push failure returns success; missing VAPID = CONFIGURATION_ERROR only.
+- [x] **No frontend changes, no migration** - alembic head f0e1d2c3b4a5 unchanged.
+- [x] **Verification** - verify_phase_11c_p4.py 27/27 PASS (read-only GET, emit creates row, push-once, duplicate suppression, push-failure isolation, zero-subscription + VAPID-missing persistence, recipient isolation, PATCH regression) P3 verifier 20/20 PASS P2 verifier 24/24 PASS compileall PASS. No browser automation; no commit/deploy.
+
+### NOT in P4 (hard boundary)
+
+- No frontend changes (P5).
+- No scheduler/cron/background workers (CLASS_REMINDER sweep is callable but unscheduled).
+- No public send-push endpoint; no auth/JWT changes.
+- No migration/schema change; no production environment changes; no production migration; no commit; no deploy.
+
+## Phase 11C-P5 ó Notification Bell / In-App Refresh ó COMPLETE (2026-09-03)
+
+**Scope:** P5 only ó frontend refresh/presentation. Newly persisted canonical notifications (created by P4 mutation triggers) must become visible in the bell badge and notification center without a full-page reload. No notification generation, no backend change, no polling.
+
+### Delivered
+
+- [x] **Service-worker ? page signal** ó `frontend/public/service-worker.js`: the P1 `push` handler now, after `showNotification()`, posts `{ type: "NOTIFICATIONS_UPDATED" }` to every controlled window client via `clients.matchAll()`. The message is only an invalidation hint ó no payload content, no secrets, no reconstructed inbox. Backend canonical row remains authoritative.
+- [x] **Centralized frontend listener** ó NEW `frontend/src/components/pwa/NotificationRefreshListener.tsx`, mounted in `AppShell`. Listens for SW messages; validates type; triggers targeted SWR revalidation of the canonical notification key only. No other cache key touched, no page reload, no polling, cleanup on unmount.
+- [x] **Canonical shared SWR key** ó `frontend/src/lib/api.ts` exports `NOTIFICATIONS_KEY = "/api/v1/notifications"`; `useNotifications()` (bell + center) uses it, so the SW signal, bell-open `mutate()`, and PATCH reconciliation all target the same cache entry.
+- [x] **Foreground/focus recovery** ó preserved the pre-P5 SWR policy: the always-mounted bell runs `STANDARD_CACHE` (`revalidateOnFocus: true`, `dedupingInterval: 60s`), so returning to the app revalidates the notification key once per 60s window via SWR's own focus/visibility handling ó no manual visibility listener added, no request storm.
+- [x] **Bell open / PATCH / center** ó unchanged: bell-open calls `mutate()`, PATCH updates the shared cache locally, center reads the same key.
+- [x] **No polling** ó no setInterval/timer/SSE/WebSocket added. GET /notifications remains strictly read-only; P4 persistence/emit untouched.
+
+### Verification (static only ó manual browser/PWA testing is the user's responsibility)
+- `npx tsc --noEmit` ó PASS ∑ `npx eslint` on changed files ó PASS (0 errors) ∑ `node --check public/service-worker.js` ó PASS ∑ `python -m compileall backend/app` ó PASS (backend untouched) ∑ `python -m alembic heads` ó `f0e1d2c3b4a5` (no migration) ∑ `git diff --check` ó PASS. No browser automation.
+
+### NOT in P5 (hard boundary)
+- No notification generation; GET /notifications remains read-only. No polling/scheduler/cron. No UI redesign. No auth/JWT changes. No migration. No commit/deploy.
+
+### Manual browser/PWA verification (PENDING ó user performs)
+1. Foreground page: trigger a backend notification ? Web Push appears ? bell unread badge refreshes without full-page reload ? center shows the row.
+2. Center already open: keep panel open, trigger another notification ? list refreshes from canonical GET.
+3. Background ? foreground: background the app, trigger notification, return ? one targeted refresh catches up.
+4. Bell open: create a notification while the UI cache is stale, open the bell ? latest rows appear.
+5. Read/dismiss: mark read ? badge updates; dismiss ? list/badge stay synchronized.
+6. Offline/transient failure: simulate connectivity loss, return online ? refresh recovers without logout.
+7. Installed PWA: repeat key checks under the installed PWA shell.
+
+## Phase 11C-P4 AUDIT (2026-09-02) ó READ-ONLY transaction & security audit
+
+**Status: REJECT ó two CRITICAL defects found; remediation required before P5.**
+
+Audit scope: `NotificationService.emit()` / `try_create` / refresh path / `_notify_push`, all four trigger helpers, P3 PushDispatchService interaction, transaction ordering, idempotency (sequential + concurrent), push-failure isolation, P2 subscription-ownership reassignment, elective recipient isolation, GET /notifications read-only contract.
+
+**CRITICAL findings (both in `backend/app/services/notification_service.py`):**
+
+- **F-1** ó `after_attendance_mutation()` (line 237) passes `user_id` (a `UUID`) to `_attendance_items()` which accesses `user.id` (line 465) as if it were a `User` object. `AttributeError` is silently caught by the trigger's `except Exception`; the attendance trigger therefore NEVER emits ATTENDANCE_THRESHOLD / MUST_ATTEND / SAFE_SKIP notifications.
+- **F-2** ó `after_quiz_mutation()` (line 322) passes `user_id` (a `UUID`) to `_quiz_approaching()` which accesses `user.id` (line 448). Same silent failure; the quiz trigger therefore NEVER emits QUIZ_APPROACHING notifications.
+
+The event trigger (`after_event_mutation`) is unaffected (it passes UUIDs to `emit()`, which accepts `Union[User, UUID]`). The sweep (`regenerate_user_notifications`) passes a real `User` object and is unaffected, but it is unscheduled. `verify_phase_11c_p4.py` (27/27 PASS) never exercised the three trigger helpers ó coverage gap (LOW, F-5). Other findings: `upsert_many` is dead code (LOW, F-3); emit() race-fallback branch doesn't push (LOW, F-4, only reachable via a physical delete race that no endpoint performs).
+
+**PASS areas:** try_create concurrency race-safety; refresh preserves created_at/is_read/is_dismissed/occurrence_key; push-failure isolation (404/410, 5xx, network, missing VAPID, unexpected exception all leave the canonical row intact); no credential leakage in logs; transaction ordering (domain commit ? notification commit ? push) correct at all four trigger sites; GET /notifications strictly read-only; P2 endpoint-ownership reassignment is safe (browser subscription follows the current authenticated principal); elective recipient isolation correct; alembic head `f0e1d2c3b4a5` unchanged; no auth/JWT/attendance/calendar/eligibility/migration changes.
+
+Fix is a focused parameter-type change in `notification_service.py` only (projection builders accept `UUID user_id`; sweep callers pass `user.id`). P5 must NOT start until F-1/F-2 are remediated and the verifier covers the trigger helpers.
+
+## Phase 11C-P4 AUDIT REMEDIATION (2026-09-03) ó F-1/F-2 fixed, verifier extended
+
+**Status: REMEDIATION COMPLETE ó P4 is ready for re-audit/acceptance. P5 remains NOT STARTED.**
+
+**Code fix (in `backend/app/services/notification_service.py`):**
+- **F-1 fixed** ó `_attendance_items()` now consumes `user_id: UUID` directly (`user_id=user_id` in the `get_subject_summaries` call); no `.id` access on a UUID. Trigger `after_attendance_mutation()` already passed a UUID.
+- **F-2 fixed** ó `_quiz_approaching()` now consumes `user_id: UUID` directly (`get_current_quiz_cycle(user_id)`); no `.id` access on a UUID. Trigger `after_quiz_mutation()` already passed a UUID.
+- **Sweep updated** ó `regenerate_user_notifications()` now passes `user.id` (UUID) to `_quiz_approaching` / `_attendance_items`; it still passes the real `User` object to `_class_reminders` and `_academic_events`.
+- **`_class_reminders` intentionally unchanged** ó it correctly expects a `User` object (its only caller, the sweep, passes one). No defect; no speculative change.
+- No calculation, idempotency, push, payload, or GET /notifications behavior changed.
+
+**Verifier coverage added (`backend/scripts/verify_phase_11c_p4.py`, now 38 checks):**
+- P5 ó attendance trigger directly exercised: `after_attendance_mutation(user_c_id, subject_code)` produces ATTENDANCE_THRESHOLD/MUST_ATTEND/SAFE_SKIP rows (F-1 proof); re-run creates no duplicates and does not re-push.
+- P6 ó quiz trigger directly exercised: `after_quiz_mutation(user_c_id)` produces QUIZ_APPROACHING (F-2 proof); re-run creates no duplicates and does not re-push.
+- P7 ó event trigger regression: `after_event_mutation(ev2)` produces ACADEMIC_EVENT for the enrolled user only (recipient isolation preserved).
+- P8 ó sweep regression: `regenerate_user_notifications(user_c)` still works after the parameter-contract correction; CLASS_REMINDER generated; re-run adds no duplicate rows and does not re-push.
+- Fixtures (AcademicSession/Semester/Subject/enrollment/ClassSession/AttendanceRecord/UserPreference/events) created deterministically and fully removed in the cleanup block.
+
+**Verification results:**
+- `python -m compileall backend/app backend/scripts` ó PASS
+- `python -c "from app.main import app"` ó PASS
+- `python -m alembic heads` ó `f0e1d2c3b4a5` (single head, unchanged)
+- `verify_phase_11c_p4.py` ó **38/38 PASS** (original 27/27 P4 contract checks + 11 new trigger checks)
+- `verify_phase_11c_p3.py` ó **20/20 PASS** (regression)
+- `verify_phase_11c_p2.py` ó **24/24 PASS** (regression)
+- `git diff --check` ó PASS
+- DB residue check after verifier runs ó zero (no temp users, no fixtures, no test notifications)
+
+**No migration. No production changes. No commit/push/deploy. No browser automation.**
+
 
 
 ## Phase 12A √¢‚Ç¨‚Äù Responsive Foundation + Mobile Navigation (COMPLETE, 2026-08-21)
@@ -4338,3 +4435,4 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [x] **Verification**: `alembic current` ? `a9b8c7d6e5f4 (head)`; `refresh_tokens` table exists; `POST /api/v1/auth/login` with bad credentials ? `401 Unauthorized` with `{"detail":"Incorrect roll number or password"}` (no 500); backend health 200.
 - [x] **Scope**: no application code changed (only DB migration applied). No schema, engine, frontend, auth, API-contract, or deployment change. No commit.
 - [ ] **Remaining (manual)**: user should test login in browser with real credentials. If "Unable to reach the server" still appears, the potential residual cause is `NEXT_PUBLIC_API_URL=http://localhost:8080` in `frontend/.env.local` while the backend binds `127.0.0.1:8080` (IPv4-only) ó `localhost` may resolve to `::1` (IPv6) in some browsers. Changing to `http://127.0.0.1:8080` (matching `DEV_API_URL` fallback in `api.ts` and `start-dev.ps1` bind address) would eliminate this. The frontend dev server must be restarted for the change to take effect.
+

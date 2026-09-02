@@ -231,7 +231,33 @@ class AttendanceService:
             await self.repo.save_attendance(record)
             
         await self.db.commit()
+
+        # Phase 11C-P4: post-commit canonical notification side-channel.
+        # The attendance mutation is committed and authoritative; notification
+        # emission + push dispatch are best-effort and fully isolated — they
+        # can never fail or roll back the attendance write. Lazy import avoids
+        # a module cycle (notification_service imports this service).
+        try:
+            from app.services.notification_service import NotificationService
+            await NotificationService(self.db).after_attendance_mutation(
+                user_id=user_id,
+                subject_code=await self._subject_code(effective_subject_id),
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Notification trigger failed for attendance user %s session %s",
+                user_id, class_session_id,
+            )
         return record
+
+    async def _subject_code(self, subject_id: UUID) -> str:
+        """Resolve a subject's code (Phase 11C-P4 helper)."""
+        from app.repositories.subject_repo import SubjectRepository
+        subject = await SubjectRepository(self.db).get_by_id(subject_id)
+        if subject is None:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        return subject.code
 
     async def get_history(
         self,

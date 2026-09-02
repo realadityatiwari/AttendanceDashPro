@@ -209,6 +209,32 @@ function parsePushPayload(text) {
   };
 }
 
+// Phase 11C-P5: notify controlled AttendanceDash clients that canonical
+// notification state may have changed after a push was received. The message
+// is ONLY an invalidation/revalidation hint — it carries no payload content,
+// no subscription keys, no secrets, and no reconstructed inbox data. The
+// backend canonical Notification row remains the source of truth; the page
+// revalidates GET /api/v1/notifications on receipt.
+const NOTIFICATIONS_UPDATED_MESSAGE = "NOTIFICATIONS_UPDATED";
+
+async function signalClientsNotificationsUpdated() {
+  try {
+    const windowClients = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+    for (const client of windowClients) {
+      try {
+        client.postMessage({ type: NOTIFICATIONS_UPDATED_MESSAGE });
+      } catch {
+        // A single unresponsive client must not break the broadcast.
+      }
+    }
+  } catch {
+    // Messaging unsupported in this browser/context — display still works.
+  }
+}
+
 self.addEventListener("push", (event) => {
   const payload = parsePushPayload(event.data ? event.data.text() : "");
 
@@ -223,11 +249,15 @@ self.addEventListener("push", (event) => {
   }
 
   // waitUntil keeps the notification display alive until showNotification
-  // resolves. This is display-only — no API calls, no cache writes, no
-  // database access. Failures are swallowed so a bad push can never crash
-  // the worker or the page.
+  // resolves, and keeps the client signal alive alongside it. This is
+  // display/signal-only — no API calls, no cache writes, no database
+  // access. Failures are swallowed so a bad push can never crash the
+  // worker or the page.
   event.waitUntil(
-    self.registration.showNotification(payload.title, options).catch(() => {})
+    Promise.all([
+      self.registration.showNotification(payload.title, options).catch(() => {}),
+      signalClientsNotificationsUpdated(),
+    ])
   );
 });
 

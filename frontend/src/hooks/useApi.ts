@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { apiFetch, PROFILE_KEY } from '@/lib/api';
+import { apiFetch, PROFILE_KEY, NOTIFICATIONS_KEY } from '@/lib/api';
 import {
   StudentProfile,
   SubjectResponse,
@@ -462,10 +462,12 @@ export function usePreferenceMutation() {
 // gated on `enabled` so the inbox is fetched only when the bell (always) or
 // the notification center (on open) needs it — never unconditionally. One
 // logical request per revalidation; the bell and the center share the same
-// key, so SWR dedupes them.
+// key, so SWR dedupes them. Phase 11C-P5: the key is the canonical
+// NOTIFICATIONS_KEY so the service-worker invalidation signal, bell-open
+// mutate, and PATCH reconciliation all target the same cache entry.
 export function useNotifications(enabled = true) {
   const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>(
-    enabled ? '/api/v1/notifications' : null,
+    enabled ? NOTIFICATIONS_KEY : null,
     fetcher,
     STANDARD_CACHE
   );

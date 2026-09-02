@@ -7,7 +7,6 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from app.models.user import User, Section
 from app.models.academic import StudentEnrollment, StudentElectiveChoice, Subject, Semester, AcademicSession
-from app.models.event import AcademicEvent
 from app.models.enums import EventType, ElectiveSlot
 
 class UserRepository:
@@ -16,6 +15,19 @@ class UserRepository:
         
     async def get_enrolled_subjects(self, user_id: UUID) -> List[Subject]:
         stmt = select(Subject).join(StudentEnrollment).filter(StudentEnrollment.user_id == user_id)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_enrolled_user_ids(self, subject_id: UUID) -> List[UUID]:
+        """All users enrolled in a subject (Phase 11C-P4 recipient resolution).
+
+        Reverse of get_enrolled_subjects: used by the event / quiz mutation
+        triggers to enumerate the canonical recipients of a subject-scoped
+        notification. Owner-safe by construction — it reads the authoritative
+        student_enrollments rows, never any client input."""
+        stmt = select(StudentEnrollment.user_id).where(
+            StudentEnrollment.subject_id == subject_id
+        )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -96,3 +108,23 @@ class UserRepository:
             if key is not None and choice.subject is not None:
                 result[key] = choice.subject.code
         return result
+
+    async def get_elective_choices_for_slot(
+        self, slot: ElectiveSlot
+    ) -> List[StudentElectiveChoice]:
+        """All students who made a choice for a Department Elective slot,
+        with their chosen subject eagerly loaded. Used by the event-mutation
+        trigger (P4) to enumerate recipients of an elective-slot event."""
+        stmt = (
+            select(StudentElectiveChoice)
+            .options(selectinload(StudentElectiveChoice.subject))
+            .where(StudentElectiveChoice.elective_slot == slot)
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        return list(rows)
+
+    async def get_all_user_ids(self) -> List[UUID]:
+        """Every user id in the system (P4 global-event broadcast)."""
+        stmt = select(User.id)
+        rows = (await self.db.execute(stmt)).scalars().all()
+        return list(rows)

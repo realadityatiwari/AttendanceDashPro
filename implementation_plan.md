@@ -1234,6 +1234,109 @@ Third of five phases (P1–P5) from the delivery investigation. Scope: the backend
 
 **P4 boundary (explicit non-goals of P3):** no dispatch calls added to notification/attendance/quiz/calendar/dashboard/eligibility services, no notification-generation or TTL/cache changes, no scheduling/cron/background workers, no polling/SSE/WebSocket, no "send on GET /notifications", no public send-push endpoint, no frontend changes, no migration (alembic head remains `f0e1d2c3b4a5`), no production environment/migration changes, no commit/deploy.
 
+### Phase 11C-P4 — Canonical Notification ? Push Triggers COMPLETE (2026-09-02)
+
+Fourth of five phases (P1–P5) from the delivery investigation. Scope: the trigger layer that decides WHEN a canonical in-app notification becomes a Web Push. The in-app notification system remains the source of truth; push is a best-effort side-channel. **No migration** (alembic head `f0e1d2c3b4a5` unchanged). **No frontend changes.**
+
+**Architecture (the P4 invariant):**
+
+```
+AUTHORITATIVE DOMAIN MUTATION
+   (attendance / event / quiz schedule — service commits)
+        ?
+NotificationService.emit()            ? single canonical emission boundary
+   race-free INSERT … ON CONFLICT DO NOTHING (new row)
+   or refresh-in-place (existing row)
+        ?
+Notification row COMMITTED
+        ?
+PushDispatchService (best-effort, isolated)   ? P3
+   only for NEWLY created rows; existing rows never re-push
+```
+
+**GET /api/v1/notifications is now READ-ONLY.** `NotificationService.get_notifications()` serves only the persisted inbox from the DB (or the 60s TTL cache); the four projection generators are no longer invoked on read. The historical 11A/11B "generation on read" contract is intentionally replaced (the pinned-head + generation assertions in `verify_phase_11b.py` are superseded by the P4 read-only contract).
+
+**Emission boundary — `NotificationService.emit()`:**
+- New rows: `NotificationRepository.try_create` (`INSERT … ON CONFLICT DO NOTHING RETURNING id`) — atomic, race-free, never duplicates (DB-enforced `UNIQUE(user_id, kind, occurrence_key)`).
+- Existing rows: refresh message/subject refs/updated_at in place, preserving `date`, `is_read`, `is_dismissed`, `created_at` (11B semantics).
+- Push dispatched ONLY when a row was newly inserted; a repeated trigger/sweep for an existing fact refreshes WITHOUT re-pushing.
+- `PushPayload` derived from the canonical row: `body=row.message`, `notification_id=str(row.id)`, `kind=row.kind`, `url` = kind-based same-origin deep link (`/dashboard`, `/tools/quiz-schedule`, `/history`, `/tools/events`).
+
+**Mutation triggers (all post-commit, fully isolated — never raise, never affect the domain result):**
+
+| Trigger | Where wired | Emits |
+|---|---|---|
+| Attendance marked | `AttendanceService.record_attendance` ? `after_attendance_mutation` | ATTENDANCE_THRESHOLD / MUST_ATTEND / SAFE_SKIP for the affected resolved subject |
+| Event created/updated | `EventService.create_event` / `update_event` ? `after_event_mutation` | ACADEMIC_EVENT to enrolled-scope recipients (concrete-subject ? that subject's enrollees only; elective-slot ? slot choosers + anchor fallback; global ? all users; past/inactive skipped). AdminEventService delegates into EventService, so admin-portal events are covered. |
+| Quiz schedule created/updated | `AdminQuizService.create_quiz_schedule` / `update_quiz_schedule` ? `_notify_quiz_users` ? `after_quiz_mutation` per affected user | QUIZ_APPROACHING for enrolled users (+ slot choosers for elective schedules) |
+
+**Sweep (callable, NOT scheduled):** `NotificationService.regenerate_user_notifications(user)` regenerates all four families (CLASS_REMINDER — gated by the `class_reminders` preference — plus quiz/attendance/events) via `emit()`. Time-dependent regeneration is explicitly deferred from scheduling: no cron/Celery/Redis/APScheduler was added.
+
+**Supporting repository methods:** `NotificationRepository.try_create` / `get_by_occurrence_key`; `UserRepository.get_enrolled_user_ids` / `get_elective_choices_for_slot` / `get_all_user_ids`.
+
+**Idempotency:** (user_id, kind, occurrence_key) is DB-enforced; emit on an existing fact refreshes without re-push; concurrent emits are safe via `ON CONFLICT DO NOTHING`.
+
+**Failure isolation:** push failure (including P3 404/410 cleanup) never deletes or alters the canonical notification row; domain mutation success + notification success + push failure still returns success; missing VAPID = side-channel CONFIGURATION_ERROR only; zero subscriptions = canonical notification persists.
+
+**Verification:** `verify_phase_11c_p4.py` **27/27 PASS** (A read-only GET, B emit creates row, C push-once, D duplicate suppression, E push-failure isolation, F zero-subscription persistence, G VAPID-missing persistence, H P3 cleanup decoupling, I multi-subscription isolation, J recipient isolation, K read-only no-write GET, L PATCH read-state regression) · P3 verifier **20/20 PASS** regression · P2 verifier **24/24 PASS** regression · `python -m compileall backend/app` PASS · `app.main` import PASS · alembic head `f0e1d2c3b4a5` unchanged · `git diff --check` PASS. No browser automation; no commit/deploy.
+
+**Files changed (P4):**
+
+| File | Change |
+|---|---|
+| `backend/app/services/notification_service.py` | `get_notifications()` read-only; `emit()` boundary; `_notify_push`; `after_attendance_mutation` / `after_event_mutation` / `after_quiz_mutation`; `regenerate_user_notifications` sweep; kind deep-link map |
+| `backend/app/repositories/notification_repo.py` | `try_create` (race-free insert), `get_by_occurrence_key` |
+| `backend/app/repositories/user_repo.py` | `get_enrolled_user_ids`, `get_elective_choices_for_slot`, `get_all_user_ids` |
+| `backend/app/services/attendance_service.py` | Post-commit attendance trigger (lazy import, isolated) |
+| `backend/app/services/event_service.py` | Post-commit event triggers on create/update (lazy import, isolated) |
+| `backend/app/services/admin_quiz_service.py` | Post-commit quiz schedule triggers (`_notify_quiz_users`) |
+| `backend/scripts/verify_phase_11c_p4.py` | NEW verifier (27/27 PASS) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+**P5 boundary (explicit non-goals of P4):** no bell/notification-center changes, no SWR refreshInterval, no polling/SSE/WebSocket, no notification-generation/TTL/cache changes beyond the read-only refactor, no public send-push endpoint, no scheduling of the sweep.
+
+**Phase 11C-P4 AUDIT (2026-09-02): REJECTED.** Two CRITICAL defects found (F-1/F-2). **REMEDIATION COMPLETE (2026-09-03)** â€” F-1/F-2 fixed, verifier extended to 38/38 PASS, P2/P3 regressions green. See task.md for full findings.
+
+### Phase 11C-P5 â€” Notification Bell / In-App Refresh COMPLETE (2026-09-03)
+
+Fifth of five phases (P1-P5) from the delivery investigation. Frontend refresh/presentation only: newly persisted canonical notifications (P4) become visible in the bell badge and center without a page reload. **No backend change, no migration (alembic head `f0e1d2c3b4a5`), no polling, no generation.**
+
+**Architecture (event-driven, not polling):**
+
+```
+Web Push received by service worker
+  --> showNotification() (P1, unchanged)
+  --> postMessage { type: "NOTIFICATIONS_UPDATED" } to controlled window clients
+  --> NotificationRefreshListener (AppShell) validates type
+  --> mutate(NOTIFICATIONS_KEY) -- targeted SWR revalidation only
+  --> bell badge + center refresh from canonical GET /api/v1/notifications
+```
+
+**Implemented:**
+
+1. `frontend/public/service-worker.js` - push handler extended: after `showNotification()` it posts `{ type: "NOTIFICATIONS_UPDATED" }` to every controlled window client (`clients.matchAll`). Message carries no payload content/keys/secrets; backend canonical row stays authoritative.
+2. `frontend/src/components/pwa/NotificationRefreshListener.tsx` (NEW) - single centralized listener mounted in AppShell; validates message type and calls `useSWRConfig().mutate(NOTIFICATIONS_KEY)`; no broad cache reset, no reload, no polling; removes its listener on unmount.
+3. `frontend/src/lib/api.ts` - exports canonical `NOTIFICATIONS_KEY = "/api/v1/notifications"`.
+4. `frontend/src/hooks/useApi.ts` - `useNotifications()` consumes NOTIFICATIONS_KEY (bell and center share the same cache entry; SW invalidation, bell-open mutate, and PATCH reconciliation target the same key).
+5. `frontend/src/components/layout/AppShell.tsx` - mounts `<NotificationRefreshListener />`.
+
+**Foreground/focus recovery:** no new visibility listener. The always-mounted bell already runs STANDARD_CACHE (revalidateOnFocus: true, dedupingInterval: 60s), so returning to the app revalidates the notification key once per 60s window via SWR's own focus/visibility handling (preserves the pre-P5 storm guardrail).
+
+**No polling:** no setInterval/timer/SSE/WebSocket. GET /api/v1/notifications remains strictly read-only; P4 persistence/emit untouched.
+
+**Verification:** `npx tsc --noEmit` PASS - `npx eslint` changed files PASS (0 errors) - `node --check public/service-worker.js` PASS - `python -m compileall backend/app` PASS - `python -m alembic heads` unchanged `f0e1d2c3b4a5` - `git diff --check` PASS. Manual browser/PWA testing is the user responsibility (PENDING). No commit/deploy.
+
+**Files changed (P5):**
+
+| File | Change |
+|---|---|
+| `frontend/public/service-worker.js` | push handler posts NOTIFICATIONS_UPDATED to controlled clients |
+| `frontend/src/components/pwa/NotificationRefreshListener.tsx` | NEW centralized SW-message listener |
+| `frontend/src/components/layout/AppShell.tsx` | mounts the listener |
+| `frontend/src/hooks/useApi.ts` | useNotifications consumes canonical NOTIFICATIONS_KEY |
+| `frontend/src/lib/api.ts` | exports NOTIFICATIONS_KEY |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | governance |
+
 ### 11.0 â€” Architecture & Discovery Audit (COMPLETE)
 
 Read-only audit establishing the Phase 11 baseline: zero notification substrate exists (no model/table/endpoint, no scheduler, no Web Push/SW/PWA â€” PWA is Phase 13); `class_reminders` is the only preference with an active consumer; `auto_mark_present` and `week_starts_on` remain storage-only (auto-mark must NOT ship without an explicit product decision). Phase 11 = in-app notifications generated on-read; delivery model decision-gated (11C). Report: `docs/phase_11/phase_11_architecture_audit.md`.

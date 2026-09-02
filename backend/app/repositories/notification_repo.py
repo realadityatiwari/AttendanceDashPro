@@ -175,6 +175,72 @@ class NotificationRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
+    async def get_by_occurrence_key(
+        self,
+        user_id: UUID,
+        kind: NotificationKind,
+        occurrence_key: str,
+    ) -> Optional[Notification]:
+        """Owner-scoped lookup by the idempotency key (Phase 11C-P4).
+
+        The emission boundary uses this to decide whether a canonical
+        notification already exists before inserting (so a repeated trigger /
+        sweep refreshes in place and never re-pushes)."""
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.kind == kind,
+            Notification.occurrence_key == occurrence_key,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
+    async def try_create(
+        self,
+        user_id: UUID,
+        kind: NotificationKind,
+        occurrence_key: str,
+        date: date,
+        message: str,
+        subject_code: Optional[str] = None,
+        subject_name: Optional[str] = None,
+        session_id: Optional[UUID] = None,
+        quiz_cycle: Optional[int] = None,
+        event_id: Optional[UUID] = None,
+    ) -> Optional[Notification]:
+        """Insert a NEW notification row, or return None when a row with the
+        same (user_id, kind, occurrence_key) already exists.
+
+        Phase 11C-P4: the emission boundary's race-free create. Uses
+        PostgreSQL ``INSERT ... ON CONFLICT DO NOTHING RETURNING id`` — one
+        atomic statement — so a concurrent sweep/trigger can never produce a
+        duplicate row AND never falsely reports "newly created". Returns None
+        when the row pre-existed (caller refreshes in place without pushing).
+        """
+        now = datetime.now(IST)
+        stmt = pg_insert(Notification).values(
+            user_id=user_id,
+            kind=kind,
+            occurrence_key=occurrence_key,
+            date=date,
+            message=message,
+            subject_code=subject_code,
+            subject_name=subject_name,
+            session_id=session_id,
+            quiz_cycle=quiz_cycle,
+            event_id=event_id,
+            created_at=now,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_nothing(
+            constraint="uq_notifications_user_kind_occurrence_key",
+        ).returning(Notification.id)
+        result = await self.db.execute(stmt)
+        row_id = result.scalar_one_or_none()
+        if row_id is None:
+            return None
+        await self.db.commit()
+        return await self.get_by_id(user_id, row_id)
+
     async def count_unread(self, user_id: UUID) -> int:
         """Unread, non-dismissed notifications (the bell badge count)."""
         stmt = select(func.count()).select_from(Notification).where(

@@ -251,6 +251,16 @@ class EventService:
             await self.db.rollback()
             raise
         await self.db.refresh(event)
+        # Phase 11C-P4: post-commit canonical notification side-channel
+        # (best-effort, isolated; never affects the event mutation result).
+        try:
+            from app.services.notification_service import NotificationService
+            await NotificationService(self.db).after_event_mutation(event)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Event notification trigger failed for event %s", event.id
+            )
         return event
 
     async def update_event(self, user: User, event_id: UUID, data: AcademicEventUpdate) -> AcademicEvent:
@@ -356,6 +366,16 @@ class EventService:
             await self.db.rollback()
             raise
         await self.db.refresh(event)
+        # Phase 11C-P4: post-commit canonical notification side-channel
+        # (best-effort, isolated; never affects the event mutation result).
+        try:
+            from app.services.notification_service import NotificationService
+            await NotificationService(self.db).after_event_mutation(event)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Event notification trigger failed for event %s", event.id
+            )
         return event
 
     async def deactivate_event(self, user: User, event_id: UUID) -> AcademicEvent:

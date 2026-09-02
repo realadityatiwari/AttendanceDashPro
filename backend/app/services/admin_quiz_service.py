@@ -346,6 +346,9 @@ class AdminQuizService:
             await self.db.rollback()
             raise
         refreshed = await self.repo.get_quiz_schedule(schedule.id)
+        # Phase 11C-P4: post-commit canonical notification side-channel for the
+        # affected users (best-effort, isolated — never affects the mutation).
+        await self._notify_quiz_users(schedule)
         return AdminQuizScheduleMutationResponse(
             schedule=await self._to_response(refreshed),
             event_created=created,
@@ -396,8 +399,39 @@ class AdminQuizService:
             await self.db.rollback()
             raise
         refreshed = await self.repo.get_quiz_schedule(schedule.id)
+        # Phase 11C-P4: post-commit canonical notification side-channel for the
+        # affected users (best-effort, isolated — never affects the mutation).
+        await self._notify_quiz_users(schedule)
         return AdminQuizScheduleMutationResponse(
             schedule=await self._to_response(refreshed),
             event_created=created,
             event_deactivated=deactivated,
         )
+
+    # ── Phase 11C-P4 notification trigger helper ──────────────────────────────
+
+    async def _notify_quiz_users(self, schedule) -> None:
+        """Re-evaluate QUIZ_APPROACHING for every user affected by a quiz
+        schedule mutation. Best-effort — never raises."""
+        try:
+            from app.services.notification_service import NotificationService
+            from app.repositories.user_repo import UserRepository
+
+            affected: set[UUID] = set()
+            affected.update(
+                await UserRepository(self.db).get_enrolled_user_ids(schedule.subject_id)
+            )
+            if schedule.elective_slot is not None:
+                for c in await UserRepository(self.db).get_elective_choices_for_slot(
+                    schedule.elective_slot
+                ):
+                    affected.add(c.user_id)
+
+            notif = NotificationService(self.db, push_dispatch=None)
+            for uid in affected:
+                await notif.after_quiz_mutation(uid)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Quiz schedule notification trigger failed (schedule=%s)", schedule.id
+            )
