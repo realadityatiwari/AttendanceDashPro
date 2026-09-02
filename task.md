@@ -1181,7 +1181,31 @@ Static, read-only trace of the complete notification architecture (`docs/notific
 - No bell/refresh changes (P5), no in-app notification generation/cache/TTL changes, no auth/JWT/refresh changes, no attendance/eligibility/calendar engine changes.
 - No production environment changes, no production migration, no commit, no deploy.
 
-### Remaining (P3ñP5, NOT STARTED)
+## Phase 11C-P3 ó Web Push Delivery Infrastructure (VAPID + PushDispatchService) ó COMPLETE (2026-09-02)
+
+**Scope:** P3 only ó backend Web Push DELIVERY infrastructure. Given a persisted subscription and a payload, attempt delivery with VAPID auth and classify the outcome. DELIVERY, not TRIGGERING (P4 owns triggers). No public dispatch API, no frontend changes, no migration.
+
+### Delivered
+
+- [x] **VAPID configuration** ó `Settings` gains `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` (empty defaults = delivery unavailable). Private key server-side only; subject is an operator-provided `mailto:`/`https:` URI. Documented in `backend/.env.example`, `deploy/.env.prod.example`, `render.yaml` (placeholders only; production values via deployment secrets; nothing committed).
+- [x] **Dependency** ó `pywebpush>=2.5.0` added to `backend/requirements.txt` (project min-version convention); installed + verified on Python 3.13.5.
+- [x] **PushDispatchService** (`backend/app/services/push_dispatch_service.py`) ó `PushPayload` dataclass (P1-SW-compatible `{title,body,icon,badge,tag,url}` + optional additive `notification_id`/`kind`; same-origin relative URL enforcement; no secrets), `PushResult` outcomes (`SUCCESS`/`INVALID_SUBSCRIPTION`/`TEMPORARY_FAILURE`/`CONFIGURATION_ERROR`/`UNEXPECTED_ERROR`), `DeliveryResult` per subscription, `dispatch_to_subscription()` / `dispatch_to_user()` with per-subscription isolation. Async `webpush_async` delivery boundary (injectable for tests).
+- [x] **Invalid-subscription cleanup** ó provider 404/410 ? `INVALID_SUBSCRIPTION` and the exact row removed via the P2 repository (owner-scoped, repo-owned commit); network errors/5xx/429/other ? `TEMPORARY_FAILURE`, row KEPT. Only permanently-gone responses delete.
+- [x] **Failure isolation** ó push failures never touch canonical notifications, auth/JWT, other subscriptions, or the dashboard; credentials (endpoint/p256dh/auth) never logged ó only subscription UUIDs + outcomes.
+- [x] **Verification** ó `backend/scripts/verify_phase_11c_p3.py` **20/20 PASS** (config validation A, payload serialization B, VAPID handling C, construction D, lookup E, mocked success F, 404/410 cleanup G, transient non-deletion H, multi-subscription isolation I, canonical-notification untouched J, no credential leakage in logs K) ∑ `verify_phase_11c_p2.py` regression **24/24 PASS** (L) ∑ `compileall` PASS ∑ `app.main` import PASS ∑ alembic head unchanged `f0e1d2c3b4a5` (no migration) ∑ `git status`/`git diff` clean of unrelated changes. No browser automation; no commit/deploy.
+- [x] **Governance** ó MASTER_ROADMAP.md / implementation_plan.md / task.md / walkthrough.md reconciled.
+
+### NOT in P3 (hard boundary)
+
+- No dispatch calls added to notification/attendance/quiz/calendar/dashboard/eligibility services; no notification-generation/TTL/cache changes (P4 owns triggering).
+- No scheduler/cron/background workers, no polling/SSE/WebSocket, no "send on GET /notifications".
+- No public send-push endpoint; no frontend changes; no auth/JWT changes.
+- No migration/schema change; no production environment changes; no production migration; no commit; no deploy.
+
+### Remaining (P4ñP5, NOT STARTED)
+
+- **P4:** Canonical notification ? push triggers (move generation off read-only; dispatch as a side-channel of the persisted in-app notification).
+- **P5:** Bell/in-app refresh improvements.
 
 
 ## Phase 12A √¢‚Ç¨‚Äù Responsive Foundation + Mobile Navigation (COMPLETE, 2026-08-21)

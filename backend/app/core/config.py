@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     REGISTER_MAX_ATTEMPTS: int = 5
     REGISTER_WINDOW_SECONDS: int = 3600   # 1 hour
 
+    # VAPID (Phase 11C-P3 Web Push delivery)
+    # Public key exposed to the frontend (NEXT_PUBLIC_VAPID_PUBLIC_KEY); private
+    # key is server-side only. VAPID_SUBJECT should be a mailto: or https: URI
+    # identifying the application operator. These are environment-driven — empty
+    # strings here mean push delivery is unavailable until configured (P3).
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = ""
+
     @model_validator(mode="after")
     def _validate_production_config(self) -> "Settings":
         """Production guard (Phase 17 + 18B):

@@ -9746,13 +9746,108 @@ push_subscriptions
 
 **ZERO changes to existing tables.** The `push_subscriptions` table is additive — no existing table, row, view, or constraint is modified. The migration was applied to the local dev database only (PostgreSQL on `localhost:55432`). Alembic head: `f0e1d2c3b4a5`.
 
-### Remaining work (P3–P5, NOT STARTED)
+### Remaining work (P4–P5, NOT STARTED)
 
-- **P3 — VAPID + backend dispatch:** VAPID keypair generation (private key server-side only), `pywebpush`, `PushDispatchService`, 404/410 dead-subscription cleanup, retry policy.
 - **P4 — canonical ? push triggers:** move generation off read-only to post-mutation + optional sweep; dispatch Web Push as a side-channel of the persisted in-app notification (in-app feed remains the source of truth).
 - **P5 — bell/in-app refresh improvements:** e.g., a modest `refreshInterval` on `useNotifications` for real-time freshness (parallelizable with Phase 26 performance work).
 
 **HARD STOP after P2 — no commit, no push, no deploy, no browser automation.**
+
+
+---
+
+## Phase 11C-P3 — Web Push Delivery Infrastructure (VAPID + PushDispatchService) — Walkthrough
+
+**Status: COMPLETE (2026-09-02).** P3 of the five-phase Web Push delivery plan (`docs/notification_delivery_investigation.md`). This phase establishes the backend Web Push DELIVERY layer: VAPID configuration, `pywebpush` dependency, and `PushDispatchService` that takes a persisted subscription + payload, authenticates with VAPID, sends via Web Push, classifies the outcome, and removes permanently-gone subscriptions. DELIVERY only — no triggering (P4), no in-app notification changes, no frontend changes.
+
+### Scope
+
+- VAPID configuration (public/private key, subject) — environment-driven, empty defaults disable delivery.
+- `pywebpush>=2.5.0` dependency (async delivery via `webpush_async`).
+- `PushDispatchService` + `PushPayload` + `PushResult`/`DeliveryResult` — the delivery service.
+- Provider 404/410 ? permanently-invalid subscription removed via the P2 repository.
+- Transient failures (network/5xx/429) ? row kept.
+- Failure isolation, no credential logging, no public dispatch API.
+
+### Architecture
+
+```
+P4 (canonical notification ? push trigger)
+  ?
+  ? PushPayload
+  ?
+PushDispatchService (P3)
+  ?
+  ? VAPID auth + pywebpush.webpush_async
+  ?
+Web Push Provider (FCM / Mozilla / APNs)
+  ?
+  ? HTTP push
+  ?
+P1 Service Worker ? showNotification()
+```
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `backend/app/services/push_dispatch_service.py` | **NEW** — PushDispatchService, PushPayload, PushResult, DeliveryResult |
+| `backend/scripts/verify_phase_11c_p3.py` | **NEW** — verifier (20/20 PASS) |
+| `backend/app/core/config.py` | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` settings |
+| `backend/requirements.txt` | `pywebpush>=2.5.0` |
+| `backend/.env.example` | VAPID vars documented (empty placeholders) |
+| `deploy/.env.prod.example` | VAPID vars documented (production secrets via env) |
+| `render.yaml` | VAPID env placeholders (`sync: false` — set in dashboard) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+### VAPID configuration
+
+- **Backend environment:** `VAPID_PUBLIC_KEY` (public), `VAPID_PRIVATE_KEY` (secret, server-only), `VAPID_SUBJECT` (operator contact, `mailto:` or `https:` URI). All three default to empty strings in `Settings` — when any is missing, `PushDispatchService.is_configured()` returns `False` and dispatch returns `CONFIGURATION_ERROR` without attempting a send.
+- **Frontend:** `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (already documented in P2's `frontend/.env.example`). Must match the backend's `VAPID_PUBLIC_KEY`.
+- **Production:** values injected through deployment secrets (Render dashboard, etc.) — never committed. Generation command documented in `.env.example`:
+  ```python
+  from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key.decode()); print(); print(v.private_key.decode())
+  ```
+- **No migration:** alembic head remains `f0e1d2c3b4a5` (P2). No schema changes.
+
+### PushDispatchService design
+
+- **PushPayload** — dataclass with `{title, body, icon, badge, tag, url}` (matching the P1 service worker exactly) plus additive optional `notification_id`/`kind` (the SW ignores unknown fields; P4 may consume them). `url` is enforced same-origin relative (starts with "/", not "//") so a payload can never navigate to an external origin. No tokens, JWTs, keys, or sensitive internals.
+- **PushResult** — `SUCCESS` / `INVALID_SUBSCRIPTION` (404/410 ? delete) / `TEMPORARY_FAILURE` (network/5xx/429 ? keep) / `CONFIGURATION_ERROR` (VAPID missing) / `UNEXPECTED_ERROR`.
+- **Delivery methods** — `dispatch_to_subscription(sub, payload)` (single) and `dispatch_to_user(user | user_id, payload)` (all user subscriptions, independent attempts). Returns `DeliveryResult` per subscription.
+- **Default send** — `pywebpush.webpush_async` (async-native, matches the FastAPI async stack) with `ttl=3600, timeout=10`. The send function is injectable in the constructor for deterministic verification.
+- **Invalid-subscription cleanup** — `WebPushException.status_code` in (404, 410) ? `INVALID_SUBSCRIPTION` ? the row is removed via `PushSubscriptionRepository.delete(sub.user_id, sub.id)` (owner-scoped, repo-owned commit — the established session convention). Network errors (no HTTP response), 5xx, 429, and other provider rejections ? `TEMPORARY_FAILURE` — the row is KEPT.
+- **Failure isolation** — one subscription's failure never affects others. Canonical in-app notifications are never touched. Auth/JWT is never involved. Credentials (endpoint/p256dh/auth) are never logged — only the subscription UUID and outcome classification.
+
+### Verification performed (static/in-process only)
+
+- `python -m compileall backend/app` — **PASS**
+- `app.main` import — **PASS**
+- `backend/scripts/verify_phase_11c_p3.py` — **20/20 PASS** (A: configuration validation, B: payload serialization, C: VAPID handling, D: construction, E: subscription lookup, F: mocked success, G: 404/410 cleanup, H: transient non-deletion, I: multi-subscription isolation, J: canonical-notification untouched, K: no credential leakage in logs)
+- `backend/scripts/verify_phase_11c_p2.py` regression — **24/24 PASS**
+- `npx tsc --noEmit` — NOT run (no frontend changes in P3)
+- Alembic head — `f0e1d2c3b4a5` (unchanged, no migration)
+- `git diff`/`git status` — no unrelated auth/attendance/notification-generation/schema changes; no secrets committed
+- **No browser automation, Playwright/Cypress/Selenium, or E2E testing was run** (per scope — the user performs browser/PWA testing)
+
+### Explicit non-goals (NOT in P3)
+
+- No dispatch calls added to notification/attendance/quiz/calendar/dashboard/eligibility services (P4 owns triggering).
+- No notification-generation rules, TTL/cache, or notification-kind changes.
+- No scheduler/cron/background workers, no polling/SSE/WebSocket, no "send on GET /notifications".
+- No public send-push endpoint; no frontend changes; no auth/JWT changes.
+- No migration/schema change; no production environment changes; no production migration; no commit; no deploy.
+
+### Database mutation status
+
+**ZERO changes to existing tables.** The migration graph is unchanged (alembic head `f0e1d2c3b4a5`, P2's `push_subscriptions` table). No existing table, row, view, or constraint is modified. The verifier's test rows are created and removed within the same run.
+
+### Remaining work (P4–P5, NOT STARTED)
+
+- **P4 — canonical ? push triggers:** move generation off read-only to post-mutation + optional sweep; dispatch Web Push as a side-channel of the persisted in-app notification (in-app feed remains the source of truth).
+- **P5 — bell/in-app refresh improvements:** e.g., a modest `refreshInterval` on `useNotifications` for real-time freshness (parallelizable with Phase 26 performance work).
+
+**HARD STOP after P3 — no commit, no push, no deploy, no browser automation.**
 
 
 ---

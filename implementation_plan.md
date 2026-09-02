@@ -1184,6 +1184,56 @@ Second of five phases (P1–P5) from the delivery investigation. Scope: persistent
 
 **P3 boundary (explicit non-goals of P2):** no VAPID keypair generation, no `pywebpush`, no `PushDispatchService`, no 404/410 dead-subscription cleanup, no delivery triggers (P4), no bell/refresh changes (P5), no in-app notification generation/cache/TTL changes, no auth/JWT/refresh changes, no production environment changes, no production migration.
 
+### Phase 11C-P3 — VAPID + PushDispatchService (Web Push delivery) COMPLETE (2026-09-02)
+
+Third of five phases (P1–P5) from the delivery investigation. Scope: the backend Web Push DELIVERY layer — given a persisted subscription and a payload, attempt delivery with VAPID auth and classify the outcome. P3 establishes DELIVERY, not TRIGGERING: nothing decides when/which notifications are dispatched (that is P4). No public dispatch API was added.
+
+**VAPID configuration contract:**
+
+- `backend/app/core/config.py` (`Settings`): `VAPID_PUBLIC_KEY: str = ""`, `VAPID_PRIVATE_KEY: str = ""`, `VAPID_SUBJECT: str = ""` — environment-driven, empty defaults mean delivery is unavailable until configured.
+- Private key is server-side only — never committed, never exposed to the frontend, never logged, never in error responses. Public key must match the frontend's `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (safe to expose).
+- `VAPID_SUBJECT` is a `mailto:` or `https:` URI identifying the operator; no production contact address was invented — it is explicitly operator-provided via env.
+- Documented in `backend/.env.example`, `deploy/.env.prod.example`, `render.yaml` (placeholders only; production values injected via deployment secrets).
+- Missing VAPID ? `PushDispatchService.is_configured()` False ? dispatch returns `CONFIGURATION_ERROR` with NO send attempt (application startup is unaffected).
+
+**Dependency:** `pywebpush>=2.5.0` added to `backend/requirements.txt` (project convention: minimum-version pins). Installed and verified on Python 3.13.5; brings `aiohttp`, `py-vapid`, `http-ece`, `requests`, `cryptography>=47`.
+
+**PushDispatchService (`backend/app/services/push_dispatch_service.py`):**
+
+- `PushPayload` dataclass — the explicit JSON payload contract, byte-compatible with the P1 service worker: `{title, body, icon, badge, tag, url}` plus additive optional `notification_id`/`kind` (unknown fields are ignored by the SW; P4 may consume them). `url` is enforced same-origin relative (must start with `/`, not `//`) so a payload can never navigate the browser to an external origin. No tokens/JWTs/keys/sensitive internals.
+- `PushResult` outcomes: `SUCCESS` / `INVALID_SUBSCRIPTION` / `TEMPORARY_FAILURE` / `CONFIGURATION_ERROR` / `UNEXPECTED_ERROR`; `DeliveryResult(subscription_id, result, error)` per subscription.
+- `dispatch_to_subscription(sub, payload)` and `dispatch_to_user(user | user_id, payload)` (returns one `DeliveryResult` per subscription; empty list when none). Each subscription is attempted independently — one failure never stops the others (isolation).
+- Delivery boundary is `pywebpush.webpush_async` (async-native, matches the app stack) with `ttl=3600`, `timeout=10`; injectable `send_function` for deterministic verification (only the external call is mocked in tests).
+- **Invalid-subscription cleanup:** provider `404`/`410` ? `INVALID_SUBSCRIPTION` and the exact row is removed via the existing P2 `PushSubscriptionRepository.delete` (owner-scoped, repo-owned commit — the established session convention). Network errors, timeouts, 5xx, 429, and other provider rejections ? `TEMPORARY_FAILURE` with the row KEPT. Only permanently-gone statuses ever delete.
+- **Failure isolation:** a failed push never deletes/alters/invalidates canonical notifications, never touches auth, never rolls back unrelated work, never logs out the user. Subscription credentials (endpoint/p256dh/auth) are never logged — only the subscription UUID and outcome.
+
+**Verification (`backend/scripts/verify_phase_11c_p3.py`) — 20/20 PASS:**
+
+- A: `is_configured()` False with empty env; unconfigured dispatch ? `CONFIGURATION_ERROR`, send boundary not invoked.
+- B: payload serialization matches the P1 SW shape; no token/secret keys; external + protocol-relative URLs rejected.
+- C/D/E/F: configured dispatch invokes the (mocked) send boundary with the exact P2 subscription keys; success keeps the row; lookup via the real P2 repository.
+- G: provider 404 and 410 ? `INVALID_SUBSCRIPTION` and the exact rows are removed.
+- H: network error and 5xx ? `TEMPORARY_FAILURE`, rows kept.
+- I: mixed multi-subscription `dispatch_to_user` — only the permanently-invalid row is removed in the same run; healthy rows kept.
+- J: canonical notification table row count unchanged by dispatch.
+- K: endpoint/p256dh/auth/private-key values absent from captured log output.
+- L: P2 verifier regression `verify_phase_11c_p2.py` 24/24 PASS.
+
+**Files changed (P3):**
+
+| File | Change |
+|---|---|
+| `backend/app/services/push_dispatch_service.py` | NEW — PushDispatchService + PushPayload + PushResult/DeliveryResult |
+| `backend/scripts/verify_phase_11c_p3.py` | NEW verifier (20/20 PASS) |
+| `backend/app/core/config.py` | VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT settings |
+| `backend/requirements.txt` | `pywebpush>=2.5.0` |
+| `backend/.env.example` | VAPID vars documented (empty placeholders) |
+| `deploy/.env.prod.example` | VAPID vars documented (production secrets via env) |
+| `render.yaml` | VAPID env placeholders (`sync: false` — set in dashboard) |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation |
+
+**P4 boundary (explicit non-goals of P3):** no dispatch calls added to notification/attendance/quiz/calendar/dashboard/eligibility services, no notification-generation or TTL/cache changes, no scheduling/cron/background workers, no polling/SSE/WebSocket, no "send on GET /notifications", no public send-push endpoint, no frontend changes, no migration (alembic head remains `f0e1d2c3b4a5`), no production environment/migration changes, no commit/deploy.
+
 ### 11.0 â€” Architecture & Discovery Audit (COMPLETE)
 
 Read-only audit establishing the Phase 11 baseline: zero notification substrate exists (no model/table/endpoint, no scheduler, no Web Push/SW/PWA â€” PWA is Phase 13); `class_reminders` is the only preference with an active consumer; `auto_mark_present` and `week_starts_on` remain storage-only (auto-mark must NOT ship without an explicit product decision). Phase 11 = in-app notifications generated on-read; delivery model decision-gated (11C). Report: `docs/phase_11/phase_11_architecture_audit.md`.

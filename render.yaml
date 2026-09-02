@@ -40,3 +40,14 @@ services:
       # provisioning (Phase 21D.2) if Render documents one.
       - key: SECURITY_HSTS_ENABLED
         value: "true"          # Render + Vercel serve HTTPS
+      # VAPID Web Push (Phase 11C-P3). VAPID_PRIVATE_KEY is SECRET (set in the
+      # dashboard, never committed). VAPID_PUBLIC_KEY is public and must match
+      # the frontend's NEXT_PUBLIC_VAPID_PUBLIC_KEY. VAPID_SUBJECT is the
+      # operator contact (mailto: or https: URI). Leave unset to keep push
+      # delivery disabled (the dispatch service reports CONFIGURATION_ERROR).
+      - key: VAPID_PUBLIC_KEY
+        sync: false            # set in Render dashboard (public, but operator-provided)
+      - key: VAPID_PRIVATE_KEY
+        sync: false            # secret — set in Render dashboard
+      - key: VAPID_SUBJECT
+        sync: false            # operator contact — set in Render dashboard
