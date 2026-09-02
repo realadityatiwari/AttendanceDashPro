@@ -355,6 +355,88 @@ class AttendanceRepository:
         ]
         return collapse_count_rows(rows)
 
+    async def get_subject_counts_between_for_subjects(
+        self,
+        user_id: UUID,
+        subject_ids,
+        start_date: date,
+        end_date: date,
+        exclude_quiz_day: bool = False,
+    ) -> List[dict]:
+        """
+        ONE date-bounded, enrollment-scoped scan for MANY subjects (Phase 26.3
+        quiz-window bucketing). Mirrors get_subject_counts_between row-for-row
+        (same outcome join keyed on the resolved subject, same
+        exclude_quiz_day shape predicate, same (date, start_time, id)
+        ordering) but returns every matching session for ANY of `subject_ids`
+        with subject-attribution fields, so the caller can bucket per
+        (subject, window) and collapse per subject in memory.
+
+        Attribution fields (Phase 22.3/22.4 elective semantics, identical to
+        `_resolved_subject_match`): a row belongs to subject X when
+        `session_subject_id == X` (its own subject) OR `slot IS NOT NULL AND
+        choice_subject_id == X` (an elective slot the student selected X for).
+        The practical-block collapse is deliberately NOT performed here — it
+        must run per (subject, window) at the caller to be byte-identical to
+        the per-subject path.
+        """
+        if not subject_ids:
+            return []
+        subject_ids = list(subject_ids)
+        resolved_slot = func.coalesce(
+            TimetableEntry.elective_slot, ClassSession.elective_slot
+        )
+        stmt = select(
+            ClassSession.class_type,
+            AttendanceRecord.status,
+            ClassSession.date,
+            ClassSession.is_cancelled,
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
+            ClassSession.subject_id.label("session_subject_id"),
+            resolved_slot.label("slot"),
+            StudentElectiveChoice.subject_id.label("choice_subject_id"),
+        ).outerjoin(
+            AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            # Phase 23.6: per-subject occurrence outcome (student-scoped).
+            OccurrenceOutcome, self._outcome_join_on(
+                func.coalesce(StudentElectiveChoice.subject_id, ClassSession.subject_id)
+            )
+        ).filter(
+            or_(
+                ClassSession.subject_id.in_(subject_ids),
+                and_(
+                    resolved_slot.isnot(None),
+                    StudentElectiveChoice.subject_id.in_(subject_ids),
+                ),
+            ),
+            ClassSession.date >= start_date,
+            ClassSession.date <= end_date,
+        )
+        if exclude_quiz_day:
+            stmt = stmt.filter(
+                ~(ClassSession.timetable_entry_id.is_(None)
+                  & ~ClassSession.is_extra
+                  & (ClassSession.class_type == ClassType.LECTURE))
+            )
+        stmt = stmt.order_by(
+            ClassSession.date,
+            TimetableEntry.start_time.asc().nulls_last(),
+            ClassSession.id,
+        )
+
+        result = await self.db.execute(stmt)
+        return [
+            self._apply_outcome_to_row(dict(row._mapping))
+            for row in result.all()
+        ]
+
     async def get_sessions_with_status(self, user_id: UUID, start_date: date, end_date: date) -> List[dict]:
         """
         Read-only dashboard aggregation source: every class session in the

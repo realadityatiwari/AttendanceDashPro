@@ -117,3 +117,166 @@ self.addEventListener("fetch", (event) => {
   // Do not intercept — Next.js build artifacts are content-addressed
   // and the browser cache is sufficient.
 });
+
+// ---------------------------------------------------------------------------
+// Phase 11C-P1: Web Push foundation (browser-side only).
+//
+// Delivery/display infrastructure: a `push` event displays a notification
+// and a `notificationclick` event routes the user back into the app. There is
+// NO subscription creation, NO VAPID, NO backend dispatch, and NO network
+// calls from the service worker here — push payloads are parsed defensively
+// and displayed as-is. The in-app notification system remains canonical.
+// ---------------------------------------------------------------------------
+
+const PUSH_TITLE_MAX_LENGTH = 100;
+const PUSH_BODY_MAX_LENGTH = 400;
+const PUSH_TAG_MAX_LENGTH = 64;
+const PUSH_URL_MAX_LENGTH = 500;
+const DEFAULT_PUSH_TITLE = "AttendanceDash Pro";
+const DEFAULT_PUSH_ICON = "/brand/icon-192.png";
+const DEFAULT_PUSH_URL = "/dashboard";
+
+/**
+ * Coerce an unknown value to a bounded string, or return the fallback when
+ * the value is not a string (or exceeds the maximum length).
+ */
+function pushString(value, fallback, maxLength) {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > maxLength) return fallback;
+  return trimmed;
+}
+
+/**
+ * Resolve a push-provided destination to an application URL.
+ *
+ * Security: only same-origin relative paths are accepted. Protocol-relative
+ * ("//host/path") and absolute URLs to other origins are rejected so a push
+ * payload can never navigate the user to an arbitrary external site. Returns
+ * null when the candidate is not a safe application path.
+ */
+function resolvePushUrl(candidate) {
+  const raw = pushString(candidate, null, PUSH_URL_MAX_LENGTH);
+  if (raw === null) return null;
+  if (!raw.startsWith("/")) return null;
+  // Protocol-relative or scheme-qualified external destinations.
+  if (raw.startsWith("//")) return null;
+  try {
+    const url = new URL(raw, self.location.origin);
+    if (url.origin !== self.location.origin) return null;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a push payload into safe showNotification options.
+ *
+ * Supported shape (all fields optional):
+ *   { "title": string, "body": string, "icon": string, "badge": string,
+ *     "tag": string, "url": string }
+ * Malformed JSON, empty payloads, missing fields and wrong types all fall
+ * back to safe defaults — nothing is executed and nothing is interpolated
+ * into markup.
+ */
+function parsePushPayload(text) {
+  let data = null;
+  if (typeof text === "string" && text.trim().length > 0) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+
+  const obj = data !== null && typeof data === "object" && !Array.isArray(data) ? data : {};
+
+  const title = pushString(obj.title, DEFAULT_PUSH_TITLE, PUSH_TITLE_MAX_LENGTH);
+  const body = pushString(obj.body, "", PUSH_BODY_MAX_LENGTH);
+  const icon = pushString(obj.icon, DEFAULT_PUSH_ICON, PUSH_URL_MAX_LENGTH);
+  const badge = pushString(obj.badge, DEFAULT_PUSH_ICON, PUSH_URL_MAX_LENGTH);
+  const tag = pushString(obj.tag, "", PUSH_TAG_MAX_LENGTH);
+  const url = resolvePushUrl(obj.url);
+
+  return {
+    title,
+    body,
+    icon,
+    badge,
+    tag,
+    url: url ?? DEFAULT_PUSH_URL,
+  };
+}
+
+self.addEventListener("push", (event) => {
+  const payload = parsePushPayload(event.data ? event.data.text() : "");
+
+  const options = {
+    body: payload.body,
+    icon: payload.icon,
+    badge: payload.badge,
+    data: { url: payload.url },
+  };
+  if (payload.tag) {
+    options.tag = payload.tag;
+  }
+
+  // waitUntil keeps the notification display alive until showNotification
+  // resolves. This is display-only — no API calls, no cache writes, no
+  // database access. Failures are swallowed so a bad push can never crash
+  // the worker or the page.
+  event.waitUntil(
+    self.registration.showNotification(payload.title, options).catch(() => {})
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  // The destination was validated when the notification was shown
+  // (parsePushPayload -> resolvePushUrl). Re-validate defensively here so a
+  // tampered notification data object can never open an external origin.
+  const rawUrl =
+    event.notification.data && typeof event.notification.data === "object"
+      ? event.notification.data.url
+      : undefined;
+  const destination = resolvePushUrl(rawUrl) ?? DEFAULT_PUSH_URL;
+
+  event.waitUntil(
+    (async () => {
+      const windowClients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+
+      for (const client of windowClients) {
+        try {
+          const clientOrigin = new URL(client.url).origin;
+          if (clientOrigin !== self.location.origin) continue;
+        } catch {
+          continue;
+        }
+
+        // Focus the existing app window first.
+        await client.focus().catch(() => {});
+        // Navigate to the destination where supported (same-origin
+        // only, which resolvePushUrl guarantees). Older browsers throw
+        // for cross-origin navigations; ours cannot be cross-origin.
+        try {
+          if (client.navigate) {
+            await client.navigate(destination);
+          }
+        } catch {
+          // Navigation unsupported or failed — the app is already
+          // focused, which is an acceptable fallback.
+        }
+        return;
+      }
+
+      // No existing app window: open one at the validated destination.
+      const url = new URL(destination, self.location.origin);
+      await self.clients.openWindow(url.href).catch(() => {});
+    })()
+  );
+});

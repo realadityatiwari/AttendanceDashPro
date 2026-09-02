@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, delete
@@ -75,6 +75,85 @@ class NotificationRepository:
         row_id = result.scalar_one()
         await self.db.commit()
         return row_id
+
+    async def upsert_many(
+        self,
+        rows: List[dict],
+    ) -> None:
+        """Batch-upsert a set of generated projections in ONE transaction.
+
+        Performance optimization (2026-09-02): the generation loop previously
+        called upsert() once per projection — N sequential INSERT ... ON
+        CONFLICT statements with an individual COMMIT each (N database round
+        trips during dashboard startup). This executes the SAME upsert
+        semantics as a single multi-row INSERT ... ON CONFLICT DO UPDATE
+        statement and commits ONCE, collapsing N round trips into 1 while
+        keeping the whole batch atomic: a failure in any row rolls back the
+        entire statement, so partial regeneration can never persist an
+        inconsistent inbox (stronger than the previous per-row commits).
+
+        Idempotency is unchanged and still DB-enforced: every row keys on
+        UNIQUE(user_id, kind, occurrence_key) via the same conflict clause,
+        so regenerating the same occurrence refreshes in place — never a
+        duplicate. The conflict clause refreshes only the mutable projection
+        fields (message / subject references / updated_at); `date`,
+        `is_read`, `is_dismissed` and `created_at` are preserved, so
+        read/dismissed notifications stay read/dismissed while their source
+        condition still holds.
+
+        Ordering is preserved: created_at is staggered in list order (one
+        microsecond per row) so the inbox sort (created_at desc, id desc)
+        renders newly created rows in the same order the previous
+        sequential-commit loop produced.
+
+        Each row is a dict with the same keys as upsert()'s positional
+        arguments (user_id, kind, occurrence_key, date, message,
+        subject_code, subject_name, session_id, quiz_cycle, event_id). Rows
+        are deduplicated by (kind, occurrence_key), keeping the LAST
+        occurrence — identical to sequential upsert semantics (the later
+        write wins) and required for a multi-row statement (a conflict key
+        may appear only once per VALUES list).
+        """
+        if not rows:
+            return
+        now = datetime.now(IST)
+        # Deduplicate by idempotency key, keeping the last occurrence (the
+        # sequential upsert semantics: the later write refreshes the row).
+        by_key: dict[tuple[UUID, NotificationKind, str], dict] = {}
+        for row in rows:
+            by_key[(row["user_id"], row["kind"], row["occurrence_key"])] = row
+        unique_rows = list(by_key.values())
+        # Stagger created_at in list order so the inbox sort renders newly
+        # created rows exactly as the old per-item commit loop did.
+        values = [
+            {
+                "user_id": row["user_id"],
+                "kind": row["kind"],
+                "occurrence_key": row["occurrence_key"],
+                "date": row["date"],
+                "message": row["message"],
+                "subject_code": row.get("subject_code"),
+                "subject_name": row.get("subject_name"),
+                "session_id": row.get("session_id"),
+                "quiz_cycle": row.get("quiz_cycle"),
+                "event_id": row.get("event_id"),
+                "created_at": now + timedelta(microseconds=i),
+                "updated_at": now,
+            }
+            for i, row in enumerate(unique_rows)
+        ]
+        stmt = pg_insert(Notification).values(values)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_notifications_user_kind_occurrence_key",
+            set_={
+                "message": stmt.excluded.message,
+                "subject_code": stmt.excluded.subject_code,
+                "subject_name": stmt.excluded.subject_name,
+                "updated_at": now,
+            },
+        )
+        await self.db.execute(stmt)
+        await self.db.commit()
 
     async def get_inbox(self, user_id: UUID) -> List[Notification]:
         """The user's inbox, newest first (audit 11B objective). Dismissed

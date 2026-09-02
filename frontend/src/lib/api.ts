@@ -26,6 +26,55 @@ export { API_BASE_URL };
  * into one /student/me request. */
 export const PROFILE_KEY = "/api/v1/student/me";
 
+// ── Single-flight refresh-token renewal ───────────────────────────────────
+//
+// Phase 25.2: opaque HttpOnly refresh cookie → POST /api/v1/auth/refresh
+// returns a new access_token. One in-flight refresh at any time; all
+// concurrent 401s share the same promise.
+
+type RefreshResult =
+  | { ok: true; token: string }
+  | { ok: false; permanent: boolean };
+
+let _refreshPromise: Promise<RefreshResult> | null = null;
+
+async function _attemptRefresh(): Promise<RefreshResult> {
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        return { ok: false, permanent: true };
+      }
+
+      const data = await response.json();
+      if (typeof data.access_token !== "string") {
+        return { ok: false, permanent: true };
+      }
+
+      localStorage.setItem("access_token", data.access_token);
+      return { ok: true, token: data.access_token };
+    } catch {
+      // Network error during refresh — transient, not a permanent auth
+      // failure. The caller should keep the existing token and let SWR
+      // retry naturally.
+      return { ok: false, permanent: false };
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+// ── apiFetch ──────────────────────────────────────────────────────────────
+
 interface FetchOptions extends RequestInit {
   requireAuth?: boolean;
 }
@@ -33,10 +82,17 @@ interface FetchOptions extends RequestInit {
 /**
  * Custom fetch wrapper that automatically attaches the JWT access token
  * to requests when requireAuth is true (which is the default).
+ *
+ * Phase 25.2: on a genuine 401 (never 403/5xx/network) the wrapper attempts
+ * a single-flight refresh-token rotation before clearing auth. If the refresh
+ * succeeds the original request is retried exactly once; if it fails with a
+ * permanent error (HTTP 401 on the refresh endpoint) the existing logout path
+ * runs. A transient network error during refresh does NOT clear auth — the
+ * user stays on the page and SWR retries on the next focus/visibility event.
  */
 export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
   const { requireAuth = true, headers, ...restOptions } = options;
-  
+
   const requestHeaders = new Headers(headers);
   requestHeaders.set("Content-Type", "application/json");
 
@@ -49,7 +105,7 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   let response: Response;
   try {
     response = await fetch(url, {
@@ -69,6 +125,45 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
   }
 
   if (!response.ok) {
+    // Phase 25.2: attempt refresh on genuine 401 with auth required.
+    // Never on 403, 5xx, network errors, or non-auth requests.
+    if (response.status === 401 && requireAuth) {
+      const refreshResult = await _attemptRefresh();
+
+      if (refreshResult.ok) {
+        // Retry the original request exactly once with the new token.
+        requestHeaders.set("Authorization", `Bearer ${refreshResult.token}`);
+        try {
+          response = await fetch(url, { ...restOptions, headers: requestHeaders });
+        } catch (err) {
+          // Network error on retry — same as any other network failure.
+          throw new Error(
+            "Unable to reach the server. Check your connection and try again.",
+            { cause: err },
+          );
+        }
+        if (response.ok) {
+          if (response.status === 204) return null;
+          return response.json();
+        }
+        // Retry failed (any status, including 401). Fall through to the
+        // standard error handling below. A second 401 after a fresh token
+        // means the session is genuinely dead — the 401 handler clears auth.
+      } else if (!refreshResult.permanent) {
+        // Transient network failure during the refresh call itself. The
+        // original 401 is still valid, but the inability to reach the
+        // refresh endpoint is not a reason to destroy the session. Throw
+        // without a status so AuthContext does NOT clear the token; SWR
+        // will retry on the next focus/visibility event.
+        throw new Error("Session renewal failed. Please try again.");
+      }
+      // permanent refresh failure: fall through to the existing 401
+      // handling below (clear token + redirect).
+    }
+
+    // Existing error handling (Phase 24.1 / 24.7-F).
+    // 401/403 clear auth and redirect; 5xx and transient errors preserve
+    // the token so SWR can retry.
     if (response.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
       // Redirect to login if not already there

@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { apiFetch, PROFILE_KEY } from "@/lib/api";
+import { apiFetch, API_BASE_URL, PROFILE_KEY } from "@/lib/api";
 
 // Assuming User type from backend schema (StudentProfile)
 export interface User {
@@ -52,6 +52,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // removed here — only on a genuine 401/403 or explicit logout.
   useEffect(() => {
     setTokenStatus(localStorage.getItem("access_token") ? "present" : "absent");
+  }, []);
+
+  // Phase 25.2 multi-tab: localStorage is shared across tabs/PWA contexts.
+  // When one tab refreshes the access token or logs out, other tabs observe
+  // the change and re-sync their token status. The access token itself is
+  // read fresh by apiFetch on every request, so tabs that missed the storage
+  // event still pick up the new token on their next call.
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "access_token") {
+        setTokenStatus(e.newValue ? "present" : "absent");
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Shared SWR profile resource. AuthContext and useProfile() use the SAME
@@ -140,6 +155,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Phase 25.2: best-effort server-side session revocation (POST
+    // /auth/logout revokes the refresh-token family via the HttpOnly
+    // cookie). Fire-and-forget: logout must work even when the backend is
+    // unreachable, the cookie is missing, or the session is already
+    // revoked. Local auth state is cleared immediately regardless.
+    fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+
     localStorage.removeItem("access_token");
     // Clear the ENTIRE SWR cache so no stale per-user data survives into the
     // next session (cross-user isolation); the profile can never re-authenticate.

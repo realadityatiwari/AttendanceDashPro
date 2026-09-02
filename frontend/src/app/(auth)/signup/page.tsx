@@ -81,6 +81,11 @@ export default function SignupPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
+        // Phase 25.2: credentials are included so the backend's HttpOnly
+        // refresh cookie (Set-Cookie on the register response) is stored by
+        // the browser for the cross-origin architecture. JSON contract
+        // unchanged.
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),

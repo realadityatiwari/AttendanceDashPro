@@ -5,6 +5,7 @@ import { Switch } from "@base-ui/react/switch";
 import {
   AlertTriangle,
   Bell,
+  BellRing,
   CalendarDays,
   CheckCircle2,
   Info,
@@ -16,6 +17,7 @@ import {
 import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
 import { usePreferences, usePreferenceMutation } from "@/hooks/useApi";
+import { useNotificationPermission } from "@/hooks/useNotificationPermission";
 import { UserPreferencesUpdate, WeekStart } from "@/types/api";
 
 interface SettingsModalProps {
@@ -53,6 +55,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   // opened, not unconditionally at shell mount.
   const { preferences, isLoading, isError, mutate } = usePreferences(open);
   const { savePreferences } = usePreferenceMutation();
+  const {
+    supported: browserNotificationsSupported,
+    permission: browserNotificationPermission,
+    isRequesting: browserNotificationRequesting,
+    requestPermission: requestBrowserNotificationPermission,
+  } = useNotificationPermission();
 
   const [draft, setDraft] = useState<UserPreferencesUpdate | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
@@ -153,6 +161,53 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 >
                   <Switch.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[18px] data-checked:bg-white" />
                 </Switch.Root>
+              </div>
+              <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
+                <div className="flex min-w-0 items-start gap-3">
+                  <BellRing className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">
+                      Browser notifications
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {!browserNotificationsSupported ? (
+                        "Browser notifications are not supported on this device or browser."
+                      ) : browserNotificationPermission === "granted" ? (
+                        "Permission granted. Push subscription will be added in a later phase."
+                      ) : browserNotificationPermission === "denied" ? (
+                        "Notifications are blocked for this site. Allow them in your browser's site settings."
+                      ) : (
+                        "Allow this site to show browser notifications. Push subscription will be added in a later phase."
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center">
+                  {browserNotificationsSupported &&
+                    browserNotificationPermission === "default" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => requestBrowserNotificationPermission()}
+                        disabled={browserNotificationRequesting}
+                      >
+                        {browserNotificationRequesting ? (
+                          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <BellRing className="size-3.5" aria-hidden="true" />
+                        )}
+                        Enable browser notifications
+                      </Button>
+                    )}
+                  {browserNotificationsSupported &&
+                    browserNotificationPermission === "granted" && (
+                      <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" />
+                    )}
+                  {browserNotificationsSupported &&
+                    browserNotificationPermission === "denied" && (
+                      <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+                    )}
+                </div>
               </div>
             </section>
 

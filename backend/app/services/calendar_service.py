@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.calendar import CalendarMonthResponse, CalendarDayItem, AcademicEventResponse
 from app.services.elective_resolver import ElectiveResolver
 from app.services.student_context_service import StudentContextService
+from app.models.event import AcademicEvent
 
 class CalendarService:
     def __init__(self, db: AsyncSession):
@@ -15,8 +16,12 @@ class CalendarService:
         self.repo = CalendarRepository(db)
         self.attendance_repo = AttendanceRepository(db)
 
-    async def get_day_schedule(self, target_date: date) -> AcademicDay:
-        events = await self.repo.get_all_events()
+    async def get_day_schedule(self, target_date: date, events: Optional[List[AcademicEvent]] = None) -> AcademicDay:
+        # Phase 25.4 (optimization #1): accept pre-fetched events to avoid a
+        # redundant query when the caller already has them (e.g. dashboard
+        # summary). Default None = fetch (existing behavior unchanged).
+        if events is None:
+            events = await self.repo.get_all_events()
         # Single source of truth from the calendar engine (JS getDay() indices:
         # 0=Sunday, 6=Saturday). Previously a local [5, 6] (Python weekday
         # indices) was passed here, which the engine interpreted as JS indices

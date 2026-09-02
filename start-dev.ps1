@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # start-dev.ps1
 # AttendanceDash Pro — one-command local development startup.
 #
@@ -223,14 +223,33 @@ if (Test-ServiceRunning -Port $backendPort -Pattern "python") {
 } else {
     $logOut = Join-Path $backendDir "backend_out.log"
     $logErr = Join-Path $backendDir "backend_err.log"
-    $backendProcess = Start-Process `
-        -FilePath $pythonExe `
-        -ArgumentList "-m uvicorn app.main:app --host $backendHost --port $backendPort" `
-        -WorkingDirectory $backendDir `
-        -PassThru `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $logOut `
-        -RedirectStandardError $logErr
+
+    # The backend's DATABASE_URI MUST come from backend/.env (the intended
+    # local asyncpg configuration), never from a stale inherited shell
+    # variable. pydantic-settings gives environment variables higher
+    # precedence than the .env file, so an inherited DATABASE_URI (e.g. a
+    # leftover Supabase bare postgresql:// value baked into a long-lived
+    # terminal session) would override backend/.env and crash the async
+    # engine with the sync psycopg2 driver (InvalidRequestError). Strip it
+    # from the child environment for this launch and restore it afterward.
+    $savedDatabaseUri = $env:DATABASE_URI
+    Remove-Item Env:DATABASE_URI -ErrorAction SilentlyContinue
+    try {
+        $backendProcess = Start-Process `
+            -FilePath $pythonExe `
+            -ArgumentList "-m uvicorn app.main:app --host $backendHost --port $backendPort" `
+            -WorkingDirectory $backendDir `
+            -PassThru `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $logOut `
+            -RedirectStandardError $logErr
+    } finally {
+        if ($null -ne $savedDatabaseUri) {
+            $env:DATABASE_URI = $savedDatabaseUri
+        } else {
+            Remove-Item Env:DATABASE_URI -ErrorAction SilentlyContinue
+        }
+    }
 
     Write-Step "Waiting for backend to bind to port $backendPort ..."
     $maxWaitSec = 10

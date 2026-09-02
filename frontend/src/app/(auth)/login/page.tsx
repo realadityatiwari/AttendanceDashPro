@@ -22,6 +22,11 @@ export default function LoginPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
         method: "POST",
+        // Phase 25.2: credentials are included so the backend's HttpOnly
+        // refresh cookie (Set-Cookie on the login response) is stored by the
+        // browser for the cross-origin architecture (dev localhost→127.0.0.1,
+        // production Vercel→Render). The JSON contract is unchanged.
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },

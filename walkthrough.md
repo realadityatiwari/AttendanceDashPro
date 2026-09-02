@@ -1069,6 +1069,15 @@ byte-identical to the documented 9.2.1 baseline. Report:
 - **What's Next:** Phase 12 â€” Mobile / Responsive Experience. Phase 11 is **COMPLETE & FROZEN** within its delivered scope.
 - **11C** delivery model remains decision-gated (in-app only vs scheduled sweep), deferred, and **NOT implemented** â€” it may be omitted from Phase 11 entirely.
 - **HARD STOP after 11F** â€” no commit made; Phase 11 COMPLETE & FROZEN (11A âœ… Â· 11B âœ… Â· 11D âœ… Â· 11E âœ… Â· 11F âœ…); 11C NOT implemented; browser/manual testing remains the user's responsibility.
+- **PHASE 11 PERFORMANCE OPTIMIZATION (2026-09-02) â€” batched notification regeneration.** Post-freeze write-path optimization; behavior preserved, no migration, no commit.
+  - **Previous write pattern:** `NotificationService.get_notifications` called `NotificationRepository.upsert` once per generated projection, and each `upsert` executed its own `INSERT ... ON CONFLICT DO UPDATE` followed by an individual `db.commit()` — N notification projections meant N sequential database round trips (one per item) during dashboard startup, each fully committed independently.
+  - **New transaction pattern:** `NotificationRepository.upsert_many(rows)` — a NEW batch method — executes ALL projections as ONE multi-row `INSERT ... ON CONFLICT DO UPDATE` (same `uq_notifications_user_kind_occurrence_key` conflict target) and commits once. N round trips â†’ 1. The service builds the row dicts (identical fields to the old per-item call) and invokes it a single time. The single-row `upsert` is retained unchanged for the Phase 11B verifier and direct callers.
+  - **Transaction safety:** the whole batch is a single atomic statement — a failure in any row rolls back the entire batch, so partial notification regeneration can never persist an inconsistent inbox (stronger than the previous per-row commits, which could leave earlier rows written and later ones failed).
+  - **Idempotency preservation:** unchanged and still DB-enforced. Every row keys on `UNIQUE(user_id, kind, occurrence_key)`; the conflict clause refreshes only `message` / `subject_code` / `subject_name` / `updated_at`, so re-running generation refreshes in place, never duplicates, and preserves `date`, `is_read`, `is_dismissed`, `created_at` (read/dismissed rows stay read/dismissed). Rows are deduplicated by (kind, occurrence_key) keeping the last occurrence — identical to sequential upsert semantics and required for a multi-row VALUES list.
+  - **Ordering preservation:** `created_at` is staggered in list order (one microsecond per row) so the inbox sort (`created_at DESC, id DESC`) renders newly created rows in exactly the order the previous sequential-commit loop produced.
+  - **Files changed:** `backend/app/repositories/notification_repo.py` (added `upsert_many`, added `timedelta` import), `backend/app/services/notification_service.py` (generation loop â†’ single `upsert_many` call). No schema, migration, API, auth, attendance/eligibility/calendar engine, dashboard, frontend, or cache-code changes. Alembic single head `a9b8c7d6e5f4` unchanged — inspection proved the existing constraint is sufficient (no migration required).
+  - **Verification (lightweight/static, per instruction):** `compileall` on both changed files and the full `backend/app` + `backend/scripts` PASS; alembic heads single + unchanged; `git diff` scoped to the two notification files. Live-DB verifier (`verify_phase_11b.py`) requires the running PostgreSQL container (not available in this environment) and is unaffected in contract — the service's observable behavior and the verifier's direct `repo.upsert` calls are preserved.
+  - **Remaining performance work (documented, not done):** the 60s TTL cache means regeneration (and thus this batch) runs at most once per minute per user; `_academic_events` still loads all events via `calendar_repo.get_all_events()` and `_class_reminders`/`_quiz_approaching`/`_attendance_items` each issue their own queries (4+ read round trips per regeneration); in-process-only cache (a single uvicorn worker gets full benefit; N workers run N caches — still per-user keyed, never a leak); the inbox + unread-count are two separate reads after the batch write. None were touched (out of scope: "Do not redesign notification generation").
 - **PHASE 12.0 AUDIT + 12A COMPLETE (2026-08-21).** Read-only architecture & implementation-readiness audit for Phase 12 (`docs/phase_12/phase_12_architecture_audit.md`) concluded **READY FOR ONLY A PHASE 12 SUB-PHASE (12A)** and **NO BACKEND CHANGE REQUIRED**: mobile navigation is ABSENT (TopNav nav `hidden md:flex`), all touch targets are below 40px, ShellDialog dialogs cannot scroll on short screens, and the Laboratory tab bar (~380px nowrap) is clipped by the shell â€” the top overflow risks. S4 prior art (`17_AI_HANDOFF.md:41-43`) fixes the contract at exactly 4 bottom tabs (Dashboard/Subjects/History/Profile) with Academic Tools reachable from Profile â€” never a 5th tab. The audit also corrected a governance inconsistency (Phase 12 was mislabeled "PWA & Offline"; it is "Mobile / Responsive Experience", PWA is Phase 13). 12A then delivered the **responsive foundation**: NEW `MobileBottomNav.tsx` (`md:hidden` fixed bottom nav, exactly 4 tabs + More bottom sheet via the existing `ui/sheet.tsx` exposing Profile + Track/Laboratory/Quiz Eligibility/Calendar/Events, all rows â‰¥40px); AppShell bottom clearance `p-4 pb-28 md:p-6 lg:p-8` (desktop padding byte-identical); touch-target foundation in `ui/button.tsx` (mobile base sizes with `sm:` desktop restores â€” NOT a global h-10/h-11 replacement; auto-upgrades dialog/sheet close buttons, calendar arrows, NotificationCenter actions); ShellDialog `max-h-[90dvh] overflow-y-auto` (EventFormDialog pattern) fixing all 6 shell modals; NotificationCenter list `max-h-[50dvh] md:max-h-[26rem]`; NotificationBell ~40px mobile hit area. Intentionally NOT touched: TopNav/UserMenu/dialog.tsx/sheet.tsx/app layout.tsx (documented rationale), all page components (12B-12F scope), and everything backend/DB/migration/API/PWA. Gates: `tsc --noEmit` PASS; ESLint (6 changed files) PASS; `npm run build` PASS (15 routes); `git diff --check` PASS; diff scope = 5 modified frontend files + 1 new component + `docs/phase_12/` only â€” zero backend changes, no migrations, no artifacts. Browser/manual testing NOT performed (user's responsibility; 320px/360-412px/768px+ checklist in `docs/phase_12/phase_12a_implementation_report.md`). Governance updated (MASTER_ROADMAP, implementation_plan, task.md, walkthrough â€” label fix included). **HARD STOP after 12A â€” no commit made; Phase 12: 12.0 + 12A COMPLETE; 12B (Track/Dashboard/Calendar) NEXT; desktop behavior unchanged; frozen systems untouched.**
 - **PHASE 12B COMPLETE (2026-08-21).** Track / Dashboard / Calendar responsive experience. Evidence-first: measured every nav row and grid at 320px (content 288px / card-inner 256px). Found and fixed a **real Calendar overflow** â€” the month-nav row (40px arrows + fixed `w-36` label + Today) â‰ˆ310px > 288px content, previously clipped by the shell: row is now `flex flex-wrap` with label `min-w-0 w-28 sm:w-36` (â‰ˆ276px single row at 320, wraps gracefully if fonts render wider). Calendar grid cells enlarged 31â†’35px at 320 via grid card `p-2 sm:p-4` and grids `gap-1 sm:gap-1.5` (month-calendar interaction model preserved â€” no date-picker substitution; DayDetail/legend/error/empty states verified already responsive and unchanged). Track: date-nav center column `flex-1 min-w-0` so the input stretches between 40px arrows; input `h-10 w-full sm:h-8 sm:w-40` and Today `sm:h-8` (mobile 40px via the 12A foundation; desktop 32px byte-identical); TrackSessionCard left column `min-w-0 flex-1` + wrapping badges (MID-SEM PRACTICAL no longer collides with the time at 320), actions row auto-height (fixed `h-9` was clipping the 12A h-10 buttons), and Change buttons dropped their explicit `h-7` override (mobile 40px; desktop stays `sm:h-7` â€” the 12A-report page-level residual, now resolved). Dashboard: three minimal fixes (Today badge row `flex-wrap`, Overall delta row `flex-wrap`, Weekly rows `gap-2 sm:gap-3`); all other cards verified fine at 320 and unchanged. Desktop preservation: every change is `sm:`-gated or overflow-inert (flex-wrap), so â‰¥768px is byte-identical. NOT changed: backend/DB/migrations/API/engines, all 12A files, PageHeader/Badge/Card/GlassCard/lib/date/hooks/types, css/responsive.css (unimported legacy), no new breakpoints. Gates: `tsc --noEmit` PASS; ESLint (7 changed files) PASS; `npm run build` PASS (15 routes); `git diff --check` PASS; diff = 7 frontend files (+35/âˆ’23) â€” zero backend/12A/artifact changes. Browser/manual testing NOT performed (owner's responsibility; 320px / 360â€“412px / 768px+ checklist in `docs/phase_12/phase_12b_implementation_report.md` Â§10). Governance updated (MASTER_ROADMAP, implementation_plan, task.md, walkthrough). **HARD STOP after 12B â€” no commit made; Phase 12: 12.0 + 12A + 12B COMPLETE; 12C (Laboratory/Subjects/Quiz/Events) NEXT; desktop behavior unchanged; frozen systems untouched.**
 - **BUGFIX COMPLETE (2026-08-22) â€” CLASS_CANCELLED Not Propagating to Track.** Chronological execution: **(1) Discovered** â€” owner reported an active CLASS_CANCELLED event (BCS-058 Lecture, 2026-07-30, 10:00â€“11:00) while Track still showed the class as a normal Absent+Change attendance card. **(2) Reproduced from the live DB** â€” session `19bdc85aâ€¦` (LECTURE, `is_cancelled=false`, timetable entry `02ee420aâ€¦` Thu 10:00â€“11:00) holds MISSED record `faa0ce5eâ€¦`; event `9e5a7f98â€¦` is CLASS_CANCELLED/active/exact match created AFTER the record; a sibling active case exists on 07-29 (`ce76c27fâ€¦` / `ea065985â€¦`). Explicitly running `EventSessionSynchronizer.sync_event` on the live event left the session uncancelled â€” defect mechanically isolated. **(3) Pipeline investigated end-to-end** â€” events API â†’ EventService (sync runs in-transaction on create/update/deactivate âœ“) â†’ synchronizer â†’ class_sessions â†’ Track daily read â†’ frontend card â†’ counting consumers; every `is_cancelled` consumer audited. **(4) Root cause** â€” `_reconcile_date`'s blanket guard skipped ANY session holding an attendance record, making explicit cancellations silent no-ops for historical classes (the common real-world case); cancellation provably worked only for unattended sessions. **(5) Fix** â€” synchronizer-first: `_desired_schedule` now emits `cancellation_removed` (entries explicitly removed by an active CLASS_CANCELLED only â€” LAB_CANCELLED/closures deliberately excluded per frozen Phase 9.1 check 18 and Phase 6.6 checks 5/31); `_reconcile_date` cancels unattended sessions as before AND explicitly-targeted recorded ones, restoration always allowed (full reversal), weekend-artifact/quiz-day protections intact. Consumer alignment through one canonical predicate `occurrence_is_cancelled()` (`practical_occurrence.py`) applied to subject counts (`collapse_count_rows`), History filters+summary (`attendance_repo.py`), and dashboard `_aggregate_range` â€” cancelled theory occurrences never count as attended/missed/pending anywhere; practical record-wins rule preserved; NO attendance record deleted anywhere. **(6) Regression testing** â€” NEW `verify_event_cancellation_propagation.py` **26/26** (propagation over stale marks, Track Cancelled data, mutation 409, summary/history exclusion + filters, enrollment isolation both directions, idempotent double-sync, no duplicates, PATCH-move reconciliation of two recorded sessions, exact deactivation reversal, closure + LAB_CANCELLED frozen-boundary probes via rollback transactions, owner-record fingerprints, exact count baseline). Existing verifiers re-run: compileall PASS Â· 6_6 **36/36** Â· attendance-spec **15/15** Â· events_correction **42/42** Â· working_saturday **24/24** Â· 6_5 **27/27** Â· quiz_day_materialization **14/14** Â· 11A **19/19** Â· 11B **23/23** Â· phase_3 **26/26** Â· phase_1 **18/18** Â· 7_1 **26/26** Â· 7_2 **25/26**, phase_2 **14/15** â€” the two asterisked plus history_filters (7/20), phase_9_1 (21/28), track_lab_fix (hardcoded "future" fixtures aged into the past + pre-existing FK-order cleanup crash), 8_1 (18/22), 8_2 (StopIteration) were each proven **pre-existing drift** by git-stash A/B runs against the ORIGINAL code (identical failures). **(7) DB restored** â€” full pre-work snapshot; final state: all 18 table counts byte-equal to baseline, alembic single head `d1e2f3a4b5c6` unchanged, zero temp users/events/sessions/records (crashed-run leaks cleaned strictly by captured IDs: TRK_TMP_LAB user Ã—2, 9 leaked MID_SEM/LAB_CANCELLED events, 1 extra session). **(8) Live case healed via the canonical path** â€” the two active BCS-058 cancellation events re-synced: both sessions now `is_cancelled=true`, records preserved and excluded from math (owner API probe: Track shows Cancelled for BCS-058 on 07-29 and 07-30). Note: HEAD moved mid-session (owner committed their own 12B work as `ede3da2` from a parallel terminal) â€” no work lost. **(9) Manual testing handed off** (checklist in `docs/bugfix/event_cancellation_propagation_report.md`). Report: `docs/bugfix/event_cancellation_propagation_report.md`. Frontend unchanged. No commit made.
@@ -9385,3 +9394,453 @@ Invalid/expired/revoked/reused/missing refresh -> 401 with one generic detail (`
 - SameSite=None requires `credentials: 'include'` on the frontend refresh/logout calls (25.2).
 - Refresh rows are never garbage-collected (no scheduler by design); a future cleanup phase can prune expired rows.
 - Phase 25.2 (recommended next): frontend refresh interceptor + logout wiring; then operator-applied migration on production.
+
+
+---
+
+## Implementation: Frontend Session-Renewal Integration (Phase 25.2, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Backend refresh infrastructure (25.1) is live in the codebase; this phase wires the frontend to it. No backend change, no migration, no CORS/deployment change, no commit, no browser automation.
+
+### Files changed
+
+- `frontend/src/lib/api.ts` -- refresh interceptor + single-flight
+- `frontend/src/contexts/AuthContext.tsx` -- best-effort server logout + storage-event multi-tab sync
+- `frontend/src/app/(auth)/login/page.tsx` -- `credentials: 'include'` on the login POST
+- `frontend/src/app/(auth)/signup/page.tsx` -- `credentials: 'include'` on the register POST
+
+### Exact refresh flow
+
+1. An authenticated `apiFetch` call gets `response.status === 401 && requireAuth` (and only that).
+2. `_attemptRefresh()` is called. If another refresh is in flight, the existing promise is returned (single-flight).
+3. `POST {API_BASE_URL}/api/v1/auth/refresh` with `credentials: 'include'` (HttpOnly cookie travels automatically), no manual Authorization header.
+4. Success (`200 {access_token, token_type}`): `localStorage.setItem('access_token', newToken)`; the ORIGINAL request is retried exactly once with the new token; a `204` returns null, `200` returns JSON.
+5. Refresh `!ok` (401 -- invalid/revoked/reused/expired cookie): `{ok: false, permanent: true}` -> falls through to the existing 401 handler: `localStorage.removeItem('access_token')` + redirect to `/login`.
+6. Refresh network error: `{ok: false, permanent: false}` -> apiFetch throws `Error("Session renewal failed...")` WITHOUT a `status`, so AuthContext's 401/403 effect does nothing; the token stays; SWR retries on focus/visibility.
+
+### 401 handling flow (preserved semantics)
+
+- Genuine 401 with no usable refresh: token removed, redirect to `/login` (exact existing behavior, now after one refresh attempt).
+- 403: untouched (immediate error, no refresh, no token removal unless AuthContext's existing 403 handler runs -- unchanged).
+- 5xx/network/timeout on the ORIGINAL request: untouched (no refresh, token preserved, SWR retry).
+- A second 401 after a successful refresh: falls through to the genuine-auth-failure path; the retry branch never re-enters the refresh logic, so loops are impossible.
+
+### Single-flight & retry safety
+
+Module-level `_refreshPromise` (per JS context/tab): N simultaneous 401s -> 1 refresh request, N-1 await the same promise, then each retries its own original request once. After the refresh settles, `_refreshPromise` is nulled so future expiry cycles refresh again. Maximum per request: one refresh + one retry.
+
+### Multi-tab / PWA
+
+localStorage is the shared token bus: `apiFetch` reads `access_token` fresh on every request, and a successful refresh writes it, so other tabs automatically use the new token on their next call. AuthContext's new `storage` event listener re-syncs `tokenStatus` across tabs on refresh/logout. Note (documented backend posture): the refresh cookie is shared per-origin; two tabs refreshing in the SAME instant can race, and the backend's reuse detection revokes the family -- the losing tab is logged out by design. The storage-event sync makes this rare and self-consistent.
+
+### Logout
+
+`logout()` fires `fetch(POST /api/v1/auth/logout, {credentials: 'include'})` best-effort (`.catch(() => {})`), then immediately: `localStorage.removeItem('access_token')`, full SWR cache clear, `setTokenStatus('absent')`, `router.push('/login')`. Usable when the backend is unreachable, the cookie is missing, or the session is already revoked.
+
+### Login/signup
+
+`credentials: 'include'` added to the two auth POSTs so the browser stores the backend's HttpOnly refresh cookie (Set-Cookie on login/register) under the cross-origin architecture (dev localhost:3100 -> 127.0.0.1:8080; prod Vercel -> Render). The response contract is unchanged; localStorage token persistence and `refreshUser()` are untouched; existing transient-profile-failure navigation behavior preserved.
+
+### Verification
+
+- `npx tsc --noEmit` -- PASS (clean).
+- `npm run build` with `NEXT_PUBLIC_API_URL=https://ci.example.com` (CI placeholder, same as the repo's CI job) -- PASS: compiled successfully in 456ms, 25/25 static pages generated.
+- `npx eslint` on the four changed files -- ZERO new errors. The 5 reported errors (AuthContext set-state-in-effect x2 at the pre-existing hydration/401 effects; login/signup `no-explicit-any` x2; login unescaped-entity x1) are pre-existing in frozen files -- verified identical by linting the stashed (pre-change) baseline.
+- No browser/PWA automation run (per scope).
+
+### Known limitations
+
+- Simultaneous same-instant refresh across two tabs can trigger the backend's reuse-detection family revocation (documented 25.1 security posture); the losing tab must re-login. Storage-event sync minimizes the window.
+- If the backend is unreachable when the access token expires, the user stays on the page with a status-less error and SWR retries on focus -- they are NOT logged out, but neither can they renew until connectivity returns.
+- The access-token lifetime remains 480 minutes (unchanged); shortening is Phase 25.3 (operator decision, after rollout).
+- No expired-refresh-row GC on the backend (25.1 limitation, unchanged).
+
+### Manual checks the operator must perform (no automation)
+
+1. Login normally; open DevTools -> Application -> Cookies and confirm an HttpOnly `refresh_token` cookie exists for the backend origin.
+2. Set a short `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (or wait for the 8h expiry), trigger any authenticated request, and confirm: exactly ONE `/api/v1/auth/refresh` request fires, the request succeeds silently, the page does not redirect, and the cookie rotated.
+3. Dashboard cold load after expiry: all four parallel requests should produce exactly one refresh and succeed without a login redirect.
+4. Open two tabs; log out in one; confirm the other tab redirects to /login promptly (storage event sync).
+5. Stop the backend; trigger a request; confirm NO logout/redirect (transient preservation); restart backend; confirm the next request heals on focus.
+6. Log out with the backend stopped: page must still clear local state and redirect to /login instantly.
+7. PWA: install the app, kill it, reopen after expiry; confirm silent renewal on first authenticated request.
+
+
+---
+
+## Implementation: Dashboard Summary Query Deduplication (Phase 26.1, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Optimization #1 from the 2026-09-02 performance investigation. No schema, migration, engine, frontend, auth, or API contract change. No commit.
+
+### What was built
+
+**Duplicate analysis.** The `/dashboard/summary` call graph had 4 datasets fetched 2-3 times within the same request:
+
+| Dataset | Unique fetches | Fetchers |
+|---|---|---|
+| `get_all_events()` | 3 | `get_day_schedule` (today), `get_quiz_eligibility_for_subjects` (snapshot), `_build_upcoming_events` |
+| `get_quiz_cycle_with_policy(cycle_number)` | 2 | `_build_quiz_snapshot` + eligibility batch (same cycle) |
+| `load_choices`/`chosen_elective_map` | 2-3 | `_build_quiz_snapshot`, eligibility batch, `_build_upcoming_events` |
+| `get_effective_quiz_dates_for_subjects` | 2 | `_build_quiz_snapshot` + eligibility batch |
+
+**Consolidation.** `DashboardService.get_summary` now pre-fetches `events` and `choices` (from `ElectiveResolver`) once at the top of the method, derives `elective_scope` from choices in memory, and threads them into every builder. The eligibility batch is called with pre-fetched `cycle_model`, `events`, `elective_scope`, and `effective_by_subject` so it skips its own redundant queries.
+
+**Downstream guard pattern.** `CalendarService.get_day_schedule(today, events=None)` and `EligibilityService.get_quiz_eligibility_for_subjects(...)` accept optional pre-fetched data. Each parameter defaults to `None`, meaning "fetch as before" -- zero behavior change for all existing callers (calendar endpoint, quiz eligibility endpoint, etc.). The dashboard passes pre-fetched values, so the downstream methods skip their internal queries.
+
+**Behavior preservation.** The same queries (same `get_all_events()` with no filter, same `load_choices()`, same `get_quiz_cycle_with_policy()`, same `get_effective_quiz_dates_for_subjects()`) are executed, just once instead of 2-3 times. The data is byte-identical; the engine path is identical; the response shape is identical.
+
+### Expected query reduction per request (N=8 subjects)
+
+- `get_all_events`: 3 -> 1 (-2)
+- `get_quiz_cycle_with_policy`: 2 -> 1 (-1)
+- `load_choices/chosen_elective_map`: 2-3 -> 1 (-1..-2)
+- `get_effective_quiz_dates_for_subjects`: 2 -> 1 (-1)
+- Total: **~6 queries saved** (the 2N=16 quiz-window scans remain; they are optimization #3)
+
+### Verification
+
+- `compileall` PASS (app + verifier).
+- App import PASS (full wiring, all three services).
+- `verify_phase_25_4.py` **25/25 PASS** (static call-site counts vs HEAD baseline, guard-pattern analysis, data-threading assertions, scope guard confirming no prohibited categories touched).
+- Live DB / HTTP verification intentionally NOT run (dev Docker daemon not running this session; no DB-dependent verifier written for this phase).
+
+### Known limitations / next
+
+- The 2N quiz-window scans (optimization #3) remain -- they are the next highest-impact optimization.
+- `anchor_subjects()` in `_build_upcoming_events` is still fetched once per request (it was not duplicated within the request, so it is not addressed by this phase).
+- No cross-endpoint caching, no DB indexes, no frontend changes -- only in-request dedup within `dashboard_service.py`.
+- Next optimization phases (ordered by impact / risk): #3 (eliminate 2N quiz-window scans), #2 (shared semester scan), #5 (filter `get_all_events` at source), #7 (DB indexes -- requires Alembic migration, separate authorization).
+
+---
+
+## Notification Delivery Investigation (2026-09-02) — INVESTIGATION ONLY, no implementation
+
+**Status: INVESTIGATION COMPLETE** — static, read-only end-to-end trace of the complete notification architecture. No code, migration, env, deployment, or commit. Full report: `docs/notification_delivery_investigation.md`.
+
+### What was investigated
+
+1. **In-app notification pipeline** (Phase 11A/11B/11D): verified functional. Generation on-read (GET /api/v1/notifications), 60s per-user TTL cache, PATCH invalidation, idempotent upsert (UNIQUE(user_id, kind, occurrence_key)), owner-scoped, consistent `institution_today()`. CLASS_REMINDER gated by `class_reminders` preference (default OFF). No generation bug found.
+2. **Web Push**: NOT IMPLEMENTED. Zero occurrences of PushManager/PushSubscription/VAPID/pywebpush/web-push anywhere. No push-subscription persistence, no backend send path, no dispatch service, no trigger.
+3. **Service worker**: defined (`frontend/src/components/pwa/useServiceWorker.ts`) but NEVER MOUNTED — `navigator.serviceWorker.register()` never runs. `public/service-worker.js` has install/activate/fetch only; no `push`/`notificationclick`/`notificationclose`/`showNotification`/payload/deep-link handling.
+4. **Real-time delivery**: intentionally de-polled (Phase 11D). Bell = STANDARD_CACHE (focus revalidation) + manual mutate on open. No polling, SSE, WebSocket, or push. New records appear only on focus/open/reload.
+5. **Permission UI**: none exists. The only notification-adjacent control (Settings "Class reminders") toggles a database preference row; no `Notification.requestPermission()` call exists. A user-granted browser permission is completely inert.
+
+### Root-cause classification (ranked)
+
+| Rank | Code | Issue | Scope |
+|---|---|---|---|
+| 1 | D | No Web Push subscription created | Frontend (PushManager never called) |
+| 2 | E | No backend Web Push delivery | Backend (no pywebpush/send path) |
+| 3 | F | No VAPID configuration | Env (no keys, no settings) |
+| 4 | C | Service worker not registered | Frontend (useServiceWorker never mounted) |
+| 5 | G | No background trigger/job | Architecture (generation is on-read only) |
+| 6 | B | Cache/revalidation gap; no real-time in-app update | Frontend (no polling/SSE/push) |
+| 7 | H | Inert permission state | UI (permission granted but unused) |
+| — | A | In-app generation bug | **NOT CONFIRMED** (pipeline verified intact) |
+
+### Recommended implementation (NOT started, phases P1–P5)
+
+- **P1 (parallelizable):** mount `useServiceWorker()` in AppShell; add honest permission UI; extend SW with `push`/`notificationclick` handlers.
+- **P2 (sequential after P1):** push subscription creation + persistence (authenticated endpoints, owner-scoped, `push_subscriptions` table + migration).
+- **P3 (after P2):** VAPID keypair generation; `pywebpush`; `PushDispatchService`; 404/410 dead-subscription cleanup.
+- **P4 (after P3):** trigger strategy — move generation off read-only to a post-mutation hook + optional sweep; dispatch push as a side-channel of the canonical in-app notification (never the source of truth).
+- **P5 (parallelizable):** restore cheap bell freshness (e.g., 60-120s `refreshInterval` on `useNotifications`; backend TTL makes it cheap).
+
+### Files examined (read-only)
+
+Backend (functional in-app): `notification.py`, `enums.py`, `notification.py` (schema), `notification_repo.py`, `notification_service.py`, `notifications.py` (endpoint), `api.py`, `d1e2f3a4b5c6_add_notifications.py` (migration). Frontend (functional in-app): `NotificationBell.tsx`, `NotificationCenter.tsx`, `TopNav.tsx`, `UserMenu.tsx`, `useApi.ts` (`useNotifications`/`useNotificationMutation`), `types/api.ts`, `SettingsModal.tsx`. PWA (files exist, functionality absent): `service-worker.js`, `manifest.json`, `useServiceWorker.ts`, `AppShell.tsx`, `useInstallPrompt.ts`, `InstallAppModal.tsx`. Governance: `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md`. Reports: `docs/phase_11/*`.
+
+### Clean bill
+
+- Phase 11 remains **COMPLETE & FROZEN**; 11C (delivery model) remains deferred/not implemented.
+- Attendance/eligibility engines, Admin Portal, auth architecture, frozen verifiers — all untouched.
+- **HARD STOP — no implementation, no migration, no commit, no browser automation.**
+
+---
+
+## Phase 11C-P1 — Web Push Foundation (Browser-side) — Walkthrough
+
+**Status: COMPLETE (2026-09-02).** P1 of the five-phase Web Push delivery plan (`docs/notification_delivery_investigation.md`). This phase makes the browser/service-worker side technically ready: service-worker registration is live, browser notification permission is requestable through an explicit user action, and the service worker can display and route push notifications. No subscription, VAPID, backend dispatch, or in-app changes.
+
+### Scope
+
+- Register the existing service worker at runtime (previously defined but never mounted).
+- Provide a real, explicit, user-initiated browser notification permission path (Settings).
+- Add defensive `push` / `notificationclick` handling to the service worker.
+- Preserve every existing service-worker behavior (cache versioning, activate cleanup, network-first navigation, network-only `/api/*`, precache, no `skipWaiting`).
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `frontend/src/components/pwa/ServiceWorkerRegistration.tsx` | **NEW** — side-effect-only client component; mounts `useServiceWorker()` |
+| `frontend/src/components/layout/AppShell.tsx` | Renders `<ServiceWorkerRegistration />` (authenticated shell) |
+| `frontend/src/hooks/useNotificationPermission.ts` | **NEW** — real `Notification.permission` hook (`unsupported`/`default`/`granted`/`denied`), user-gesture `requestPermission()`, `permissionchange` + focus sync, no faked state |
+| `frontend/src/components/shell/SettingsModal.tsx` | "Browser notifications" row in the Notifications section (per-state copy + control) |
+| `frontend/public/service-worker.js` | Added `push` listener, `notificationclick` listener, defensive `parsePushPayload()`/`resolvePushUrl()`; all existing handlers byte-preserved |
+| `MASTER_ROADMAP.md`, `implementation_plan.md`, `task.md`, `walkthrough.md` | Governance reconciliation (this entry) |
+
+### Implementation summary
+
+1. **Registration.** `AppShell` (authenticated layout) now mounts `ServiceWorkerRegistration`, which calls the pre-existing `useServiceWorker()` hook. The hook registers `/service-worker.js` in the browser only, uses a module-level `serviceWorkerRegistered` flag (single registration), checks `"serviceWorker" in navigator` for unsupported browsers, swallows failures, and keeps its update-found/focus/hourly `registration.update()` lifecycle. Registration is not tied to authentication and never blocks first paint (side-effect component renders `null`).
+2. **Permission.** `useNotificationPermission()` returns `supported`, `permission` (the real `Notification.permission`), `isRequesting`, and `requestPermission()`. `requestPermission()` is invoked only from the Settings button (user gesture) and only when the state is `default` — granted/denied are never re-prompted. State updates come from `permissionchange` and focus re-sync; nothing is stored in localStorage.
+3. **Settings UI.** The Notifications section now has a "Browser notifications" row:
+   - `unsupported` ? muted explanation, no control;
+   - `default` ? "Enable browser notifications" button ? `requestPermission()`;
+   - `granted` ? success checkmark with "Push subscription will be added in a later phase.";
+   - `denied` ? warning icon with "Notifications are blocked for this site. Allow them in your browser's site settings."
+4. **Service worker push handling.**
+   - `push`: parses the payload defensively, then `event.waitUntil(self.registration.showNotification(...))`. Payload shape supported: `{ title, body, icon, badge, tag, url }` (all optional), with length caps (title 100, body 400, tag 64, url 500) and same-origin validation via `resolvePushUrl()` for `url`/`icon`/`badge`. Malformed JSON, empty payloads, missing fields, and wrong types fall back to safe defaults (`"AttendanceDash Pro"`, `"/brand/icon-192.png"`, `"/dashboard"`). No API calls, no cache writes, no database access.
+   - `notificationclick`: closes the notification, re-validates the destination (stored in `notification.data.url`) as a same-origin app path, focuses an existing app window client and navigates it when supported, otherwise `clients.openWindow()`. External origins are never opened.
+   - `notificationclose`: intentionally not implemented (optional; P1 has no telemetry/analytics).
+
+### Verification performed (static/in-process only)
+
+- `npx tsc --noEmit` — **PASS** (0 errors).
+- `npx eslint` on the changed frontend files — **PASS** (0 errors).
+- `node --check frontend/public/service-worker.js` — **PASS** (syntax valid).
+- `git diff` review — changed files limited to those listed above + governance; **no backend/schema/migration/auth/engine changes**.
+- **No browser automation, Playwright/Cypress/Selenium, or E2E testing was run** (per scope — the user performs browser/PWA testing).
+
+### Explicit non-goals (NOT in P1)
+
+- No `PushManager.subscribe()` / `pushManager` / `PushSubscription` creation.
+- No subscription persistence, no subscription endpoints, no VAPID keys, no `pywebpush`, no backend dispatch service.
+- No delivery triggers, no background scheduler, no notification delivery records.
+- No bell redesign, no notification-center changes, no `/notifications` API change, no notification generation/cache/TTL change, no SWR policy change, no polling reintroduced.
+- No auth/JWT/login/signup changes, no Admin Portal changes, no attendance/eligibility/calendar engine changes.
+- No database writes, no Alembic migration.
+
+### Database mutation status
+
+**ZERO.** No models, repositories, services, endpoints, migrations, or database data were touched.
+
+### Remaining work (P2–P5, NOT STARTED)
+
+- **P2 — subscription persistence:** `PushManager.subscribe()` with VAPID public key; `push_subscriptions` table + migration; authenticated owner-scoped POST/DELETE subscription endpoints; `usePushSubscription()` frontend hook.
+- **P3 — VAPID + backend dispatch:** VAPID keypair generation (private key server-side only), `pywebpush`, `PushDispatchService`, 404/410 dead-subscription cleanup, retry policy.
+- **P4 — canonical ? push triggers:** move generation off read-only to post-mutation + optional sweep; dispatch Web Push as a side-channel of the persisted in-app notification (in-app feed remains the source of truth).
+- **P5 — bell/in-app refresh improvements:** e.g., a modest `refreshInterval` on `useNotifications` for real-time freshness (parallelizable with Phase 26 performance work).
+
+**HARD STOP after P1 — no commit, no push, no deploy, no browser automation.**
+
+
+---
+
+## Implementation: Eliminate 2N Quiz-Window Scans (Phase 26.3, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Optimization #3 from the 2026-09-02 performance investigation. No schema, migration, engine, frontend, auth, or API contract change. No commit.
+
+### What was built
+
+**Previous 2N pattern.** The dashboard's quiz-snapshot section called `get_quiz_eligibility_for_subjects`, which evaluated each quiz-applicable subject via `_evaluate_subject`. For each subject with a resolved milestone, `_evaluate_subject` issued TWO database scans: one for the cycle window (Criterion I: previous quiz boundary or commencement -> day before quiz) and one for the cumulative window (Criterion II: commencement -> day before quiz). Total: **2N scans** per summary request.
+
+**New single-scan pattern.** `_quiz_window_counts_by_subject` computes per-subject attendance windows once via the same canonical calendar engine calls (`get_attendance_window`, `get_cumulative_attendance_window`), determines the union date range covering all windows, and issues ONE scan (`get_subject_counts_between_for_subjects`) over that range for ALL milestone-resolved subjects. Each subject's window rows are then filtered and practical-collapsed in memory via `_bucket_window_counts` + `collapse_count_rows` -- identical to the per-subject repo path.
+
+**Repository method.** `get_subject_counts_between_for_subjects` mirrors `get_subject_counts_between` row-for-row: same outcome join keyed on the resolved subject, same `exclude_quiz_day` shape predicate, same (date, start_time, id) ordering. It adds subject-attribution fields (`session_subject_id`, `slot`, `choice_subject_id`) so the caller can reproduce `_resolved_subject_match` semantics per subject in memory. The practical-block collapse is deliberately NOT performed here -- it must run per (subject, window) at the caller to be byte-identical.
+
+**Single-source-of-truth.** `_build_domain_subject` is the shared construction for the domain Subject + milestone Timeline, used by both `_evaluate_subject` (single-subject path) and `_quiz_window_counts_by_subject` (batch path), ensuring the domain-subject shape is identical regardless of which path computes it.
+
+**Backward-compatibility.** `_evaluate_subject` accepts optional `raw_counts`/`cumulative_raw_counts` params (default None). The batch path passes precomputed counts; the single-subject path (`get_quiz_eligibility`) passes nothing -- the method falls back to its own per-subject scans, behavior unchanged.
+
+### Behavior preservation strategy
+
+Every filter and transformation is byte-identical to the per-subject path:
+
+| Aspect | Per-subject path | Bulk path | Verdict |
+|---|---|---|---|
+| `_resolved_subject_match` | `session.subject_id == S OR (slot AND choice == S)` | Same predicate in `_bucket_window_counts` | Identical |
+| `exclude_quiz_day` | SQL filter on session shape | Same SQL filter in bulk query | Identical |
+| `occurrence_outcome` join | `_outcome_join_on(resolved)` | Same join in bulk query | Identical |
+| Date bounds | `start <= date <= end` inclusive | Same in `_bucket_window_counts` | Identical |
+| Ordering | `(date, start_time NULLS LAST, id)` | Same ORDER BY in bulk query | Identical |
+| Practical collapse | `collapse_count_rows` | Same `collapse_count_rows` on per-subject slice | Identical |
+| `_build_counts` aggregation | `(class_type, status)` tuples | Same tuples from `collapse_count_rows` | Identical |
+| Engine evaluation | `evaluate_quiz_eligibility(counts, cumulative_counts)` | Same counts + cumulative_counts | Identical |
+
+### Expected query reduction per request
+
+- `get_subject_counts_between`: **2N -> 0** (eliminated all per-subject window scans)
+- `get_subject_counts_between_for_subjects`: **0 -> 1** (one scan for the union range)
+- For N=8 quiz-applicable subjects: **16 scans -> 1** (-15 queries)
+
+### Verification
+
+- compileall PASS (full app).
+- `verify_phase_26_3.py` **27/27 PASS** (bulk method structure, batch wiring, `_evaluate_subject` optional-counts guard, single-subject-path preservation, scope guard).
+- No schema/migration/engine/frontend/auth/API-contract change. No commit.
+
+### Known limitations / next
+
+- The single-subject `get_quiz_eligibility` endpoint path still does 2 scans per subject (it is not a performance bottleneck -- it handles one subject at a time).
+- Optimization #2 (shared semester scan across summary + analytics) is now unblocked after 26.3.
+- Optimization #5 (filter `get_all_events` at source) and #7 (DB indexes) remain.
+- No expired-refresh-row GC, no cross-endpoint caching, no deployment change.
+
+
+---
+
+## Implementation: Event Source Filtering (Phase 26.5, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Optimization #5 from the 2026-09-02 performance investigation. No schema, migration, index, engine, frontend, auth, or API contract change. No commit.
+
+### Previous event query behavior
+
+`DashboardService.get_summary` fetched the full `academic_events` table: `events = await self.calendar_repo.get_all_events()` -- no `active` filter, no date bounds. The full result was passed to all three consumers (day schedule, quiz snapshot/eligibility, upcoming events), which then filtered in memory. This scanned every event ever created, including inactive and historically-ended rows.
+
+### New filtering
+
+```python
+event_floor = today
+if semester_start is not None and semester_start < today:
+    event_floor = semester_start
+events = await self.calendar_repo.get_all_events(
+    active=True,
+    date_from=event_floor,
+)
+```
+
+The repository applies: `WHERE active = true AND end_date >= event_floor` (ORDER BY start_date unchanged).
+
+### Correctness reasoning
+
+| Consumer | Dates referenced | Why the floor is safe |
+|---|---|---|
+| Day schedule (`get_academic_day(today, ...)`) | `today` only | Events covering today have `end_date >= today >= floor`; inactive events are filtered by the engine anyway |
+| Eligibility windows (`get_attendance_window` / `get_cumulative_attendance_window`) | commencement (semester_start or today) -> day before quiz | All window dates >= commencement >= floor; events ending before the floor cannot overlap a window date |
+| Upcoming events builder (`end_date >= today`) | today and later | Events with `end_date >= today` trivially satisfy `end_date >= floor`; inactive events were skipped in memory |
+
+Range-overlap semantics in the repo (`event.end_date >= date_from`) keep events whose range spans the semester boundary -- a closure that started before the semester and ends inside it is retained. Inactive events are excluded at the source; the calendar engine, eligibility engine, and upcoming builder all filter `active` in memory, so no output could ever reference an inactive event.
+
+### Files changed
+
+- `backend/app/services/dashboard_service.py` -- the single event fetch in `get_summary` now passes `active=True, date_from=event_floor`.
+- `backend/verify_phase_26_5.py` (new) -- static verifier.
+
+### Verification
+
+- compileall PASS (full app).
+- `verify_phase_26_5.py` **17/17 PASS** (filter params present in the dashboard call, event_floor computation, repository parameter support, consumer wiring, scope guard confirming no prohibited categories touched).
+- Live DB verification not run (dev Docker daemon down this session); reduction demonstrated statically.
+
+### Remaining bottlenecks
+
+- Optimization #2 (shared semester scan across summary + analytics) -- the analytics endpoint still issues its own heavy range scans duplicating summary work.
+- Optimization #7 (DB indexes on `class_sessions.date` / `academic_events(start_date)`) -- requires a new Alembic migration, separate authorization.
+- The calendar day endpoint, eligibility single-subject endpoint, and notification service still fetch events unfiltered (each has its own scope; out of scope for this phase).
+
+## Implementation: DATABASE_URI Launcher Env Hardening (Phase 26.7, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Permanent fix for the recurring `InvalidRequestError: The asyncio extension requires an async driver to be used. The loaded 'psycopg2' is not async.` at `backend/app/db/session.py:4`. No schema, migration, engine, frontend, auth, or API contract change. No commit.
+
+### Background
+
+The backend crashed with `psycopg2` sync-driver error despite `backend/.env` containing the correct `postgresql+asyncpg://` URL. Earlier investigation found a stale persistent user-level `DATABASE_URI` in `HKCU:\Environment` (bare Supabase `postgresql://` URL) and prescribed removal (`Remove-Item -Path 'HKCU:\Environment' -Name 'DATABASE_URI' -Force`). After removal, the crash recurred.
+
+### Root cause (final)
+
+The persistent env var was successfully removed from the registry (User + Machine scopes both empty). However, the **in-memory environment block** of the currently-running terminal/IDE process tree was snapshotted when the session started (before the cleanup), and Windows does NOT propagate registry changes to already-running processes. Every child spawned from that tree -- including `Start-Process` from `start-dev.ps1`, and even fresh `-NoProfile` child shells -- inherits the stale value from the parent's environment block.
+
+Confirmation: `[Environment]::GetEnvironmentVariable('DATABASE_URI','User')` ? empty; `[Environment]::GetEnvironmentVariable('DATABASE_URI','Machine')` ? empty; but `$env:DATABASE_URI` in the current process (and fresh `powershell.exe -NoProfile` / `pwsh -NoProfile` child shells) ? `postgresql://postgres.zwkdiervvtjalaazscdv:...@aws-0-ap-south-1.pooler.supabase.com:5432/postgres`.
+
+pydantic-settings v2 precedence: **init args > env vars > dotenv file > defaults**. The inherited bare `postgresql://` env var wins over `backend/.env`'s `postgresql+asyncpg://`, routing SQLAlchemy to the sync `psycopg2` dialect ? `create_async_engine` crashes.
+
+### Fix
+
+**`start-dev.ps1`**: the backend `Start-Process` block now saves the current `$env:DATABASE_URI`, removes it from the process environment, starts the backend (which inherits a clean environment), then restores the original value. The backend always resolves the intended local asyncpg configuration from `backend/.env`, regardless of stale inherited values.
+
+**BOM restoration**: the `start-dev.ps1` file originally had a UTF-8 BOM (`EF BB BF`). When the edit tool rewrote the file without BOM, PowerShell 5.1 (which assumes ANSI encoding for BOM-less `.ps1` files) garbled the multi-byte UTF-8 box-drawing characters (?, ?, ?) and broke script parsing. The BOM was restored via explicit UTF-8-with-BOM encoding.
+
+### Files changed
+
+- `start-dev.ps1` -- save/remove/restore of `$env:DATABASE_URI` around backend `Start-Process`; UTF-8 BOM preserved.
+
+### Verification (live, with stale env var present in parent shell)
+
+1. `$env:DATABASE_URI` in the launching shell confirmed stale: `postgresql://postgres.zwkdiervvtjalaazscdv:...@aws-0-ap-south-1.pooler.supabase.com:5432/postgres`.
+2. `.\start-dev.ps1` launched successfully: PostgreSQL ready, backend launched and listening on port 8080, frontend on port 3100.
+3. `GET http://127.0.0.1:8080` ? HTTP 200 `{"message":"AttendanceDash Pro API is running."}`.
+4. `backend_err.log` shows clean startup: no `InvalidRequestError`, no `psycopg2` mention.
+5. Direct Python check with env stripped (replicating the launcher's effect): `scheme=postgresql+asyncpg`, `host=localhost`, `port=55432`, `database=attendancedash`.
+
+### Why this is architecturally correct
+
+- The root cause is external (stale in-memory env var in the user's terminal session). The repository cannot clear the parent process's environment block.
+- The launcher (`start-dev.ps1`) is the architectural boundary between the shell environment and the backend process. It already hardcodes local dev topology (`$dbHost = "127.0.0.1"`, `$dbPort = 55432`). Making it ensure the backend receives the intended local `.env` configuration is architecturally consistent.
+- This is a launcher-level safeguard, NOT an application-level URL normalization. The backend code (`config.py`, `session.py`) is untouched.
+- Permitted explicitly by the fix governance rule: "If the root cause is an environment variable that should never be accepted for local development, make the local launcher explicitly and safely use the intended `.env` configuration."
+
+### Remaining
+
+The stale `$env:DATABASE_URI` still exists in the current shell session. While the launcher now makes it harmless for `start-dev.ps1`, the user can fully clear it by starting a new terminal or running `Remove-Item Env:DATABASE_URI -ErrorAction SilentlyContinue`. This is not required for correct operation but may be desirable for cleanliness.
+
+## Implementation: Login "Unable to reach the server" Fix (Phase 26.8, 2026-09-02)
+
+**Status: IMPLEMENTATION COMPLETE.** Login failed with 500 `relation "refresh_tokens" does not exist` at `POST /api/v1/auth/login`. Root cause: the Phase 25.1 migration `a9b8c7d6e5f4` (add_refresh_tokens) had never been applied to the local dev database. No application code modified. No commit.
+
+### Background
+
+The user reported seeing "Unable to reach the server. Check your connection and try again." on the login page. The backend was running and healthy (root endpoint returning 200). Initial investigation focused on CORS, network connectivity, and the frontend API URL, but the backend logs revealed the actual failure: every login POST reached the server and returned 500 with `relation "refresh_tokens" does not exist`.
+
+### Investigation findings
+
+1. **Frontend login URL**: `POST http://localhost:8080/api/v1/auth/login` with `Content-Type: application/json`, `{roll_number, password}`. The `NEXT_PUBLIC_API_URL` comes from `frontend/.env.local` ? `http://localhost:8080`. The `DEV_API_URL` fallback in `api.ts` is `http://127.0.0.1:8080`. The login page uses raw `fetch()`, not `apiFetch()`.
+
+2. **CORS configuration**: `BACKEND_CORS_ORIGINS = ["http://localhost:3100", "http://127.0.0.1:3100"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`. Verified: OPTIONS preflight returns 200 with `access-control-allow-origin: http://localhost:3100`, `allow-credentials: true`. CORS is correct.
+
+3. **Backend login endpoint**: `POST /api/v1/auth/login` (auth.py:82). On successful authentication, calls `RefreshTokenService(db).issue(user)` (line 124) which INSERTs into `refresh_tokens`. The entire endpoint is within a rate limit (10/900s).
+
+4. **Runtime evidence**: Backend logs (backend_out.log) show:
+   ```
+   INFO: 127.0.0.1:2811 - "OPTIONS /api/v1/auth/login" 200 OK
+   INFO: 127.0.0.1:4009 - "POST /api/v1/auth/login" 500 Internal Server Error
+   INFO: 127.0.0.1:1762 - "POST /api/v1/auth/login" 500 Internal Server Error
+   ```
+   The error traceback shows `asyncpg.exceptions.UndefinedTableError: relation "refresh_tokens" does not exist` at the INSERT statement.
+
+5. **Database state**: `docker exec attendancedashpro_db psql -d attendancedash -c "SELECT version_num FROM alembic_version"` ? `c4d5e6f7a8b9`. The local DB was NOT at head `a9b8c7d6e5f4` — the Phase 25.1 migration `a9b8c7d6e5f4` (add_refresh_tokens.py) had never been applied to the local dev DB. `\dt` showed 23 tables, none was `refresh_tokens`. The task brief's claim "Alembic is at a9b8c7d6e5f4 (head)" was incorrect for the local database.
+
+### Root cause
+
+The task brief stated "The missing refresh_tokens migration was successfully applied: c4d5e6f7a8b9 -> a9b8c7d6e5f4", but the local dev database was at `c4d5e6f7a8b9` and had no `refresh_tokens` table. The migration was likely applied to a different database (possibly the Supabase production DB, because the stale `DATABASE_URI` env var documented in Phase 26.7 pointed at the Supabase pooler URL). The local dev DB (attendancedashpro_db:55432) — which is what the backend connects to via `backend/.env` — never received the migration.
+
+Every login attempt that passed authentication (user found, password verified, account active) would hit `RefreshTokenService.issue()` ? INSERT into `refresh_tokens` ? `ProgrammingError: relation "refresh_tokens" does not exist` ? 500 Internal Server Error ? login fails.
+
+### Fix
+
+The stale `DATABASE_URI` env var (Supabase production URL) was removed from the process environment to prevent the migration from running against the wrong database. Then:
+
+```
+alembic upgrade head
+```
+
+Output: `Running upgrade c4d5e6f7a8b9 -> a9b8c7d6e5f4, Phase 25.1: refresh-token session persistence`
+
+### Files changed
+
+No application code was modified. Only the database migration state was advanced.
+
+### Verification
+
+1. `alembic current` ? `a9b8c7d6e5f4 (head)` — confirmed local DB is at head.
+2. `\dt refresh_tokens` ? `refresh_tokens | table` — table exists.
+3. `\d refresh_tokens` — all columns match the INSERT statement (id, user_id, token_hash, family_id, expires_at, is_used, is_revoked, replaced_by, created_at, updated_at).
+4. `POST /api/v1/auth/login` with bad credentials ? `401 Unauthorized` with `{"detail":"Incorrect roll number or password"}` and full CORS headers (`access-control-allow-origin: http://localhost:3100`, `allow-credentials: true`). No 500 error.
+5. `GET /` ? `HTTP 200 {"message":"AttendanceDash Pro API is running."}` — backend healthy.
+6. `backend_err.log` — no new errors after the fix.
+
+No backend restart was required: the running process (PID 22436) connects to the same local database, and the `refresh_tokens` table now exists for the next INSERT.
+
+### Why this is architecturally correct
+
+- The `refresh_tokens` table is required by the Phase 25.1 login endpoint contract. The existing Alembic migration `a9b8c7d6e5f4` creates it via the project's canonical migration path — not a manual `CREATE TABLE`.
+- The stale `DATABASE_URI` env var was removed before running the migration, ensuring it targeted the local dev DB (55432) and could not be redirected to the Supabase production database.
+- No application code, configuration, middleware, or architecture was changed. The fix is purely a database state advancement.
+
+### Remaining
+
+The user should test login in the browser with real credentials. Expected behavior:
+- Correct credentials ? redirect to `/dashboard`, access token stored in `localStorage`.
+- Incorrect credentials ? "Incorrect roll number or password" message (not "Unable to reach the server").
+
+If "Unable to reach the server" still appears, the possible residual cause is the `NEXT_PUBLIC_API_URL=http://localhost:8080` in `frontend/.env.local`: `localhost` resolves to both `::1` (IPv6) and `127.0.0.1` (IPv4) on this machine, but the backend binds only `127.0.0.1:8080` (IPv4-only). Changing `frontend/.env.local` to `NEXT_PUBLIC_API_URL=http://127.0.0.1:8080` (matching the `DEV_API_URL` fallback in `api.ts` and the `start-dev.ps1` backend bind address) and restarting the frontend dev server would eliminate this as a possibility.

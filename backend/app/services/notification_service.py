@@ -129,19 +129,31 @@ class NotificationService:
         # Phase 11B: snapshot the generated projections into persisted rows.
         # Idempotent by construction — the same occurrence upserts, never
         # duplicates. The inbox is then the persisted rows, newest first.
-        for item in items:
-            await self.notification_repo.upsert(
-                user_id=user.id,
-                kind=item.kind,
-                occurrence_key=self._occurrence_key(item),
-                date=item.date,
-                message=item.message,
-                subject_code=item.subject_code,
-                subject_name=item.subject_name,
-                session_id=item.session_id,
-                quiz_cycle=item.quiz_cycle,
-                event_id=item.event_id,
-            )
+        #
+        # Performance (2026-09-02): all projections are written in ONE
+        # transaction via a single multi-row upsert (NotificationRepository.
+        # upsert_many) instead of N sequential single-row upserts with an
+        # individual commit each — one database round trip per regeneration
+        # instead of N, with the whole batch atomic (a failure rolls back the
+        # entire statement, never a partially regenerated inbox). Content,
+        # idempotency keys, per-user isolation and the created_at ordering
+        # used by the inbox sort are all preserved.
+        rows = [
+            {
+                "user_id": user.id,
+                "kind": item.kind,
+                "occurrence_key": self._occurrence_key(item),
+                "date": item.date,
+                "message": item.message,
+                "subject_code": item.subject_code,
+                "subject_name": item.subject_name,
+                "session_id": item.session_id,
+                "quiz_cycle": item.quiz_cycle,
+                "event_id": item.event_id,
+            }
+            for item in items
+        ]
+        await self.notification_repo.upsert_many(rows)
 
         rows = await self.notification_repo.get_inbox(user.id)
         unread_count = await self.notification_repo.count_unread(user.id)

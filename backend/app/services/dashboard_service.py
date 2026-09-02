@@ -83,14 +83,44 @@ class DashboardService:
 
         summaries = await self._subject_summaries(user.id, subjects, today)
 
+        # Phase 25.4 (optimization #1): request-scoped datasets fetched ONCE and
+        # reused in memory by every builder that needs them, instead of each
+        # builder (and the eligibility/calendar services beneath them) re-fetching
+        # the same rows. Behavior is identical — same query, same ordering, same
+        # filters — but the database round trips are eliminated.
+        #
+        # Phase 26.5 (optimization #5): events are filtered at the source instead
+        # of fetching the full table. The safe lower bound is the earliest date
+        # ANY consumer can reference: the day schedule and upcoming events need
+        # events covering/after `today`, eligibility windows start at
+        # `commencement` (= semester_start when placed, else today) — so the
+        # bound is min(semester_start, today). Events ending before that bound
+        # cannot affect any dashboard consumer (range-overlap semantics in the
+        # repo keep events that SPAN the boundary). Inactive events are excluded
+        # — no consumer uses them (the calendar engine, eligibility engine, and
+        # upcoming builder all filter `active` in memory). Callers outside the
+        # dashboard (calendar endpoint, eligibility single-subject endpoint,
+        # notification service) fetch their own events with their own call to
+        # `get_all_events()` and are unaffected.
+        event_floor = today
+        if semester_start is not None and semester_start < today:
+            event_floor = semester_start
+        events = await self.calendar_repo.get_all_events(
+            active=True,
+            date_from=event_floor,
+        )
+        resolver = ElectiveResolver(self.db)
+        choices = await resolver.load_choices(user.id)
+        elective_scope = {choice.subject_id: slot for slot, choice in choices.items()}
+
         return DashboardSummaryResponse(
             generated_at=today,
-            today=await self._build_today(user.id, today, rows),
+            today=await self._build_today(user.id, today, rows, events),
             overall=self._build_overall(rows, today, semester_start),
             weekly=self._build_weekly(rows, today, summaries),
-            quiz_snapshot=await self._build_quiz_snapshot(user, subjects, semester_start),
+            quiz_snapshot=await self._build_quiz_snapshot(user, subjects, semester_start, events, elective_scope),
             attention_required=self._build_attention_required(subjects, summaries),
-            upcoming_events=await self._build_upcoming_events(user, subjects),
+            upcoming_events=await self._build_upcoming_events(user, subjects, events, choices),
         )
 
     async def _subject_summaries(self, user_id, subjects: List[Subject], as_of_date: date):
@@ -105,8 +135,10 @@ class DashboardService:
         )
         return [(s, summaries_map[s.id]) for s in applicable]
 
-    async def _build_today(self, user_id, today: date, rows) -> TodaySection:
-        day = await self.calendar_service.get_day_schedule(today)
+    async def _build_today(self, user_id, today: date, rows, events) -> TodaySection:
+        # Phase 25.4 (optimization #1): reuse the request-scoped events fetched
+        # once in get_summary instead of re-fetching all events here.
+        day = await self.calendar_service.get_day_schedule(today, events=events)
 
         classes: List[DashboardClassItem] = []
         attended = 0
@@ -287,19 +319,14 @@ class DashboardService:
             needs_attention_subject=needs_attention_subject,
         )
 
-    async def _build_quiz_snapshot(self, user, subjects: List[Subject], semester_start: Optional[date]) -> QuizSnapshotSection:
+    async def _build_quiz_snapshot(self, user, subjects: List[Subject], semester_start: Optional[date], events, elective_scope) -> QuizSnapshotSection:
         quiz_applicable = [s for s in subjects if s.quiz_applicable]
         empty = QuizSnapshotSection()
         if not quiz_applicable:
             return empty
 
-        # Phase 8.1 N+1 fix: one grouped effective-quiz-dates query + one
-        # batched eligibility evaluation (single canonical engine path),
-        # replacing the previous per-subject schedule + eligibility loops.
-        # Quiz dates are authoritative from active QUIZ_DAY AcademicEvents
-        # (Phase 2), with positional cycle ranks. Phase 22.4: elective
-        # subjects the student selected resolve the shared slot's quiz dates.
-        elective_scope = await ElectiveResolver(self.db).chosen_elective_map(user.id)
+        # Phase 25.4 (optimization #1): events + elective_scope are pre-fetched
+        # in get_summary and reused here and inside the eligibility batch.
         effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
             [s.id for s in quiz_applicable], elective_scope=elective_scope
         )
@@ -318,6 +345,12 @@ class DashboardService:
             subjects=quiz_applicable,
             quiz_cycle=cycle_number,
             semester_start=semester_start,
+            # Phase 25.4 (optimization #1): pass pre-fetched data so the
+            # eligibility batch skips its own redundant queries.
+            cycle_model=cycle_model,
+            events=events,
+            elective_scope=elective_scope,
+            effective_by_subject=effective_by_subject,
         )
         eligible = 0
         attention = 0
@@ -358,19 +391,17 @@ class DashboardService:
         items.sort(key=lambda x: (x.status == "CRITICAL", -(x.current_pct if x.current_pct is not None else 0)), reverse=True)
         return items
 
-    async def _build_upcoming_events(self, user, subjects: List[Subject]) -> List[UpcomingEventItem]:
+    async def _build_upcoming_events(self, user, subjects: List[Subject], events, choices) -> List[UpcomingEventItem]:
         today = institution_today()
         enrolled_ids = {s.id for s in subjects}
         subject_by_id = {s.id: s for s in subjects}
 
-        # Phase 22.4: elective-slot events are shared admin events resolved to
-        # the student's selected subject; a user with no selection (ADMIN)
-        # falls back to the shared anchor subject.
+        # Phase 25.4 (optimization #1): events + choices are pre-fetched in
+        # get_summary (same query, same ordering). anchor_subjects is still
+        # fetched here (one query, not duplicated within the request).
         resolver = ElectiveResolver(self.db)
-        choices = await resolver.load_choices(user.id)
         anchor_subjects = await resolver.anchor_subjects()
 
-        events = await self.calendar_repo.get_all_events()
         upcoming: List[UpcomingEventItem] = []
         for e in events:
             if not e.active or e.end_date < today:
