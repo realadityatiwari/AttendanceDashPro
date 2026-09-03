@@ -10233,3 +10233,54 @@ The user should test login in the browser with real credentials. Expected behavi
 - Incorrect credentials ? "Incorrect roll number or password" message (not "Unable to reach the server").
 
 If "Unable to reach the server" still appears, the possible residual cause is the `NEXT_PUBLIC_API_URL=http://localhost:8080` in `frontend/.env.local`: `localhost` resolves to both `::1` (IPv6) and `127.0.0.1` (IPv4) on this machine, but the backend binds only `127.0.0.1:8080` (IPv4-only). Changing `frontend/.env.local` to `NEXT_PUBLIC_API_URL=http://127.0.0.1:8080` (matching the `DEV_API_URL` fallback in `api.ts` and the `start-dev.ps1` backend bind address) and restarting the frontend dev server would eliminate this as a possibility.
+
+
+---
+
+## Phase 11C -- Production Web Push Verification & Hardening -- Walkthrough (2026-09-04)
+
+**Status: COMPLETE (verification-only).** The production Web Push chain was verified as far as can be safely verified without new production code, new endpoints, schema mutation, or credential exposure. Actual push DELIVERY was not executed (no safe runtime mechanism exists -- see below). Zero application code changed.
+
+### What was verified, with evidence
+
+1. **Code contracts (static)**: `dispatch_to_user(User | UUID)` (push_dispatch_service.py:235-247); `PushPayload {title, body, icon, badge, tag, url}` + optional `notification_id`/`kind` with same-origin `url` enforcement (push_dispatch_service.py:56-98); `_default_send` calls the real `pywebpush.webpush_async` with env-driven VAPID + TTL 3600 + timeout 10s (push_dispatch_service.py:149-162); `PushResult` five-way classification (push_dispatch_service.py:30-45); `NotificationService.emit` -> `_notify_push` -> `PushDispatchService` best-effort, never raises (notification_service.py:195-220). A direct dispatch creates NO canonical notification row -- safe for infrastructure verification.
+
+2. **Production Alembic**: `f0e1d2c3b4a5` (head) -- read via a temporary read-only script using a session-only `DATABASE_URI`; the script printed ONLY the revision, table existence, and count and was deleted immediately after (never committed). Production was previously `a9b8c7d6e5f4`; the P2 migration was applied 2026-09-04 with the pre-migration backup `production-backups/AttendanceDashPro_production_2026-09-04_pre_push_subscriptions.dump` in place.
+
+3. **push_subscriptions persistence**: table present; SUBSCRIPTION COUNT = 1. The row was created by the operator's browser (POST /push-subscriptions -> 200 after the migration; the pre-migration 500 was the missing-table symptom). Endpoint/p256dh/auth were NEVER selected or printed; no row was modified. Local dev DB cross-check (read-only): `f0e1d2c3b4a5`, table present, 0 rows -- consistent (the browser subscription targets production).
+
+4. **VAPID presence (values never revealed)**:
+   - Render: `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` -- presence confirmed by the operator in the dashboard.
+   - Vercel: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` -- presence verified INDEPENDENTLY of the dashboard: the deployed login/dashboard chunks were scanned for an 87-char base64url constant (the P-256 public key length); exactly one match exists, in chunk `1jnw9tfoj5rps.js`, at the exact minified form of `VAPID_PUBLIC_KEY = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "").trim()` from `frontend/src/lib/push.ts` (assignment + `.trim()` + `length > 0` guard all confirmed). Inspection was fingerprint-only (first/last 4 characters reported; the value itself was never printed, stored, or committed). The private key appears in no frontend chunk. `*.pem` is gitignored; zero tracked key files.
+
+5. **Production HTTP contract (read-only probes)**: OPTIONS /api/v1/push-subscriptions with the Vercel origin -> 200; unauthenticated POST -> 401 (auth boundary intact); `verify_prod_reachability.py` 5/5 PASS (Vercel /login 200; production API URL inlined; Render /health 200; CORS preflight; invalid login -> 401 not 500).
+
+6. **P5 behavior (static + deployed artifact)**: the DEPLOYED `/service-worker.js` contains the `push` listener (defensive `parsePushPayload` -> `showNotification`), the `notificationclick` listener (same-origin re-validated focus + navigate / openWindow), and `signalClientsNotificationsUpdated()` posting `{type: "NOTIFICATIONS_UPDATED"}` to all controlled window clients (includeUncontrolled) inside `event.waitUntil(Promise.all([...]))`. In the app: `NotificationRefreshListener` is mounted in AppShell (AppShell.tsx:31), validates `event.data.type === "NOTIFICATIONS_UPDATED"`, and calls `mutate(NOTIFICATIONS_KEY)` only. `NOTIFICATIONS_KEY = "/api/v1/notifications"` (lib/api.ts:34) is the single shared key for the bell (`useNotifications`, useApi.ts:470), the center, the SW signal, and PATCH reconciliation. No polling, no manual visibility listener; foreground recovery rides the preserved STANDARD_CACHE focus policy (revalidateOnFocus, 60s dedupe). The open/revalidation behavior from Phase 11D is intact.
+
+### What was NOT verified, and why
+
+- **Actual Web Push delivery (Phase D)**: not executed. There is no safe existing runtime mechanism to invoke `PushDispatchService` in production: Render Free exposes no one-off shell to this agent, no dispatch API exists by design (P4 triggers push only through `NotificationService.emit`, which would create a canonical notification row -- notification-generation verification, explicitly out of scope), and creating a permanent (or committing a temporary) test endpoint is forbidden. The VAPID private key was never placed in the repository or local `.env`.
+- **Safest next step (operator)**: a one-off, ephemeral runtime invocation in the deployed environment (Render one-off job / shell) executing the existing service against the persisted subscription, e.g. `PushDispatchService(db).dispatch_to_user(<user_uuid>, PushPayload(title="AttendanceDash Pro -- Push Test", body="Production Web Push delivery is working.", url="/dashboard", tag="production-push-test"))`. It performs zero schema writes and no canonical-notification writes; the outcome is read from the returned `PushResult` (SUCCESS / INVALID_SUBSCRIPTION / TEMPORARY_FAILURE / CONFIGURATION_ERROR / UNEXPECTED_ERROR) and nothing else is printed. INVALID_SUBSCRIPTION legitimately removes the stored row (existing P3 contract) -- the operator should be aware before running it.
+
+### Verification gates re-run (2026-09-04)
+
+- `node --check frontend/public/service-worker.js` PASS
+- `python -m compileall backend/app` PASS
+- `npx tsc --noEmit` PASS (frontend)
+- `python -m alembic heads` -> `f0e1d2c3b4a5 (head)` (single)
+- `verify_prod_reachability.py` 5/5 PASS
+- No browser automation, no expensive test suites, no load on production beyond the read-only probes above.
+
+### Manual checklist remaining (owner)
+
+1. Foreground push -> OS notification displayed; bell badge increments without reload.
+2. Background push -> notification displayed; on return, bell catches up via focus revalidation (one deduped request).
+3. notificationclick -> existing tab focused + navigated to the payload url (new tab when closed).
+4. Notification center after a push -> canonical rows visible.
+5. Optional operator one-off delivery test (above) -> observe SUCCESS + the notification; INVALID_SUBSCRIPTION would also prove row cleanup.
+
+### Governance & hygiene
+
+- MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md synchronized with this evidence (no duplicate historical plans created).
+- Temporary verification script created then removed; not committed. No `.env` modified. No commit/push/merge/deploy performed. Git tree clean except the operator's untracked backup dump (`production-backups/AttendanceDashPro_production_2026-09-04_pre_push_subscriptions.dump`) left for the owner to track or ignore.
+- HARD STOP after this verification slice.
