@@ -68,3 +68,5 @@ backups/
 
 # Production environment (Phase 18A)
 deploy/.env.prod
+
+*.pem
