@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEvents, useProfile, useCalendarMonth, useEventMutations } from "@/hooks/useApi";
 import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,10 +10,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EventRow, humanizeEventType } from "@/components/events/EventRow";
+import { EventRow } from "@/components/events/EventRow";
+import { humanizeEventType } from "@/components/events/eventRules";
 import { EventFormDialog } from "@/components/events/EventFormDialog";
 import { canStudentMutateEventType } from "@/components/events/eventRules";
+import { useToast } from "@/components/feedback/toast";
 import { getLocalDateString } from "@/lib/date";
 import { AlertCircle, CalendarX2, Plus, RefreshCw } from "lucide-react";
 
@@ -67,12 +70,18 @@ export default function EventsPage() {
 
   const { events, isLoading, isError, mutate } = useEvents(params);
   const { deactivateEvent } = useEventMutations();
+  const { toast } = useToast();
+  // UI-009: in-flight guard so a rapid double-click on the inline Confirm can
+  // never submit the deactivation twice. The inline Confirm/Cancel interaction
+  // is retained per D-11 (structurally sound).
+  const deactivatingRef = useRef(false);
 
   const handleSaved = () => {
     setFormOpen(false);
     setEditingEvent(null);
     mutate();
     mutateCalendar();
+    toast({ variant: "success", title: "Event saved" });
   };
 
   const openCreate = () => {
@@ -86,15 +95,26 @@ export default function EventsPage() {
   };
 
   const handleDeactivate = async (event: AcademicEventResponse) => {
+    if (deactivatingRef.current) return;
+    deactivatingRef.current = true;
     try {
       await deactivateEvent(event.id);
       mutate();
       mutateCalendar();
+      toast({ variant: "success", title: "Event deactivated" });
     } catch (err: unknown) {
       // apiFetch translates network-level failures ("Failed to fetch") into an
       // actionable message; HTTP errors keep their backend-provided detail.
+      // UI-009: error feedback via the application toast layer — the native
+      // browser alert is gone; confirmation semantics are unchanged (Phase 3).
       const message = err instanceof Error ? err.message : "Unable to deactivate the event.";
-      window.alert(message);
+      toast({
+        variant: "error",
+        title: "Couldn't deactivate the event",
+        description: `${message} Please try again.`,
+      });
+    } finally {
+      deactivatingRef.current = false;
     }
   };
 
@@ -135,12 +155,8 @@ export default function EventsPage() {
     return { today, upcoming, past };
   }, [filtered, todayStr]);
 
-  const selectClass =
-    "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
-  const dateInputClass = selectClass;
-
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="flex w-full flex-1 flex-col gap-6 py-6">
       <PageHeader
         title="Academic Events"
         description="Upcoming, current, and past academic events for your program."
@@ -186,12 +202,11 @@ export default function EventsPage() {
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-type">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-type">
               Event type
             </label>
-            <select
+            <Select
               id="events-type"
-              className={selectClass}
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value as EventType | "")}
             >
@@ -199,42 +214,41 @@ export default function EventsPage() {
               {TYPE_OPTIONS.map(type => (
                 <option key={type} value={type}>{humanizeEventType(type)}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
               State
             </label>
-            <select
+            <Select
               id="events-active"
-              className={selectClass}
               value={activeFilter}
               onChange={e => setActiveFilter(e.target.value as ActiveFilter)}
             >
               <option value="active">Active events</option>
               <option value="inactive">Inactive events</option>
-            </select>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
               From
             </label>
             <Input
               id="events-from"
               type="date"
-              className={dateInputClass}
+              className="[color-scheme:dark]"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
               To
             </label>
             <Input
               id="events-to"
               type="date"
-              className={dateInputClass}
+              className="[color-scheme:dark]"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
             />
@@ -364,7 +378,7 @@ function EventSection({
         <h2 id={id} className="text-sm font-semibold uppercase tracking-wider text-foreground">
           {title}
         </h2>
-        <Badge variant="neutral" className="h-4 px-1.5 text-[10px]">{count}</Badge>
+        <Badge variant="neutral" className="h-4 px-1.5 leading-none text-[11px]">{count}</Badge>
       </div>
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyLabel}</p>

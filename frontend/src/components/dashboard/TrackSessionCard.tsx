@@ -166,11 +166,11 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
                 ClassSession (shape: LECTURE, is_extra=false, no timetable
                 time). Normal lectures on the same date stay unflagged. */}
             {session.is_quiz_day && (
-              <Badge variant="primary" className="text-[10px] tracking-wider py-0 h-5">
+              <Badge variant="primary" className="text-[11px] tracking-wider py-0 h-5">
                 Quiz Day
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] tracking-wider py-0 h-5">
+            <Badge variant="outline" className="text-[11px] tracking-wider py-0 h-5">
               {displayType}
             </Badge>
           </div>

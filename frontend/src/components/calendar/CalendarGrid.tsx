@@ -1,13 +1,14 @@
 "use client";
 
 import { CalendarDayItem } from "@/types/api";
+import type { WeekStart } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatLongDate, getLocalDateString, parseLocalDate } from "@/lib/date";
 
-// Alignment follows the backend convention: JS getDay() indices, Sunday first
-// (matches DEFAULT_WEEKENDS in the Python calendar engine). Weekday headers are
-// pure layout; whether a day is working comes only from the API read model.
+// Weekday headers are pure layout; whether a day is working comes only from
+// the API read model. Column order rotates with the user's week-start
+// preference (Phase 9, D-05) — the backend default is MONDAY.
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAY_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -19,6 +20,10 @@ interface CalendarGridProps {
   days: CalendarDayItem[];
   selectedDate: string | null;
   onSelect: (date: string) => void;
+  /** D-05: visual week-start preference. Affects only column order and the
+   * leading blank count — dates, selection, today, and indicators are
+   * unchanged and stay attached to their real calendar dates. */
+  weekStartsOn?: WeekStart;
 }
 
 /**
@@ -27,11 +32,29 @@ interface CalendarGridProps {
  * are not in the API's effective range are plain layout placeholders — never
  * academic days.
  */
-export function CalendarGrid({ year, month, days, selectedDate, onSelect }: CalendarGridProps) {
+export function CalendarGrid({
+  year,
+  month,
+  days,
+  selectedDate,
+  onSelect,
+  weekStartsOn = "MONDAY",
+}: CalendarGridProps) {
   const todayStr = getLocalDateString();
   const dayMap = new Map(days.map(d => [d.date, d]));
   const firstOfMonth = new Date(year, month - 1, 1);
-  const leadingBlanks = firstOfMonth.getDay();
+  const mondayStart = weekStartsOn === "MONDAY";
+  // JS getDay(): 0 = Sunday. Monday-start rotates the header columns and
+  // shifts the leading blanks so the first lands under its weekday column.
+  const weekdayLabels = mondayStart
+    ? [...WEEKDAY_LABELS.slice(1), WEEKDAY_LABELS[0]]
+    : WEEKDAY_LABELS;
+  const weekdayShort = mondayStart
+    ? [...WEEKDAY_SHORT.slice(1), WEEKDAY_SHORT[0]]
+    : WEEKDAY_SHORT;
+  const leadingBlanks = mondayStart
+    ? (firstOfMonth.getDay() + 6) % 7
+    : firstOfMonth.getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
   const monthLabel = `${MONTH_NAME_FORMATTER.format(firstOfMonth)} ${year}`;
 
@@ -60,12 +83,12 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
   return (
     <div aria-label={`${monthLabel} academic calendar`}>
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-        {WEEKDAY_LABELS.map((label, i) => (
+        {weekdayLabels.map((label, i) => (
           <div
             key={label}
-            className="pb-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs"
+            className="pb-1 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs"
           >
-            <span className="sm:hidden">{WEEKDAY_SHORT[i]}</span>
+            <span className="sm:hidden">{weekdayShort[i]}</span>
             <span className="hidden sm:inline">{label}</span>
           </div>
         ))}
@@ -73,7 +96,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5">{cells}</div>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-accent" aria-hidden />
+          <span className="size-2 rounded-full bg-primary" aria-hidden />
           Event
         </span>
         <span className="flex items-center gap-1.5">
@@ -83,7 +106,7 @@ export function CalendarGrid({ year, month, days, selectedDate, onSelect }: Cale
           Today
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-3 rounded-sm bg-accent/15 ring-1 ring-accent" aria-hidden />
+          <span className="size-3 rounded-sm bg-primary/15 ring-1 ring-primary" aria-hidden />
           Selected
         </span>
         <span className="flex items-center gap-1.5">
@@ -128,7 +151,7 @@ function DayCell({
       className={cn(
         "flex min-h-12 w-full flex-col items-stretch justify-between gap-0.5 rounded-lg p-1.5 sm:min-h-16 sm:p-2",
         working ? "bg-card hover:bg-muted/70" : "bg-muted/25 text-muted-foreground hover:bg-muted/40",
-        isSelected && "bg-accent/10 ring-2 ring-accent hover:bg-accent/15",
+        isSelected && "bg-primary/10 ring-2 ring-primary hover:bg-primary/15",
         isToday && !isSelected && "ring-1 ring-primary/50"
       )}
     >
@@ -143,15 +166,15 @@ function DayCell({
         </span>
         {eventCount > 0 && (
           <span className="flex items-center gap-0.5" title={`${eventCount} ${eventCount === 1 ? "event" : "events"}`}>
-            <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-            {eventCount > 1 && <span className="text-[9px] leading-none font-bold text-accent">{eventCount}</span>}
+            <span className="size-1.5 rounded-full bg-primary" aria-hidden />
+            {eventCount > 1 && <span className="text-[9px] leading-none font-bold text-primary">{eventCount}</span>}
           </span>
         )}
       </span>
       <span className="min-h-0">
         {working ? (
           item.session_count > 0 && (
-            <span className="block truncate text-[10px] leading-tight font-medium text-success/90">{classLabel}</span>
+            <span className="block truncate text-[11px] leading-tight font-medium text-success/90">{classLabel}</span>
           )
         ) : (
           item.non_working_reason && (
@@ -164,7 +187,7 @@ function DayCell({
                 aria-hidden
               />
               <span
-                className="hidden truncate text-[10px] leading-tight text-muted-foreground/80 sm:block"
+                className="hidden truncate text-[11px] leading-tight text-muted-foreground/80 sm:block"
                 title={item.non_working_reason}
               >
                 {item.non_working_reason}

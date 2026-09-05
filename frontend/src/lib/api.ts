@@ -2,7 +2,9 @@
 // NEXT_PUBLIC_API_URL is a build-time public variable (inlined into the
 // client bundle). If it is missing or points at a development host while
 // building for production, fail loudly instead of shipping a broken client.
-const DEV_API_URL = "http://127.0.0.1:8080";
+// 8300: port 8080 sits inside a Windows reserved/excluded TCP port range on
+// the dev machine (WinError 10013 at bind), so the local dev backend uses 8300.
+const DEV_API_URL = "http://127.0.0.1:8300";
 const configuredApiUrl = (process.env.NEXT_PUBLIC_API_URL || "").trim();
 const isLocalDevUrl = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(configuredApiUrl);
 
@@ -173,6 +175,14 @@ export async function apiFetch(endpoint: string, options: FetchOptions = {}) {
     // the token so SWR can retry.
     if (response.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
+      // UI-026: mark the session as expired so the login page can explain the
+      // redirect instead of the user being silently dropped onto the form.
+      // Idempotent for concurrent 401s; read once and cleared on the login page.
+      try {
+        sessionStorage.setItem('session_expired', '1');
+      } catch {
+        // Storage may be unavailable (privacy mode) — messaging is best-effort.
+      }
       // Redirect to login if not already there
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';

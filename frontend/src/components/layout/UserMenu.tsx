@@ -57,10 +57,10 @@ export function UserMenu({ onOpenModal }: UserMenuProps) {
         aria-label="Open user menu"
         className="-m-1.5 flex items-center gap-3 rounded-md p-1.5 transition-colors outline-none hover:bg-accent focus-visible:bg-accent data-popup-open:bg-accent"
       >
-        <Avatar className="h-8 w-8 border border-border bg-surface2">
+        <Avatar className="h-8 w-8 border border-border bg-muted">
           <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
         </Avatar>
-        <span className="hidden text-sm font-semibold text-foreground lg:block">
+        <span className="hidden whitespace-nowrap text-sm font-semibold text-foreground lg:block">
           {isLoading ? "…" : displayName}
         </span>
       </DropdownMenuTrigger>

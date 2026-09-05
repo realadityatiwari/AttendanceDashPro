@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # never sent with ordinary API traffic.
     REFRESH_COOKIE_PATH: str = "/api/v1/auth"
     # Cross-site architecture (Vercel frontend <-> Render backend; dev
-    # localhost:3100 <-> 127.0.0.1:8080) requires SameSite=None. Loopback
+    # localhost:3100 <-> 127.0.0.1:8300) requires SameSite=None. Loopback
     # hosts are trustworthy origins, so Secure cookies are permitted in dev;
     # production is HTTPS-only. Both are env-overridable.
     REFRESH_COOKIE_SECURE: bool = True

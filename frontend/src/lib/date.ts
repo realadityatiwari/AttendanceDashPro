@@ -32,14 +32,12 @@ export function formatShortDate(value: string | Date): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()].toUpperCase()}`;
 }
 
-export function formatDayHeader(value: string | Date): string {
+/** Medium canonical date (D-09): "5 Sep 2026". Deterministic English —
+ * never device-locale. Date-only strings parse as local calendar dates
+ * (T00:00:00), so the displayed calendar date can never shift by a day. */
+export function formatDateMedium(value: string | Date): string {
   const d = toDate(value);
-  return `${d.getDate()} ${MONTHS[d.getMonth()].toUpperCase()}`;
-}
-
-export function formatDayInitial(value: string | Date): string {
-  const d = toDate(value);
-  return WEEKDAYS[d.getDay()].slice(0, 2);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function getGreeting(date: Date = new Date()): string {
@@ -52,6 +50,16 @@ export function getGreeting(date: Date = new Date()): string {
 export function formatPct(value: number | null | undefined): string {
   if (value === null || value === undefined || isNaN(value)) return '—';
   return `${Math.round(value)}%`;
+}
+
+/** One-decimal percentage (D-10 as corrected in the Phase 7 follow-up):
+ * calculated attendance/eligibility values keep meaningful precision
+ * (72.2%), because the decimal reflects the actual computed attendance.
+ * Null/undefined renders as an em dash. Display only — never alters the
+ * underlying number. */
+export function formatPct1(value: number | null | undefined): string {
+  if (value === null || value === undefined || isNaN(value)) return '—';
+  return `${value.toFixed(1)}%`;
 }
 
 export function formatDelta(value: number | null | undefined): string {

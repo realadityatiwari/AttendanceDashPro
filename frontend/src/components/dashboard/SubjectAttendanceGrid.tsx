@@ -2,13 +2,23 @@
 
 import { useSubjects, useAnalyticsOverview } from "@/hooks/useApi";
 import { SubjectAttendanceCard } from "./SubjectAttendanceCard";
-import { AlertCircle } from "lucide-react";
+import { ErrorState } from "@/components/shared/ErrorState";
 
 export function SubjectAttendanceGrid() {
-  const { subjects, isLoading: subjectsLoading, isError: subjectsError } = useSubjects();
+  const {
+    subjects,
+    isLoading: subjectsLoading,
+    isError: subjectsError,
+    mutate: mutateSubjects,
+  } = useSubjects();
   // ONE analytics overview request supplies every subject's backend summary
   // (practical %, 75% must-attend/safe-skip, forecasts) — no per-subject N+1.
-  const { overview, isLoading: overviewLoading, isError: overviewError } = useAnalyticsOverview();
+  const {
+    overview,
+    isLoading: overviewLoading,
+    isError: overviewError,
+    mutate: mutateOverview,
+  } = useAnalyticsOverview();
 
   const isLoading = subjectsLoading || overviewLoading;
   const isError = subjectsError || overviewError;
@@ -17,7 +27,7 @@ export function SubjectAttendanceGrid() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-40 bg-surface rounded-xl border border-border animate-pulse"></div>
+          <div key={i} className="h-40 bg-muted rounded-xl border border-border animate-pulse"></div>
         ))}
       </div>
     );
@@ -25,19 +35,20 @@ export function SubjectAttendanceGrid() {
 
   if (isError) {
     return (
-      <div className="p-6 bg-red-950/20 border border-red-900/50 rounded-xl text-center">
-        <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-        <h3 className="text-sm font-semibold text-red-400">Failed to load subjects</h3>
-        <p className="text-xs text-red-400/80 mt-1">
-          Could not retrieve your enrolled subjects or their analytics from the server.
-        </p>
-      </div>
+      <ErrorState
+        title="Failed to load subjects"
+        message="Could not retrieve your enrolled subjects or their analytics. Check your connection and try again."
+        onRetry={() => {
+          mutateSubjects();
+          mutateOverview();
+        }}
+      />
     );
   }
 
   if (!subjects || subjects.length === 0) {
     return (
-      <div className="p-8 bg-surface border border-border rounded-xl text-center">
+      <div className="p-8 bg-card border border-border rounded-xl text-center">
         <h3 className="text-sm font-semibold text-foreground">No subjects found</h3>
         <p className="text-xs text-muted-foreground mt-1">
           You are not currently enrolled in any subjects.

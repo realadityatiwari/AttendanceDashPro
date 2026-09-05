@@ -39,7 +39,7 @@ export function NotificationBell({ onOpenModal }: NotificationBellProps) {
     >
       <Bell className="size-5" aria-hidden="true" />
       {unreadCount > 0 && (
-        <span className="absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-semibold text-white">
+        <span className="absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[11px] leading-none font-semibold text-white">
           {badge}
         </span>
       )}

@@ -5,6 +5,7 @@ import { SubjectResponse, AnalyticsSubjectItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatDateMedium, formatPct, formatPct1 } from "@/lib/date";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,20 +30,8 @@ const HEALTH_PROGRESS: Record<string, "success" | "warning" | "danger" | "defaul
   CRITICAL: "danger",
 };
 
-function fmtPct(value: number | null | undefined): string {
-  return value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;
-}
-
-function fmtIntPct(value: number | null | undefined): string {
-  return value === null || value === undefined ? "—" : `${value.toFixed(0)}%`;
-}
-
-function fmtDate(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const d = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+// D-10 (as corrected): calculated attendance keeps one decimal (72.2%).
+// Whole-number contexts use the shared formatPct. No local helpers remain.
 
 /**
  * Attendance subject card (Phase 8.2 — attendance monitoring only).
@@ -80,7 +69,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             <CardTitle className="font-mono text-sm font-bold tracking-tight text-foreground">
               {subject.code}
             </CardTitle>
-            <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-[10px] tracking-wider px-2 py-0 h-5">
+            <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-[11px] tracking-wider px-2 py-0 h-5">
               {isLabOnly ? "LAB" : "THEORY"}
             </Badge>
           </div>
@@ -91,7 +80,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
         {healthBadge && (
           <Badge
             variant={healthBadge.variant}
-            className={cn("uppercase text-[10px] tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
+            className={cn("uppercase text-[11px] tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
           >
             {healthBadge.label}
           </Badge>
@@ -101,15 +90,15 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
       <CardContent className="p-4 pt-1 flex-1 flex flex-col gap-3">
         {/* Main: large overall percentage */}
         <div>
-          <div className="flex items-end justify-between gap-3">
-            <div className="text-3xl font-bold tracking-tight text-foreground tabular-nums leading-none">
-              {fmtPct(primaryPct)}
-            </div>
+            <div className="flex items-end justify-between gap-3">
+              <div className="text-3xl font-bold tracking-tight text-foreground tabular-nums leading-none">
+                {formatPct1(primaryPct)}
+              </div>
             <div className="text-right pb-0.5">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide leading-tight">
                 {isLabOnly ? "Practical" : "Overall"}
               </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide leading-tight">
                 Attendance
               </div>
             </div>
@@ -171,7 +160,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Mid-Sem Practical</span>
               <span className="font-medium text-foreground tabular-nums">
-                {summary?.mid_sem_session_date ? fmtDate(summary.mid_sem_session_date) : "Not scheduled"}
+                {summary?.mid_sem_session_date ? formatDateMedium(summary.mid_sem_session_date) : "Not scheduled"}
               </span>
             </div>
           </div>
@@ -225,8 +214,8 @@ function Block({
   return (
     <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
-        <span className="tabular-nums font-semibold text-foreground text-sm leading-none">{fmtIntPct(pct)}</span>
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
+        <span className="tabular-nums font-semibold text-foreground text-sm leading-none">{formatPct(pct)}</span>
       </div>
       <p className="text-[11px] text-muted-foreground mt-1.5 tabular-nums">
         {counts?.attended ?? 0}/{counts?.total ?? 0} attended
@@ -257,7 +246,7 @@ function DetailRow({
           </span>
         )}
       </span>
-      <span className="tabular-nums text-muted-foreground shrink-0">{fmtPct(pct)}</span>
+      <span className="tabular-nums text-muted-foreground shrink-0">{formatPct1(pct)}</span>
     </div>
   );
 }

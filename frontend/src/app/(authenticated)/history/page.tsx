@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   AttendanceHistoryItem,
@@ -58,7 +59,7 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-muted border border-border shrink-0">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             {formatShortDate(item.date).split(" ")[1]}
           </span>
           <span className="text-sm font-bold text-foreground leading-none">
@@ -68,11 +69,11 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-foreground font-mono text-sm">{item.subject_code}</span>
-            <Badge variant="outline" className="text-[10px] tracking-wider py-0 h-4">
+            <Badge variant="outline" className="text-[11px] leading-none tracking-wider py-0 h-4">
               {displayType}
             </Badge>
             {item.is_extra && (
-              <Badge variant="primary" className="text-[10px] tracking-wider py-0 h-4">
+              <Badge variant="primary" className="text-[11px] leading-none tracking-wider py-0 h-4">
                 EXTRA
               </Badge>
             )}
@@ -129,7 +130,7 @@ export default function HistoryPage() {
     [subject, status, dateFrom, dateTo, appliedSearch, offset]
   );
 
-  const { history, isLoading, isError } = useAttendanceHistory(params);
+  const { history, isLoading, isError, mutate } = useAttendanceHistory(params);
 
   // Accumulate pages locally; reset whenever any filter changes.
   const filterSig = [subject, status, dateFrom, dateTo, appliedSearch].join("|");
@@ -173,11 +174,6 @@ export default function HistoryPage() {
     setAppliedSearch("");
   };
 
-  const selectClass =
-    "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
-  const dateInputClass =
-    "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
-
   const contextLine = [
     profile?.semester_name,
     semesterStart && semesterEnd
@@ -190,7 +186,7 @@ export default function HistoryPage() {
   const summary = history?.summary;
 
   return (
-    <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full flex flex-col gap-6">
+    <div className="flex-1 py-6 w-full flex flex-col gap-6">
       <PageHeader
         title="Attendance History"
         description={
@@ -235,10 +231,9 @@ export default function HistoryPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="history-subject">Subject</label>
-            <select
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-subject">Subject</label>
+            <Select
               id="history-subject"
-              className={selectClass}
               value={subject}
               onChange={e => setSubject(e.target.value)}
             >
@@ -246,27 +241,26 @@ export default function HistoryPage() {
               {(subjects ?? []).map(s => (
                 <option key={s.id} value={s.code}>{s.code} · {s.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="history-status">State</label>
-            <select
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-status">State</label>
+            <Select
               id="history-status"
-              className={selectClass}
               value={status}
               onChange={e => setStatus(e.target.value as HistoryStatusFilter)}
             >
               {STATUS_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="history-from">From</label>
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-from">From</label>
             <Input
               id="history-from"
               type="date"
-              className={dateInputClass}
+              className="[color-scheme:dark]"
               min={semesterStart ?? undefined}
               max={semesterEnd ?? undefined}
               value={dateFrom}
@@ -274,11 +268,11 @@ export default function HistoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="history-to">To</label>
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-to">To</label>
             <Input
               id="history-to"
               type="date"
-              className={dateInputClass}
+              className="[color-scheme:dark]"
               min={semesterStart ?? undefined}
               max={semesterEnd ?? undefined}
               value={dateTo}
@@ -286,7 +280,7 @@ export default function HistoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground" htmlFor="history-search">Search</label>
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-search">Search</label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
@@ -304,7 +298,10 @@ export default function HistoryPage() {
 
       {/* Results */}
       {isError ? (
-        <ErrorState message="Could not load your attendance history. The endpoint might be unavailable or unauthenticated." />
+        <ErrorState
+          message="Could not load your attendance history. Check your connection and try again."
+          onRetry={() => mutate()}
+        />
       ) : rows.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-4">
@@ -366,7 +363,7 @@ function SummaryStat({ label, value, className }: { label: string; value: number
       <span className={cn("text-xl font-bold tracking-tight", className)}>
         {value ?? "—"}
       </span>
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{label}</span>
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-0.5">{label}</span>
     </div>
   );
 }

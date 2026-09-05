@@ -97,13 +97,12 @@ export function InstallAppModal({
           <div className="flex gap-2.5 rounded-lg border border-border bg-background p-3">
             <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="text-xs leading-relaxed text-muted-foreground">
-<p>
-                  PWA infrastructure is now configured (web app manifest and service worker). The browser may offer an install prompt depending on platform support and app engagement. Some platforms do not support web app installation. Tracked in task.md.
-                </p>
-              <p className="mt-1.5">
-                Once PWA support lands, the browser will offer an install
-                prompt here and the app will launch with its own window and
-                offline shell. Tracked in task.md.
+              <p>
+                AttendanceDash Pro can be installed on this device so it opens
+                in its own window with offline access. If this browser supports
+                installation, you&apos;ll see an install prompt here or in your
+                browser&apos;s menu. Some platforms don&apos;t support web app
+                installation.
               </p>
             </div>
           </div>

@@ -3,7 +3,8 @@ import { WeeklySection, WeeklyAnalyticsItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDayHeader, formatDelta, formatPct } from "@/lib/date";
+import { formatShortDate, formatDelta, formatPct } from "@/lib/date";
+import { WEEKLY_BAR_SAFE_PCT, WEEKLY_BAR_WATCH_PCT } from "@/lib/statusLabels";
 
 interface WeeklyAttendanceCardProps {
   weekly: WeeklySection;
@@ -74,16 +75,16 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                   }`}
                 >
                   <span className="w-16 shrink-0 text-xs font-medium text-foreground">
-                    {formatDayHeader(week.week_start)}
+                    {formatShortDate(week.week_start)}
                   </span>
                   <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
                       className={`h-full rounded-full ${
                         pct === null
                           ? "bg-muted"
-                          : pct >= 80
+                          : pct >= WEEKLY_BAR_SAFE_PCT
                             ? "bg-success"
-                            : pct >= 60
+                            : pct >= WEEKLY_BAR_WATCH_PCT
                               ? "bg-warning"
                               : "bg-destructive"
                       }`}
@@ -93,9 +94,9 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                   <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                     {pct !== null ? `${Math.round(pct)}%` : "—"}
                   </span>
-                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                     {week.attended}/{week.recorded}
-                    {week.pending > 0 ? ` · ${week.pending}p` : ""}
+                    {week.pending > 0 ? ` · ${week.pending} pending` : ""}
                   </span>
                 </li>
               );

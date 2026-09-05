@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPct } from "@/lib/date";
+import { attendanceStatusLabel } from "@/lib/statusLabels";
 import { attendanceStatusVariant } from "./status";
 
 interface AttentionRequiredCardProps {
@@ -42,7 +43,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
                       {item.subject_code}
                     </span>
                     <Badge variant={attendanceStatusVariant(item.status)}>
-                      {item.status}
+                      {attendanceStatusLabel(item.status)}
                     </Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -54,7 +55,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
                     {formatPct(item.current_pct)}
                   </div>
                   {item.forecast_pct !== null && (
-                    <div className="text-[10px] tabular-nums text-muted-foreground">
+                    <div className="text-[11px] tabular-nums text-muted-foreground">
                       forecast {formatPct(item.forecast_pct)}
                     </div>
                   )}
@@ -66,8 +67,10 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
       </CardContent>
 
       <CardFooter className="justify-end">
-        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/laboratory" />}>
-          View Strategy
+        {/* D-02: the strategy content (must-attend/safe-skip) lives on the
+            Quiz Eligibility surface, so the CTA points there. */}
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/quiz-schedule" />}>
+          View plan
         </Button>
       </CardFooter>
     </Card>

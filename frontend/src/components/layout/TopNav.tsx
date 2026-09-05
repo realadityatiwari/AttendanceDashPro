@@ -4,17 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  FlaskConical,
-  TestTubes,
-  CalendarClock,
-  BookOpen,
-  History,
-  CalendarDays,
-  CalendarRange,
-  MessageSquareText,
-} from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/useApi";
 import { UserMenu, ShellModalId } from "@/components/layout/UserMenu";
@@ -26,25 +16,29 @@ import { SettingsModal } from "@/components/shell/SettingsModal";
 import { FeedbackModal } from "@/components/shell/FeedbackModal";
 import { InstallAppModal } from "@/components/shell/InstallAppModal";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
-
-const NAV_ITEMS = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Track", href: "/tools/laboratory", icon: FlaskConical },
-  { label: "Laboratory", href: "/laboratory", icon: TestTubes },
-  { label: "Quiz Eligibility", href: "/tools/quiz-schedule", icon: CalendarClock },
-  { label: "Attendance", href: "/subjects", icon: BookOpen },
-  { label: "History", href: "/history", icon: History },
-  { label: "Calendar", href: "/calendar", icon: CalendarRange },
-  { label: "Events", href: "/tools/events", icon: CalendarDays },
-];
-
-const ADMIN_NAV_ITEM = { label: "Feedback", href: "/tools/feedback", icon: MessageSquareText };
+import {
+  navItemsForRole,
+  moreItemsForRole,
+  type NavItem,
+} from "@/components/layout/navItems";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /**
- * Full-width compact top navigation bar. Replaces the legacy sidebar:
- * brand on the left, primary navigation in the middle, authenticated user
- * menu on the right. Navigation links are hidden below `md` — the mobile
- * navigation pattern is a dedicated later phase.
+ * Full-width compact top navigation bar. Phase 4 responsive IA (D-03):
+ *  - lg and above: the full navigation inline (existing design).
+ *  - md to lg: primary destinations inline + secondary destinations under a
+ *    "More" dropdown, so the row can never overflow at tablet widths.
+ *  - below md: the nav is hidden (mobile uses MobileBottomNav) and, for
+ *    non-home routes, the header shows the current page title (D-04).
+ *
+ * Navigation data is shared with MobileBottomNav via navItems.ts — labels,
+ * routes and the mobile titles are defined once. Route availability is
+ * unchanged in every band.
  */
 export function TopNav() {
   const pathname = usePathname();
@@ -56,12 +50,39 @@ export function TopNav() {
     if (!open) setActiveModal(null);
   };
 
-  const navItems = profile?.role === "ADMIN"
-    ? [...NAV_ITEMS, ADMIN_NAV_ITEM]
-    : NAV_ITEMS;
+  const items = navItemsForRole(profile?.role);
+  const secondaryItems = moreItemsForRole(profile?.role);
+  const primaryItems = items.filter(
+    (item) => !secondaryItems.some((secondary) => secondary.href === item.href)
+  );
+  const moreActive = secondaryItems.some((item) => item.href === pathname);
+  // D-04: current page title for the mobile header (undefined on Home).
+  const activeTitle = items.find((item) => item.href === pathname)?.title;
+
+  const renderItem = ({ label, href, icon: Icon }: NavItem) => {
+    const active = pathname === href;
+    return (
+      <Link
+        key={href}
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          // Atomic items: never shrink, never wrap (Phase 4 correction —
+          // long D-01 labels must stay on one line at lg+).
+          "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+          active
+            ? "bg-secondary text-foreground"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+        )}
+      >
+        <Icon className="size-4" aria-hidden="true" />
+        {label}
+      </Link>
+    );
+  };
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6 lg:px-8">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 sm:px-6 lg:px-8">
       <Link
         href="/dashboard"
         className="flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
@@ -74,37 +95,72 @@ export function TopNav() {
           className="size-7 shrink-0"
           priority
         />
-        <span className="text-[0.95rem] font-semibold tracking-tight text-foreground">
+        <span
+          className={cn(
+            "text-[0.95rem] font-semibold tracking-tight text-foreground",
+            // D-04: on small screens the page title replaces the wordmark.
+            activeTitle && "hidden sm:inline"
+          )}
+        >
           AttendanceDash <span className="font-normal text-muted-foreground">Pro</span>
         </span>
       </Link>
 
+      {activeTitle && (
+        <div className="min-w-0 flex-1 text-center md:hidden">
+          <span className="block truncate text-sm font-semibold text-foreground">
+            {activeTitle}
+          </span>
+        </div>
+      )}
+
+      {/* lg and above: full navigation (atomic single-line items) */}
       <nav
         aria-label="Primary"
-        className="hidden min-w-0 items-center gap-1 md:flex lg:gap-1.5"
+        className="hidden shrink-0 items-center gap-1 lg:flex"
       >
-        {navItems.map(({ label, href, icon: Icon }) => {
-          const active = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              )}
-            >
-              <Icon className="size-4" aria-hidden="true" />
-              {label}
-            </Link>
-          );
-        })}
+        {items.map(renderItem)}
       </nav>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      {/* md to lg: primary destinations + More dropdown for secondary */}
+      <nav
+        aria-label="Primary"
+        className="hidden shrink-0 items-center gap-1 md:flex lg:hidden"
+      >
+        {primaryItems.map(renderItem)}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-current={moreActive ? "true" : undefined}
+            className={cn(
+              "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60",
+              moreActive
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground data-popup-open:bg-muted/60 data-popup-open:text-foreground"
+            )}
+          >
+            More
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {secondaryItems.map((item) => (
+              <DropdownMenuItem
+                key={item.href}
+                render={
+                  <Link
+                    href={item.href}
+                    aria-current={pathname === item.href ? "page" : undefined}
+                  />
+                }
+              >
+                <item.icon className="size-4" aria-hidden="true" />
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
+
+      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         <NotificationBell onOpenModal={setActiveModal} />
         <UserMenu onOpenModal={setActiveModal} />
       </div>

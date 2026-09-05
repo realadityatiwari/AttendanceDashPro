@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { usePreferences, usePreferenceMutation } from "@/hooks/useApi";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { isVapidConfigured } from "@/lib/push";
@@ -194,7 +195,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                       ) : browserPushError ? (
                         browserPushError
                       ) : !isVapidConfigured ? (
-                        "Browser permission is enabled, but push setup is incomplete — the server VAPID key is configured in a later phase."
+                        "Browser permission is enabled, but push notifications aren't fully set up yet."
                       ) : (
                         "Browser permission is enabled, but push setup is incomplete."
                       )}
@@ -279,6 +280,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   <Switch.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[18px] data-checked:bg-white" />
                 </Switch.Root>
               </div>
+              {/* D-06: honest state — the preference is persisted but no
+                  automatic marking exists in the system yet. */}
+              <p className="mt-1.5 px-1 text-xs leading-relaxed text-muted-foreground">
+                Automatic attendance marking is not currently active — the
+                preference is saved with your account.
+              </p>
             </section>
 
             <section>
@@ -292,31 +299,30 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     Week starts on
                   </span>
                 </div>
-                <select
+                <Select
                   value={base.week_starts_on}
                   onChange={(e) =>
                     updateDraft({ week_starts_on: e.target.value as WeekStart })
                   }
                   disabled={controlsDisabled}
                   aria-label="Week starts on"
-                  className="h-9 sm:h-7 rounded-md border border-border bg-background px-2 text-sm text-foreground disabled:opacity-50"
+                  className="w-auto"
                 >
                   {WEEK_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             </section>
 
             <div className="flex gap-2.5 rounded-lg border border-border bg-background p-3">
               <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Class reminders are shown in the bell icon when enabled. The
-                other preferences are saved to your account for future features
-                — saving them does not mark attendance or change calendar
-                calculations.
+                Class reminders are shown in the bell icon when enabled. Week
+                start controls the calendar layout. Auto-mark present is saved
+                with your account but does not mark attendance yet.
               </p>
             </div>
 

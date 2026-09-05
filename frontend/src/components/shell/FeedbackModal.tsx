@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, Loader2, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
 import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
@@ -172,15 +172,6 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             )}
             <p className="text-xs text-muted-foreground">
               <span className="font-medium">{MIN_MESSAGE_LENGTH}+</span> characters required
-            </p>
-          </div>
-
-          <div className="mt-4 flex gap-2.5 rounded-lg border border-border bg-background p-3">
-            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              If the feedback service is unavailable, your message will not be
-              saved anywhere — you will see an explicit error instead of a fake
-              confirmation.
             </p>
           </div>
 

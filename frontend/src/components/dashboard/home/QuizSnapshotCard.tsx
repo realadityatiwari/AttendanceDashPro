@@ -68,7 +68,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                 <div className="text-xl font-bold tabular-nums text-success">
                   {quiz.eligible}
                 </div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                   Eligible
                 </div>
               </div>
@@ -76,7 +76,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                 <div className="text-xl font-bold tabular-nums text-warning">
                   {quiz.attention}
                 </div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                   Attention
                 </div>
               </div>
@@ -84,7 +84,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                 <div className="text-xl font-bold tabular-nums text-destructive">
                   {quiz.not_eligible}
                 </div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                   Not eligible
                 </div>
               </div>

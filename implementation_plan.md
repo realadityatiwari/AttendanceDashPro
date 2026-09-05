@@ -5450,3 +5450,267 @@ No application code modified. Only the database migration was applied.
 - Governance docs (MASTER_ROADMAP.md, implementation_plan.md, task.md, walkthrough.md) synchronized with this evidence.
 
 **HARD STOP after this verification slice -- no commit/push/deploy; no unrelated work.**
+---
+
+## UI/UX Remediation — Implementation Plan (PLANNING ONLY, 2026-09-05)
+
+**Status:** PLANNED, NOT IMPLEMENTED. No phase below has started or completed. Blueprint: `docs/UI_UX_REMEDIATION_BLUEPRINT_2026-09-05.md`. Audit: `docs/UI_UX_AUDIT_STUDENT_APP_2026-09-05.md` (40 findings, authoritative).
+
+**Execution order (each phase has an explicit STOP CONDITION in the blueprint):**
+
+0. **Decision gate** — user approves D-01..D-13 (Track/Laboratory naming, "View Strategy" target, md-band nav strategy, mobile wayfinding, week_starts_on, auto_mark_present, attendance verbs, status vocabulary, date format, pct precision, destructive policy, notification bulk, student event form). No code.
+1. **Visual foundation** — 1.1 define `--surface/--surface2/text2` tokens (CSS only); 1.2 repoint 8 accent-as-visible-color usages to primary; 1.3 add `app/not-found.tsx` + `app/error.tsx`; 1.4 verify. Findings UI-001, UI-002, UI-007.
+2. **Feedback architecture** — 2.1 ErrorState `onRetry` + adopt on Dashboard/History/Track/Subjects; 2.2 dashboard partial-data note (analytics `isError`); 2.3 minimal toast provider + adoption; 2.4 session-expiry notice (ADDITIVE `sessionStorage` flag in `lib/api.ts` — refresh/redirect flow untouched) + SW update banner (UI layer only). Findings UI-005, UI-022, UI-023, UI-025, UI-026.
+3. **Destructive-action safety** — ConfirmDialog primitive; confirm bulk mark-all + lab deletes; replace `window.alert` with inline banner; keep event inline-confirm per D-11. Findings UI-006, UI-009, UI-015.
+4. **Navigation & IA** — single `navItems.ts` source; D-01/D-02 relabels + "View Strategy" retarget; D-03 md-band collapse; D-04 mobile active-state inheritance + header page title. Findings UI-003, UI-004, UI-008. Routes unchanged.
+5. **Layout contract** — AppShell owns width/padding; strip 11 page-level `max-w-*`/`px-*`/`py-*` root wrappers; PageHeader mb-8 → container gap. Finding UI-011.
+6. **Primitive consolidation** — 6.1 canonical input/select heights + `ui/select.tsx` + auth pages onto primitives; 6.2 migrate inline error/empty variants + dedupe `humanizeEventType`/`classTypeLabel`/date-chip; 6.3 `text-[10px]` → 11px floor. Findings UI-016, UI-021, UI-032.
+7. **Vocabulary/formatting/content** — `lib/statusLabels.ts` (D-07/D-08), weekly thresholds centralized (verified: current 80/60 match backend legacy bands, `attendance_engine.py:11-13`), `lib/date.ts` canonical set (D-09), pct module (D-10), dev-copy cleanup. Findings UI-010, UI-012, UI-013, UI-017, UI-018, UI-029, UI-036, UI-038.
+8. **Notification UX** — per-row pending; Mark-all-read via sequential idempotent PATCH loop (D-12, no backend change); optional undo per D-11; empty icon. Findings UI-014, UI-039. Generation architecture untouched.
+9. **Settings honesty** — D-05 week_starts_on consumed by CalendarGrid (frontend-only, verified); D-06 auto_mark_present deferred with honest label. Finding UI-019.
+10. **Accessibility** — quiz/lab tab semantics, touch-target lifts, aria-live on toasts/track errors, contrast verification. Findings UI-020, UI-024, UI-033.
+11. **Screen-specific polish** — UI-027, UI-028 (auth primitives), UI-030, UI-031, UI-034 (90dvh), UI-035 (D-13 student form scope), UI-037 (manifest color), UI-040; optional A-3 calendar date deep-link.
+12. **Verification & close-out** — manual checklist + static sweep (`tsc --noEmit`, `lint`, `build`, grep gates, `git diff --stat backend/` must be empty) + governance reconciliation. No commit unless separately authorized.
+
+**Protected (untouched):** auth/session internals, attendance engine, eligibility, notification generation/Web Push, API contracts, schema/migrations, production config.
+
+**HARD STOP: planning only. Do not start Phase 0/1 without explicit user authorization.**
+
+---
+
+## UI/UX Remediation Phase 1 — Visual Foundation (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 1 only (UI-001, UI-002). Phases 2–12 remain PLANNED and NOT STARTED. All 13 product decisions (D-01..D-13) remain approved-but-unimplemented future work.
+
+**1.1 Token vocabulary (executed via migration, not new tokens):** the blueprint's preferred path applied — existing canonical tokens fully expressed the intended hierarchy, so NO new tokens were added and `globals.css` is UNCHANGED. Mapping: subtle elevated surfaces/skeletons/chips/avatars → `bg-muted(/50|/30)`; recessed tab + progress tracks → `bg-muted`; card-like empty panel → `bg-card`; `text-text2` → `text-muted-foreground/70`.
+
+**1.2 Accent semantics (executed):** visible accent→`primary` with identical opacity modifiers (calendar event dot/count, legend Event + Selected swatches, day-cell selection `bg-primary/10 ring-2 ring-primary hover:bg-primary/15`, DayDetail substitution line / "View all" link / event left border, EventRow Calendar link, profile section icons, quiz Info icon). Feedback SUGGESTION badge → `bg-warning/10 text-warning`. Accent surface usages (UserMenu, dropdown-menu primitives) intentionally retained. `--accent` value unchanged.
+
+**1.3 Global 404/error UI:** NOT implemented in this pass (blueprint sub-phase 1.3) — deferred within Phase 1 completion criteria; `app/not-found.tsx` / `app/error.tsx` still to be added in a follow-up slice of Phase 1 or explicitly re-scoped. (Deviations from the sub-phase plan documented here per governance honesty requirements.)
+
+**1.4 Visual-state verification:** static portion complete (compiled-CSS presence of every corrected utility; zero dead-token selectors). Browser visual pass = user's manual checklist.
+
+**Files changed (14, frontend only):** `app/(authenticated)/laboratory/page.tsx`, `app/(authenticated)/profile/page.tsx`, `app/(authenticated)/tools/quiz-schedule/page.tsx`, `app/(authenticated)/tools/feedback/page.tsx`, `components/admin/AdminShell.tsx`, `components/dashboard/SubjectAttendanceGrid.tsx`, `components/dashboard/SubjectLaboratoryView.tsx`, `components/dashboard/home/OverallAttendanceCard.tsx`, `components/layout/UserMenu.tsx`, `components/shell/ProfileModal.tsx`, `components/quiz/QuizEligibilityCard.tsx`, `components/calendar/CalendarGrid.tsx`, `components/calendar/DayDetail.tsx`, `components/events/EventRow.tsx`. `git diff --stat`: 42 insertions(+), 42 deletions(-) — class swaps only.
+
+**Static verification results:** `npx tsc --noEmit` PASS; ESLint PASS (14 changed files); `npm run build` with CI-placeholder `NEXT_PUBLIC_API_URL` PASS (25/25 pages); compiled CSS: 0 `bg-surface*`/`text2` selectors, all corrected utilities present; `git diff --check` PASS; `git diff -- backend/` empty.
+
+**HARD STOP — Phases 2–12 not started. No commit/push/deploy.**
+
+---
+
+## Local Dev Backend Port Migration 8080 -> 8300 (COMPLETE, 2026-09-05)
+
+**Problem.** The local FastAPI backend could not start: Windows holds TCP 8027-8126 inside a Hyper-V/WinNAT excluded port range, so binding 8080 raises WinError 10013. Port 8300 was verified free on the dev machine (no `netstat` listener, no `netsh interface ipv4 show excludedportrange protocol=tcp` coverage). This section is the authoritative record of the migration; earlier sections' port-8080 dev-workflow assumptions (e.g. the 26.7/26.8 evidence blocks) are superseded on this machine.
+
+**Scope discipline.** LOCAL DEVELOPMENT ONLY. Untouched: production deployment (Render injects `PORT`; Dockerfile default 8000; `render.yaml`/`docker-compose.prod.yml` contain no 8080), `docker-compose.yml` (maps postgres 55432 only), CORS (`BACKEND_CORS_ORIGINS` lists the frontend's 3100 origins -- the backend's own port is not a CORS concept), all application logic, schema, engines, auth, Windows port exclusions/WSL networking.
+
+**Changes (6 files).**
+1. `start-dev.ps1` -- `$backendPort = 8300` + rationale comment. The availability/ownership check, bind-wait loop, error paths, and the status/URL summary all read `$backendPort`, so launcher consistency is structural (no split-brain 8080/8300 possible).
+2. `stop-dev.ps1` -- `Stop-DevPort -Port 8300` + header comment; UTF-8 BOM restored (see Verification).
+3. `frontend/.env.local` (gitignored, active local config) -- `NEXT_PUBLIC_API_URL=http://127.0.0.1:8300`. `127.0.0.1` over `localhost` per `docs/login_connectivity_investigation.md` (localhost can resolve to ::1 and miss the IPv4-only bind).
+4. `frontend/.env.example` -- dev example value and the DEVELOPMENT comment block updated to match.
+5. `frontend/src/lib/api.ts` -- `DEV_API_URL` fallback -> `http://127.0.0.1:8300` + rationale comment; the production guard is unchanged (production builds still refuse a localhost API URL).
+6. `backend/app/core/config.py` -- comment-only: the cross-site architecture line now reads `localhost:3100 <-> 127.0.0.1:8300`.
+
+**Intentionally unchanged 8080 occurrences (classified).** (a) Legacy `npx serve . -p 8080` static-frontend era docs -- 02_TECH_STACK, 12_PWA_AND_DEPLOYMENT, 14_TESTING_AND_QA, 17_AI_HANDOFF, AUTH_REGRESSION_RECOVERY, S3.5_UI_UX_AUDIT, S3.10_CURRENT_SEMESTER_BASELINE: they describe the pre-Next.js architecture, not the current dev workflow. (b) Dated investigation/audit reports -- login_connectivity_investigation, database_driver_mismatch_investigation, bugfix/cancellation_state_and_counting_consistency_report, phase_18/phase_18_0_infrastructure_audit, phase_21/phase_21d1_config_hardening: point-in-time records; rewriting them would falsify history. (c) `repomix-output.xml`: generated snapshot artifact. None are read by any script or runtime path -- the goal (no stale reference steering the dev workflow at 8080) is met.
+
+**Verification (static only).** PowerShell AST parse: both launchers OK under the PS 5.1 parser -- possible only after restoring `stop-dev.ps1`'s UTF-8 BOM (BOM-less + PS 5.1 ANSI decode of its box-drawing/em-dash characters produced "Missing closing '}'"; the identical failure was confirmed on the HEAD copy, so it pre-existed this migration; same class as the 26.7 start-dev.ps1 BOM incident). `py_compile` on config.py PASS. Repo-wide grep: zero `8080` in any executable/config path. Runtime NOT exercised -- the operator runs the dev environment manually (note: the Next.js dev server must be restarted so `NEXT_PUBLIC_API_URL` re-inlines as 8300).
+
+---
+
+## UI/UX Remediation Phase 2 — Feedback & Error-State Foundation (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 2 exactly — UI-005, UI-007, UI-009, UI-022, UI-023, UI-025, UI-026. Phases 3–12 remain PLANNED and NOT STARTED. D-11 destructive-confirmation policy explicitly NOT started.
+
+**Architecture decisions:**
+1. Toast layer = local lightweight implementation (no dependency added; none existed). Provider mounted in `AppShell` (client boundary via ToastProvider), viewport fixed above the mobile bottom nav (`bottom-24` mobile / `sm:bottom-6 right-6` desktop), capped at 3, auto-dismiss (5s success/info, 8s error/warning) + manual dismiss, `role=status|alert` + `aria-live`, icon per variant (no color-only signal), `motion-reduce:animate-none`.
+2. ErrorState extended additively (`onRetry`/`retryLabel`/`action`) so the 9 admin consumers stay untouched; retries call the failed hook's own SWR `mutate()` — real revalidation, no polling, no cache-semantics change.
+3. SW update: smallest safe mechanism — `useServiceWorker` exposes `updateAvailable`; `ServiceWorkerRegistration` renders `UpdateBanner`; reload is strictly user-initiated (matches the no-skipWaiting lifecycle); caching/push untouched.
+4. Session expiry: additive `sessionStorage` flag in the existing genuine-401 branch only (refresh-failure-permanent path); transient/network/403 semantics unchanged; read-once + cleared on login; concurrent 401s cannot duplicate the message.
+
+**Files (Phase 2):** NEW `components/feedback/toast.tsx`, `components/feedback/UpdateBanner.tsx`, `app/not-found.tsx`, `app/error.tsx`; MODIFIED `components/shared/ErrorState.tsx`, `app/(authenticated)/dashboard/page.tsx`, `app/(authenticated)/history/page.tsx`, `components/dashboard/SubjectAttendanceGrid.tsx`, `app/(authenticated)/tools/laboratory/page.tsx`, `components/pwa/useServiceWorker.ts`, `components/pwa/ServiceWorkerRegistration.tsx`, `components/layout/AppShell.tsx`, `lib/api.ts` (additive block only), `app/(auth)/login/page.tsx` (notice + pre-existing-lint hygiene in touched file), `app/(authenticated)/tools/events/page.tsx` (alert→toast + success toasts).
+
+**Verification:** tsc PASS; ESLint 15 changed files → 13 clean + 3 findings proven PRE-EXISTING on HEAD (history ×2 set-state-in-effect, api.ts location-assign warning); build PASS 25/25; `git diff --check` PASS; greps: 0 `window.alert` in student scope, 0 toast-library additions, no API payload/contract diffs, no Phase 3 additions.
+
+**Working-tree note (outside this phase):** the user's own dev-port migration (8080→8300: `backend/app/core/config.py`, `lib/api.ts` DEV_API_URL, `start-dev.ps1`, `stop-dev.ps1`) pre-dates Phase 2, was preserved untouched, and is excluded from this phase's diff accounting.
+
+**HARD STOP — Phases 3–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 3 — Destructive-Action Safety / RU-3 (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 3 exactly — UI-006, UI-015, UI-009, D-11 applied. Phases 4–12 remain PLANNED and NOT STARTED. Notification dismissal (Phase 8) untouched.
+
+**Confirmation policy now in force (D-11 as approved):**
+| Action | Guard | Confirm label | Variant | Failure path | Success path |
+|---|---|---|---|---|---|
+| Bulk "Mark all present" (Track) | ConfirmDialog with real pending count | "Mark all present" | default (recoverable per-class) | inline error + toast (full/partial/total, real counts) | success toast with count |
+| Delete lab record (Laboratory) | ConfirmDialog naming experiment | "Delete" | destructive | existing inline error banner | "Record deleted" toast |
+| Deactivate experiment (Laboratory, admin) | ConfirmDialog naming experiment | "Deactivate" | destructive | existing inline error banner | "Experiment deactivated" toast |
+| Deactivate event (Events) | retained INLINE Confirm/Cancel (D-11: structurally sound) + new in-flight ref guard | "Confirm" (existing) | inline destructive | toast (Phase 2) | "Event deactivated" toast |
+| Notification dismiss | UNCHANGED — immediate (Phase 8 scope) | — | — | — | — |
+
+**Key decisions:** (1) ConfirmDialog built on the existing Dialog primitive — no new dependency or modal framework; (2) dialog stays open and locks controls until the mutation promise settles, then closes (caller owns feedback; double-submission impossible via pending lock + existing isMarkingAll guard + new events ref guard); (3) `run()` in the lab ExperimentsTab returns a success boolean so success toasts are honest — failures keep the inline banner rather than a duplicate toast; (4) the old non-null assertion `recordFor(exp.id)!.id` at confirm time was replaced by a real null guard; (5) mark-all confirm copy states recoverability ("You can still change each class afterwards") because per-class Change exists — destructive variant reserved for the irreversible lab actions.
+
+**Files (Phase 3):** NEW `components/feedback/ConfirmDialog.tsx`; MODIFIED `app/(authenticated)/tools/laboratory/page.tsx` (confirm state + dialog + honest result feedback), `app/(authenticated)/laboratory/page.tsx` (confirm state + dialog + run() success return + toasts), `app/(authenticated)/tools/events/page.tsx` (in-flight guard only).
+
+**Verification:** tsc PASS; ESLint 4 changed files PASS (0 findings); build PASS 25/25 pages; `git diff --check` PASS; greps: 0 student-scope alerts, Dialog primitive reused, no payload/endpoint changes, no Phase 8 leakage, migrations untouched; backend working-tree diff remains ONLY the user's pre-existing dev-port line (documented Phase 2, not this phase).
+
+**HARD STOP — Phases 4–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 4 — Navigation, IA & Responsive Shell (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 4 exactly — UI-003, UI-004, UI-008, D-01, D-02, D-03, D-04. Phases 5–12 remain PLANNED and NOT STARTED (AppShell width/padding contract untouched; no vocabulary normalization beyond the D-01/D-02 labels; no accessibility sweep).
+
+**Architecture decisions:**
+1. Single nav source `components/layout/navItems.ts` — labels (D-01), icons, mobile titles, and group membership defined once; TopNav and MobileBottomNav derive everything (no more duplicated route lists). Route URLs unchanged.
+2. D-03 responsive bands: `lg+` full inline nav (existing design) / `md–lg` primary inline + secondary in a "More" DropdownMenu (trigger gets active tint + aria-current when a secondary route is open) / `<md` hidden (bottom bar). Both desktop navs are display-toggled so screen readers never see duplicates.
+3. D-04 mobile wayfinding: centered truncating page title in the header for every non-home route (brand wordmark yields below `sm` when a title is shown; dashboard keeps wordmark + greeting); MobileBottomNav "More" control highlights and sets `aria-current="true"` while any More-group route is open.
+4. D-01 applied to user-facing labels/titles only — internal component names, hook names, and URLs untouched (business behavior unchanged). D-02: Attention card CTA "View Strategy"→"View plan", target /tools/quiz-schedule (verified existing).
+5. Route matching: exact-match (existing convention) — valid because no student nav route has nested children; /tools/* are leaves.
+
+**Files (Phase 4):** NEW `components/layout/navItems.ts`; MODIFIED `components/layout/TopNav.tsx`, `components/layout/MobileBottomNav.tsx`, `components/dashboard/home/AttentionRequiredCard.tsx`, `app/(authenticated)/tools/laboratory/page.tsx` (titles), `app/(authenticated)/laboratory/page.tsx` (title).
+
+**Verification:** tsc PASS; ESLint 6 changed files PASS (0 findings); build PASS 25/25 pages; `git diff --check` PASS; static searches: no "View Strategy"/"Track Attendance"/`label: "Track"`/`label: "Laboratory"` anywhere in frontend/src; "View plan" → /tools/quiz-schedule confirmed; all 10 route files present; notifications untouched; no backend/migration changes by this phase (backend tree still carries only the user's pre-existing config.py port line); no Phase 5 container/layout refactor.
+
+**Known residual (manual check):** admin at exactly 1024px sees 9 inline items at lg — improved vs pre-Phase-4 but verify no squeeze at 1024–1100.
+
+**HARD STOP — Phases 5–12 not started. No commit/push/deploy.**
+
+---
+
+## Phase 4 Correction — Desktop TopNav Visual Regression (COMPLETE, 2026-09-05)
+
+**Problem (user's manual pass):** at lg+ several D-01 labels and the user name wrapped to two lines — taller/heavier navbar vs the previous compact one-line bar.
+**Root cause:** flex squeeze — no shrink-0/whitespace-nowrap on nav items, More trigger, or the right control group; nav carried min-w-0 (shrink license); D-01 labels added ~+75px intrinsic width so lg+ exceeded the old fit and flex compressed items into wrapping.
+**Fix:** atomicity (shrink-0 + whitespace-nowrap on all header items/controls), shrink license removed, identity span nowrap, and modest tightening reclaiming the label growth (px-3→px-2.5 items, lg:gap-1.5→gap-1, header gap-4→gap-3). Breakpoints, labels, mobile behavior, and navItems.ts unchanged.
+**Files:** `components/layout/TopNav.tsx`, `components/layout/UserMenu.tsx` (one class).
+**Verification:** tsc PASS; ESLint PASS; build PASS 25/25; git diff --check PASS; diff review confirms correction-only scope (no overflow-hidden/truncate/max-w hacks on desktop; mobile untouched).
+**Manual re-check:** 1024/1100/1280/1440/1600+ single-line nav + name; 768–1023 More band; mobile unaffected.
+
+---
+
+## UI/UX Remediation Phase 5 — Layout Contract & Container Consolidation (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 5 exactly — UI-011. Phases 6–12 remain PLANNED and NOT STARTED.
+
+**The contract (now in force):** AppShell's inner container `mx-auto w-full max-w-5xl p-4 pb-28 md:p-6 lg:p-8` is the single owner of authenticated content width, centering, and horizontal padding. Pages own only their vertical rhythm and any legitimate local width constraint. Verified the shell needed NO adjustment — its classes were already the intended contract; only page-side duplication existed.
+
+**Container classification after the change:**
+| Surface | Root now | Classification |
+|---|---|---|
+| Dashboard | `w-full` (unchanged) | shell-owned, was already clean |
+| Subjects, Laboratory | `flex-1 py-8 w-full` | duplication removed (max-w-7xl unreachable inside shell 5xl) |
+| Events, Calendar ×3 | `flex w-full flex-1 flex-col gap-6 py-6` | duplication removed (max-w-5xl == shell width) |
+| History | `flex-1 py-6 w-full flex flex-col gap-6` | duplication removed (max-w-5xl == shell width) |
+| Mark Attendance (Track) ×2 | `… max-w-2xl mx-auto` (py-6/py-8 kept) | legitimate local narrow column (blueprint-sanctioned), padding duplication removed |
+| Quiz Eligibility ×2, Feedback ×2, Profile ×3 | `… max-w-4xl mx-auto` (py-8/space-y-6 kept) | legitimate local reading width, padding duplication removed |
+| Login/Signup | untouched | own centered layout outside AppShell — not shell duplication |
+| Dialogs/inputs/cards with local max-w | untouched | legitimate local constraints |
+
+**Vertical spacing:** preserved everywhere (py/gap/space-y/mb untouched) — this phase is horizontal-ownership only.
+
+**Expected visual delta (documented):** horizontal inset drops from 64px to 32px per side on mobile and from 128px to 64px on desktop for the affected pages; content widens by the previously-wasted double padding. This is the intended UI-011 outcome, not a regression.
+
+**Files (Phase 5):** 9 page files, root-container classes only — calendar, history, laboratory, subjects, tools/events, profile, tools/feedback, tools/quiz-schedule, tools/laboratory. AppShell: zero changes.
+
+**Verification:** tsc PASS; ESLint 9 files → 8 clean + the 2 PRE-EXISTING history findings (proven on HEAD in Phase 2); build PASS 25/25 (CI placeholder); `git diff --check` PASS; container audit: zero shell-duplication px patterns remain in app/(authenticated); remaining root max-w-* = the 4 classified local constraints; nav/navItems/AppShell untouched by this phase; notifications/contexts zero diffs; backend = user's pre-existing config.py line only.
+
+**HARD STOP — Phases 6–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 6 — Design-System Primitive Consolidation (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 6 exactly — UI-016, UI-021 (single safe consolidation), UI-032, UI-009 confirmation-consistency remainder. Phases 7–12 remain PLANNED and NOT STARTED.
+
+**Canonical control vocabulary (UI-016):** `h-10 sm:h-8` for standard inputs/selects (matches the Button foundation; EventFormDialog + Track already used it), compact icon/sm sizes unchanged, textarea/textareas n/a. Implemented via: `ui/input.tsx` h-8 → h-10 sm:h-8 (shared primitive fix preferred over new abstractions) + NEW `ui/select.tsx` (native select, Input-matching styles, `[color-scheme:dark]`, w-full overridable). All 11 student selects migrated; 4 accidental height systems deleted; Track date input simplified; Settings/Laboratory selects use `w-auto` override to preserve row layouts.
+
+**Confirmation audit (UI-009 remainder):** clean — no equivalent modal confirmations exist to migrate; D-11 inline event confirmation retained; ConfirmDialog untouched.
+
+**UI-021:** exactly ONE consolidation (humanizeEventType + classTypeLabel → eventRules.ts). Retained-with-justification list: status.ts classTypeLabel (different contract), date-chip style variants, date formatters (Phase 7), QUIZ_LABELS/CYCLES, remaining inline empties (Phase 2 documented), read-only class-type display box.
+
+**UI-032:** 50× text-[10px] → text-[11px] (15 files); leading-none added to 14 h-4 badges (clipping prevention); h-5 badges unaffected; text-[0.65rem] bottom-nav labels retained (intentional compact microcopy, outside the audit's literal scope).
+
+**Files (Phase 6):** NEW `components/ui/select.tsx`; MODIFIED `components/ui/input.tsx`, `components/events/eventRules.ts`, `components/events/EventRow.tsx`, `components/events/EventFormDialog.tsx`, `components/calendar/DayDetail.tsx`, `components/calendar/CalendarGrid.tsx`, `components/shell/SettingsModal.tsx`, `components/notifications/NotificationBell.tsx`, `components/quiz/QuizEligibilityCard.tsx`, `components/dashboard/SubjectAttendanceCard.tsx`, `components/dashboard/TrackSessionCard.tsx`, `components/dashboard/home/{AttentionRequiredCard,QuizSnapshotCard,TodayAttendanceCard,UpcomingEventsCard}.tsx`, `app/(authenticated)/history/page.tsx`, `app/(authenticated)/tools/events/page.tsx`, `app/(authenticated)/tools/laboratory/page.tsx`, `app/(authenticated)/laboratory/page.tsx`.
+
+**Verification:** tsc PASS; ESLint 20 changed files — 19 clean + 2 pre-existing history findings; build PASS 25/25 (CI placeholder); `git diff --check` PASS; audits: 0 native selects / 0 text-[10px] remaining in student scope, single humanizeEventType, ConfirmDialog + inline confirm intact; diff review: 0 handler/payload changes, 0 new "use client", 0 Phase 7+ leakage. Diff: 18 files, 128+/124−.
+
+**HARD STOP — Phases 7–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 7 — Vocabulary, Status, Dates & Percentages (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 7 exactly — UI-010, UI-012, UI-013, UI-017, UI-018, UI-029, UI-036, UI-038 + D-07/D-08/D-09/D-10. Phases 8–12 remain PLANNED and NOT STARTED.
+
+**Canonical vocabulary now in force:**
+- Attendance states: Present / Absent (Pending / Cancelled for the other states); "attended N of M" remains valid prose.
+- Status: Healthy / Watch / At Risk / Critical (legacy SAFE/WATCH/CRITICAL mapped for display; backend Health set already canonical).
+- Dates: Long `Saturday · 5 Sep 2026` (existing formatLongDate) · Medium `5 Sep 2026` (NEW formatDateMedium) · Short `5 SEP` (formatShortDate, now also EventRow chips) · Time stays fixed-locale `h:MM AM`.
+- Percentages: whole numbers via shared formatPct/fmtIntPct; Quiz "View Calculation" CriterionRow keeps toFixed(1).
+
+**New/changed shared helpers:** NEW `lib/statusLabels.ts` (attendanceStatusLabel + WEEKLY_BAR_*_PCT constants = 80/60 unchanged, documented against backend legacy bands); `lib/date.ts` +formatDateMedium, −formatDayHeader (duplicate of formatShortDate), −formatDayInitial (dead); `dashboard/home/status.ts` classStatusLabel D-07.
+
+**Screen copy:** dashboard status badges mapped; Laboratory backend data values ("Attended"/"Missed") mapped to Present/Absent for display ONLY (data comparisons byte-identical); quiz intro → 3 scannable lines; weekly `· Np` → `· N pending` (w-16→w-24); dev copy removed (PostgreSQL, VAPID phasing, Tracked in task.md ×2 + contradictory PWA paragraphs → single honest install text, fake-confirmation rationale box deleted, profile footnote deleted, Ingest→Add, backend-admin contract description simplified); login identity fixed (h1 AttendanceDash Pro, subtitle Student Portal, Sign in) + signup V2/link.
+
+**Semantic-integrity proof (diff-audited):** threshold values only moved to same-valued constants; zero arithmetic/predicate changes; attendance_status data comparisons byte-identical; lib/date.ts formatPct/toDate untouched; all date migrations preserve local T00:00:00 parsing (no day-shift); percentage changes swap formatter calls on identical data fields only.
+
+**Files (Phase 7):** NEW `lib/statusLabels.ts`; MODIFIED `lib/date.ts`, `components/dashboard/home/{status,OverallAttendanceCard,AttentionRequiredCard,WeeklyAttendanceCard,UpcomingEventsCard}.tsx`, `components/dashboard/{SubjectAttendanceCard,SubjectLaboratoryView}.tsx`, `components/quiz/QuizEligibilityCard.tsx`, `components/events/EventRow.tsx`, `components/calendar/DayDetail.tsx`, `components/shell/{ProfileModal,InstallAppModal,SettingsModal,FeedbackModal}.tsx`, `app/(authenticated)/laboratory/page.tsx`, `app/(authenticated)/profile/page.tsx`, `app/(authenticated)/tools/feedback/page.tsx`, `app/(authenticated)/tools/quiz-schedule/page.tsx`, `app/(auth)/login/page.tsx`, `app/(auth)/signup/page.tsx`.
+
+**Verification:** tsc PASS; ESLint 22 changed files PASS (signup err:any + apostrophe fixed as touched-file hygiene); build PASS 25/25 (CI placeholder); git diff --check PASS; post-audits: 0 raw status enums, 0 locale-dependent dates (remaining Intl = month labels + fixed-locale time, classified), remaining toFixed = toFixed(0) whole-number + sanctioned quiz-calc toFixed(1), 0 user-facing dev copy, 0 text-[10px], pending indicator resolved.
+
+**HARD STOP — Phases 8–12 not started. No commit/push/deploy.**
+
+---
+
+## Phase 7 Correction — Attendance Decimal Precision (COMPLETE, 2026-09-05)
+
+**Corrected D-10 rule (authoritative, supersedes the Phase 7 interpretation):** percentages representing actual calculated attendance/eligibility render with ONE DECIMAL (formatPct1); whole numbers remain only for genuinely categorical/summary displays (dashboard overall/forecast, attention values, weekly figures, history summary, subject-card Lecture/Tutorial blocks, "required N%" labels).
+
+**Implementation:** NEW `formatPct1` in `lib/date.ts` (toFixed(1), null → "—"); SubjectAttendanceCard headline + detail rows → formatPct1 (local fmtIntPct deleted; Lecture/Tutorial blocks → shared formatPct, display unchanged); QuizEligibilityCard — local fmtPct delegates to formatPct1 and all row sites (lecture/tutorial/average + CriterionRow) use it; Laboratory practical stat → formatPct1. Decimal logic exists in exactly one shared place (0 scattered toFixed(1) in student scope).
+
+**Verification:** tsc PASS; ESLint 4 files PASS; build PASS 25/25 (CI placeholder); git diff --check PASS; diff audit: 0 calculation/payload/threshold lines touched; precision restored exactly on the Phase 7 regression set.
+
+**HARD STOP — no commit/push/deploy; Phase 8 not started.**
+
+---
+
+## UI/UX Remediation Phase 8 — Notification Center & Inbox UX (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 8 exactly — UI-014, UI-039, D-12, notification-dismiss undo (D-11 portion). Phases 9–12 remain PLANNED and NOT STARTED. Notification generation/push architecture UNTOUCHED.
+
+**State model (smallest correct):** `pendingIds: string[]` (per-row in-flight mutations; unrelated rows stay interactive) + `markAllPending: boolean`. Guards: row action returns early if mark-all pending or its own id already pending (double-click safe); mark-all returns early if any row pending (race-safe). No global context, no new architecture.
+
+**D-12 mark-all read:** sequential for..of over type-narrowed unread ids using the EXISTING PATCH `/{id}` `{is_read:true}`; per-row cache update after each genuine 2xx; failures leave rows unread (server truth); toasts: full success / partial warning + inline banner / total-failure error. No bulk endpoint, no migration, no schema change.
+
+**Dismiss undo:** immediate dismissal unchanged; 8s toast "Undo" → existing idempotent PATCH `{is_dismissed:false}` → canonical `mutate()` revalidation (server ordering; same mechanism as the SW invalidation signal). Undo failure = explicit error toast. Mark-read undo deferred (row stays visible; not warranted) — documented.
+
+**UI-039:** empty-state icon CalendarDays → Bell (structure/tokens unchanged; CalendarDays kept for the ACADEMIC_EVENT kind badge).
+
+**Files (Phase 8):** `components/notifications/NotificationCenter.tsx` (pending model, mark-all, undo, icon), `components/feedback/toast.tsx` (additive optional toast action). NotificationBell, NotificationRefreshListener, useServiceWorker, lib/api.ts, hooks: untouched by this phase.
+
+**Verification:** tsc PASS; ESLint 2 changed files PASS; build PASS 25/25 (CI placeholder); git diff --check PASS; audits: sequential PATCH / no bulk endpoint / payloads = existing {is_read},{is_dismissed} only / per-row pending confirmed / global lock removed / canonical key + listener + bell intact / no polling / backend tree still only the user's pre-existing config.py line.
+
+**HARD STOP — Phases 9–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 9 — Settings Behavior (COMPLETE, 2026-09-05)
+
+**Scope executed:** blueprint Phase 9 exactly — UI-019 via D-05 + D-06. Phases 10–12 remain PLANNED and NOT STARTED.
+
+**D-05 (implemented, frontend-only):** CalendarGrid accepts `weekStartsOn?: WeekStart` (default MONDAY = verified backend default). Monday-start rotates weekday header columns and uses `(getDay()+6)%7` leading blanks; Sunday-start unchanged. Calendar page feeds the saved preference through the shared usePreferences SWR key (deduped; no duplicate requests). Dates/selection/today/indicators unchanged — layout-only.
+
+**D-06 (handled honestly, no automation exists):** discovery confirmed auto_mark_present is storage-only (no attendance automation in the backend). The toggle remains (contract preserved, still persists) with the caption "Automatic attendance marking is not currently active — the preference is saved with your account." No engine/service/API/behavior changes; no fake success claims.
+
+**Settings info box:** updated to remain truthful after D-05 (week start controls calendar layout; auto-mark saved but not yet marking).
+
+**Files (Phase 9):** `components/calendar/CalendarGrid.tsx`, `app/(authenticated)/calendar/page.tsx`, `components/shell/SettingsModal.tsx`.
+
+**Verification:** tsc PASS; ESLint 3 files PASS; build PASS 25/25 (CI placeholder); git diff --check PASS; audits — week-math rotation/blank formulas correct, preferences payload unchanged, no new Date parsing, backend/engines/services/migrations untouched (backend diff still only the user's pre-existing config.py line).
+
+**HARD STOP — Phases 10–12 not started. No commit/push/deploy.**

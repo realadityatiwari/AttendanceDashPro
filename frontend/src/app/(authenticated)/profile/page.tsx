@@ -16,7 +16,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
+      <div className="flex-1 py-8 w-full max-w-4xl mx-auto space-y-6">
         <PageHeader title="Profile Settings" />
         <Skeleton className="h-[400px] w-full rounded-xl" />
       </div>
@@ -36,7 +36,7 @@ export default function ProfilePage() {
 
   if (isError) {
     return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+      <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
         <PageHeader title="Profile Settings" />
         <ErrorState message="Could not load your student profile. Please check your connection and try again." />
         <div className="mt-8 flex justify-center">
@@ -50,19 +50,19 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+    <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
       <PageHeader title="Profile Settings" description="Manage your account identity and settings." />
       
       <div className="grid gap-6">
         <GlassCard>
           <div className="p-6 sm:p-8">
             <h3 className="text-lg font-medium text-foreground mb-6 flex items-center gap-2">
-              <User className="h-5 w-5 text-accent" />
-              Student Identity (PostgreSQL)
+              <User className="h-5 w-5 text-primary" />
+              Student Identity
             </h3>
             
             <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
-              <Avatar className="h-24 w-24 bg-surface2 border-2 border-border/50">
+              <Avatar className="h-24 w-24 bg-muted border-2 border-border/50">
                 <AvatarFallback className="text-3xl font-semibold">{initials}</AvatarFallback>
               </Avatar>
               
@@ -103,10 +103,10 @@ export default function ProfilePage() {
                     <ShieldAlert className="h-5 w-5 text-amber-400" aria-hidden="true" />
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-amber-400">Profile Editing Deferred</h3>
+                    <h3 className="text-sm font-medium text-amber-400">Profile editing isn&apos;t available yet</h3>
                     <div className="mt-2 text-sm text-amber-400/80">
                       <p>
-                        The backend API currently does not expose an endpoint to modify student profile data. This is a read-only view.
+                        This page is read-only for now.
                       </p>
                     </div>
                   </div>
@@ -119,7 +119,7 @@ export default function ProfilePage() {
         <GlassCard>
           <div className="p-6 sm:p-8">
             <h3 className="text-lg font-medium text-foreground mb-6 flex items-center gap-2">
-              <Key className="h-5 w-5 text-accent" />
+              <Key className="h-5 w-5 text-primary" />
               Authentication Identity
             </h3>
             

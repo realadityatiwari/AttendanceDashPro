@@ -55,11 +55,11 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
                     <span className="text-sm font-semibold text-foreground">
                       {cls.subject_code}
                     </span>
-                    <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px] uppercase tracking-wider">
+                    <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
                       {classTypeLabel(cls.class_type)}
                     </Badge>
                     {cls.is_extra && (
-                      <Badge variant="neutral" className="h-4 px-1.5 py-0 text-[10px] uppercase tracking-wider">
+                      <Badge variant="neutral" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
                         Extra
                       </Badge>
                     )}

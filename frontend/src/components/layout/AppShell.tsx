@@ -3,6 +3,7 @@ import { TopNav } from "./TopNav";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 import { NotificationRefreshListener } from "@/components/pwa/NotificationRefreshListener";
+import { ToastProvider } from "@/components/feedback/toast";
 
 interface AppShellProps {
   children: ReactNode;
@@ -29,15 +30,17 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <ServiceWorkerRegistration />
       <NotificationRefreshListener />
-      <TopNav />
+      <ToastProvider>
+        <TopNav />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl p-4 pb-28 md:p-6 lg:p-8">
-          {children}
-        </div>
-      </main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl p-4 pb-28 md:p-6 lg:p-8">
+            {children}
+          </div>
+        </main>
 
-      <MobileBottomNav />
+        <MobileBottomNav />
+      </ToastProvider>
     </div>
   );
 }

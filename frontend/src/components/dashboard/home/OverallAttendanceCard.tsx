@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDelta, formatPct } from "@/lib/date";
+import { attendanceStatusLabel } from "@/lib/statusLabels";
 import { attendanceStatusVariant } from "./status";
 
 interface OverallAttendanceCardProps {
@@ -24,7 +25,7 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Overall Attendance</CardTitle>
           <Badge variant={attendanceStatusVariant(overall.status)}>
-            {overall.status ?? "N/A"}
+            {attendanceStatusLabel(overall.status)}
           </Badge>
         </div>
       </CardHeader>
@@ -42,7 +43,7 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
             {forecastPct !== null && forecastPct !== undefined && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Forecast {formatPct(forecastPct)}
-                <span className="text-text2"> if all pending attended</span>
+                <span className="text-muted-foreground/70"> if all pending attended</span>
               </p>
             )}
           </div>

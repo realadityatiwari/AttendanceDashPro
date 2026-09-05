@@ -1,27 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { AcademicEventResponse, CalendarDayItem, ClassType, EventType } from "@/types/api";
+import { AcademicEventResponse, CalendarDayItem, EventType } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/shared/GlassCard";
-import { formatLongDate, parseLocalDate } from "@/lib/date";
+import { classTypeLabel, humanizeEventType } from "@/components/events/eventRules";
+import { formatDateMedium, formatLongDate } from "@/lib/date";
 import { CalendarDays, CalendarRange, Info } from "lucide-react";
 
-const EVENT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", year: "numeric" });
-
+// D-09: deterministic English dates (medium form).
 function formatEventDate(value: string): string {
-  return EVENT_DATE_FORMATTER.format(parseLocalDate(value));
-}
-
-function humanizeEventType(type: string): string {
-  return type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function classTypeLabel(type: ClassType | null): string | null {
-  if (type === ClassType.LECTURE) return "Lecture";
-  if (type === ClassType.TUTORIAL) return "Tutorial";
-  if (type === ClassType.PRACTICAL || type === ClassType.PRACTICAL2) return "Practical";
-  return null;
+  return formatDateMedium(value);
 }
 
 const HOLIDAY_TYPES = new Set([EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY, EventType.FESTIVAL_HOLIDAY]);
@@ -51,7 +40,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
       </div>
 
       {day.substitution_schedule_override && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-accent sm:mt-3">
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary sm:mt-3">
           <CalendarRange className="size-3.5 shrink-0" aria-hidden />
           Follows {day.substitution_schedule_override.toLowerCase()} schedule
         </p>
@@ -81,7 +70,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
           </h4>
           <Link
             href="/tools/events"
-            className="rounded-sm text-xs font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="rounded-sm text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
             View all
           </Link>
@@ -109,17 +98,17 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
   const classLabel = classTypeLabel(event.class_type);
 
   return (
-    <li className="rounded-lg border-l-2 border-accent bg-muted/30 px-2.5 py-1.5 sm:px-3 sm:py-2">
+    <li className="rounded-lg border-l-2 border-primary bg-muted/30 px-2.5 py-1.5 sm:px-3 sm:py-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm font-medium text-foreground">{humanizeEventType(event.event_type)}</span>
-        {isHoliday && <Badge variant="success" className="h-4 py-0 text-[10px]">Holiday</Badge>}
+        {isHoliday && <Badge variant="success" className="h-4 py-0 leading-none text-[11px]">Holiday</Badge>}
         {classLabel && (
-          <Badge variant="outline" className="h-4 py-0 text-[10px] uppercase tracking-wider">{classLabel}</Badge>
+          <Badge variant="outline" className="h-4 py-0 leading-none text-[11px] uppercase tracking-wider">{classLabel}</Badge>
         )}
       </div>
       {event.resolved_subject_code && (
         <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-foreground/80">
-          <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px] tracking-wide">
+          <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[11px] tracking-wide">
             {event.resolved_subject_code}
           </span>
           {event.resolved_subject_name}

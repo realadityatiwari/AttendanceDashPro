@@ -116,7 +116,7 @@ export function AdminShell({
               <LayoutDashboard className="size-4" aria-hidden="true" />
               Student app
             </Button>
-            <Avatar className="h-8 w-8 border border-border bg-surface2">
+            <Avatar className="h-8 w-8 border border-border bg-muted">
               <AvatarFallback className="text-xs font-semibold">
                 {initials}
               </AvatarFallback>

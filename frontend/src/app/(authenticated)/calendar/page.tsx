@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useCalendarMonth } from "@/hooks/useApi";
+import { useCalendarMonth, usePreferences } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -28,6 +28,9 @@ export default function CalendarPage() {
 
   const monthKey = `${year}-${month}`;
   const { calendarMonth: data, isLoading, isError, mutate } = useCalendarMonth(year, month);
+  // Phase 9 (D-05): the saved week-start preference drives the grid's visual
+  // column order. Same SWR key as Settings (deduped); backend default MONDAY.
+  const { preferences } = usePreferences();
 
   // The displayed month always comes from the backend read model (SWR's
   // keepPreviousData retains the previous month during a switch). The requested
@@ -129,7 +132,7 @@ export default function CalendarPage() {
 
   if (isError && (!data || data.year !== year || data.month !== month)) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex w-full flex-1 flex-col gap-6 py-6">
         <PageHeader title="Calendar" description="Monthly view of your academic calendar">
           {navControls}
         </PageHeader>
@@ -152,7 +155,7 @@ export default function CalendarPage() {
 
   if (!data) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex w-full flex-1 flex-col gap-6 py-6">
         <PageHeader title="Calendar" description="Monthly view of your academic calendar">
           {navControls}
         </PageHeader>
@@ -164,7 +167,7 @@ export default function CalendarPage() {
   const isEmpty = data.days.length === 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="flex w-full flex-1 flex-col gap-6 py-6">
       <PageHeader title="Calendar" description={semesterRange ?? "Monthly view of your academic calendar"}>
         {navControls}
       </PageHeader>
@@ -194,6 +197,7 @@ export default function CalendarPage() {
               days={data.days}
               selectedDate={selectedDate}
               onSelect={handleSelect}
+              weekStartsOn={preferences?.week_starts_on ?? "MONDAY"}
             />
           </GlassCard>
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">

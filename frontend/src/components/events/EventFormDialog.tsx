@@ -5,6 +5,7 @@ import { AcademicEventPayload, AcademicEventResponse, ClassType, ElectiveSlot, E
 import { useSubjects, useTimetable, useEventMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { humanizeEventType } from "@/components/events/EventRow";
 import {
   getRule,
+  humanizeEventType,
   SUBSTITUTION_DAYS,
   CLASS_TYPE_LABELS,
   STUDENT_CREATABLE_EVENT_TYPES,
@@ -101,10 +102,8 @@ function initialState(event: AcademicEventResponse | null, isAdmin: boolean): Fo
   };
 }
 
-const selectClass =
-  "h-10 sm:h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [color-scheme:dark]";
 const fieldClass = "flex flex-col gap-1";
-const labelClass = "text-[10px] uppercase tracking-wider text-muted-foreground";
+const labelClass = "text-[11px] uppercase tracking-wider text-muted-foreground";
 
 /**
  * Event create/edit form (Phase 6.5 + attendance-spec alignment). Exposes
@@ -371,16 +370,15 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
 
           <div className={fieldClass}>
             <label className={labelClass} htmlFor="event-form-type">Event type</label>
-            <select
+            <Select
               id="event-form-type"
-              className={selectClass}
               value={form.event_type}
               onChange={e => handleEventTypeChange(e.target.value as EventType)}
             >
               {typeOptions.map(type => (
                 <option key={type} value={type}>{humanizeEventType(type)}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className={fieldClass}>
@@ -411,7 +409,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               <Input
                 id="event-form-start"
                 type="date"
-                className={selectClass}
+                className="[color-scheme:dark]"
                 value={form.start_date}
                 onChange={e => handleStartDateChange(e.target.value)}
               />
@@ -422,7 +420,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                   <Input
                     id="event-form-start"
                     type="date"
-                    className={selectClass}
+                    className="[color-scheme:dark]"
                     value={form.start_date}
                     onChange={e => handleStartDateChange(e.target.value)}
                   />
@@ -432,7 +430,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                   <Input
                     id="event-form-end"
                     type="date"
-                    className={selectClass}
+                    className="[color-scheme:dark]"
                     value={form.end_date}
                     onChange={e => handleEndDateChange(e.target.value)}
                   />
@@ -444,9 +442,8 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
           {rule.requiresSubject && (
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-subject">Subject</label>
-              <select
+              <Select
                 id="event-form-subject"
-                className={selectClass}
                 value={form.subject_id}
                 onChange={e => set("subject_id", e.target.value)}
               >
@@ -468,14 +465,14 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                     </option>
                   ))
                 )}
-              </select>
+              </Select>
               {isClassCancelled && subjectsForEvent.length === 0 && form.start_date && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   No lectures or tutorials scheduled on {form.start_date} for your enrolled subjects.
                 </p>
               )}
               {quizScopedEvent && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Only quiz-bearing (theory) subjects can host quizzes.
                 </p>
               )}
@@ -492,9 +489,8 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
           ) : (
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-class">Class type</label>
-              <select
+              <Select
                 id="event-form-class"
-                className={selectClass}
                 value={form.class_type}
                 onChange={e => set("class_type", e.target.value)}
               >
@@ -504,7 +500,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                     {CLASS_TYPE_LABELS[classType]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ))}
 
@@ -517,7 +513,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               <Input
                 id="event-form-note"
                 type="text"
-                className={selectClass}
+                className="[color-scheme:dark]"
                 placeholder={form.event_type === EventType.HOLIDAY
                   ? "e.g. Republic Day, Institute Holiday, Diwali"
                   : form.event_type === EventType.LAB_CANCELLED ? "e.g. Technical issue" : "e.g. Mid-semester practical"}
@@ -531,9 +527,8 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-working">Working day state</label>
-              <select
+              <Select
                 id="event-form-working"
-                className={selectClass}
                 value={form.is_working_day}
                 onChange={e => set("is_working_day", e.target.value)}
                 disabled={rule.isClosure || form.event_type === EventType.WORKING_SATURDAY}
@@ -541,14 +536,14 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                 <option value="">Not specified</option>
                 <option value="true">Working</option>
                 <option value="false">Non-working</option>
-              </select>
+              </Select>
               {rule.isClosure && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Closure types are always non-working (engine rule).
                 </p>
               )}
               {form.event_type === EventType.WORKING_SATURDAY && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Working Saturday is always a working day on Saturdays (weekdays
                   inside the range keep their normal state).
                 </p>
@@ -556,9 +551,8 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </div>
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="event-form-substitution">Substitution schedule</label>
-              <select
+              <Select
                 id="event-form-substitution"
-                className={selectClass}
                 value={form.substitution_schedule_override}
                 onChange={e => set("substitution_schedule_override", e.target.value)}
               >
@@ -566,7 +560,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                 {SUBSTITUTION_DAYS.map(day => (
                   <option key={day} value={day}>{day[0] + day.slice(1).toLowerCase()}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 

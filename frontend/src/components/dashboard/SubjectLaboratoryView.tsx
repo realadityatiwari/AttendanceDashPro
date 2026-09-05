@@ -1,6 +1,7 @@
 import { useLabExperiments, useLabRecords } from "@/hooks/useApi";
 import { GlassCard } from "@/components/shared/GlassCard";
 import { Badge } from "@/components/ui/badge";
+import { formatDateMedium } from "@/lib/date";
 import { CheckCircle2, Circle, AlertCircle, Clock } from "lucide-react";
 import { SignatureStatus } from "@/types/api";
 
@@ -15,7 +16,7 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <GlassCard key={i} className="h-16 animate-pulse bg-surface/50" />
+          <GlassCard key={i} className="h-16 animate-pulse bg-muted/50" />
         ))}
       </div>
     );
@@ -45,9 +46,9 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
 
   return (
     <GlassCard className="overflow-hidden">
-      <div className="bg-surface2/50 px-4 py-3 border-b border-border/50 flex justify-between items-center">
+      <div className="bg-muted/50 px-4 py-3 border-b border-border/50 flex justify-between items-center">
         <h3 className="font-bold text-foreground text-base">{subjectCode} Experiments</h3>
-        <Badge variant="outline" className="bg-surface border-border">
+        <Badge variant="outline" className="bg-muted border-border">
           {recList.filter(r => r.signature_status === SignatureStatus.SIGNED).length} / {expList.length} Completed
         </Badge>
       </div>
@@ -71,23 +72,23 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
           }
 
           return (
-            <div key={exp.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-surface2/30 transition-colors">
+            <div key={exp.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-4">
-                <div className="flex flex-col items-center justify-center w-8 h-8 rounded bg-surface2 border border-border/50 shrink-0 text-sm font-bold text-muted-foreground">
+                <div className="flex flex-col items-center justify-center w-8 h-8 rounded bg-muted border border-border/50 shrink-0 text-sm font-bold text-muted-foreground">
                   {exp.experiment_number}
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-foreground">{exp.title}</h4>
                   {record?.date_conducted && (
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      Conducted: {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(record.date_conducted))}
+                      Conducted: {formatDateMedium(record.date_conducted)}
                     </div>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-4 sm:justify-end">
                 {record?.marks !== null && record?.marks !== undefined && (
-                  <Badge variant="outline" className="bg-surface2 border-border text-foreground font-mono">
+                  <Badge variant="outline" className="bg-muted border-border text-foreground font-mono">
                     {record.marks} pts
                   </Badge>
                 )}

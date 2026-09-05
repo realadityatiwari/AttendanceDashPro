@@ -4,7 +4,7 @@
 #
 # Starts the complete stack in dependency order:
 #   1. PostgreSQL (Docker container: attendancedashpro_db, port 55432)
-#   2. FastAPI backend (127.0.0.1:8080)
+#   2. FastAPI backend (127.0.0.1:8300)
 #   3. Next.js frontend (localhost:3100)
 #
 # Usage:
@@ -207,7 +207,9 @@ Write-Host ""
 
 # ── 2. FastAPI backend ─────────────────────────────────────────────────────────
 
-$backendPort    = 8080
+# 8300: 8080 sits inside a Windows reserved/excluded TCP port range on this
+# dev machine (WinError 10013 at bind), so the dev backend uses 8300.
+$backendPort    = 8300
 $backendHost    = "127.0.0.1"
 $backendStarted = $false
 

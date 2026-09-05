@@ -1,10 +1,10 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # stop-dev.ps1
 # AttendanceDash Pro — one-command development environment shutdown.
 #
 # Stops (in reverse order):
 #   1. Next.js frontend   (port 3100 — node process)
-#   2. FastAPI backend    (port 8080 — python process)
+#   2. FastAPI backend    (port 8300 — python process)
 #
 # PostgreSQL behaviour:
 #   The database container (attendancedashpro_db) is LEFT RUNNING.
@@ -63,7 +63,7 @@ Stop-DevPort -Port 3100 -ExpectedProcessPattern "node" -ServiceName "Next.js fro
 Write-Host ""
 
 # Stop backend (Uvicorn / Python)
-Stop-DevPort -Port 8080 -ExpectedProcessPattern "python" -ServiceName "FastAPI backend"
+Stop-DevPort -Port 8300 -ExpectedProcessPattern "python" -ServiceName "FastAPI backend"
 
 Write-Host ""
 Write-Host "  ────────────────────────────────────────────────────" -ForegroundColor DarkGray

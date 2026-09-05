@@ -16,11 +16,15 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { GlassCard } from "@/components/shared/GlassCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useToast } from "@/components/feedback/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatDateMedium, formatPct1 } from "@/lib/date";
 import {
   useSubjects,
   useProfile,
@@ -60,9 +64,9 @@ export default function LaboratoryPage() {
   const resolvedCode = subjectCode || labSubjects[0]?.code || "";
 
   return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+    <div className="flex-1 py-8 w-full">
       <PageHeader
-        title="Laboratory"
+        title="Lab Experiments"
         description="Practical attendance, experiment progress, and lab activity — all values are backend-derived from the canonical attendance pipeline."
       />
 
@@ -71,11 +75,11 @@ export default function LaboratoryPage() {
           <label htmlFor="lab-subject" className="text-sm font-medium text-muted-foreground">
             Subject
           </label>
-          <select
+          <Select
             id="lab-subject"
             value={resolvedCode}
             onChange={(e) => setSubjectCode(e.target.value)}
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="w-auto"
           >
             {(labSubjects.length > 0 || subjectsLoading) && (
               <option value="" disabled>
@@ -87,10 +91,10 @@ export default function LaboratoryPage() {
                 {s.code} — {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
-        <nav aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-surface p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <nav aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-muted p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -137,8 +141,8 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-24 w-full bg-surface/50" />
-        <Skeleton className="h-24 w-full bg-surface/50" />
+        <Skeleton className="h-24 w-full bg-muted/50" />
+        <Skeleton className="h-24 w-full bg-muted/50" />
       </div>
     );
   }
@@ -165,12 +169,12 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
           <Badge variant="primary">{pa.total} sessions</Badge>
         </div>
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-2 text-center">
-          <Stat label="Attended" value={pa.attended} tone="text-emerald-400" />
-          <Stat label="Missed" value={pa.missed} tone="text-red-400" />
+          <Stat label="Present" value={pa.attended} tone="text-emerald-400" />
+          <Stat label="Absent" value={pa.missed} tone="text-red-400" />
           <Stat label="Pending" value={pa.pending} tone="text-amber-400" />
-          <Stat label="Attendance" value={`${pa.current_practical_pct.toFixed(1)}%`} tone="text-foreground" />
+          <Stat label="Attendance" value={formatPct1(pa.current_practical_pct)} tone="text-foreground" />
         </div>
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface2">
+        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full bg-primary transition-all"
             style={{ width: `${Math.min(pa.current_practical_pct, 100)}%` }}
@@ -197,7 +201,14 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Attendance</span>
               <Badge variant={ms.attendance_status === "Attended" ? "success" : ms.attendance_status === "Missed" ? "danger" : "neutral"}>
-                {ms.attendance_status ?? "Not logged"}
+                {/* D-07: "Attended"/"Missed" are the backend's lab-domain data
+                    values (comparisons unchanged) — display maps to the
+                    canonical Present/Absent vocabulary. */}
+                {ms.attendance_status === "Attended"
+                  ? "Present"
+                  : ms.attendance_status === "Missed"
+                    ? "Absent"
+                    : (ms.attendance_status ?? "Not logged")}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -233,20 +244,49 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
   const [num, setNum] = useState("");
   const [title, setTitle] = useState("");
   const [showIngest, setShowIngest] = useState(false);
+  // UI-015 / D-11: destructive actions confirm before mutating; this holds
+  // the action awaiting confirmation (null = dialog closed).
+  const [confirmAction, setConfirmAction] = useState<{
+    kind: "delete" | "deactivate";
+    exp: LaboratoryExperimentResponse;
+  } | null>(null);
+  const { toast } = useToast();
 
   const isLoading = summaryLoading || expLoading || recLoading;
   const catalogAvailable = summary?.experiment_progress.catalog_available ?? false;
 
+  // Returns whether the mutation succeeded so callers can give honest
+  // feedback; failures stay in the inline error banner above the list.
   const run = async (id: string, fn: () => Promise<unknown>) => {
     setBusyId(id);
     setError(null);
     try {
       await fn();
       await Promise.all([mutateExps(), mutateRecs()]);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed");
+      return false;
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { kind, exp } = confirmAction;
+    if (kind === "delete") {
+      const record = recordFor(exp.id);
+      if (!record) return;
+      const ok = await run(exp.id, () =>
+        mutations.deleteRecord(subjectCode, record.id)
+      );
+      if (ok) toast({ variant: "success", title: "Record deleted" });
+    } else {
+      const ok = await run(exp.id, () =>
+        mutations.deleteExperiment(subjectCode, exp.id)
+      );
+      if (ok) toast({ variant: "success", title: "Experiment deactivated" });
     }
   };
 
@@ -257,7 +297,7 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-16 w-full bg-surface/50" />
+          <Skeleton key={i} className="h-16 w-full bg-muted/50" />
         ))}
       </div>
     );
@@ -338,7 +378,7 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
               />
             </div>
             <Button onClick={handleIngest} disabled={busyId !== null || num.trim() === ""}>
-              Ingest
+              Add
             </Button>
           </div>
         </GlassCard>
@@ -358,7 +398,7 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
                   mutations.createRecord(subjectCode, { experiment_id: exp.id })
                 )
               }
-              onDelete={() => run(exp.id, () => mutations.deleteRecord(subjectCode, recordFor(exp.id)!.id))}
+              onDelete={() => setConfirmAction({ kind: "delete", exp })}
               onSign={() =>
                 run(exp.id, () =>
                   mutations.updateRecord(subjectCode, recordFor(exp.id)!.id, {
@@ -366,11 +406,36 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
                   })
                 )
               }
-              onDeactivate={() => run(exp.id, () => mutations.deleteExperiment(subjectCode, exp.id))}
+              onDeactivate={() => setConfirmAction({ kind: "deactivate", exp })}
             />
           ))}
         </div>
       </GlassCard>
+
+      {/* UI-015 / D-11: destructive actions require explicit confirmation.
+          The dialog stays open and locks its controls until the mutation
+          settles; failures surface in the inline error banner above. */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={
+          confirmAction?.kind === "deactivate"
+            ? "Deactivate this experiment?"
+            : "Delete this record?"
+        }
+        description={
+          confirmAction?.kind === "deactivate"
+            ? `Experiment ${confirmAction.exp.experiment_number}${
+                confirmAction.exp.title ? ` — ${confirmAction.exp.title}` : ""
+              } for ${subjectCode} will be deactivated and removed from the experiment list.`
+            : `Your tracking record for Experiment ${confirmAction?.exp.experiment_number ?? ""} in ${subjectCode} will be removed. You can track it again later.`
+        }
+        confirmLabel={confirmAction?.kind === "deactivate" ? "Deactivate" : "Delete"}
+        variant="destructive"
+        onConfirm={handleConfirmAction}
+      />
     </div>
   );
 }
@@ -411,9 +476,9 @@ function ExperimentRow({
   }
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-surface2/30 transition-colors">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded bg-surface2 border border-border/50 text-sm font-bold text-muted-foreground">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded bg-muted border border-border/50 text-sm font-bold text-muted-foreground">
           {exp.experiment_number}
         </div>
         <div className="min-w-0">
@@ -425,7 +490,7 @@ function ExperimentRow({
           )}
           {record?.date_conducted && (
             <p className="text-xs text-muted-foreground">
-              Conducted {formatDate(record.date_conducted)}
+              Conducted {formatDateMedium(record.date_conducted)}
             </p>
           )}
         </div>
@@ -475,7 +540,7 @@ function ActivityTab({ subjectCode }: { subjectCode: string }) {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-16 w-full bg-surface/50" />
+          <Skeleton key={i} className="h-16 w-full bg-muted/50" />
         ))}
       </div>
     );
@@ -528,7 +593,8 @@ function ActivityRow({ item }: { item: LaboratoryActivityItem }) {
           <Badge
             variant={status === "Attended" ? "success" : status === "Missed" ? "danger" : "neutral"}
           >
-            {status}
+            {/* D-07: backend data value → canonical display label. */}
+            {status === "Attended" ? "Present" : status === "Missed" ? "Absent" : status}
           </Badge>
         ) : (
           <Badge variant="neutral">Not logged</Badge>
@@ -557,8 +623,5 @@ function ActivityRow({ item }: { item: LaboratoryActivityItem }) {
   );
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+// D-09 note: date display uses the shared formatDateMedium (local calendar
+// parsing); the former local en-US helper was removed with Phase 7.

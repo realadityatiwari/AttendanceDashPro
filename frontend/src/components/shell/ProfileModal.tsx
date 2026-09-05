@@ -5,17 +5,7 @@ import { useProfile } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-
-function formatDate(iso?: string | null): string | undefined {
-  if (!iso) return undefined;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { formatDateMedium } from "@/lib/date";
 
 interface ProfileModalProps {
   open: boolean;
@@ -39,7 +29,7 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
       width="md"
     >
       <div className="flex items-center gap-4">
-        <Avatar size="lg" className="bg-surface2 border border-border">
+        <Avatar size="lg" className="bg-muted border border-border">
           <AvatarFallback className="text-base font-semibold">
             {initials}
           </AvatarFallback>
@@ -72,20 +62,15 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
             <ShellField label="Academic Session" value={profile?.academic_session} />
             <ShellField
               label="Semester Start"
-              value={formatDate(profile?.semester_start)}
+              value={profile?.semester_start ? formatDateMedium(profile.semester_start) : undefined}
             />
             <ShellField
               label="First Quiz Date"
-              value={formatDate(profile?.first_quiz_date)}
+              value={profile?.first_quiz_date ? formatDateMedium(profile.first_quiz_date) : undefined}
             />
           </>
         )}
       </div>
-
-      <p className="mt-4 text-xs text-muted-foreground">
-        Program is resolved from your section; the remaining fields are
-        resolved from your section, semester and quiz schedules.
-      </p>
     </ShellDialog>
   );
 }

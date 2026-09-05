@@ -24,7 +24,7 @@ const TYPE_OPTIONS: { value: FeedbackType | ""; label: string }[] = [
 
 const TYPE_BADGE: Record<FeedbackType, string> = {
   BUG: "bg-destructive/10 text-destructive",
-  SUGGESTION: "bg-accent/10 text-accent",
+  SUGGESTION: "bg-warning/10 text-warning",
   QUESTION: "bg-primary/10 text-primary",
   PRAISE: "bg-success/10 text-success",
 };
@@ -56,7 +56,7 @@ export default function FeedbackAdminPage() {
   // Non-admin UX guard (backend still enforces 403 on the API itself).
   if (!isAdmin) {
     return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+      <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
         <PageHeader title="Feedback" />
         <ErrorState message="You do not have access to the feedback admin surface." />
       </div>
@@ -69,10 +69,10 @@ export default function FeedbackAdminPage() {
   };
 
   return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+    <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
       <PageHeader
         title="Feedback"
-        description="Feedback submitted by students — reviewed by the backend-admin contract."
+        description="Feedback submitted by students."
       />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

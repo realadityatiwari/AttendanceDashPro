@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -11,8 +11,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // UI-026: set by apiFetch when a genuine session expiry forced the redirect.
+  // Read once and cleared so a manual revisit never shows a stale notice.
+  const [sessionExpired, setSessionExpired] = useState(false);
   const { refreshUser } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    let expired = false;
+    try {
+      if (sessionStorage.getItem("session_expired") === "1") {
+        sessionStorage.removeItem("session_expired");
+        expired = true;
+      }
+    } catch {
+      // Storage unavailable (privacy mode) — notice is best-effort.
+    }
+    if (!expired) return;
+    // Deferred so the effect never sets state synchronously (cascading-render
+    // lint rule); the one-frame delay is imperceptible.
+    const timerId = window.setTimeout(() => setSessionExpired(true), 0);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,14 +75,16 @@ export default function LoginPage() {
       }
 
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err) {
       // Network-level failures surface as TypeError with the browser's raw
       // "Failed to fetch" — replace it with an actionable message. HTTP
       // errors (4xx/5xx) keep their backend-provided detail.
       if (err instanceof TypeError) {
         setError("Unable to reach the server. Check your connection and try again.");
+      } else if (err instanceof Error && err.message) {
+        setError(err.message);
       } else {
-        setError(err.message || "Failed to log in.");
+        setError("Failed to log in.");
       }
     } finally {
       setLoading(false);
@@ -73,11 +95,19 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-card p-8 shadow-sm">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Student Portal</h1>
-          <p className="mt-2 text-sm text-muted-foreground">AttendanceDash Pro V2</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">AttendanceDash Pro</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Student Portal</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {sessionExpired && (
+            <div
+              role="status"
+              className="rounded-md bg-warning/10 p-3 text-sm text-warning border border-warning/30"
+            >
+              Your session has expired. Please sign in again.
+            </div>
+          )}
           {error && (
             <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive border border-destructive">
               {error}
@@ -119,12 +149,12 @@ export default function LoginPage() {
             disabled={loading}
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
           >
-            {loading ? "Logging in..." : "Login securely"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/signup" className="font-medium text-primary hover:underline">
             Create one
           </Link>

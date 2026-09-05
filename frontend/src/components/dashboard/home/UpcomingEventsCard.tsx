@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDayHeader } from "@/lib/date";
+import { formatShortDate } from "@/lib/date";
 import { classTypeLabel, eventTypeLabel } from "./status";
 
 interface UpcomingEventsCardProps {
@@ -35,11 +35,11 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
             {events.map((event) => (
               <li key={event.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex w-12 shrink-0 flex-col items-center rounded-md border border-border bg-muted/40 py-1.5">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {formatDayHeader(event.start_date).split(" ")[1]}
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {formatShortDate(event.start_date).split(" ")[1]}
                   </span>
                   <span className="text-lg font-bold tabular-nums leading-tight text-foreground">
-                    {formatDayHeader(event.start_date).split(" ")[0]}
+                    {formatShortDate(event.start_date).split(" ")[0]}
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -47,7 +47,7 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
                     {event.subject_name ?? eventTypeLabel(event.event_type)}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px] uppercase tracking-wider">
+                    <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
                       {eventTypeLabel(event.event_type)}
                     </Badge>
                     {event.subject_code && (

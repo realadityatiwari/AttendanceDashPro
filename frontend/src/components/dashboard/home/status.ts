@@ -18,13 +18,14 @@ export function classStatusVariant(
 export function classStatusLabel(status: DashboardClassStatus): string {
   switch (status) {
     case DashboardClassStatus.ATTENDED:
-      return "Attended";
+      // D-07: canonical attendance state vocabulary (Present/Absent).
+      return "Present";
     case DashboardClassStatus.MISSED:
-      return "Missed";
+      return "Absent";
     case DashboardClassStatus.CANCELLED:
       return "Cancelled";
     default:
-      return "Attendance pending";
+      return "Pending";
   }
 }
 

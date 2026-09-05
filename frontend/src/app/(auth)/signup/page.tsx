@@ -123,14 +123,16 @@ export default function SignupPage() {
         // Profile refresh failed transiently; navigate anyway.
       }
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err) {
       // Network-level failures surface as TypeError with the browser's raw
       // "Failed to fetch" — replace it with an actionable message. HTTP
       // errors (4xx/5xx) keep their backend-provided detail.
       if (err instanceof TypeError) {
         setServerError("Unable to reach the server. Check your connection and try again.");
+      } else if (err instanceof Error && err.message) {
+        setServerError(err.message);
       } else {
-        setServerError(err.message || "Unable to create account. Please try again.");
+        setServerError("Unable to create account. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -147,7 +149,7 @@ export default function SignupPage() {
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-card p-8 shadow-sm">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Create Account</h1>
-          <p className="mt-2 text-sm text-muted-foreground">AttendanceDash Pro V2</p>
+          <p className="mt-2 text-sm text-muted-foreground">AttendanceDash Pro</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -280,7 +282,7 @@ export default function SignupPage() {
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-primary hover:underline">
-            Login
+            Sign in
           </Link>
         </p>
       </div>

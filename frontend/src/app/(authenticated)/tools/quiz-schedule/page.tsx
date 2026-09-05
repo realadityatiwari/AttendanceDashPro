@@ -29,7 +29,7 @@ export default function QuizEligibilityPage() {
 
   if (isError) {
     return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+      <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
         <PageHeader title="Quiz Eligibility" />
         <ErrorState message="Could not load subjects to determine quiz eligibility." />
       </div>
@@ -39,21 +39,29 @@ export default function QuizEligibilityPage() {
   const quizApplicableSubjects = subjects?.filter((s) => s.quiz_applicable) || [];
 
   return (
-    <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
+    <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
       <PageHeader
         title="Quiz Eligibility"
         description="Eligibility per the institutional attendance criteria — evaluated by the backend from your actual attendance."
       />
 
-      <GlassCard className="mb-6 p-4 border border-border/50 bg-surface2/30">
+      <GlassCard className="mb-6 p-4 border border-border/50 bg-muted/30">
         <div className="flex items-start gap-3 text-sm text-muted-foreground">
-          <Info className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-          <p>
-            A subject is eligible when <span className="font-medium text-foreground">Criterion I OR Criterion II</span> meets the required
-            percentage — 70% for Quiz I, 75% for Quiz II and Quiz III. Both criteria use the same{" "}
-            <span className="font-medium text-foreground">(Lecture % + Tutorial %) / 2</span> average and differ only in the counting window:
-            Criterion I counts from the previous quiz, Criterion II from the start of the semester. Only theory subjects with confirmed quiz dates appear here.
-          </p>
+          <Info className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <p>
+              A subject is eligible when{" "}
+              <span className="font-medium text-foreground">Criterion I or Criterion II</span> reaches the required
+              percentage: <span className="font-medium text-foreground">70%</span> for Quiz I,{" "}
+              <span className="font-medium text-foreground">75%</span> for Quiz II and III.
+            </p>
+            <p>
+              Both criteria use the same{" "}
+              <span className="font-medium text-foreground">(Lecture % + Tutorial %) / 2</span> average and differ only
+              in the counting window — Criterion I counts from the previous quiz, Criterion II from the semester start.
+            </p>
+            <p>Only theory subjects with confirmed quiz dates appear here.</p>
+          </div>
         </div>
       </GlassCard>
 
@@ -68,7 +76,7 @@ export default function QuizEligibilityPage() {
               "h-8 px-4 rounded-lg text-sm font-medium transition-colors",
               activeCycle === c.number
                 ? "bg-primary text-primary-foreground"
-                : "bg-surface2/50 border border-border/50 text-muted-foreground hover:bg-surface2 hover:text-foreground"
+                : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             {c.label}
@@ -79,7 +87,7 @@ export default function QuizEligibilityPage() {
       {isLoading ? (
         <div className="space-y-6">
           {[1, 2].map((i) => (
-            <GlassCard key={i} className="h-44 animate-pulse bg-surface/50" />
+            <GlassCard key={i} className="h-44 animate-pulse bg-muted/50" />
           ))}
         </div>
       ) : quizApplicableSubjects.length === 0 ? (

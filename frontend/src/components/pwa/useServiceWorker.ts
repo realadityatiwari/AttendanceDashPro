@@ -23,6 +23,10 @@ let serviceWorkerRegistered = false;
  */
 export function useServiceWorker() {
   const [swRegistered, setSwRegistered] = useState(false);
+  // UI-023: a newly installed waiting worker (while a controller exists)
+  // means a new version is ready and a user-initiated reload will apply it.
+  // Surfaced to the UI instead of console-only reporting.
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -48,10 +52,8 @@ export function useServiceWorker() {
             if (installingWorker.state === "installed") {
               if (navigator.serviceWorker.controller) {
                 // New content is available; the new SW is waiting (no
-                // skipWaiting) and will activate once tabs are closed.
-                console.log(
-                  "New content available; reload page to apply update",
-                );
+                // skipWaiting) and will activate once the user reloads.
+                setUpdateAvailable(true);
               } else {
                 console.log("Content cached for offline use");
               }
@@ -89,5 +91,5 @@ export function useServiceWorker() {
     };
   }, []);
 
-  return { swRegistered };
+  return { swRegistered, updateAvailable };
 }

@@ -3,10 +3,12 @@
 import { useState } from "react";
 import {
   AlertTriangle,
+  Bell,
   BookOpen,
   CalendarClock,
   CalendarDays,
   Check,
+  CheckCheck,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -17,6 +19,7 @@ import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/feedback/toast";
 import {
   useNotifications,
   useNotificationMutation,
@@ -93,12 +96,23 @@ const KIND_META: Record<NotificationKind, KindMeta> = {
 export function NotificationCenter({ open, onOpenChange }: NotificationCenterProps) {
   const { notifications, isLoading, isError, mutate } = useNotifications(open);
   const { updateNotification } = useNotificationMutation();
+  const { toast } = useToast();
 
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  // UI-014: per-row pending state (ids of rows with an in-flight mutation)
+  // plus a separate mark-all lock — unrelated rows stay interactive while
+  // another row's request runs, and mark-all cannot race a row action.
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const [markAllPending, setMarkAllPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const items = notifications?.items ?? [];
   const unreadCount = notifications?.unread_count ?? 0;
+
+  const setRowPending = (id: string, pending: boolean) => {
+    setPendingIds((prev) =>
+      pending ? [...prev, id] : prev.filter((x) => x !== id)
+    );
+  };
 
   const applyCacheUpdate = (transform: (items: NotificationItem[]) => NotificationItem[]) => {
     mutate(
@@ -115,23 +129,52 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
     );
   };
 
+  // D-11/D-12: dismissal is immediate; the same idempotent PATCH with
+  // `is_dismissed: false` makes a genuine undo possible — no fake restore,
+  // the canonical SWR key is revalidated so the row returns in server order.
+  const undoDismiss = async (item: NotificationItem) => {
+    if (!item.notification_id) return;
+    try {
+      await updateNotification(item.notification_id, { is_dismissed: false });
+      await mutate();
+    } catch {
+      toast({
+        variant: "error",
+        title: "Couldn't restore the notification",
+        description: "Please try again.",
+      });
+    }
+  };
+
   const runAction = async (
     item: NotificationItem,
     payload: { is_read?: boolean; is_dismissed?: boolean }
   ) => {
-    if (!item.notification_id || pendingId) return;
-    setPendingId(item.notification_id);
+    if (!item.notification_id || markAllPending) return;
+    if (pendingIds.includes(item.notification_id)) return;
+    setRowPending(item.notification_id, true);
     setActionError(null);
     try {
       const updated = await updateNotification(item.notification_id, payload);
       if (payload.is_dismissed) {
-        applyCacheUpdate((items) =>
-          items.filter((i) => i.notification_id !== item.notification_id)
+        applyCacheUpdate((rows) =>
+          rows.filter((r) => r.notification_id !== item.notification_id)
         );
+        toast({
+          variant: "info",
+          title: "Notification dismissed",
+          duration: 8000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void undoDismiss(item);
+            },
+          },
+        });
       } else {
-        applyCacheUpdate((items) =>
-          items.map((i) =>
-            i.notification_id === updated.notification_id ? updated : i
+        applyCacheUpdate((rows) =>
+          rows.map((r) =>
+            r.notification_id === updated.notification_id ? updated : r
           )
         );
       }
@@ -142,7 +185,65 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           : "The backend did not accept the request.";
       setActionError(detail);
     } finally {
-      setPendingId(null);
+      setRowPending(item.notification_id, false);
+    }
+  };
+
+  // D-12: mark-all runs the EXISTING per-notification PATCH sequentially over
+  // the currently unread ids — no bulk endpoint, no uncontrolled burst. Each
+  // row's cache entry updates only after its genuine 2xx; failures leave
+  // those rows untouched (server truth) and are reported honestly.
+  const handleMarkAllRead = async () => {
+    if (markAllPending || pendingIds.length > 0) return;
+    const unread = items.filter(
+      (i): i is NotificationItem & { notification_id: string } =>
+        !i.is_read && i.notification_id !== null
+    );
+    if (unread.length === 0) return;
+    setMarkAllPending(true);
+    setActionError(null);
+    let succeeded = 0;
+    try {
+      for (const row of unread) {
+        try {
+          const updated = await updateNotification(row.notification_id, {
+            is_read: true,
+          });
+          applyCacheUpdate((rows) =>
+            rows.map((r) =>
+              r.notification_id === updated.notification_id ? updated : r
+            )
+          );
+          succeeded += 1;
+        } catch {
+          // Row stays unread in the cache; counted as failed below.
+        }
+      }
+      const failed = unread.length - succeeded;
+      if (failed === 0) {
+        toast({
+          variant: "success",
+          title: `Marked ${succeeded} ${succeeded === 1 ? "notification" : "notifications"} read`,
+        });
+      } else if (succeeded === 0) {
+        const message = "Couldn't mark notifications as read. Please try again.";
+        setActionError(message);
+        toast({
+          variant: "error",
+          title: "Couldn't mark notifications as read",
+          description: "Please try again.",
+        });
+      } else {
+        const message = `${failed} ${failed === 1 ? "notification" : "notifications"} couldn't be marked read.`;
+        setActionError(message);
+        toast({
+          variant: "warning",
+          title: `Marked ${succeeded} of ${unread.length} read`,
+          description: message,
+        });
+      }
+    } finally {
+      setMarkAllPending(false);
     }
   };
 
@@ -186,14 +287,36 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center">
-          <CalendarDays className="size-8 text-muted-foreground/60" aria-hidden="true" />
+          <Bell className="size-8 text-muted-foreground/60" aria-hidden="true" />
           <p className="text-sm font-medium text-foreground">No notifications yet</p>
           <p className="text-xs text-muted-foreground">
             Class, quiz, attendance and event updates will appear here.
           </p>
         </div>
       ) : (
-        <div className="flex max-h-[60dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
+        <>
+          {/* D-12: mark-all operates on the currently unread rows only. */}
+          {unreadCount > 0 && (
+            <div className="flex items-center justify-between gap-3 pb-2">
+              <span className="text-xs text-muted-foreground">
+                {unreadCount} unread
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={markAllPending || pendingIds.length > 0}
+                onClick={handleMarkAllRead}
+              >
+                {markAllPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <CheckCheck className="size-3.5" aria-hidden="true" />
+                )}
+                Mark all read
+              </Button>
+            </div>
+          )}
+          <div className="flex max-h-[60dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
           {actionError && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
@@ -206,7 +329,8 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           {items.map((item) => {
             const meta = KIND_META[item.kind] ?? KIND_META.ACADEMIC_EVENT;
             const Icon = meta.icon;
-            const pending = pendingId === item.notification_id;
+            const rowId = item.notification_id;
+            const rowPending = rowId !== null && pendingIds.includes(rowId);
             return (
               <div
                 key={item.id}
@@ -245,13 +369,13 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={pendingId !== null}
+                        disabled={markAllPending || rowPending}
                         onClick={() =>
                           runAction(item, { is_read: true })
                         }
                         aria-label={`Mark as read: ${item.message}`}
                       >
-                        {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                        {rowPending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
                         <Check className="size-3.5" aria-hidden="true" />
                         Read
                       </Button>
@@ -259,11 +383,11 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      disabled={pendingId !== null}
+                      disabled={markAllPending || rowPending}
                       onClick={() => runAction(item, { is_dismissed: true })}
                       aria-label={`Dismiss: ${item.message}`}
                     >
-                      {pending ? (
+                      {rowPending ? (
                         <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                       ) : (
                         <X className="size-3.5" aria-hidden="true" />
@@ -274,7 +398,8 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </ShellDialog>
   );

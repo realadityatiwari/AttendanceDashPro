@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { EligibilityState, type CriterionResult } from "@/types/api";
+import { formatDateMedium, formatPct1 } from "@/lib/date";
 import { AlertCircle, Calendar, ChevronDown, ChevronUp, Calculator, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,13 +23,11 @@ const STATE_BADGE: Partial<Record<EligibilityState, { label: string; variant: "s
 // the card intact — the state is NOT reinterpreted as any known state.
 const UNKNOWN_STATE_BADGE = { label: "Unknown", variant: "neutral" } as const;
 
+// D-10 (as corrected): every quiz percentage on this card represents actual
+// calculated attendance/eligibility, so all rows — including the detailed
+// calculation — use the shared one-decimal formatter.
 function fmtPct(value: number | null): string {
-  return value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "TBD";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T00:00:00`));
+  return formatPct1(value);
 }
 
 // Presentation-only criterion titles: both criteria use the SAME
@@ -99,7 +98,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
   const { eligibility, isLoading, isError, mutate } = useQuizEligibility(subjectCode, cycle);
 
   if (isLoading) {
-    return <GlassCard className="h-44 animate-pulse bg-surface/50" />;
+    return <GlassCard className="h-44 animate-pulse bg-muted/50" />;
   }
 
   if (isError || !eligibility) {
@@ -137,12 +136,12 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
-                {cycleLabel} · Quiz on {fmtDate(eligibility.quiz_date)}
+                {cycleLabel} · Quiz on {eligibility.quiz_date ? formatDateMedium(eligibility.quiz_date) : "TBD"}
               </span>
               {eligibility.state !== EligibilityState.UNRESOLVED && (
                 <span className="inline-flex items-center gap-1">
                   <span className="h-1 w-1 rounded-full bg-border inline-block" />
-                  Criterion I window: {fmtDate(eligibility.window_start)} – {fmtDate(eligibility.window_end)}
+                  Criterion I window: {eligibility.window_start ? formatDateMedium(eligibility.window_start) : "TBD"} – {eligibility.window_end ? formatDateMedium(eligibility.window_end) : "TBD"}
                 </span>
               )}
             </div>
@@ -173,7 +172,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                       <span className="text-muted-foreground font-normal"> · {eligibility.lecture.pending} pending</span>
                     )}
                   </span>
-                  <span className="tabular-nums text-muted-foreground">{fmtPct(eligibility.lecture_pct)}</span>
+                  <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.lecture_pct)}</span>
                 </div>
                 <Progress value={eligibility.lecture_pct ?? 0} variant={lectureVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
               </div>
@@ -186,7 +185,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                         <span className="text-muted-foreground font-normal"> · {eligibility.tutorial.pending} pending</span>
                       )}
                     </span>
-                    <span className="tabular-nums text-muted-foreground">{fmtPct(eligibility.tutorial_pct)}</span>
+                    <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.tutorial_pct)}</span>
                   </div>
                   <Progress value={eligibility.tutorial_pct ?? 0} variant={tutorialVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
                 </div>
@@ -197,7 +196,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                     Average <span className="text-muted-foreground font-normal">· required {required.toFixed(0)}%</span>
                   </span>
                   <span className={cn("tabular-nums font-medium", eligibility.average_pct !== null && eligibility.average_pct >= required ? "text-success" : "text-warning")}>
-                    {fmtPct(eligibility.average_pct)}
+                    {formatPct1(eligibility.average_pct)}
                   </span>
                 </div>
                 <Progress value={eligibility.average_pct ?? 0} variant={averageVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
@@ -213,7 +212,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
             </Button>
 
             {showCalculation && (
-              <div className="rounded-lg border border-border/50 bg-surface2/30 p-4 space-y-4">
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4">
                 <CriterionRow criterion={eligibility.criterion_i} passed={eligibility.criterion_i?.passed ?? false} />
                 <CriterionRow criterion={eligibility.criterion_ii} passed={eligibility.criterion_ii?.passed ?? false} />
                 <div className="flex items-start justify-between gap-3 border-t border-border/50 pt-3">
@@ -228,15 +227,15 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 </div>
                 {eligibility.optimization && eligibility.optimization.is_reachable === true && (
                   <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
-                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Must Attend <span className="font-normal normal-case tracking-normal">(best route)</span></p>
+                    <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
+                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">Must Attend <span className="font-normal normal-case tracking-normal">(best route)</span></p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.tutorial_deficit}</span></p>
                       )}
                     </div>
-                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[10px] tracking-wider uppercase mb-1">Safe Skip <span className="font-normal normal-case tracking-normal">(best route)</span></p>
+                    <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
+                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">Safe Skip <span className="font-normal normal-case tracking-normal">(best route)</span></p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_lecture}</span></p>
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_tutorial}</span></p>
@@ -246,7 +245,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 )}
                 {eligibility.optimization && eligibility.optimization.is_reachable === false && eligibility.state === EligibilityState.NOT_ELIGIBLE && (
                   <div className="border-t border-border/50 pt-3">
-                    <div className="rounded bg-surface2/50 border border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="rounded bg-muted/50 border border-border/50 px-3 py-2 text-xs text-muted-foreground">
                       Eligibility cannot be recovered within the remaining attendance window.
                     </div>
                   </div>

@@ -12,12 +12,18 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { TrackSessionCard } from "@/components/dashboard/TrackSessionCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useToast } from "@/components/feedback/toast";
 import { ChevronLeft, ChevronRight, Loader2, Calendar, AlertTriangle } from "lucide-react";
 
 export default function TrackAttendancePage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  // UI-006 / D-11: the bulk action always confirms before mutating — the
+  // button only opens this dialog.
+  const [markAllOpen, setMarkAllOpen] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const { toast } = useToast();
   const dateStr = getLocalDateString(selectedDate);
   // Future academic dates are VIEW-ONLY: the schedule stays visible (Upcoming),
   // but no attendance mutation controls are offered (the backend rejects
@@ -95,8 +101,28 @@ export default function TrackAttendancePage() {
       );
 
       const failed = results.filter(r => r.status === "rejected").length;
-      if (failed > 0) {
-        setMutationError(`${failed} session${failed > 1 ? "s" : ""} could not be marked.`);
+      const succeeded = results.length - failed;
+      // Honest result feedback (UI-006): real counts from the settled
+      // results only — never a generic success when something failed.
+      if (results.length > 0 && failed === 0) {
+        toast({
+          variant: "success",
+          title: `Marked ${succeeded} ${succeeded === 1 ? "class" : "classes"} present`,
+        });
+      } else if (succeeded === 0 && failed > 0) {
+        setMutationError("No classes could be marked present. Please try again.");
+        toast({
+          variant: "error",
+          title: "Couldn't mark classes present",
+          description: "None of the classes could be updated. Please try again.",
+        });
+      } else if (failed > 0) {
+        setMutationError(`${failed} ${failed === 1 ? "session" : "sessions"} could not be marked.`);
+        toast({
+          variant: "warning",
+          title: `Marked ${succeeded} of ${results.length} ${results.length === 1 ? "class" : "classes"} present`,
+          description: `${failed} ${failed === 1 ? "class" : "classes"} could not be updated.`,
+        });
       }
 
       await mutate();
@@ -108,9 +134,12 @@ export default function TrackAttendancePage() {
 
   if (isError) {
     return (
-      <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-2xl mx-auto w-full">
-        <PageHeader title="Track Attendance" />
-        <ErrorState message="Could not load daily scheduled sessions." />
+      <div className="flex-1 py-8 w-full max-w-2xl mx-auto">
+        <PageHeader title="Mark Attendance" />
+        <ErrorState
+          message="Could not load daily scheduled sessions. Check your connection and try again."
+          onRetry={() => mutate()}
+        />
       </div>
     );
   }
@@ -127,11 +156,11 @@ export default function TrackAttendancePage() {
   const progressValue = total > 0 ? (recorded / total) * 100 : 0;
 
   return (
-    <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-2xl mx-auto w-full flex flex-col gap-6">
+    <div className="flex-1 py-6 w-full max-w-2xl mx-auto flex flex-col gap-6">
 
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Track Attendance</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Mark Attendance</h1>
         <p className="text-sm text-muted-foreground">
           {formatLongDate(selectedDate)}
           {atSemesterStart && <span className="text-primary"> · Semester start</span>}
@@ -154,7 +183,7 @@ export default function TrackAttendancePage() {
             min={semesterStart ?? undefined}
             max={semesterEnd ?? undefined}
             onChange={e => handleDatePick(e.target.value)}
-            className="h-10 w-full [color-scheme:dark] text-xs sm:h-8 sm:w-40"
+            className="[color-scheme:dark] text-xs sm:w-40"
           />
           <Button
             variant={isToday(selectedDate) ? "secondary" : "outline"}
@@ -211,7 +240,7 @@ export default function TrackAttendancePage() {
             ) : (
               pending > 0 && (
                 <Button
-                  onClick={handleMarkAllPresent}
+                  onClick={() => setMarkAllOpen(true)}
                   disabled={isMarkingAll}
                   className="w-full bg-success hover:bg-success/90 text-success-foreground"
                 >
@@ -237,20 +266,32 @@ export default function TrackAttendancePage() {
             <div className="grid grid-cols-3 divide-x divide-border">
               <div className="flex flex-col items-center">
                 <span className="text-2xl font-bold tracking-tight text-success">{present}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Present</span>
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Present</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-2xl font-bold tracking-tight text-destructive">{absent}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Absent</span>
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Absent</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-2xl font-bold tracking-tight text-foreground">{pending}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Pending</span>
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Pending</span>
               </div>
             </div>
           </Card>
         </>
       )}
+
+      {/* UI-006 / D-11: bulk mutation requires explicit confirmation. The
+          dialog shows the real pending count and closes only after the
+          mutation settles; double-submission is locked while pending. */}
+      <ConfirmDialog
+        open={markAllOpen}
+        onOpenChange={setMarkAllOpen}
+        title={`Mark ${pending} ${pending === 1 ? "class" : "classes"} present?`}
+        description="This will mark all currently pending classes as present. You can still change each class afterwards."
+        confirmLabel="Mark all present"
+        onConfirm={handleMarkAllPresent}
+      />
     </div>
   );
 }

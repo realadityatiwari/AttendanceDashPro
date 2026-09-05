@@ -124,6 +124,24 @@ export function canStudentMutateEventType(eventType: EventType): boolean {
   return STUDENT_CREATABLE_EVENT_TYPES.includes(eventType);
 }
 
+// Humanizes any event type string — including types unknown to the current
+// enum — so an unknown/future type renders a readable label instead of
+// crashing. Canonical copy (Phase 6, UI-021): previously duplicated in
+// EventRow and DayDetail.
+export function humanizeEventType(type: string): string {
+  return type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Null for class types without a display label (unknown/legacy). Note: the
+// dashboard's status.ts has its own classTypeLabel with a DIFFERENT contract
+// (string return, "Practical" default) — intentionally not unified.
+export function classTypeLabel(type: ClassType | null): string | null {
+  if (type === ClassType.LECTURE) return "Lecture";
+  if (type === ClassType.TUTORIAL) return "Tutorial";
+  if (type === ClassType.PRACTICAL || type === ClassType.PRACTICAL2) return "Practical";
+  return null;
+}
+
 export type DurationMode = "single" | "range";
 
 // Default duration mode for a newly created event (UX preference only). The
