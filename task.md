@@ -4597,3 +4597,16 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [x] **Verification** — tsc PASS; ESLint 3 files PASS; build PASS 25/25; git diff --check PASS; payload/backend/migration audits clean.
 - [ ] **Manual browser pass (user)** — Monday/Sunday layouts incl. month-start edge cases; selection/today/indicators under both; settings save → calendar reflects; caption at 360px+.
 - HARD STOP — Phase 10+ not started; no commit/push/deploy.
+
+## UI/UX Remediation Phase 10 — Completion Record (2026-09-06)
+
+- [x] **UI-020** — quiz cycle selector: false `tablist`/`tab`/`aria-selected` semantics dropped (it is a list filter, not a tab interface — no panel exists to own `tabpanel`); now native buttons with `aria-pressed` inside `role="group" aria-label="Quiz cycle"`. Cycle values, data fetching, and selection logic unchanged.
+- [x] **UI-033** — laboratory section buttons switch in-page content (not routes): `aria-current="page"` replaced by `aria-pressed`; `<nav>` landmark → `role="group" aria-label="Laboratory sections"`. Routing, experiment data, Phase 3 ConfirmDialog untouched. All other `aria-current` uses are on real links (correct, untouched).
+- [x] **UI-024 page-level pass** — History/Events reset buttons `h-7` → `sm:h-7` (mobile override restored, desktop identical); Settings switches 36×20 → 44×24 per blueprint (same visual language); quiz pills and lab section buttons → `h-10 sm:h-8` (40px mobile, 32px desktop unchanged); toast dismiss `p-1` → `p-1.5` (above the 24px floor); NotificationBell 36→40px mobile (`p-2.5 sm:p-2`). NotificationCenter `icon-sm` verified 40px mobile (blueprint verify-only). No shared-primitive changes.
+- [x] **Live region** — Track mutation-error region gained `aria-live="polite"`; toast container already announced via `role="status"/"alert"` + `aria-live` (Phase 2) — verified only.
+- [x] **Contrast spot-check (static)** — muted-foreground #94a3b8: 8.4:1 on background, 7.6:1 on card, ≈7.9:1 on chips — AA/AAA pass at caption sizes; manual check remains with the user.
+- [x] **Keyboard/focus** — native buttons throughout, no custom keyboard logic; quiz/lab selectors gained the standard `focus-visible:ring-2 focus-visible:ring-ring/60` indication.
+- [x] **Verification** — tsc PASS; ESLint PASS on all changed files (2 pre-existing History `set-state-in-effect` errors in untouched effects, recorded not fixed); build PASS 25/25 (CI placeholder); `git diff --check` PASS; ARIA greps clean (no tab roles / no `aria-current` on buttons in student scope); Phase 1–9 work unregressed.
+- [ ] **Deferred findings (recorded only)** — EventRow admin-gated buttons keep `className="h-7"` (28px mobile; outside Phase 10 file list); TopNav desktop links ≈30px (pointer UI, meets 24px floor); QuizEligibilityCard `size="xs"` Retry 24px on desktop (foundation design).
+- [ ] **Manual browser pass (user)** — keyboard-only tab through quiz selector and lab tabs (Tab reaches buttons, Enter/Space toggle, focus ring visible, focus not lost on switch); screen-reader smoke test ("pressed"/"not pressed" on both selectors, Track error announcement); tap ergonomics at 360px on quiz pills, lab tabs, Settings switch, History/Events reset, bell, toast dismiss; confirm no visual drift on desktop.
+- HARD STOP — Phase 11 not started; no commit/push/deploy.

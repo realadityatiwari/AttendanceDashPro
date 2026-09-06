@@ -94,14 +94,19 @@ export default function LaboratoryPage() {
           </Select>
         </div>
 
-        <nav aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-muted p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {/* UI-033: these buttons switch in-page section content (they are
+            not links and not route navigation), so the link-only aria-current
+            state is replaced by aria-pressed on native buttons inside a named
+            group. Section rendering and the subject selector are unchanged. */}
+        <div role="group" aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-muted p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              type="button"
               onClick={() => setTab(id)}
-              aria-current={tab === id ? "page" : undefined}
+              aria-pressed={tab === id}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors shrink-0 whitespace-nowrap",
+                "flex h-10 sm:h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors shrink-0 whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                 tab === id
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -111,7 +116,7 @@ export default function LaboratoryPage() {
               {label}
             </button>
           ))}
-        </nav>
+        </div>
       </div>
 
       {resolvedCode === "" ? (

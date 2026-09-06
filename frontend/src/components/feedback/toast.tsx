@@ -165,11 +165,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   {item.action.label}
                 </button>
               )}
+              {/* UI-024: p-1.5 keeps the compact icon but lifts the hit area
+                  above the 24px minimum (p-1 left it at 22px). */}
               <button
                 type="button"
                 aria-label="Dismiss notification"
                 onClick={() => dismiss(item.id)}
-                className="shrink-0 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="shrink-0 rounded-md p-1.5 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 <X className="size-3.5" aria-hidden="true" />
               </button>

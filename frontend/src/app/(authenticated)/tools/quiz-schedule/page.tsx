@@ -65,15 +65,20 @@ export default function QuizEligibilityPage() {
         </div>
       </GlassCard>
 
-      <div className="flex flex-wrap items-center gap-2 mb-6" role="tablist" aria-label="Quiz cycle">
+      {/* UI-020: these buttons filter the card list below (including loading
+          and empty states) — they are not a tab interface, so the false
+          tablist/tab semantics are replaced by native buttons exposing the
+          active cycle via aria-pressed inside a named group. Selection stays
+          client-side only; cycle values and data fetching are unchanged. */}
+      <div className="flex flex-wrap items-center gap-2 mb-6" role="group" aria-label="Quiz cycle">
         {CYCLES.map((c) => (
           <button
             key={c.number}
-            role="tab"
-            aria-selected={activeCycle === c.number}
+            type="button"
+            aria-pressed={activeCycle === c.number}
             onClick={() => setCycle(c.number)}
             className={cn(
-              "h-8 px-4 rounded-lg text-sm font-medium transition-colors",
+              "h-10 px-4 rounded-lg text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:h-8",
               activeCycle === c.number
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground"

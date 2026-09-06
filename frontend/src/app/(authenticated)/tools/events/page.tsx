@@ -194,8 +194,10 @@ export default function EventsPage() {
       <Card className="flex flex-col gap-3 border-border p-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</span>
+          {/* UI-024: h-7 scoped to sm+ so the filter row keeps the
+              foundation's 40px mobile height (desktop unchanged). */}
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={resetFilters}>
+            <Button variant="ghost" size="sm" className="text-xs sm:h-7" onClick={resetFilters}>
               Reset
             </Button>
           )}

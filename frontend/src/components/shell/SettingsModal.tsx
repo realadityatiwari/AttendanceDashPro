@@ -163,15 +163,18 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     Class reminders
                   </span>
                 </div>
+                {/* UI-024: 44×24 track (was 36×20) — same visual language,
+                    larger target; thumb scales with the track and its checked
+                    offset is recomputed for the wider track. */}
                 <Switch.Root
                   checked={base.class_reminders}
                   onCheckedChange={(checked) =>
                     updateDraft({ class_reminders: checked })
                   }
                   disabled={controlsDisabled}
-                  className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
+                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
                 >
-                  <Switch.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[18px] data-checked:bg-white" />
+                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
                 </Switch.Root>
               </div>
               <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
@@ -275,9 +278,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     updateDraft({ auto_mark_present: checked })
                   }
                   disabled={controlsDisabled}
-                  className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
+                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
                 >
-                  <Switch.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[18px] data-checked:bg-white" />
+                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
                 </Switch.Root>
               </div>
               {/* D-06: honest state — the preference is persisted but no

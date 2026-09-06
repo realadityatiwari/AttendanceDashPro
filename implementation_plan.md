@@ -5714,3 +5714,29 @@ No application code modified. Only the database migration was applied.
 **Verification:** tsc PASS; ESLint 3 files PASS; build PASS 25/25 (CI placeholder); git diff --check PASS; audits — week-math rotation/blank formulas correct, preferences payload unchanged, no new Date parsing, backend/engines/services/migrations untouched (backend diff still only the user's pre-existing config.py line).
 
 **HARD STOP — Phases 10–12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 10 — Accessibility & Interaction Semantics (COMPLETE, 2026-09-06)
+
+**Scope executed:** blueprint Phase 10 (RU-10) exactly — UI-020, UI-033, UI-024 (page-level) + the Track-page live region and contrast spot-check. Phase 11 remains PLANNED and NOT STARTED. No backend, API, calculation, or routing changes.
+
+**UI-020 semantic decision (quiz cycle):** discovery confirmed the cycle selector is NOT a tab interface — the buttons filter the entire card list below (which also renders loading skeletons and an empty state; there is no single labelled panel to own `tabpanel`/`aria-controls`). The blueprint's recommended option was adopted: false `role="tablist"`/`role="tab"`/`aria-selected` dropped in favor of native buttons with `aria-pressed` inside `role="group" aria-label="Quiz cycle"`. Tab/Enter/Space behavior is native; cycle numbers, data fetching, and selection logic untouched.
+
+**UI-033 semantic decision (laboratory sections):** the three section buttons switch IN-PAGE content (attendance/experiments/activity views) — they are not route links. The link-only `aria-current="page"` was replaced by `aria-pressed` on native buttons; the `<nav>` landmark became `role="group" aria-label="Laboratory sections"` (a nav landmark promises navigation links, which these are not). Laboratory routing, experiment data, and ConfirmDialog (Phase 3) untouched. All other `aria-current` uses in the app sit on real `<Link>` elements (correct) and were left alone.
+
+**UI-024 touch-target strategy (hit-area first, visuals preserved):** the shared Button/Input/Select foundation (h-10/sm:h-8 pair) already covers nearly every student-scope control — verified, not changed (no broad primitive edit). Page-level fixes only: (1) History + Events reset buttons — `className="h-7"` stripped the mobile override, now `text-xs sm:h-7` (40px mobile, desktop byte-identical); (2) Settings switches 36×20 → 44×24 (`h-6 w-11`, thumb size-4, checked translate recomputed to 24px — blueprint-prescribed, same visual language); (3) quiz pills `h-8` → `h-10 sm:h-8` (32→40px mobile, desktop identical); (4) lab section buttons `py-1.5` → `h-10 sm:h-8` with the same 32px desktop height; (5) toast dismiss `p-1` → `p-1.5` (22→26px, above the 24px WCAG floor; icon unchanged); (6) NotificationBell `p-2` → `p-2.5 sm:p-2` (36→40px mobile, desktop unchanged). NotificationCenter `icon-sm` dismiss verified at 40px mobile per blueprint (no change).
+
+**Keyboard/focus:** all affected controls are native buttons — no custom keyboard logic added. The quiz and lab selectors previously relied on the browser default outline only; they now carry the app's standard `focus-visible:ring-2 focus-visible:ring-ring/60` indication. `aria-pressed` gives screen readers the selected state on both selectors.
+
+**Live regions:** Track mutation-error region gained `aria-live="polite"` (blueprint item); the toast container already implements `role="status"/"alert"` + `aria-live` from the Phase 2 foundation — verified, not changed.
+
+**Contrast spot-check (static):** `text-muted-foreground` #94a3b8 measures 8.4:1 on background #0a0a0a, 7.6:1 on card #171717, ≈7.9:1 on the blended `bg-muted/50` chip — passes AA and AAA at the 11px caption scale; manual visual confirmation remains with the user.
+
+**Discovered but deferred (recorded, not implemented):** (a) `components/events/EventRow.tsx:121,134,142,152` — four admin-gated buttons carry `className="h-7"` (28px mobile); admin-render-only and outside the blueprint's Phase 10 file list — the same `sm:h-7` one-liner applies when authorized; (b) TopNav inline links ≈30px tall (desktop/tablet pointer interface, hidden on mobile; meets the 24px floor); (c) QuizEligibilityCard `size="xs"` Retry is 24px on desktop only (foundation design, meets the floor). Two pre-existing `react-hooks/set-state-in-effect` ESLint errors in the History page's untouched filter/pagination effects were noted and left alone (not introduced by this phase).
+
+**Files (Phase 10):** `app/(authenticated)/tools/quiz-schedule/page.tsx`, `app/(authenticated)/laboratory/page.tsx`, `app/(authenticated)/history/page.tsx`, `app/(authenticated)/tools/events/page.tsx`, `app/(authenticated)/tools/laboratory/page.tsx`, `components/shell/SettingsModal.tsx`, `components/feedback/toast.tsx`, `components/notifications/NotificationBell.tsx`. No shared primitive was modified.
+
+**Verification:** tsc PASS (0 errors); ESLint PASS on all changed files (the 2 History errors are pre-existing, see above); production build PASS 25/25 pages (CI placeholder URL); `git diff --check` clean; targeted ARIA searches — zero `role="tab"`/`tablist`/`aria-selected` and zero `aria-current` on buttons in student scope, `aria-pressed` present on both selectors, `aria-live` present on Track error + toast; residual `h-7` scan — only the deferred EventRow admin buttons remain; Phase 1–9 work unregressed (build + no touched shared primitives).
+
+**HARD STOP — Phase 11 not started. No commit/push/deploy.**

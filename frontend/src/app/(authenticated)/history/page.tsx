@@ -222,8 +222,10 @@ export default function HistoryPage() {
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Filters
           </span>
+          {/* UI-024: h-7 scoped to sm+ so the filter row keeps the
+              foundation's 40px mobile height (desktop unchanged). */}
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={resetFilters}>
+            <Button variant="ghost" size="sm" className="text-xs sm:h-7" onClick={resetFilters}>
               <FilterX className="h-3.5 w-3.5 mr-1" />
               Reset
             </Button>
