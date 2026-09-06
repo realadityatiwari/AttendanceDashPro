@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eye, EyeOff } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 
 type FormErrors = {
   name?: string;
@@ -16,7 +19,12 @@ type FormErrors = {
   electiveII?: string;
 };
 
-// Phase 22.3: authoritative CSE-51 V Semester Department Elective options.
+// Department Elective options for registration. The backend contract requires
+// both selections (POST /auth/register validates them authoritatively against
+// the active semester's DB catalog — subjects.elective_slot — and rejects an
+// unknown code with a 422 detail this page surfaces). There is intentionally
+// no pre-auth catalog endpoint, so this client-side list mirrors the deployed
+// semester's catalog; it is NOT presented as a hardcoded section assumption.
 const ELECTIVE_I_OPTIONS = [
   { code: "BCS-052", name: "Data Analytics" },
   { code: "BCS-053", name: "Computer Graphics" },
@@ -139,8 +147,6 @@ export default function SignupPage() {
     }
   };
 
-  const inputClass =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
   const labelClass =
     "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground";
 
@@ -161,21 +167,20 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="name" className={labelClass}>Full Name</label>
-            <input
+            <Input
               id="name"
               type="text"
               required
               value={name}
               onChange={(e) => { setName(e.target.value); setErrors(prev => ({ ...prev, name: undefined })); }}
               placeholder="Your full name"
-              className={inputClass}
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
           <div className="space-y-2">
             <label htmlFor="rollNumber" className={labelClass}>University Roll Number</label>
-            <input
+            <Input
               id="rollNumber"
               type="text"
               inputMode="numeric"
@@ -183,7 +188,6 @@ export default function SignupPage() {
               value={rollNumber}
               onChange={(e) => { setRollNumber(e.target.value); setErrors(prev => ({ ...prev, rollNumber: undefined })); }}
               placeholder="13 digit roll number"
-              className={inputClass}
             />
             {errors.rollNumber && <p className="text-xs text-destructive">{errors.rollNumber}</p>}
           </div>
@@ -191,20 +195,20 @@ export default function SignupPage() {
           <div className="space-y-2">
             <label htmlFor="password" className={labelClass}>Password</label>
             <div className="relative">
-              <input
+              <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: undefined })); }}
                 placeholder="Min 8 characters"
-                className={`${inputClass} pr-10`}
+                className="pr-10"
               />
               <button
                 type="button"
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword(v => !v)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -215,20 +219,20 @@ export default function SignupPage() {
           <div className="space-y-2">
             <label htmlFor="confirmPassword" className={labelClass}>Confirm Password</label>
             <div className="relative">
-              <input
+              <Input
                 id="confirmPassword"
                 type={showConfirm ? "text" : "password"}
                 required
                 value={confirmPassword}
                 onChange={(e) => { setConfirmPassword(e.target.value); setErrors(prev => ({ ...prev, confirmPassword: undefined })); }}
                 placeholder="Re-enter password"
-                className={`${inputClass} pr-10`}
+                className="pr-10"
               />
               <button
                 type="button"
                 aria-label={showConfirm ? "Hide password" : "Show password"}
                 onClick={() => setShowConfirm(v => !v)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
                 {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -238,45 +242,45 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="electiveI" className={labelClass}>Department Elective-I</label>
-            <select
+            <Select
               id="electiveI"
               value={electiveI}
               onChange={(e) => { setElectiveI(e.target.value); setErrors(prev => ({ ...prev, electiveI: undefined })); }}
-              className={inputClass}
               required
             >
               <option value="">Select Elective-I</option>
               {ELECTIVE_I_OPTIONS.map(o => (
                 <option key={o.code} value={o.code}>{o.code} — {o.name}</option>
               ))}
-            </select>
+            </Select>
             {errors.electiveI && <p className="text-xs text-destructive">{errors.electiveI}</p>}
           </div>
 
           <div className="space-y-2">
             <label htmlFor="electiveII" className={labelClass}>Department Elective-II</label>
-            <select
+            <Select
               id="electiveII"
               value={electiveII}
               onChange={(e) => { setElectiveII(e.target.value); setErrors(prev => ({ ...prev, electiveII: undefined })); }}
-              className={inputClass}
               required
             >
               <option value="">Select Elective-II</option>
               {ELECTIVE_II_OPTIONS.map(o => (
                 <option key={o.code} value={o.code}>{o.code} — {o.name}</option>
               ))}
-            </select>
+            </Select>
             {errors.electiveII && <p className="text-xs text-destructive">{errors.electiveII}</p>}
+            {/* UI-028: honest framing — the options mirror the current
+                semester's catalog and the server is authoritative. */}
+            <p className="text-xs text-muted-foreground">
+              Elective options reflect the current semester&apos;s catalog; the
+              server verifies your selection against it.
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Creating account..." : "Create Account"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground">

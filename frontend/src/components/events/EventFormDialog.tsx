@@ -348,7 +348,9 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      {/* UI-034: dvh cap (matches ShellDialog) so the form stays fully
+          visible and scrollable on mobile browsers with dynamic toolbars. */}
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Event" : "Add Event"}</DialogTitle>
           <DialogDescription>
@@ -381,31 +383,39 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </Select>
           </div>
 
+          {/* UI-035 / D-13: the single-day vs range choice is an
+              administrative concern — student-facing types are single-day by
+              definition, so students get one date picker. A student opening a
+              (defensive) pre-existing multi-day event still sees both pickers
+              so its stored range is never silently collapsed. */}
           <div className={fieldClass}>
             <span className={labelClass}>Date</span>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-foreground">
-                <input
-                  type="radio"
-                  name="event-duration-mode"
-                  className="h-4 w-4 rounded-full border-input accent-primary"
-                  checked={form.duration_mode === "single"}
-                  onChange={() => handleDurationModeChange("single")}
-                />
-                Single day
-              </label>
-              <label className="flex items-center gap-2 text-sm text-foreground">
-                <input
-                  type="radio"
-                  name="event-duration-mode"
-                  className="h-4 w-4 rounded-full border-input accent-primary"
-                  checked={form.duration_mode === "range"}
-                  onChange={() => handleDurationModeChange("range")}
-                />
-                Date range
-              </label>
-            </div>
-            {form.duration_mode === "single" ? (
+            {isAdmin && (
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="radio"
+                    name="event-duration-mode"
+                    className="h-4 w-4 rounded-full border-input accent-primary"
+                    checked={form.duration_mode === "single"}
+                    onChange={() => handleDurationModeChange("single")}
+                  />
+                  Single day
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="radio"
+                    name="event-duration-mode"
+                    className="h-4 w-4 rounded-full border-input accent-primary"
+                    checked={form.duration_mode === "range"}
+                    onChange={() => handleDurationModeChange("range")}
+                  />
+                  Date range
+                </label>
+              </div>
+            )}
+            {(!isAdmin && form.start_date !== "" && form.start_date !== form.end_date) ||
+            (isAdmin && form.duration_mode === "range") ? (
               <Input
                 id="event-form-start"
                 type="date"
@@ -524,55 +534,63 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="event-form-working">Working day state</label>
-              <Select
-                id="event-form-working"
-                value={form.is_working_day}
-                onChange={e => set("is_working_day", e.target.value)}
-                disabled={rule.isClosure || form.event_type === EventType.WORKING_SATURDAY}
-              >
-                <option value="">Not specified</option>
-                <option value="true">Working</option>
-                <option value="false">Non-working</option>
-              </Select>
-              {rule.isClosure && (
-                <p className="text-[11px] text-muted-foreground">
-                  Closure types are always non-working (engine rule).
-                </p>
-              )}
-              {form.event_type === EventType.WORKING_SATURDAY && (
-                <p className="text-[11px] text-muted-foreground">
-                  Working Saturday is always a working day on Saturdays (weekdays
-                  inside the range keep their normal state).
-                </p>
-              )}
+          {/* UI-035 / D-13: engine-level calendar fields — hidden from
+              students entirely (admin concerns). The payload defaults for
+              hidden fields (is_working_day null, substitution null,
+              active true) are exactly what the student form always sent. */}
+          {isAdmin && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className={fieldClass}>
+                <label className={labelClass} htmlFor="event-form-working">Working day state</label>
+                <Select
+                  id="event-form-working"
+                  value={form.is_working_day}
+                  onChange={e => set("is_working_day", e.target.value)}
+                  disabled={rule.isClosure || form.event_type === EventType.WORKING_SATURDAY}
+                >
+                  <option value="">Not specified</option>
+                  <option value="true">Working</option>
+                  <option value="false">Non-working</option>
+                </Select>
+                {rule.isClosure && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Closure types are always non-working (engine rule).
+                  </p>
+                )}
+                {form.event_type === EventType.WORKING_SATURDAY && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Working Saturday is always a working day on Saturdays (weekdays
+                    inside the range keep their normal state).
+                  </p>
+                )}
+              </div>
+              <div className={fieldClass}>
+                <label className={labelClass} htmlFor="event-form-substitution">Substitution schedule</label>
+                <Select
+                  id="event-form-substitution"
+                  value={form.substitution_schedule_override}
+                  onChange={e => set("substitution_schedule_override", e.target.value)}
+                >
+                  <option value="">None</option>
+                  {SUBSTITUTION_DAYS.map(day => (
+                    <option key={day} value={day}>{day[0] + day.slice(1).toLowerCase()}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="event-form-substitution">Substitution schedule</label>
-              <Select
-                id="event-form-substitution"
-                value={form.substitution_schedule_override}
-                onChange={e => set("substitution_schedule_override", e.target.value)}
-              >
-                <option value="">None</option>
-                {SUBSTITUTION_DAYS.map(day => (
-                  <option key={day} value={day}>{day[0] + day.slice(1).toLowerCase()}</option>
-                ))}
-              </Select>
-            </div>
-          </div>
+          )}
 
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={form.active}
-              onChange={e => set("active", e.target.checked)}
-              className="h-4 w-4 rounded border-input accent-primary"
-            />
-            Active (visible in calendar and event reads)
-          </label>
+          {isAdmin && (
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={form.active}
+                onChange={e => set("active", e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              Active (visible in calendar and event reads)
+            </label>
+          )}
 
           <DialogFooter>
             <Button variant="outline" type="button" disabled={loading} onClick={() => onOpenChange(false)}>

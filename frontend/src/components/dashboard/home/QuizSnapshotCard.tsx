@@ -19,7 +19,9 @@ interface QuizSnapshotCardProps {
 
 export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
   return (
-    <Card>
+    // UI-040: h-full keeps both cards in a grid row visually aligned, with
+    // the footer CTA pinned to the card's bottom edge.
+    <Card className="h-full">
       <CardHeader className="border-b">
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Quiz Snapshot</CardTitle>
@@ -93,7 +95,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-end">
+      <CardFooter className="mt-auto justify-end">
         <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/quiz-schedule" />}>
           View Quiz Eligibility
         </Button>

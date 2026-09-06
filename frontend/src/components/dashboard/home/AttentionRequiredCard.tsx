@@ -15,7 +15,9 @@ interface AttentionRequiredCardProps {
 
 export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
   return (
-    <Card>
+    // UI-040: h-full keeps both cards in a grid row visually aligned, with
+    // the footer CTA pinned to the card's bottom edge.
+    <Card className="h-full">
       <CardHeader className="border-b">
         <CardTitle>Attention Required</CardTitle>
       </CardHeader>
@@ -66,7 +68,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-end">
+      <CardFooter className="mt-auto justify-end">
         {/* D-02: the strategy content (must-attend/safe-skip) lives on the
             Quiz Eligibility surface, so the CTA points there. */}
         <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/quiz-schedule" />}>

@@ -5,6 +5,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function GreetingHeader() {
   const { profile, isLoading } = useProfile();
 
+  // UI-031: when the profile request fails (or carries no display name) the
+  // greeting falls back to the bare time-aware greeting — never an empty name
+  // after the comma. No identity is fabricated; profile errors stay visible
+  // through the dashboard's own error/retry states.
   const firstName = profile?.display_name ? profile.display_name.split(" ")[0] : "";
 
   return (
@@ -13,8 +17,10 @@ export function GreetingHeader() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           {isLoading ? (
             <Skeleton className="h-8 w-56" />
-          ) : (
+          ) : firstName ? (
             `${getGreeting()}, ${firstName}`
+          ) : (
+            getGreeting()
           )}
         </h1>
       </div>

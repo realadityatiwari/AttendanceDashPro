@@ -80,7 +80,7 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-between">
+      <CardFooter className="mt-auto justify-between">
         <span className="text-xs text-muted-foreground">
           {today.attended} of {today.total} classes attended
         </span>

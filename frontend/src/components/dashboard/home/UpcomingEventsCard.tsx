@@ -14,7 +14,9 @@ interface UpcomingEventsCardProps {
 
 export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
   return (
-    <Card>
+    // UI-040: h-full keeps both cards in a grid row visually aligned, with
+    // the footer CTA pinned to the card's bottom edge.
+    <Card className="h-full">
       <CardHeader className="border-b">
         <CardTitle>Upcoming Events</CardTitle>
       </CardHeader>
@@ -64,7 +66,7 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
         )}
       </CardContent>
 
-      <CardFooter className="justify-end">
+      <CardFooter className="mt-auto justify-end">
         <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/tools/events" />}>
           View All Events
         </Button>

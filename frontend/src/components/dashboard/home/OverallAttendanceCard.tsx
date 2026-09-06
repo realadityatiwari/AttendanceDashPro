@@ -20,7 +20,8 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
   const pct = overall.overall_pct;
 
   return (
-    <Card>
+    // UI-040: h-full keeps both cards in a grid row visually aligned.
+    <Card className="h-full">
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Overall Attendance</CardTitle>

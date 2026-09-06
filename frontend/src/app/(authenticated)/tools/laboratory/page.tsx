@@ -232,7 +232,11 @@ export default function TrackAttendancePage() {
             <div className="flex justify-between items-end">
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-foreground">{total} classes {isToday(selectedDate) ? "today" : ""}</span>
+                {/* UI-030: the aggregate absent count (formerly unique to the
+                    removed bottom stat card) lives here so no summary
+                    information was lost with the duplication cleanup. */}
                 {pending > 0 && <span className="text-xs text-muted-foreground">{pending} remaining</span>}
+                {absent > 0 && <span className="text-xs text-muted-foreground">{absent} absent</span>}
               </div>
               <span className="text-sm font-bold">{recorded}/{total}</span>
             </div>
@@ -263,26 +267,10 @@ export default function TrackAttendancePage() {
             ))}
           </div>
 
-          {/* Bottom Summary */}
-          <Card className="p-4 bg-card border-border mt-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-              {isToday(selectedDate) ? "Today's Attendance" : "Daily Attendance"}
-            </h3>
-            <div className="grid grid-cols-3 divide-x divide-border">
-              <div className="flex flex-col items-center">
-                <span className="text-2xl font-bold tracking-tight text-success">{present}</span>
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Present</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="text-2xl font-bold tracking-tight text-destructive">{absent}</span>
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Absent</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="text-2xl font-bold tracking-tight text-foreground">{pending}</span>
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">Pending</span>
-              </div>
-            </div>
-          </Card>
+          {/* UI-030: the former bottom "Daily Attendance" stat card is removed
+              — it repeated the Present/Absent/Pending numbers the top summary
+              and each session card already show. The top card keeps totals,
+              the progress bar, pending count, and the bulk action. */}
         </>
       )}
 

@@ -23,7 +23,8 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
   const weeks = (series ?? []).slice(-MAX_WEEKS);
 
   return (
-    <Card>
+    // UI-040: h-full keeps both cards in a grid row visually aligned.
+    <Card className="h-full">
       <CardHeader className="border-b">
         <div className="flex items-center justify-between gap-3">
           <div>
