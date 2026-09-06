@@ -5768,3 +5768,27 @@ No application code modified. Only the database migration was applied.
 **Verification:** tsc PASS (0 errors); ESLint PASS on all 13 changed files; production build PASS 25/25 pages (CI placeholder URL); `git diff --check` PASS; payload audits — signup request body and EventFormDialog payload builder show zero diff lines; viewport audit — no vh-based modal caps remain; targeted greps — no engine labels render in the student event form path, greeting has no empty-name branch, `recorded === 0` gate confirmed. Phase 1–10 work unregressed (build + no shared-primitive modifications; the only primitives touched are consumers).
 
 **HARD STOP — Phase 12 not started. No commit/push/deploy.**
+
+---
+
+## UI/UX Remediation Phase 12 — Final Verification & Cleanup (COMPLETE, 2026-09-06)
+
+**Scope executed:** final repository-wide remediation audit — all 40 findings verified against current source, systemic roots S1–S6 audited, residue searches run, protected contracts audited, governance reconciled. Verification/cleanup only; no new UI, no redesign, no backend change.
+
+**Repository state established:** the user committed the remediation between phases — `5f07c12` (Phase 10: 8 frontend files + 3 governance docs) and `5458925` (Phase 11: 13 frontend files + 3 governance docs) on `main`. Both commits contain ZERO backend/deploy files. The working tree was CLEAN at Phase 12 start (nothing to preserve or overwrite; the former untracked `dump.html` is gone). Phase 12 verified the COMMITTED state via fresh inspection, not prior reports.
+
+**Finding audit result (40/40):** 39 RESOLVED, 1 RESOLVED WITH DOCUMENTED RETENTION inside it (UI-024: the EventRow admin-gated `h-7` buttons stay as an explicitly deferred admin-render item). Zero findings REGRESSED, zero accidentally reintroduced. Full matrix recorded in walkthrough.md.
+
+**Systemic roots:** S1 (dead tokens) — zero `surface`/`surface2`/`text2` references remain. S2 (accent misuse) — `--accent` no longer appears as an indicator/foreground color; its single remaining use is the UserMenu hover/focus surface (#262626, a legitimate visible-on-dark hover token — retained with reason). S3 (primitive bypass) — Input/Select/Button/ErrorState/EmptyState/PageHeader/ConfirmDialog/ShellDialog adopted across the student app; auth pages were the last raw consumers and now use primitives. S4 (layout contract) — AppShell owns the single `max-w-5xl` container; zero page-level shell wrappers. S5 (vocabulary) — statusLabels/lib/date centralize statuses, dates, percentages; lab pages map backend "Attended"/"Missed" to Present/Absent via D-07. S6 (feedback) — toast/error/confirm/live-region model consistent; no `window.alert`/`confirm` anywhere in student scope.
+
+**Residue searches (all clean):** dead tokens; "View Strategy"/"V2"; "Np" pending abbreviations; `text-[10px]` in student scope (5 hits remain in Admin Portal — out of scope); false tab semantics; `aria-current` on in-page switchers; raw auth form controls (only the three custom password-toggle buttons remain, which are not form fields); 90vh modal caps; duplicate page shell containers; hard-coded weekly thresholds outside `lib/statusLabels`; CalendarDays notification empty state (Bell; CalendarDays legitimately remains the ACADEMIC_EVENT kind icon); global notification pending lock; nav structures bypassing navItems.ts; duplicate date/percentage helpers (remaining `Intl.DateTimeFormat` uses are month labels and clock-time, not the canonical date vocabulary; `toFixed(0)` remains only for integer thresholds).
+
+**Protected contracts:** zero changes — no backend files, no API/lib/hooks layers, no route definitions, no migrations, no payload diffs (signup body and EventFormDialog payload builder byte-identical, diff-verified), no auth/session, no notification/push, no attendance/quiz/laboratory logic. Phase 11 boundaries re-verified in source: `elective_i`/`elective_ii` sent and required; D-13 `isAdmin` gates (3) with hidden-field defaults `null/null/true`; `recorded === 0` hint gate + localStorage key; six dashboard cards `h-full` + four `mt-auto` footers.
+
+**Verification:** tsc PASS (0 errors); ESLint PASS on all remediation surfaces (the 2 `react-hooks/set-state-in-effect` errors in `history/page.tsx` pre-date the remediation, are in untouched effects, and remain documented as-is); production build PASS 25/25 (CI placeholder URL); `git diff --check` clean (tree clean).
+
+**Intentionally retained / deferred (documented, not new findings):** (1) EventRow admin-gated `h-7` buttons (28px mobile) — admin-render-only, deferred in Phase 10; (2) signup elective list is a client-side mirror of the deployed catalog — dynamic sourcing requires a pre-auth catalog endpoint (backend, out of scope per blueprint); (3) TopNav desktop links ≈30px and QuizEligibilityCard `size="xs"` Retry 24px desktop — pointer-interface controls meeting the 24px WCAG floor; (4) `text-[10px]` ×5 in Admin Portal — outside the student-app audit scope; (5) the two pre-existing History lint errors.
+
+**Governance reconciled:** blueprint header status corrected from the obsolete "PLANNING ONLY" to IMPLEMENTED/COMPLETE with a pointer to the execution records; this record supersedes the blueprint's planning-status language; MASTER_ROADMAP.md left untouched per its established structure (it tracks the original build phases only; remediation status lives in these records). No commit/push/deploy performed by Phase 12.
+
+**HARD STOP — remediation track complete. Awaiting the user's separate commit/deploy decision.**

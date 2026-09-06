@@ -10476,3 +10476,68 @@ SS 25/25 pages (CI placeholder); git diff --check PASS; post-audits all PASS (ra
 - **Verification performed:** tsc PASS; ESLint PASS on all 13 changed files; production build PASS 25/25 (CI placeholder URL); `git diff --check` PASS; payload diff audits (signup body, event payload builder) clean; viewport audit — dvh everywhere a modal is capped, `globals.css` `min-height:100vh` (app shell) intentionally untouched; Phase 1–10 unregressed (no shared-primitive edits; build-verified).
 - **Manual verification remaining (user):** fresh/empty account — hint visibility, link navigation, dismissal persistence, non-reappearance once sessions exist; auth pages at 320–390px with toggles and dark selects; student vs admin event forms side by side; a real student event creation end-to-end; Track page after summary removal; dashboard row alignment at 1024px+; installed-PWA launch splash background.
 - HARD STOP after Phase 11 — awaiting explicit authorization for Phase 12. No commit/push/deploy.
+
+---
+
+## UI/UX Remediation Phase 12 — Walkthrough (COMPLETE, 2026-09-06, final verification & cleanup)
+
+- **Repository state:** the user committed the remediation between phases — `5f07c12` (Phase 10: 8 frontend files + 3 governance docs) and `5458925` (Phase 11: 13 frontend files + 3 governance docs) on `main`, both with zero backend/deploy files. The working tree was clean at Phase 12 start, so every verification below targeted the committed source via fresh inspection (grep + targeted reads), never prior completion reports alone.
+
+- **Final finding matrix (status vs current source):**
+
+| ID | Finding | Status | Evidence (current source) |
+|---|---|---|---|
+| UI-001 | Dead surface/surface2/text2 tokens | RESOLVED | zero references in src; Phase 1 tokens in use |
+| UI-002 | `--accent` used as visible color | RESOLVED (retained as hover surface) | only remaining `accent` use is UserMenu hover/focus (#262626, visible on dark); no indicator/foreground accent |
+| UI-003 | Desktop nav overflow at md | RESOLVED | TopNav md–lg "More" dropdown, atomic items, navItems-driven |
+| UI-004 | Track/Laboratory IA; "View Strategy" | RESOLVED | navItems.ts D-01 labels; zero "View Strategy" refs |
+| UI-005 | Error states without Retry | RESOLVED | ErrorState adopted (8 files) with retry handlers |
+| UI-006 | Unconfirmed bulk "Mark all present" | RESOLVED | ConfirmDialog gates the Track bulk action |
+| UI-007 | Missing 404/error UI | RESOLVED | `app/not-found.tsx`, `app/error.tsx` |
+| UI-008 | Mobile wayfinding | RESOLVED | bottom-nav `aria-current` + More active state; D-04 mobile page titles |
+| UI-009 | window.alert / inconsistent confirms | RESOLVED | zero alert/confirm in student scope; ConfirmDialog + toast |
+| UI-010 | Dev/internal copy leaks | RESOLVED | 7.3 copy sweep; no dev jargon in student surfaces |
+| UI-011 | Nested layout containers | RESOLVED | AppShell owns the single `max-w-5xl` container; zero page wrappers |
+| UI-012 | Status label/color inconsistency | RESOLVED | `lib/statusLabels` + D-07 mapping in lab pages |
+| UI-013 | Hard-coded weekly thresholds | RESOLVED | `WEEKLY_BAR_SAFE_PCT`/`WEEKLY_BAR_WATCH_PCT` constants, single consumer |
+| UI-014 | Notification pending lock / bulk / undo | RESOLVED | per-row `pendingIds` + `markAllPending` + dismiss-undo; no global lock |
+| UI-015 | Unconfirmed lab deletes | RESOLVED | ConfirmDialog for delete/deactivate |
+| UI-016 | Four control-height systems | RESOLVED | Input/Select/Button `h-10`/`sm:h-8` family |
+| UI-017 | Date format inconsistency | RESOLVED | canonical `lib/date` formatters; remaining Intl uses are month labels / clock time only |
+| UI-018 | Percentage precision | RESOLVED | `formatPct`/`formatPct1`; `toFixed(0)` only for integer thresholds |
+| UI-019 | Inert settings | RESOLVED | D-05 week-start drives calendar; D-06 honest caption |
+| UI-020 | Quiz cycle false tab semantics | RESOLVED | `role="group"` + `aria-pressed` (Phase 10) |
+| UI-021 | Duplicated component implementations | RESOLVED (retain-with-reason per blueprint §5) | ErrorState/EmptyState/GlassCard/PageHeader primitives; no new duplication |
+| UI-022 | Dashboard ignores analytics failure | RESOLVED | non-blocking warning banner + targeted retry |
+| UI-023 | SW update only in console | RESOLVED | UpdateBanner |
+| UI-024 | Touch targets below guidance | RESOLVED (with documented retention) | Phase 10 pass + 6.1 foundation; EventRow admin-gated `h-7` buttons deferred (admin-render-only) |
+| UI-025 | No success-feedback layer | RESOLVED | ToastProvider with variants, actions, live regions |
+| UI-026 | Silent session-expiry redirect | RESOLVED | sessionStorage flag + login notice |
+| UI-027 | No first-use guidance | RESOLVED | `recorded === 0` hint + localStorage dismissal (frontend-only) |
+| UI-028 | Signup electives + auth off design system | RESOLVED | payload byte-identical; honest catalog framing; primitives; login password toggle; dynamic catalog = backend, out of scope per blueprint |
+| UI-029 | Login identity/copy mismatch | RESOLVED | "AttendanceDash Pro / Student Portal" |
+| UI-030 | Track duplicate summaries | RESOLVED | bottom card removed; absent count preserved in top card |
+| UI-031 | Empty-name greeting | RESOLVED | comma-safe fallback to bare greeting |
+| UI-032 | `text-[10px]` micro-type | RESOLVED (student scope) | zero in student app; 5 hits remain in Admin Portal (out of scope) |
+| UI-033 | Lab tabs `aria-current` misuse | RESOLVED | `role="group"` + `aria-pressed`; no `aria-current` on switchers |
+| UI-034 | 90vh modal cap | RESOLVED | EventFormDialog `90dvh`; shell `min-height:100vh` intentionally untouched |
+| UI-035 / D-13 | Student event form jargon | RESOLVED | student form = type/date/subject/class-type-if-required/note; payload builder byte-identical; admin form unchanged |
+| UI-036 | Quiz intro wall of text | RESOLVED | concise 7.3 intro card |
+| UI-037 | Manifest splash color mismatch | RESOLVED | `background_color` #0a0a0a |
+| UI-038 | "Np" pending abbreviation | RESOLVED | zero residue |
+| UI-039 | Notification empty-state icon | RESOLVED | Bell (CalendarDays remains the ACADEMIC_EVENT kind icon, intentional) |
+| UI-040 | Dashboard ragged bottoms | RESOLVED | `h-full` ×6 + `mt-auto` ×4 footers |
+
+- **Systemic roots:** S1 clean (zero dead-token refs); S2 resolved (accent only as UserMenu hover surface — retained with reason, not the invisible-indicator misuse); S3 resolved (primitives adopted; auth pages were the last raw consumers); S4 resolved (single AppShell container); S5 resolved (centralized status/date/percentage vocabulary with documented D-07 display mapping); S6 resolved (consistent toast/error/confirm/live-region model; zero `window.alert`).
+
+- **Intentionally retained / deferred (with rationale, not new findings):** EventRow admin-gated `h-7` buttons (28px mobile; admin-render-only; Phase 10 deferral); signup elective client-side catalog mirror (dynamic sourcing needs a pre-auth backend endpoint — outside the frontend-only scope); TopNav desktop links ≈30px and QuizEligibilityCard `size="xs"` Retry (pointer-interface, ≥24px WCAG floor); `text-[10px]` in Admin Portal (outside the student-app audit); two pre-existing `react-hooks/set-state-in-effect` ESLint errors in History's untouched effects (pre-date the remediation).
+
+- **Protected contracts:** zero backend/API/payload/routing/auth/notification/push/DB changes in either remediation commit or the tree; Phase 11 boundaries re-verified in source (signup `elective_i`/`elective_ii` intact; D-13 gates + `null/null/true` hidden defaults; `recorded === 0` gate + localStorage key; six `h-full` cards + four `mt-auto` footers).
+
+- **Verification performed:** tsc PASS (0 errors); ESLint PASS on all remediation surfaces; production build PASS 25/25 (CI placeholder URL); `git diff --check` clean; targeted greps per the residue list; commit-scope audits (`5f07c12`, `5458925`).
+
+- **Governance reconciled:** blueprint header corrected from the obsolete "PLANNING ONLY" to IMPLEMENTED/COMPLETE; implementation_plan.md (this and the phase records above) is the authoritative execution history; task.md records Phase 12 verification complete; MASTER_ROADMAP.md deliberately untouched (it tracks the original build phases only — no duplicate remediation section created, per the established convention).
+
+- **Git/deployment state:** no commit, no push, no deploy, no PR — performed or initiated by Phase 12. The remediation track is COMPLETE and ready for the user's separate decision about committing the Phase 12 documentation updates and deploying.
+
+- HARD STOP — final phase of the 2026-09-05 UI/UX Remediation track.

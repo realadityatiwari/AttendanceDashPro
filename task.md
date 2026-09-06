@@ -4624,3 +4624,15 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [x] **Verification** — tsc PASS; ESLint PASS (13 files); build PASS 25/25 (CI placeholder); `git diff --check` PASS; payload/viewport/ARIA-copy audits clean; Phase 1–10 unregressed.
 - [ ] **Manual browser pass (user)** — new/empty account: hint shows, links navigate, dismiss persists across reloads, never returns once sessions exist; signup/login at 320–390px, password toggles, dark select dropdowns; student Add Event form (single date picker, no engine fields, creation succeeds); admin event form retains all fields; Track layout after summary removal (incl. absent count line); dashboard row alignment at 1024px+; installed-PWA splash background now matches the app.
 - HARD STOP — Phase 12 not started; no commit/push/deploy.
+
+## UI/UX Remediation Phase 12 — Completion Record (2026-09-06)
+
+- [x] **State established** — user committed Phases 10–11 (`5f07c12`, `5458925`); tree clean; both commits contain zero backend/deploy files; no user changes overwritten.
+- [x] **All 40 findings audited against current source** — 39 RESOLVED + 1 RESOLVED with a documented retention inside it (UI-024 admin-gated EventRow buttons deferred in Phase 10); zero regressions; zero accidental reintroductions.
+- [x] **S1–S6 systemic roots verified** — dead tokens gone; accent reduced to a legitimate hover surface; primitives adopted (auth pages were the last bypass); single AppShell container; centralized status/date/percentage vocabulary; consistent toast/error/confirm/live-region model.
+- [x] **Residue searches clean** — tokens, "View Strategy", "V2", "Np" abbreviations, student-scope `text-[10px]`, false tabs, `aria-current` switchers, raw auth controls, 90vh caps, duplicate shells, hard-coded thresholds, old notification icon, global pending lock, nav bypasses, duplicate formatters. Remaining hits are all out-of-scope (Admin Portal) or documented-retained.
+- [x] **Protected contracts** — zero backend/API/payload/routing/auth/notification/DB changes; Phase 11 boundaries re-verified in source (signup payload, D-13 gates + hidden defaults, onboarding gate, dashboard card alignment).
+- [x] **Static verification** — tsc PASS; ESLint PASS on all remediation surfaces (2 pre-existing History `set-state-in-effect` errors remain, documented, untouched); build PASS 25/25 (CI placeholder); `git diff --check` clean.
+- [x] **Governance reconciled** — blueprint header corrected from "PLANNING ONLY" to IMPLEMENTED/COMPLETE with pointer to execution records; this record supersedes obsolete planning status; MASTER_ROADMAP.md structure respected (no duplicate remediation section).
+- [x] **No commit / no push / no deploy** — performed by Phase 12; committing/deploying is the user's separate decision.
+- HARD STOP — remediation track complete.
