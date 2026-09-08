@@ -230,10 +230,52 @@ def evaluate_quiz_eligibility(
             "remaining attendance window."
         )
 
-    best_opt = min(
-        (criterion_i.optimization, criterion_ii.optimization),
-        key=lambda o: (not o.is_reachable, _total_deficit(o)),
+    # 7. Top-level route optimization (Phase 27, QC-II remediation). Must
+    #    Attend and Safe Skip are optimized INDEPENDENTLY under the OR
+    #    semantics: the criteria are alternative routes, so neither
+    #    requirements nor skipped classes are ever combined across them, and
+    #    the two selections MAY name different criteria.
+    #      Must Attend — fewest future attendances among REACHABLE criteria.
+    #                    An unreachable criterion can never win while a
+    #                    reachable one exists (its deficit is its full pending
+    #                    count); ties prefer Criterion I (stable min over the
+    #                    C-I-first candidate list — the documented convention).
+    #                    Selection semantics are unchanged from the previous
+    #                    single-route behavior; only provenance is new.
+    #      Safe Skip   — most future pending classes skippable while still
+    #                    retaining at least one complete qualifying route.
+    #                    Within one criterion the min-attendance combination
+    #                    already maximizes that criterion's skips
+    #                    (skips = pending - attended), so each criterion's own
+    #                    optimization IS its best skip combination; the winner
+    #                    is the reachable criterion with the most total skips.
+    #                    Ties prefer Criterion I (strictly-greater replacement
+    #                    over the C-I-first candidate order — deterministic,
+    #                    no random selection).
+    must_candidates = [
+        ("Criterion I", criterion_i.optimization),
+        ("Criterion II", criterion_ii.optimization),
+    ]
+    must_attend_source, best_opt = min(
+        must_candidates,
+        key=lambda candidate: (not candidate[1].is_reachable, _total_deficit(candidate[1])),
     )
+
+    skip_candidates = [
+        (name, opt) for name, opt in must_candidates if opt.is_reachable
+    ]
+    if skip_candidates:
+        safe_skip_source, safe_skip_opt = skip_candidates[0]
+        for source, opt in skip_candidates[1:]:
+            if (opt.safe_skip_lecture + opt.safe_skip_tutorial) > (
+                safe_skip_opt.safe_skip_lecture + safe_skip_opt.safe_skip_tutorial
+            ):
+                safe_skip_source, safe_skip_opt = source, opt
+    else:
+        # Neither criterion is reachable: no complete qualifying route exists,
+        # so there is no Safe Skip route (state is NOT_ELIGIBLE and the UI
+        # withholds both guidance boxes for it).
+        safe_skip_source, safe_skip_opt = None, None
 
     return EligibilityResult(
         quiz_cycle=quiz_cycle,
@@ -261,5 +303,8 @@ def evaluate_quiz_eligibility(
         final_criterion=final_criterion,
         is_eligible=state == EligibilityState.ELIGIBLE,
         optimization=best_opt,
+        must_attend_criterion=must_attend_source,
+        safe_skip_optimization=safe_skip_opt,
+        safe_skip_criterion=safe_skip_source,
         explanation=explanation,
     )

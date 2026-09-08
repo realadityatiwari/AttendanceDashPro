@@ -5792,3 +5792,20 @@ No application code modified. Only the database migration was applied.
 **Governance reconciled:** blueprint header status corrected from the obsolete "PLANNING ONLY" to IMPLEMENTED/COMPLETE with a pointer to the execution records; this record supersedes the blueprint's planning-status language; MASTER_ROADMAP.md left untouched per its established structure (it tracks the original build phases only; remediation status lives in these records). No commit/push/deploy performed by Phase 12.
 
 **HARD STOP — remediation track complete. Awaiting the user's separate commit/deploy decision.**
+
+---
+
+# Phase 27 — Quiz Eligibility Safe Skip independent optimization + route provenance (2026-09-09) — CURRENT AUTHORITATIVE PLAN, IMPLEMENTED & VERIFIED
+
+**Authorized scope (user):** implement audit findings H-1 (independent Safe Skip) + M-1 (route provenance) only. Out of scope and untouched: activity/NCC/sports provisions, the (Lecture% + Tutorial%)/2 averaging formula, eligibility math, date windows, attendance aggregation, pending-session semantics, Must Attend selection semantics.
+
+**Plan (as executed):**
+1. `backend/app/schemas/attendance.py` — `EligibilityResult`: add `must_attend_criterion: Optional[str]`, `safe_skip_optimization: Optional[OptimizationResult]`, `safe_skip_criterion: Optional[str]` (all default None; additive, backward compatible). Done.
+2. `backend/app/engines/eligibility_engine.py` — `evaluate_quiz_eligibility` step 7: keep the Must Attend min-deficit selection bit-for-bit (same key/stable-min, ties prefer Criterion I) and capture its source; add the independent Safe Skip max-skips selection over reachable criteria (ties prefer Criterion I via strictly-greater replacement over the C-I-first order); None route when nothing is reachable. Done.
+3. `frontend/src/types/api.ts` — mirror the three fields on `EligibilityResult`. Done.
+4. `frontend/src/components/quiz/QuizEligibilityCard.tsx` — label the two guidance boxes with backend provenance ("Must Attend — Criterion I/II", "Safe Skip — Criterion I/II", "(best route)" fallback for legacy payloads); render Safe Skip from `safe_skip_optimization`, hidden when absent; tutorial line value-gated (> 0). No other UI change. Done.
+5. Verification: 14/14 synthetic engine cases; 18/18 live-DB combinations vs the QC-II audit expectations (incl. the four divergence corrections BCS-503/058/501/502 Q3 -> Criterion II with 17/7/8/6 skips); py_compile + imports OK; tsc PASS; ESLint PASS. Done.
+
+**Status: IMPLEMENTED AND VERIFIED. Awaiting the user's personal testing + commit/deploy decision.**
+
+**Deliberately NOT changed:** `optimize_attendance` (per-criterion optimizer), `_combined_pct`/`meets_attendance_target` (formula), calendar windows, repos/aggregation, `optimization` field semantics, dashboard attention counting (`optimization.is_reachable`), notification service (uses the unrelated `SubjectAttendanceSummary.optimization`), Phase-1 verifier expectations.

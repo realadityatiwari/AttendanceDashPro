@@ -4636,3 +4636,27 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [x] **Governance reconciled** — blueprint header corrected from "PLANNING ONLY" to IMPLEMENTED/COMPLETE with pointer to execution records; this record supersedes obsolete planning status; MASTER_ROADMAP.md structure respected (no duplicate remediation section).
 - [x] **No commit / no push / no deploy** — performed by Phase 12; committing/deploying is the user's separate decision.
 - HARD STOP — remediation track complete.
+
+---
+
+## Authoritative tasks — 2026-09-09 (Quiz Eligibility QC-II investigation track; supersedes the 2026-09-06 remediation task list above, which remains as completed history)
+
+- [x] **Investigation (read-only)** — QC-II Quiz Eligibility fully audited: all 18 subject/cycle combinations independently recomputed from raw tables and matched exactly against the real app path (report: docs/QUIZ_ELIGIBILITY_QC2_AUDIT_2026-09-09.md). Core mathematics CORRECT; no critical logic error; C-I/C-II never mixed; Must Attend optimal under the OR rule; batch == single path.
+- [ ] **DECISION (user)** — H-1: adopt independent Safe-Skip optimization (max skips across reachable criteria, may select a different criterion than Must Attend) and how to present it. Engine + UI change; both per-criterion optimizations already in the API response.
+- [ ] **DECISION (user)** — M-1: expose the selected criterion for the top-level Must Attend / Safe Skip guidance (additive schema field + UI label).
+- [ ] **DECISION (user)** — M-2: split pending into future vs past-unmarked (or document back-marking semantics in the guidance copy).
+- [ ] **CLARIFY (institution)** — report section 13: per-criterion formula ((L%+T%)/2 is a project decision, not notice-derived); previous-quiz boundary inclusivity; activity/NCC/sports attendance provisions (absent from repo and engine); pending/back-marking policy; official quiz schedule authority.
+- [ ] **CLARIFY (user)** — M-3: identify the environment/data date behind the observed UI values quoted in the brief (they match neither the 09-07 nor the 09-09 local-DB snapshots; production was never accessed).
+- [ ] OPTIONAL (owner action) — data hygiene: purge inactive/duplicate QUIZ_DAY event residue (L-4); close L-1 tutorial-only latent inconsistency if such subjects can exist.
+- Constraint: no implementation until the user authorizes fixes. implementation_plan.md gets a plan only when a fix is authorized.
+
+---
+
+## Authoritative tasks — 2026-09-09 (updated after Phase 27 implementation; supersedes the earlier investigation-track task list)
+
+- [x] **QC-II investigation (read-only)** — 18/18 independent verification; report docs/QUIZ_ELIGIBILITY_QC2_AUDIT_2026-09-09.md.
+- [x] **H-1 Safe Skip independent optimization** — implemented in `eligibility_engine.py` (max-skips over reachable criteria, ties prefer C-I); Must Attend preserved bit-for-bit; C-I/C-II never mixed. Verified 14/14 synthetic + 18/18 live DB incl. the four divergence corrections (BCS-503 Q3 17 / BCS-058 Q3 7 / BCS-501 Q3 8 / BCS-502 Q3 6, all via Criterion II).
+- [x] **M-1 route provenance** — `must_attend_criterion` / `safe_skip_optimization` / `safe_skip_criterion` added to `EligibilityResult` (additive); UI labels each box with its criterion; tsc + ESLint PASS.
+- [ ] **USER** — personal testing of the Quiz Eligibility page (all cycles, especially Quiz III windows and BCS-503 Q2), then commit/deploy decision.
+- [ ] **CLARIFY (institution)** — parked/out-of-scope items from the audit remain open: per-criterion formula confirmation, previous-quiz boundary inclusivity, pending/back-marking policy, official quiz schedule authority. (Activity/NCC/sports provisions are OUT OF SCOPE per user instruction.)
+- [ ] **CLARIFY (user)** — M-3: environment/data date behind the originally observed UI values (unresolved; production never accessed).

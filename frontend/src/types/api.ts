@@ -359,6 +359,15 @@ export interface EligibilityResult {
 
   is_eligible: boolean;
   optimization: OptimizationResult | null;
+  // Phase 27 (QC-II): the two top-level routes are independently optimized and
+  // the backend emits each route's criterion. `optimization` remains the
+  // Must Attend route (fewest future attendances among reachable criteria,
+  // ties prefer Criterion I); `safe_skip_optimization` is the route permitting
+  // the most skippable pending classes — it MAY be a different criterion and
+  // is null when no criterion is reachable.
+  must_attend_criterion: "Criterion I" | "Criterion II" | null;
+  safe_skip_optimization: OptimizationResult | null;
+  safe_skip_criterion: "Criterion I" | "Criterion II" | null;
   explanation: string | null;
   policy_ambiguity_notes: string | null;
 }

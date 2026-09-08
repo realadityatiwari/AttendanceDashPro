@@ -210,6 +210,26 @@ class EligibilityResult(BaseModel):
     # Results
     is_eligible: bool
     optimization: Optional[OptimizationResult] = None
+    # Phase 27 (QC-II remediation): the two top-level routes are optimized
+    # INDEPENDENTLY under the OR semantics — Must Attend and Safe Skip may be
+    # produced by different criteria, and neither requirements nor skips are
+    # ever combined across criteria.
+    #   optimization           — unchanged: Must Attend = the reachable route
+    #                            requiring the fewest future attendances (ties
+    #                            prefer Criterion I; stable min).
+    #   must_attend_criterion  — which criterion `optimization` came from
+    #                            ("Criterion I" | "Criterion II").
+    #   safe_skip_optimization — Safe Skip = independently optimized: among
+    #                            REACHABLE criteria, the route permitting the
+    #                            most total skipped pending classes (ties prefer
+    #                            Criterion I). None when no criterion is
+    #                            reachable. Reuses OptimizationResult so each
+    #                            route stays fully inspectable; the displayed
+    #                            values are its safe_skip_* fields.
+    #   safe_skip_criterion    — which criterion safe_skip_optimization came from.
+    must_attend_criterion: Optional[str] = None
+    safe_skip_optimization: Optional[OptimizationResult] = None
+    safe_skip_criterion: Optional[str] = None
     explanation: Optional[str] = None
     
     # Document potential conflicts or ambiguities

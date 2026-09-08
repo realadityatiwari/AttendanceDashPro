@@ -228,19 +228,25 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                 {eligibility.optimization && eligibility.optimization.is_reachable === true && (
                   <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
                     <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">Must Attend <span className="font-normal normal-case tracking-normal">(best route)</span></p>
+                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
+                        Must Attend{eligibility.must_attend_criterion ? ` — ${eligibility.must_attend_criterion}` : " (best route)"}
+                      </p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
                       {hasTutorials && (
                         <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.tutorial_deficit}</span></p>
                       )}
                     </div>
-                    <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">Safe Skip <span className="font-normal normal-case tracking-normal">(best route)</span></p>
-                      <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_lecture}</span></p>
-                      {hasTutorials && (
-                        <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.safe_skip_tutorial}</span></p>
-                      )}
-                    </div>
+                    {eligibility.safe_skip_optimization && (
+                      <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
+                        <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
+                          Safe Skip{eligibility.safe_skip_criterion ? ` — ${eligibility.safe_skip_criterion}` : " (best route)"}
+                        </p>
+                        <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_lecture}</span></p>
+                        {eligibility.safe_skip_optimization.safe_skip_tutorial > 0 && (
+                          <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_tutorial}</span></p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {eligibility.optimization && eligibility.optimization.is_reachable === false && eligibility.state === EligibilityState.NOT_ELIGIBLE && (
