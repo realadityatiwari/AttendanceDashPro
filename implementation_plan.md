@@ -5809,3 +5809,28 @@ No application code modified. Only the database migration was applied.
 **Status: IMPLEMENTED AND VERIFIED. Awaiting the user's personal testing + commit/deploy decision.**
 
 **Deliberately NOT changed:** `optimize_attendance` (per-criterion optimizer), `_combined_pct`/`meets_attendance_target` (formula), calendar windows, repos/aggregation, `optimization` field semantics, dashboard attention counting (`optimization.is_reachable`), notification service (uses the unrelated `SubjectAttendanceSummary.optimization`), Phase-1 verifier expectations.
+
+---
+
+# Bugfix — Add Event dialog: inverted Single day / Date range behavior (2026-09-13) — IMPLEMENTED, STATICALLY VERIFIED
+
+**Authorized scope (user):** fix the inverted Single day / Date range behavior in the Add Event dialog at the root cause (not a label swap). Explicitly out of scope: notification implementation, event-architecture refactors, attendance calculations, quiz eligibility, timetable logic, unrelated UI.
+
+**Root cause:** `EventFormDialog.tsx` (the create+edit dialog at /tools/events — the only one with the duration radios) had its date-fields render condition rewritten by UI/UX Remediation Phase 11 (commit `5458925`) from `form.duration_mode === "single"` to `(!isAdmin && start !== "" && start !== end) || (isAdmin && duration_mode === "range")`. The condition's meaning inverted (TRUE now = "show range UI") but the two JSX branches were not swapped, so "Date range" rendered the single input and "Single day" rendered the Start/End grid — and a student opening a pre-existing multi-day event got one picker instead of the documented both-pickers defensive branch.
+
+**Behavior before → after:**
+- Single day: BEFORE showed Start date + End date grid (entry in "End date" silently discarded on submit; start-only entry worked because the handler mirrors end) → AFTER shows exactly one date field under the existing "Date" group label.
+- Date range: BEFORE showed ONE input → end_date unenterable → fresh range forms always failed validation (multi-day events uncreatable via this dialog) and editing a range event silently kept a stale end or collapsed it when start moved past end → AFTER shows Start date + End date fields, both editable with start ≤ end enforced.
+- Payload/state logic itself was always correct (`end_date: singleDay ? start : end`; mode switches collapse to one date / seed end from start) — the fix restores the UI↔state correspondence; nothing else changed.
+
+**Files changed:** `frontend/src/components/events/EventFormDialog.tsx` only (9 insertions / 8 deletions): swapped the two ternary branches; added `aria-label="Event date"` to the single input (a11y parity — the group label is a non-associated span; zero visual change). No shared component, no eventRules.ts, no type, no backend file touched.
+
+**Backend/persistence impact:** none. `AcademicEventCreate.end_date: date` remains required/non-nullable; the canonical single-day representation remains `start_date == end_date`; `validate_event` (start ≤ end) unchanged; `EventService` create/update unchanged. The payload builder is untouched, so requests are byte-identical to what the correct state always produced. All existing event types (Holiday, Extra Lecture/Tutorial/Practical, Cancelled Lecture/Tutorial, Surprise Quiz, Quiz Day, and the rest) keep their business rules and default duration modes (`eventRules.ts` untouched).
+
+**Edit-event impact:** same component, fixed through the shared root cause — no duplicated date-mode logic created. Admin edit: single-day events open with one picker, range events with both (end previously uneditable in range mode). Student edit: the documented defensive branch now matches its intent (a pre-existing multi-day event shows both pickers; single-day shows one).
+
+**Verification performed (static, per instruction — no browser tests):** `npx tsc --noEmit` PASS (0 errors); ESLint PASS on the changed file; git diff audited (exactly the branch swap + aria-label); full state→payload trace for both modes including mode-switch staleness (a 2026-09-15→2026-09-18 range can never be submitted after switching to Single day — the switch collapses to one explicit date) and dialog re-open re-seeding via `initialState`.
+
+**Notification findings (documented only, NOT implemented):** backend `event_service.py` already fires the Phase 11C-P4 post-commit notification side-channel (`NotificationService.after_event_mutation`) on both create and update, best-effort and isolated; it reads the persisted event, so it automatically receives the corrected dates. No notification defect discovered. Any notification architecture work remains a separate authorized task.
+
+**Status: IMPLEMENTED AND STATICALLY VERIFIED.** UI testing, commit, and deploy are the user's decisions.

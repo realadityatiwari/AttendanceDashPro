@@ -416,14 +416,6 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
             )}
             {(!isAdmin && form.start_date !== "" && form.start_date !== form.end_date) ||
             (isAdmin && form.duration_mode === "range") ? (
-              <Input
-                id="event-form-start"
-                type="date"
-                className="[color-scheme:dark]"
-                value={form.start_date}
-                onChange={e => handleStartDateChange(e.target.value)}
-              />
-            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={fieldClass}>
                   <label className={labelClass} htmlFor="event-form-start">Start date</label>
@@ -446,6 +438,15 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                   />
                 </div>
               </div>
+            ) : (
+              <Input
+                id="event-form-start"
+                type="date"
+                className="[color-scheme:dark]"
+                value={form.start_date}
+                onChange={e => handleStartDateChange(e.target.value)}
+                aria-label="Event date"
+              />
             )}
           </div>
 

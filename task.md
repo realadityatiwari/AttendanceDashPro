@@ -4660,3 +4660,15 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [ ] **USER** — personal testing of the Quiz Eligibility page (all cycles, especially Quiz III windows and BCS-503 Q2), then commit/deploy decision.
 - [ ] **CLARIFY (institution)** — parked/out-of-scope items from the audit remain open: per-criterion formula confirmation, previous-quiz boundary inclusivity, pending/back-marking policy, official quiz schedule authority. (Activity/NCC/sports provisions are OUT OF SCOPE per user instruction.)
 - [ ] **CLARIFY (user)** — M-3: environment/data date behind the originally observed UI values (unresolved; production never accessed).
+
+---
+
+## Authoritative tasks — 2026-09-13 (Add Event date-mode bugfix; supersedes the 2026-09-09 task list above, which remains as completed/open history for the quiz track)
+
+- [x] **Discovery (read-only)** — full Add Event flow traced: tools/events page → EventFormDialog (create + edit, the only dialog with the Single day / Date range radios) → eventRules.ts → AcademicEventPayload → backend AcademicEventCreate/validate_event/EventService → persistence. Canonical single-day contract confirmed: start_date == end_date (end_date required, never null).
+- [x] **Root cause** — commit `5458925` (UI/UX Remediation Phase 11) inverted the date-fields render condition without swapping the JSX branches: "Date range" showed ONE date input, "Single day" showed the Start/End grid. State handlers and payload builder were correct; the UI made range events UNCREATABLE (end date unenterable) and let single-mode entries into "End date" be silently discarded.
+- [x] **Fix implemented** — `frontend/src/components/events/EventFormDialog.tsx` only: swapped the two ternary branches (range → Start/End grid; single → one "Date" input) + `aria-label="Event date"` on the single input (a11y parity, zero visual change). No label swap, no redesign, no state/payload/backend change.
+- [x] **Verification (static)** — tsc PASS (0 errors); ESLint PASS; diff = branch swap + aria-label only. Paths traced: single → one input → start mirrored to end → payload start==end; range → two inputs → start≤end enforced → payload as picked; mode switches collapse/seed dates (stale 15→18 range can never leak into a single-day submit); edit flow fixed through the same shared component; all event types' rules and defaults untouched. UI testing is the user's.
+- [x] **Notification findings (documented only)** — Phase 11C-P4 post-commit side-channel already fires `NotificationService.after_event_mutation` on event create/update (best-effort, isolated); reads the persisted event, so it inherits the corrected dates with no change needed. No notification defect found; no notification work performed.
+- [ ] **USER** — personal UI testing of Add Event (Single day ↔ Date range switching, stale-field checks, edit of single-day and range events), then commit/deploy decision.
+- HARD STOP — bugfix complete; notification implementation explicitly out of scope.
