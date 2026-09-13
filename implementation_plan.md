@@ -5834,3 +5834,72 @@ No application code modified. Only the database migration was applied.
 **Notification findings (documented only, NOT implemented):** backend `event_service.py` already fires the Phase 11C-P4 post-commit notification side-channel (`NotificationService.after_event_mutation`) on both create and update, best-effort and isolated; it reads the persisted event, so it automatically receives the corrected dates. No notification defect discovered. Any notification architecture work remains a separate authorized task.
 
 **Status: IMPLEMENTED AND STATICALLY VERIFIED.** UI testing, commit, and deploy are the user's decisions.
+
+---
+
+# Notification Infrastructure — Read-Only Audit + Proposed Architecture (2026-09-13) — DISCOVERY ONLY, NOT IMPLEMENTED
+
+**Authorization record:** push notification infrastructure was previously an optional/deferred future capability (Phase 11C was decision-gated; the 2026-09-02 investigation explicitly implemented delivery-side phases P1-P5 as infrastructure-only). The user has now AUTHORIZED it as a REQUIRED product capability. This section documents the audit findings and the proposed implementation plan. NOTHING IS IMPLEMENTED; phases below are proposals awaiting the user's go-ahead.
+
+## Audit findings (source-proven)
+
+- In-app notification domain (Phase 11A/B/C) is functional and canonical: `notifications` table with DB-enforced idempotency UNIQUE(user_id, kind, occurrence_key); GET /api/v1/notifications is READ-ONLY (persisted inbox + 60s per-user TTL cache); `NotificationService.emit()` is the single emission boundary; read/dismiss state preserved across refreshes.
+- Rows are created ONLY by mutation triggers (attendance marking, event create/update, quiz schedule change) — all post-commit and isolated — plus a callable sweep `regenerate_user_notifications()` that has NO production caller (no endpoint, no scheduler). Hence: notifications appear in practice only after domain mutations; event creation is the most visible trigger (fan-out to many users). INTENTIONAL design, not a bug.
+- NO scheduled execution exists anywhere: no APScheduler/Celery/node-cron/BullMQ; no lifespan/startup loop in main.py; render.yaml defines one `type: web` service and NO cron job; no vercel.json (no Vercel cron); CI has no schedule; no pg_cron. The stack cannot run anything on a schedule today.
+- Web Push is implemented end-to-end in CODE (Phase 11C-P1..P5, 2026-09-02/03): SW registration mounted in AppShell; push + notificationclick handlers; permission + subscription UI in Settings; push_subscriptions table (migration f0e1d2c3b4a5, local dev DB only); pywebpush + VAPID settings; PushDispatchService with 404/410 cleanup and per-subscription isolation; push fires ONLY for genuinely new notification rows.
+- EXACT reason OS push does not reach the mobile notification panel: the VAPID configuration boundary. Keys are committed nowhere (render.yaml `sync: false`; deploy/.env.prod.example placeholders; backend/.env has only DATABASE_URI). With NEXT_PUBLIC_VAPID_PUBLIC_KEY unset at Vercel BUILD time the client refuses to subscribe (honest "push setup unavailable" state) -> zero subscription rows -> dispatch iterates an empty list; with the backend VAPID triple unset, delivery returns CONFIGURATION_ERROR without attempting. Even configured, delivery additionally requires explicit user opt-in (Settings -> Browser notifications) and, on iOS 16.4+, the PWA installed to the home screen. Daily pushes further require the missing scheduler.
+- Other facts: push subscriptions follow the signed-in user on a shared browser (upsert reassigns user_id — documented intent); logout does not delete subscriptions; stale subscriptions are removed only reactively on 404/410; notification rows accumulate forever (dismiss is a flag; NO retention/pruning exists); in-app rows have no click-through navigation (deep links are push-payload-only); SW scope "/" correct; PWA installable (standalone manifest, maskable icons).
+
+## Proposed architecture (current stack; nothing built yet)
+
+```text
+Scheduler trigger (Render Cron Job in render.yaml  — preferred, same image/platform;
+                    or any external scheduler calling a secret-protected
+                    POST /api/v1/admin/notifications/run-daily endpoint)
+      ↓  daily, institution-local morning (e.g. 01:00 UTC = 06:30 IST)
+Backend daily job (idempotent; "today" via institution_today(); occurrence_key
+                    embeds the institution-local date -> re-run = refresh, never duplicate)
+      ↓
+Notification decision engine (NEW; reuses canonical services ONLY:
+      CalendarService.get_day_schedule / calendar_repo.get_all_events,
+      AttendanceRepository.get_sessions_with_status,
+      AttendanceService.get_subject_summaries (canonical optimizer +
+      Phase 27 provenance), EligibilityService, ElectiveResolver,
+      UserRepository enrollment/slot queries, preferences)
+      ↓
+NotificationService.emit()  → notifications table (canonical record; ON CONFLICT refresh)
+      ↓ (new rows only — existing behavior)
+PushDispatchService → pywebpush/VAPID → browser push service (202 accepted ≠ OS display proof)
+      ↓
+service-worker.js push handler → showNotification → OS notification panel
+      ↓ notificationclick → same-origin deep link
+```
+
+New components required: scheduler trigger (Render cron service or secured run endpoint + job entrypoint script); daily decision engine (DAILY_BRIEFING projection + date-bucketed quiz/exam kinds); retention/pruning policy; delivery-outcome observability (structured logs minimum; optional delivery table). Everything else is reuse.
+
+## Proposed taxonomy (NotificationKind is additive-by-design)
+
+- DAILY_BRIEFING (new, digest; 1 row/user/day; occurrence_key = "BRIEFING:<IST date>") — today's classes with times, can-leave/should-attend/must-attend summary FROM THE CANONICAL OPTIMIZER, attendance % + status band, today's quiz/event notes, non-working-day note.
+- Attendance risk — REUSE existing ATTENDANCE_THRESHOLD / MUST_ATTEND / SAFE_SKIP (already canonical; push on degradation only). No second formula anywhere.
+- Quiz — REUSE QUIZ_APPROACHING (cycle-level) + NEW date-bucketed pushes: occurrence_key "<cycle>:T-1" / "<cycle>:T0" for quiz-tomorrow/quiz-today, sourced from EligibilityService.get_current_quiz_cycle + active QUIZ_DAY events.
+- Exams — NO exam EventType EXISTS today (only MID_SEM_PRACTICAL). Exam reminders require a data-source decision first (new EventType MID_SEMESTER_EXAM vs. quiz-cycle-style schedule). Proposed kinds EXAM_APPROACHING/EXAM_TODAY are placeholders pending that decision.
+- Academic events — REUSE ACADEMIC_EVENT (push-once per event, already live). Holiday/cancellation reach students through it; briefing restates today's reality.
+
+Priority levels: INFO (briefing, events, quiz approaching) / WARNING (WATCH band, approaching threshold, quiz tomorrow) / CRITICAL (CRITICAL band, must-attend with deficit, quiz today). Push policy: CRITICAL always push; WARNING push; INFO in-app only (briefing push optional per preference). All pushes honor existing push-subscription opt-in.
+
+Dedup/spam rules: DB UNIQUE(user_id, kind, occurrence_key) + push-once-on-new-row (already enforced); digest replaces per-class reminders for the morning (CLASS_REMINDER stays preference-gated, default OFF, unchanged); date-bucketed keys make re-runs idempotent; dismissed/read rows never resurface or re-push.
+
+Timing: daily job fires once per institution day (06:30 IST proposed) generating the briefing for every active user; event/attendance/quiz triggers remain instant (existing behavior); quiz T-1/T-0 generated by the same daily job evaluating the NEXT day and TODAY.
+
+## Phased implementation plan (dependency-ordered; NOT started)
+
+- **Phase A — Push enablement (ops + small code):** generate VAPID keypair (py_vapid one-liner already in deploy/.env.prod.example), set Render backend env triple + Vercel build env NEXT_PUBLIC_VAPID_PUBLIC_KEY, verify subscription → push → OS panel E2E on Android Chrome + installed-PWA iOS 16.4+; document iOS browser-tab limitation; decide logout/multi-user shared-device semantics (current: endpoint follows signed-in user).
+- **Phase B — Scheduled job infrastructure:** add Render Cron Job service to render.yaml running a backend management script (or external scheduler → secret-protected run endpoint); idempotent job runner with logging/observability (get_logger), failure visibility, and institution_today() date resolution; job safe to run multiple times/day.
+- **Phase C — Daily morning briefing:** DAILY_BRIEFING kind + projection consuming ONLY the canonical services listed above; day-semantics matrix: normal day / holiday / term break / no classes / Saturday (WORKING_SATURDAY events authoritative — Club & Sports has NO data representation, needs a product decision) / cancelled & extra classes / quiz day / multiple events / elective-divergent events (slot vs concrete); academic configuration (timetable.json + events + cycles) stays authoritative — no hardcoded dates.
+- **Phase D — Attendance alerts:** surface existing threshold/must-attend/safe-skip projections in the digest; push on band degradation (CRITICAL/WARNING policy).
+- **Phase E — Quiz reminders:** T-1/T-0 date-bucketed kinds via EligibilityService + QUIZ_DAY events.
+- **Phase F — Exam reminders:** BLOCKED on the exam data-source decision (new EventType vs schedule table).
+- **Phase G — Event notifications:** already live via P4; optional per-day "starts today/this week" reinforcement inside the briefing; keep push-once.
+- **Phase H — Reliability/observability:** delivery-outcome logging/counters; stale-subscription proactive sweep; notifications retention/pruning policy (none exists today); job failure visibility.
+
+**Status: DISCOVERY COMPLETE. HARD STOP FOR REVIEW — no implementation performed.**
