@@ -4672,3 +4672,19 @@ Investigation and fix for login failure at `POST /api/v1/auth/login` producing 5
 - [x] **Notification findings (documented only)** — Phase 11C-P4 post-commit side-channel already fires `NotificationService.after_event_mutation` on event create/update (best-effort, isolated); reads the persisted event, so it inherits the corrected dates with no change needed. No notification defect found; no notification work performed.
 - [ ] **USER** — personal UI testing of Add Event (Single day ↔ Date range switching, stale-field checks, edit of single-day and range events), then commit/deploy decision.
 - HARD STOP — bugfix complete; notification implementation explicitly out of scope.
+
+---
+
+## Authoritative tasks — 2026-09-13 (Notification infrastructure audit track; supersedes the 2026-09-09 task list above, which remains as history)
+
+- [x] **Audit (read-only)** — complete notification architecture traced: data model (notifications + push_subscriptions, idempotency constraints), NotificationService emit/triggers/sweep, PushDispatchService (pywebpush/VAPID, 404/410 cleanup), endpoints, SW push/notificationclick handlers, Settings opt-in UI, frontend hooks. NO code/migration/production change made.
+- [x] **Root causes established** — (1) in-app notifications exist only for domain mutations (event create/update is the visible one; sweep exists but has no caller); (2) daily notifications cannot occur: NO scheduler exists anywhere in the stack (no cron service, no Vercel cron, no in-process loop, no pg_cron); (3) OS push terminates at the unconfigured VAPID boundary (keys operator-provided, unset) -> client never subscribes, backend never attempts; iOS additionally requires installed PWA 16.4+.
+- [x] **Design + phased plan produced** — taxonomy (DAILY_BRIEFING digest reusing canonical attendance/eligibility/calendar outputs; additive quiz T-1/T-0 kinds; exam kinds blocked on a data-source decision), occurrence-key date-bucketing for re-run-safe idempotency, push-once + priority levels, push/in-app separation, timezone strategy (institution_today(), 01:00 UTC = 06:30 IST proposal), architecture reusing every canonical service with no second attendance formula. Recorded in implementation_plan.md.
+- [x] **Authorization recorded** — push notification infrastructure is now a REQUIRED product capability per the user (previously optional/deferred). No implementation authorized yet.
+- [ ] **DECISION (user)** — scheduler owner: Render Cron Job (recommended) vs external scheduler + secret-protected run endpoint.
+- [ ] **DECISION (user)** — briefing push policy: in-app only vs push for the daily digest; briefing fire time (06:30 IST proposed).
+- [ ] **DECISION (user)** — exam data source (new EventType vs schedule table) before Phase F.
+- [ ] **DECISION (institution/product)** — "Saturday Club & Sports Activities" has NO representation in the repo (timetable.json/enum/engines); a data source is needed before the briefing can describe it.
+- [ ] **IMPLEMENT (pending authorization)** — Phases A-H per implementation_plan.md (A: VAPID enablement/ops; B: scheduler; C: briefing; D: attendance alerts; E: quiz reminders; F: exams; G: event polish; H: reliability/observability incl. retention/pruning which does not exist today).
+- [ ] **USER** — push enablement requires operator-side env setup (Render dashboard VAPID triple + Vercel build env NEXT_PUBLIC_VAPID_PUBLIC_KEY); not doable from the repo alone.
+- HARD STOP — discovery complete; no implementation until the user authorizes a phase.
