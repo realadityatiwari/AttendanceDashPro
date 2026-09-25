@@ -8,6 +8,7 @@ from datetime import date, datetime, time
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.db.session import AsyncSessionLocal
+from sqlalchemy import select
 from app.models.academic import AcademicSession, Semester, Subject
 from app.models.timetable import TimetableEntry
 from app.models.user import Section

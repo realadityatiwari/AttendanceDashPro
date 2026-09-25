@@ -193,10 +193,10 @@ Computed per-subject aggregate produced by `attendance-engine.js` and consumed b
 | `completedP` | number | `attP_done + missP_done` — *added S3.4* |
 | `currentLecPct` | number\|null | Current lecture % (over completed only) |
 | `currentTutPct` | number\|null | Current tutorial % |
-| `currentAvgPct` | number\|null | Weighted average |
+| `currentAvgPct` | number\|null | Pooled L+T: `(L_present + T_present) / (L_conducted + T_conducted) × 100` (not a weighted/arithmetic average of the two percentages) |
 | `forecastLecPct` | number\|null | Best-case forecast % |
 | `forecastTutPct` | number\|null | Best-case forecast % |
-| `forecastAvgPct` | number\|null | Best-case average |
+| `forecastAvgPct` | number\|null | Best-case pooled L+T: pending treated as attended, over `(L_total + T_total)` (not an average of the two forecast percentages) |
 | `optResult` | OptimizationResult | Optimization result for target % |
 
 > [!IMPORTANT]

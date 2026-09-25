@@ -405,7 +405,7 @@ hint may remain.
 **CURRENT:** page title + one-line description; responsive grid (1/2/3 columns) of
 **SubjectAttendanceCards**: header = subject code (mono, bold) + THEORY/LAB badge + health badge
 (Healthy/Watch/At Risk/Critical — Critical solid red, others tinted); 30px percentage
-("Overall" = (Lecture%+Tutorial%)/2, or "Practical" for lab-only subjects); thin progress bar
+("Overall" = pooled L+T count-level percentage `(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100` — NOT the arithmetic mean of the two percentages [updated 2026-09-26, Chunk 7]; or "Practical" for lab-only subjects); thin progress bar
 colored by health; two sub-blocks for Lecture and Tutorial (small tinted panels with % and
 attended counts, or "No tutorials"); a formula caption; an expandable **View Details** panel
 with per-category rows and a "pending never counted as absent" note. Lab-only cards show
@@ -451,7 +451,7 @@ explicit confirmation for bulk actions; keep future/cancelled semantics exactly 
 ### 8.4 Quizzes (Quiz Eligibility) — `/tools/quiz-schedule`
 
 **CURRENT:** centered `max-w-4xl`: an info card explaining the criteria (Criterion I/II, both
-(Lecture%+Tutorial%)/2, thresholds 70% Quiz I / 75% Quiz II & III, counting windows); a row of
+pooled L+T count-level percentage `(L Present + T Present) / (L Conducted + T Conducted) × 100` — NOT the arithmetic mean of the two percentages [updated 2026-09-26, Chunk 7]; thresholds 70% Quiz I / 75% Quiz II & III, counting windows); a row of
 **cycle pills** (Quiz I / II / III, `aria-pressed`, active = solid primary); then one
 **QuizEligibilityCard per theory subject**: header (code mono + THEORY badge + name + quiz date
 + window range + state badge Eligible/Recoverable/Not Eligible/Unresolved); three progress rows

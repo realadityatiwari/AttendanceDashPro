@@ -11,8 +11,9 @@ Verifies the Phase 8.2 product contract end-to-end against the real database
       from a constant.
   3.  Quiz-window changes do NOT change Attendance page totals (a rollback-
       transaction quiz-date change leaves the attendance summary identical).
-  4.  Tutorial formula: Overall = (Lecture % + Tutorial %) / 2 (theory with
-      tutorials), matching the attendance engine.
+  4.  Tutorial formula: Overall = pooled L+T counts (L_present + T_present) /
+      (L_conducted + T_conducted) x 100 (theory with tutorials), matching the
+      attendance engine (pooled-formula migration, Chunk 6).
   5.  Lecture-only fallback: theory without tutorials -> Overall = Lecture %,
       no fabricated Tutorial 0/0 block.
   6.  Cancelled practical sessions are excluded from the attendance
@@ -70,6 +71,7 @@ from app.models.enums import AttendanceStatus, ClassType, UserRole
 from app.engines.attendance_engine import (
     compute_subject_stats,
     classify_attendance_health,
+    pooled_pct,
 )
 from app.engines.practical_occurrence import collapse_count_rows, group_practical_occurrences
 from app.services.attendance_service import AttendanceService
@@ -230,7 +232,10 @@ async def main() -> int:
             lec = b["current_lecture_pct"]
             tut = b["current_tutorial_pct"]
             avg = b["current_avg_pct"]
-            exp_avg = (lec + tut) / 2.0 if lec is not None and tut is not None else None
+            # Canonical POOLED L+T formula (owner-approved, Chunks 2-5):
+            # (L_present + T_present) / (L_conducted + T_conducted) x 100 —
+            # never the arithmetic mean of the two per-type percentages.
+            # Compared against the engine's own pooled value below.
             async with AsyncSessionLocal() as db:
                 raw = await AttendanceRepository(db).get_subject_counts_up_to_date(
                     admin_user.id, subject_ids["BCS-501"], today)
@@ -248,8 +253,13 @@ async def main() -> int:
                         counts[t]["miss"] += 1
                     else:
                         counts[t]["pending"] += 1
+                exp_avg = pooled_pct(
+                    counts["L"]["att"], counts["L"]["tot"] - counts["L"]["pending"],
+                    counts["T"]["att"], counts["T"]["tot"] - counts["T"]["pending"],
+                )
                 engine_summary = compute_subject_stats("BCS-501", {"counts": counts})
-            check("4. tutorial formula: Overall = (Lecture % + Tutorial %) / 2, "
+            check("4. tutorial formula: Overall = pooled L+T counts "
+                  "(L_present + T_present) / (L_conducted + T_conducted), "
                   "identical to the attendance engine",
                   exp_avg is not None and abs(avg - exp_avg) < 1e-9
                   and abs(avg - engine_summary.current_avg_pct) < 1e-9,

@@ -30,7 +30,8 @@ Quiz Eligibility is a dedicated product responsibility explicitly separated from
 - Must present distinct tabs for the 1st, 2nd, and 3rd Quiz.
 - Only applicable *theory* subjects are shown; practicals/labs are strictly excluded.
 - Evaluates routes logically: (Criterion 1 qualifies) OR (Criterion 2 qualifies) = Eligible.
-- Exposes: Lecture %, Tutorial %, Average %, Required Percentage, Eligibility Status, and Qualifying Criterion.
+- Both criteria use the pooled L+T count-level formula `(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100` [updated 2026-09-26 — supersedes the retired arithmetic mean of the two percentages].
+- Exposes: Lecture %, Tutorial %, pooled Average %, Required Percentage, Eligibility Status, and Qualifying Criterion.
 
 ## 6. Overall Attendance Responsibility
 Overall Attendance provides a holistic view from the start of the semester (e.g., 15 July 2026) to the current date.

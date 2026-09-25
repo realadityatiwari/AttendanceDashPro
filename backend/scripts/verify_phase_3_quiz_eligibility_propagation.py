@@ -6,7 +6,7 @@ Events API (committed POST / PATCH / DELETE mutations; exact-id cleanup in the
 finally block restores the frozen baseline):
 
   Events -> active QUIZ_DAY date -> quiz cycle/window -> L/T session counts
-         -> Lecture % -> Tutorial % -> (Lecture % + Tutorial %) / 2
+         -> Lecture % -> Tutorial % -> pooled L+T percentage
          -> Criterion I / Criterion II -> Must Attend / Safe Skip
          -> Final eligibility
 
@@ -14,9 +14,9 @@ finally block restores the frozen baseline):
                   inside the Q1-Q2 gap). The new quiz becomes cycle 2
                   (positional re-ranking: 09-21 -> cycle 3, 10-16 -> cycle 4).
                   Every hop of the chain for cycle 2 and the re-ranked cycle 3
-                  is compared against a DB-derived reference (calendar-engine
+                  is compared against a DB-derived reference                  (calendar-engine
                   windows, attendance-repo counts with quiz-day exclusion,
-                  (L% + T%) / 2, per-criterion optimizer, OR-combined final).
+                  pooled L+T counts, per-criterion optimizer, OR-combined final).
   2.  RESCHEDULE: PATCH start_date 09-14 -> 09-16. Stale 09-14 gone; window
                   [08-31, 09-15] drives counts/percentages/average/Must
                   Attend/Safe Skip/final — all update to the new reference.
@@ -70,7 +70,11 @@ from app.models.enums import AttendanceStatus, ClassType, EventType
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.calendar_repo import CalendarRepository
-from app.engines.attendance_engine import optimize_attendance, normalize_class_type
+from app.engines.attendance_engine import (
+    optimize_attendance,
+    normalize_class_type,
+    pooled_pct as _pooled_pct,
+)
 from app.engines.calendar_engine import (
     get_attendance_window, get_cumulative_attendance_window, DEFAULT_WEEKENDS,
 )
@@ -97,14 +101,6 @@ def eqf(a, b) -> bool:
     if a is None or b is None:
         return a is None and b is None
     return math.isclose(a, b, abs_tol=1e-9)
-
-
-def combined_pct(lec_pct, tut_pct):
-    if tut_pct is None:
-        return lec_pct
-    if lec_pct is None:
-        return None
-    return (lec_pct + tut_pct) / 2.0
 
 
 def aggregate(raw_counts) -> dict:
@@ -160,10 +156,16 @@ async def reference_chain(db, user_id, subject, effective_dates, cycle, semester
 
     lec_pct = _pct(counts_i['L'])
     tut_pct = _pct(counts_i['T'])
-    avg = combined_pct(lec_pct, tut_pct)
+    # Canonical POOLED L+T percentage (owner-approved, Chunks 2-5) — the SAME
+    # engine helper production uses (`pooled_pct`); never the retired
+    # arithmetic mean of the two per-type percentages. Eligibility window
+    # totals include pending (eligibility count semantics unchanged).
+    avg = _pooled_pct(counts_i['L']['att'], counts_i['L']['tot'],
+                      counts_i['T']['att'], counts_i['T']['tot'])
     lec_pct_ii = _pct(counts_ii['L'])
     tut_pct_ii = _pct(counts_ii['T'])
-    avg_ii = combined_pct(lec_pct_ii, tut_pct_ii)
+    avg_ii = _pooled_pct(counts_ii['L']['att'], counts_ii['L']['tot'],
+                         counts_ii['T']['att'], counts_ii['T']['tot'])
 
     opt_i = optimize_attendance(
         counts_i['L']['tot'], counts_i['L']['att'], counts_i['L']['miss'], counts_i['L']['pending'],
@@ -175,10 +177,13 @@ async def reference_chain(db, user_id, subject, effective_dates, cycle, semester
         required)
 
     def best_avg(counts):
+        # CHUNK 6: pooled best case — pending treated as attended, L+T pooled
+        # at count level via the canonical engine helper (never the mean of
+        # the two per-type best-case percentages).
         l, t = counts['L'], counts['T']
-        return combined_pct(
-            (l['att'] + l['pending']) / l['tot'] * 100.0 if l['tot'] > 0 else None,
-            (t['att'] + t['pending']) / t['tot'] * 100.0 if t['tot'] > 0 else None,
+        return _pooled_pct(
+            l['att'] + l['pending'], l['tot'],
+            t['att'] + t['pending'], t['tot'],
         )
 
     crit_i_pass = avg is not None and avg >= required
@@ -190,7 +195,17 @@ async def reference_chain(db, user_id, subject, effective_dates, cycle, semester
         state = EligibilityState.RECOVERABLE
     else:
         state = EligibilityState.NOT_ELIGIBLE
-    top = opt_i if total_deficit(opt_i) <= total_deficit(opt_ii) else opt_ii
+    # Top-level Must Attend route (Phase 27 / pooled-Chunk semantics,
+    # mirrored from evaluate_quiz_eligibility): among REACHABLE criteria the
+    # fewest total attendances wins; ties prefer Criterion I. An unreachable
+    # criterion never wins while a reachable one exists (its deficit is its
+    # full pending count). The optimizer outputs themselves come from the
+    # canonical engine — this is route selection only, not a second optimizer.
+    _cands = [
+        (opt_i.is_reachable, total_deficit(opt_i), 0, opt_i),
+        (opt_ii.is_reachable, total_deficit(opt_ii), 1, opt_ii),
+    ]
+    top = min(_cands, key=lambda c: (not c[0], c[1], c[2]))[3]
 
     return {
         "quiz_date": next((d for c, d in effective_dates if c == cycle), None),
@@ -371,7 +386,7 @@ async def main() -> int:
             r = await client.get(f"/api/v1/quiz-eligibility/{SUBJECT}/2", headers=admin_headers)
             created_cycle2 = r.json()
             check("3. CREATE chain: cycle 2 (new quiz 09-14) — window/counts/"
-                  "percentages/(L%+T%)/2/criteria/Must Attend/Safe Skip/final "
+                  "percentages/pooled L+T/criteria/Must Attend/Safe Skip/final "
                   "== DB-derived reference",
                   r.status_code == 200 and chain_matches(created_cycle2, ref),
                   f"state={created_cycle2.get('state')} quiz={created_cycle2.get('quiz_date')} "

@@ -11,7 +11,7 @@ Verifies the Phase 7.1 product contract end-to-end against the real database:
  6.  /events upcoming surfaces all 18 quiz days
  7-9. BCS-054 Q1/Q2 windows unchanged; Q3 window follows the resolved schedule
 10.  Lecture-only formula (BNC-501: average collapses to lecture %)
-11.  Lecture+tutorial combined average formula (BCS-501)
+11.  Lecture+tutorial combined pooled L+T formula (BCS-501)
 12.  RECOVERABLE  = below target but reachable (real admin data)
 13.  ELIGIBLE     = currently satisfies the requirement (rollback scenario)
 14.  NOT_ELIGIBLE = unreachable (rollback scenario)
@@ -56,7 +56,7 @@ from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, QuizCycle, ScheduleStatus
 from app.models.enums import AttendanceStatus, EventType, UserRole
-from app.engines.attendance_engine import optimize_attendance
+from app.engines.attendance_engine import optimize_attendance, pooled_pct
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
 from app.repositories.session_repo import SessionRepository
@@ -296,8 +296,13 @@ async def main() -> int:
         r = await client.get("/api/v1/quiz-eligibility/BCS-501/1", headers=admin_headers)
         bcs501_q1 = r.json()
         lec, tut = bcs501_q1["lecture"], bcs501_q1["tutorial"]
-        expected_avg = (lec["attended"] / lec["total"] * 100.0 + tut["attended"] / tut["total"] * 100.0) / 2.0
-        check("11. BCS-501 Q1 average = (lecture % + tutorial %) / 2 from canonical counts",
+        # Canonical POOLED L+T formula (owner-approved, Chunks 2-5):
+        # (L_attended + T_attended) / (L_total + T_total) x 100 — never the
+        # arithmetic mean of the two per-type percentages. The eligibility
+        # window totals INCLUDE pending, so the raw counts are used as-is.
+        expected_avg = pooled_pct(lec["attended"], lec["total"],
+                                  tut["attended"], tut["total"])
+        check("11. BCS-501 Q1 average = pooled L+T counts from canonical counts",
               r.status_code == 200
               and lec["total"] > 0 and tut["total"] > 0
               and abs(bcs501_q1["average_pct"] - expected_avg) < 1e-6

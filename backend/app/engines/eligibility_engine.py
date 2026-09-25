@@ -5,7 +5,7 @@ from app.schemas.attendance import (
     EligibilityResult, EligibilityState, OptimizationResult,
     CriterionResult, FinalCriterionResult, ClassCounts,
 )
-from app.engines.attendance_engine import optimize_attendance
+from app.engines.attendance_engine import optimize_attendance, pooled_pct
 from app.engines.calendar_engine import get_attendance_window, get_cumulative_attendance_window
 
 def determine_quiz_threshold(quiz_cycle: int) -> float:
@@ -25,13 +25,27 @@ def _pct(attended: int, total: int) -> Optional[float]:
     return (attended / total * 100.0) if total > 0 else None
 
 def _combined_pct(lec_pct: Optional[float], tut_pct: Optional[float]) -> Optional[float]:
-    """Official combined formula: (Lecture % + Tutorial %) / 2.
-    Subjects without tutorials collapse to the lecture percentage."""
+    """HISTORICAL mean-of-percentages reference — NO production callers.
+
+    (Lecture % + Tutorial %) / 2 was the official eligibility formula until
+    Chunk 4 (current Criterion I/II) and Chunk 5 (best-case / RECOVERABLE)
+    replaced BOTH live uses with the pooled count-level aggregation
+    (`_pooled_pct` — the single implementation in the attendance engine).
+    Retained only as a documented historical reference; nothing in the live
+    path may call it. Subjects without tutorials collapse to the lecture
+    percentage (the old quirk)."""
     if tut_pct is None:
         return lec_pct
     if lec_pct is None:
         return None
     return (lec_pct + tut_pct) / 2.0
+
+# Eligibility-side canonical name for the pooled count-level aggregation.
+# ONE implementation exists — attendance_engine.pooled_pct (consolidated in
+# Chunk 5). This alias keeps the eligibility call sites and the criterion /
+# best-case tests stable, and guarantees the current criterion, the best case
+# and the subject forecast can never diverge.
+_pooled_pct = pooled_pct
 
 def _fmt(pct: Optional[float]) -> str:
     return "N/A" if pct is None else f"{pct:.1f}%"
@@ -54,18 +68,26 @@ def _evaluate_criterion(
     required: float,
 ) -> CriterionResult:
     """One qualifying route of the official policy. Both criteria use the SAME
-    lecture/tutorial average formula; they differ only in the counting window:
+    pooled lecture/tutorial count formula — (L att + T att) / (L total + T
+    total) x 100 on that window's counts (Chunk 4, owner-approved) — and
+    differ only in the counting window:
       - Criterion I  = cycle window (previous quiz boundary -> day before quiz)
       - Criterion II = cumulative window (commencement -> day before quiz)
     Must Attend / Safe Skip are derived from the same window counts and the
-    same average formula via the attendance engine's optimizer (no separate
+    same pooled constraint via the attendance engine's optimizer (no separate
     frontend mathematics)."""
     l = _norm_counts(counts.get('L'))
     t = _norm_counts(counts.get('T'))
 
-    lec_pct = _pct(l['att'], l['tot'])
+    # The per-type tutorial percentage remains informative for the no-tutorial
+    # explanation branch; the criterion VALUE itself is the pooled count-level
+    # percentage below.
     tut_pct = _pct(t['att'], t['tot'])
-    avg_pct = _combined_pct(lec_pct, tut_pct)
+    # CHUNK 4: canonical CURRENT criterion percentage — pooled L+T counts over
+    # the eligibility window totals (pending included, semantics unchanged).
+    # [OLD] the arithmetic mean of the two per-type percentages (the retired
+    # _combined_pct helper has no production callers as of Chunk 5).
+    pooled_pct = _pooled_pct(l['att'], l['tot'], t['att'], t['tot'])
 
     opt = optimize_attendance(
         l['tot'], l['att'], l['miss'], l['pending'],
@@ -75,23 +97,23 @@ def _evaluate_criterion(
 
     if tut_pct is None:
         explanation = (
-            f"Average of lecture + tutorial attendance {_fmt(avg_pct)} vs "
+            f"Average of lecture + tutorial attendance {_fmt(pooled_pct)} vs "
             f"required {required:.0f}% (no tutorials in the window "
             f"{window['window_start']} to {window['window_end']} — the average "
             f"equals lecture attendance)."
         )
     else:
         explanation = (
-            f"Average of lecture + tutorial attendance {_fmt(avg_pct)} vs "
+            f"Average of lecture + tutorial attendance {_fmt(pooled_pct)} vs "
             f"required {required:.0f}% (window {window['window_start']} to "
             f"{window['window_end']})."
         )
 
     return CriterionResult(
         name=name,
-        value=avg_pct,
+        value=pooled_pct,
         threshold=required,
-        passed=avg_pct is not None and avg_pct >= required,
+        passed=pooled_pct is not None and pooled_pct >= required,
         optimization=opt,
         explanation=explanation,
     )
@@ -117,11 +139,15 @@ def evaluate_quiz_eligibility(
     3. Evaluate lecture/tutorial requirements via exhaustive optimization
     4. Evaluate the official qualifying routes (S4 PRODUCT SPEC §5):
        (Criterion I qualifies) OR (Criterion II qualifies) = Eligible, where
-       BOTH Criterion I and Criterion II use the same lecture/tutorial average
-       formula — (Lecture % + Tutorial %) / 2 — and differ only in the
-       counting window.
+       BOTH Criterion I and Criterion II use the same POOLED lecture/tutorial
+       count formula — (L att + T att) / (L total + T total) x 100 (Chunk 4) —
+       and differ only in the counting window.
     5. Derive the canonical state: ELIGIBLE / RECOVERABLE / NOT_ELIGIBLE /
        UNRESOLVED (current pass, best-case pass, neither, no confirmed date).
+       Both halves are POOLED count-level now: the CURRENT criterion pass
+       (Chunk 4) and the best-case / RECOVERABLE projection (`_best_avg`,
+       Chunk 5 — pending treated as attended). No mean-of-percentages
+       arithmetic remains in the live eligibility path.
 
     Optimization math is delegated unchanged to the attendance engine; this
     function only re-uses the same counts to derive criteria and state.
@@ -176,7 +202,10 @@ def evaluate_quiz_eligibility(
     t_data = _norm_counts(attendance_counts.get('T'))
     lec_pct = _pct(l_data['att'], l_data['tot'])
     tut_pct = _pct(t_data['att'], t_data['tot'])
-    avg_pct = _combined_pct(lec_pct, tut_pct)
+    # CHUNK 4: the top-level current combined percentage is the same pooled
+    # count-level value the Criterion I route uses (identical counts/window),
+    # so `average_pct` and `criterion_i.value` remain one canonical number.
+    avg_pct = _pooled_pct(l_data['att'], l_data['tot'], t_data['att'], t_data['tot'])
 
     # 5. Official qualifying routes
     final_criterion = FinalCriterionResult(
@@ -190,14 +219,24 @@ def evaluate_quiz_eligibility(
         ),
     )
 
-    # Best case per criterion: every pending class in that criterion's window
-    # is attended (the optimizer's model).
+    # Best case per criterion (CHUNK 5): every pending class in that
+    # criterion's window is treated as attended (the optimizer's model) and
+    # L+T are POOLED at count level over the window totals — exactly the
+    # quantity the Chunk 3 optimizer tests for reachability:
+    #
+    #     (L_att + L_pending + T_att + T_pending)
+    #     --------------------------------------- x 100
+    #     (L_total + T_total)
+    #
+    # `tot_*` are the eligibility totals (pending included — count semantics
+    # untouched). Zero total window => None. [OLD] the mean of the two
+    # per-type best-case percentages.
     def _best_avg(counts: Dict[str, Any]) -> Optional[float]:
         l = _norm_counts(counts.get('L'))
         t = _norm_counts(counts.get('T'))
-        return _combined_pct(
-            _pct(l['att'] + l['pending'], l['tot']),
-            _pct(t['att'] + t['pending'], t['tot']),
+        return _pooled_pct(
+            l['att'] + l['pending'], l['tot'],
+            t['att'] + t['pending'], t['tot'],
         )
 
     best_i = _best_avg(attendance_counts)

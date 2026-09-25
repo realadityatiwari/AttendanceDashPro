@@ -1,8 +1,20 @@
 # 06 — Attendance Engine
 
+> [!IMPORTANT]
+> **HISTORICAL DOCUMENT (2026-09-26 marker, pooled-migration Chunk 7).** This page documents the
+> **retired legacy JavaScript prototype engine** (`js/attendance-engine.js`), not the live backend.
+> The live implementation is `backend/app/engines/attendance_engine.py`. The eligibility formula
+> below (`(Lecture% + Tutorial%) / 2`) is **SUPERSEDED**: production now uses the owner-approved
+> POOLED L+T count-level formula `(Lecture Present + Tutorial Present) / (Lecture Conducted +
+> Tutorial Conducted) × 100` for subject current, subject forecast (pending treated as attended),
+> Criterion I & II, best-case/RECOVERABLE, and the Must Attend / Safe Skip / Reachability optimizer
+> (`attendance_engine.pooled_pct` is the single canonical helper). The ERP-style all-subject
+> aggregates described at the end of this document remain exactly as written here. The body is
+> preserved unedited as implementation history.
+
 **File**: `js/attendance-engine.js`  
 **Lines**: 709  
-**Status**: ✅ Complete, production-stable
+**Status**: ✅ Complete, production-stable (LEGACY PROTOTYPE — see notice above)
 
 ---
 

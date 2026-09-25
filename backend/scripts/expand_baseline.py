@@ -38,7 +38,14 @@ async def expand_baseline():
             )
         )
         bcs054_qs = (await db.execute(stmt_bcs054)).scalars().first()
-        if bcs054_qs and (bcs054_qs.date is not None or bcs054_qs.schedule_status != ScheduleStatus.UNRESOLVED):
+        # Invariant updated for the resolved Phase 7.x schedule: BCS-054 Quiz
+        # III is SCHEDULED for 2026-10-23 (the authoritative date pinned by
+        # verify_phase_8_2/verify_phase_7_1 and MASTER_ROADMAP). The old
+        # requirement (Q3 must be UNRESOLVED) predates the resolution.
+        from datetime import date as _date
+        if (bcs054_qs is None
+                or bcs054_qs.schedule_status != ScheduleStatus.SCHEDULED
+                or bcs054_qs.date != _date(2026, 10, 23)):
             print("CRITICAL: Pre-flight BCS-054 invariant failed! Aborting.")
             return
 
@@ -117,9 +124,11 @@ async def expand_baseline():
 
             current += timedelta(days=1)
 
-        # Post-flight Check: BCS-054 invariant
+        # Post-flight Check: BCS-054 invariant (resolved Q3 = 2026-10-23)
         bcs054_qs = (await db.execute(stmt_bcs054)).scalars().first()
-        if bcs054_qs and (bcs054_qs.date is not None or bcs054_qs.schedule_status != ScheduleStatus.UNRESOLVED):
+        if (bcs054_qs is None
+                or bcs054_qs.schedule_status != ScheduleStatus.SCHEDULED
+                or bcs054_qs.date != _date(2026, 10, 23)):
             print("CRITICAL: Post-flight BCS-054 invariant failed! Rolling back.")
             await db.rollback()
             return

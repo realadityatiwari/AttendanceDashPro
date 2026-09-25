@@ -52,7 +52,11 @@ from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, QuizCycle
 from app.models.enums import AttendanceStatus, UserRole, ClassType
-from app.engines.attendance_engine import optimize_attendance, normalize_class_type
+from app.engines.attendance_engine import (
+    optimize_attendance,
+    normalize_class_type,
+    pooled_pct as _pooled_pct,
+)
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
 from app.repositories.attendance_repo import AttendanceRepository
@@ -67,14 +71,14 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"  -- {detail}" if detail and not ok else ""))
 
 
-def combined_pct(lec_pct, tut_pct):
-    """Official formula: (Lecture % + Tutorial %) / 2; no-tutorial subjects
-    collapse to the lecture percentage."""
-    if tut_pct is None:
-        return lec_pct
-    if lec_pct is None:
-        return None
-    return (lec_pct + tut_pct) / 2.0
+def expected_avg(counts: dict):
+    """Canonical POOLED L+T percentage (owner-approved, Chunks 2-5):
+    (L_attended + T_attended) / (L_total + T_total) x 100 — the SAME engine
+    helper production uses (`pooled_pct`, imported above; never the retired
+    arithmetic mean of the two per-type percentages). Counts include pending
+    in the eligibility windows (eligibility count semantics unchanged)."""
+    l, t = counts['L'], counts['T']
+    return _pooled_pct(l['att'], l['tot'], t['att'], t['tot'])
 
 
 def aggregate(raw_counts) -> dict:
@@ -95,13 +99,6 @@ def aggregate(raw_counts) -> dict:
         else:
             out[t]['pending'] += 1
     return out
-
-
-def expected_avg(counts: dict):
-    l, t = counts['L'], counts['T']
-    lec_pct = (l['att'] / l['tot'] * 100.0) if l['tot'] > 0 else None
-    tut_pct = (t['att'] / t['tot'] * 100.0) if t['tot'] > 0 else None
-    return combined_pct(lec_pct, tut_pct)
 
 
 def expected_opt(counts: dict, threshold: float):
@@ -460,9 +457,15 @@ async def main() -> int:
                         if mL + mT == 0:
                             continue
                         lec_i = (CL - mL) / CL * 100.0 if CL else 0.0
-                        tut_i = (CT - mT) / CT * 100.0 if CT else None
-                        avg_i = (lec_i + tut_i) / 2.0 if tut_i is not None else lec_i
-                        if avg_i >= 75.0:
+                        # CHUNK 6 COMPLETION: the J-section shaping conditions
+                        # use the SAME canonical pooled L+T model the engine
+                        # evaluates (imported `pooled_pct` on the window
+                        # counts) — never the retired arithmetic mean. With a
+                        # zero-pending Criterion I window the criterion's own
+                        # counts are (CL - mL) / CL attended over CL total.
+                        avg_i = _pooled_pct(CL - mL, CL, CT - mT, CT)
+                        if avg_i is not None and avg_i >= 75.0:
+                            continue
                             continue
                         for pendL in (0, 1):
                             for pendT in (0, 1):
@@ -472,14 +475,15 @@ async def main() -> int:
                                     for pmT in range(0, PT - pendT + 1):
                                         paL, paT = PL - pmL - pendL, PT - pmT - pendT
                                         lec_ii = (paL + CL - mL) / (PL + CL) * 100.0
-                                        tut_ii = ((paT + CT - mT) / (PT + CT) * 100.0
-                                                  if (PT + CT) else None)
-                                        cur_ii = (lec_ii + tut_ii) / 2.0 if tut_ii is not None else lec_ii
-                                        lec_ii_best = (paL + pendL + CL - mL) / (PL + CL) * 100.0
-                                        tut_ii_best = ((paT + pendT + CT - mT) / (PT + CT) * 100.0
-                                                       if (PT + CT) else None)
-                                        best_ii = (lec_ii_best + tut_ii_best) / 2.0 if tut_ii_best is not None else lec_ii_best
-                                        if cur_ii < 75.0 <= best_ii:
+                                        # Pooled CURRENT cumulative percentage
+                                        cur_ii = _pooled_pct(paL + CL - mL, PL + CL,
+                                                             paT + CT - mT, PT + CT)
+                                        # Pooled BEST case: pending treated as
+                                        # attended over the same window totals.
+                                        best_ii = _pooled_pct(paL + pendL + CL - mL, PL + CL,
+                                                              paT + pendT + CT - mT, PT + CT)
+                                        if (cur_ii is not None and best_ii is not None
+                                                and cur_ii < 75.0 <= best_ii):
                                             return (mL, mT, pendL, pendT, pmL, pmT)
                 return None
 
