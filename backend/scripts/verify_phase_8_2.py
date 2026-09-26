@@ -357,18 +357,36 @@ async def main() -> int:
             bcs = r_bcs.json()
             r_cc = await client.get("/api/v1/quiz-eligibility/current-cycle", headers=admin_headers)
             cc = r_cc.json()
+            # Chunk 10 (verifier refresh): the current-cycle expectation is
+            # DERIVED from the canonical quiz schedule instead of the stale
+            # "Quiz I = 2026-08-24" pin — the earliest active QUIZ_DAY date
+            # at/after today is the next upcoming quiz. The Quiz I pin only
+            # held when this verifier ran before late August 2026.
+            from datetime import date as _date
+            from app.models.event import AcademicEvent as _AE
+            from app.models.enums import EventType as _ET
+            async with AsyncSessionLocal() as _db:
+                _today = _date.today()
+                _evs = (await _db.execute(
+                    select(_AE.start_date).where(
+                        _AE.event_type == _ET.QUIZ_DAY,
+                        _AE.active.is_(True),
+                        _AE.start_date >= _today,
+                    ).order_by(_AE.start_date))).scalars().all()
+            _next_quiz = _evs[0] if _evs else None
             r_501 = await client.get("/api/v1/quiz-eligibility/BCS-501/1", headers=admin_headers)
             b501 = r_501.json()
-            check("10. Quiz Eligibility unchanged: labs 404, BCS-054 Q3 = 2026-10-23, "
-                  "current-cycle Quiz I 2026-08-24, payload shape intact",
+            check("10. Quiz Eligibility unchanged: labs 404, BCS-054 Q3 = "
+                  "2026-10-23, current-cycle = next upcoming canonical quiz "
+                  "(derived), payload shape intact",
                   lab_codes == {"BCS-551": 404, "BCS-552": 404, "BCS-553": 404}
                   and bcs["quiz_date"] == "2026-10-23" and bcs["window_end"] == "2026-10-22"
-                  and cc["quiz_cycle"] == 1 and cc["quiz_date"] == "2026-08-24"
-                  and cc["basis"] == "next_upcoming"
+                  and cc["basis"] == "next_upcoming" and cc.get("has_schedule") is True
+                  and (_next_quiz is None or cc["quiz_date"] == _next_quiz.isoformat())
                   and all(k in b501 for k in ("state", "is_eligible", "window_start",
                                               "window_end", "criterion_i", "criterion_ii",
                                               "optimization")),
-                  f"labs={lab_codes} q3={bcs.get('quiz_date')} cc={cc}")
+                  f"labs={lab_codes} q3={bcs.get('quiz_date')} cc={cc} next={_next_quiz}")
 
             # --- 12. Attendance Health classification ------------------------------
             r = await client.get("/api/v1/analytics/overview", headers=admin_headers)

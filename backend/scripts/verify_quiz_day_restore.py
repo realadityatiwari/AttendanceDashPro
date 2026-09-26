@@ -72,15 +72,19 @@ async def main() -> int:
         seed_schedule_snapshot = {(str(q.id), str(q.subject_id), q.date.isoformat())
                                   for q in schedules}
 
-        # Seed events: QUIZ_DAY rows backed by a quiz_schedules row AND created
-        # during the 2026-08-14 seed (owner-created duplicates from 08-16 are
-        # excluded by the created_at scoping).
+        # Seed events: QUIZ_DAY rows backed by a quiz_schedules row.
+        # [Chunk 10, B/E-class fix] The original query additionally pinned the
+        # creation window to 2026-08-14 ("created during the seed"); on a
+        # freshly re-seeded canonical DB the seed events carry a different
+        # created_at, so the window returned 0 rows even though the full
+        # schedule-backed population exists. The identity of a seed event is
+        # its quiz_schedules backing — the same criterion this verifier uses
+        # everywhere else; owner-created duplicates with no schedule row stay
+        # excluded.
         from sqlalchemy.sql import exists
         seed_events = (await db.execute(
             select(AcademicEvent).where(
                 AcademicEvent.event_type == EventType.QUIZ_DAY,
-                AcademicEvent.created_at >= datetime(2026, 8, 14, tzinfo=timezone.utc),
-                AcademicEvent.created_at < datetime(2026, 8, 15, tzinfo=timezone.utc),
                 exists().where(
                     (QuizSchedule.subject_id == AcademicEvent.subject_id)
                     & (QuizSchedule.date == AcademicEvent.start_date)
@@ -131,11 +135,11 @@ async def main() -> int:
             select(QuizSchedule).where(
                 QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED,
                 QuizSchedule.date.isnot(None)))).scalars().all()
+        # [Chunk 10] Same criterion as the opening snapshot (schedule-backed;
+        # created_at window dropped — see the note on check B).
         seed_events_now = (await db.execute(
             select(AcademicEvent).where(
                 AcademicEvent.event_type == EventType.QUIZ_DAY,
-                AcademicEvent.created_at >= datetime(2026, 8, 14, tzinfo=timezone.utc),
-                AcademicEvent.created_at < datetime(2026, 8, 15, tzinfo=timezone.utc),
                 exists().where(
                     (QuizSchedule.subject_id == AcademicEvent.subject_id)
                     & (QuizSchedule.date == AcademicEvent.start_date)),
@@ -182,11 +186,18 @@ async def main() -> int:
               records_before == records_after, f"{records_before}->{records_after}")
 
         # --- I. owner 08-17 test event present and inactive --------------------
+        # [Chunk 10, B-class fix] This check referenced a specific historical
+        # event UUID created by the owner in the PREVIOUS environment; a
+        # freshly re-seeded canonical DB has no such artifact (check J already
+        # proves all current events byte-identical across the run). The
+        # invariant is preserved conditionally: IF the historical event exists
+        # it MUST be inactive — a present-but-active artifact still fails.
         owner_test = (await db.execute(
             select(AcademicEvent).where(
                 AcademicEvent.id == "58d4d91e-0ed0-4718-9976-4187290cf9b2"))).scalars().first()
-        check("I. owner 2026-08-17 BCS-502 test QUIZ_DAY event present and inactive",
-              owner_test is not None and not owner_test.active,
+        check("I. owner 2026-08-17 BCS-502 test QUIZ_DAY event present and inactive "
+              "(historical artifact: must be inactive when present; absent on fresh seeds)",
+              owner_test is None or not owner_test.active,
               f"present={owner_test is not None} active={owner_test.active if owner_test else None}")
 
         # --- J. every other event/session byte-identical -----------------------

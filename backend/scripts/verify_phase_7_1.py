@@ -55,7 +55,7 @@ from app.models.timetable import ClassSession
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, QuizCycle, ScheduleStatus
-from app.models.enums import AttendanceStatus, EventType, UserRole
+from app.models.enums import AttendanceStatus, ClassType, EventType, UserRole
 from app.engines.attendance_engine import optimize_attendance, pooled_pct
 from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
@@ -209,10 +209,16 @@ async def main() -> int:
         subjects_api = r.json()
         lab_codes = {s["code"] for s in subjects_api if s["category"] == "lab"}
         theory_flags = {s["code"]: s["quiz_applicable"] for s in subjects_api if s["category"] == "theory"}
+        # Chunk 10 (verifier refresh): the frozen six-subject pin predated the
+        # Phase 23.5/22.4 elective catalog. The API does not return unchosen
+        # electives, so the theory set is derived from the returned subjects
+        # and must contain the frozen core six (timetable.json / catalog is
+        # authoritative for the full set).
+        FROZEN_CORE_THEORY = {"BNC-501", "BCS-501", "BCS-502", "BCS-503", "BCS-054", "BCS-058"}
         check("4. labs are not quiz_applicable; theory subjects are",
               lab_codes == {"BCS-551", "BCS-552", "BCS-553"}
               and all(flag for flag in theory_flags.values())
-              and set(theory_flags.keys()) == {"BNC-501", "BCS-501", "BCS-502", "BCS-503", "BCS-054", "BCS-058"},
+              and FROZEN_CORE_THEORY.issubset(theory_flags.keys()),
               f"labs={lab_codes} theory_flags={theory_flags}")
 
         # --- 5. BCS-054 Q3 QUIZ_DAY event calendar-only -------------------------
@@ -258,10 +264,20 @@ async def main() -> int:
                             for q in (await db.execute(select(QuizSchedule))).scalars().all()}
         qd_upcoming_seeded = [e for e in qd_upcoming
                               if (e["subject_id"], e["start_date"]) in seeded_pairs]
-        check("6. /events upcoming = 18 quiz days, all at/after the semester horizon",
-              r.status_code == 200 and len(qd_upcoming_seeded) == 18
-              and all(e["end_date"] >= "2026-08-14" for e in upcoming),
-              f"count={len(upcoming)} quiz_day={len(qd_upcoming)} seeded={len(qd_upcoming_seeded)}")
+        # Chunk 10 (verifier refresh): the full 18-quiz-day horizon only held
+        # while the whole semester lay ahead. The invariant is derived from the
+        # canonical schedule instead: every SCHEDULED quiz date at/after today
+        # must surface as an upcoming QUIZ_DAY event, and no event may end
+        # before today.
+        today_iso = institution_today().isoformat()
+        expected_upcoming = {pair for pair in seeded_pairs if pair[1] >= today_iso}
+        check("6. /events upcoming surfaces every remaining scheduled quiz day "
+              "(derived from the canonical schedule; none ending before today)",
+              r.status_code == 200
+              and expected_upcoming.issubset({(e["subject_id"], e["start_date"]) for e in qd_upcoming})
+              and all(e["end_date"] >= today_iso for e in upcoming),
+              f"count={len(upcoming)} quiz_day={len(qd_upcoming)} "
+              f"expected_remaining={len(expected_upcoming)}")
 
         # --- 7-9. BCS-054 windows (Q1/Q2 unchanged, Q3 follows the resolution) --
         expected_windows = {
@@ -310,14 +326,68 @@ async def main() -> int:
               and bcs501_q1["tutorial_pct"] == tut["attended"] / tut["total"] * 100.0,
               f"avg={bcs501_q1.get('average_pct')} expected={expected_avg:.2f}")
 
-        # --- 12. RECOVERABLE on real data (below target, reachable) -------------
-        check("12. BCS-501 Q1 (admin): RECOVERABLE = below target but reachable",
-              r.status_code == 200
-              and bcs501_q1["state"] == EligibilityState.RECOVERABLE.value
-              and bcs501_q1["recoverable"] is True
-              and bcs501_q1["is_eligible"] is False
-              and bcs501_q1["optimization"]["is_reachable"] is True,
-              f"state={bcs501_q1.get('state')} reachable={bcs501_q1.get('optimization', {}).get('is_reachable')}")
+        # --- 12. RECOVERABLE state derivation (deterministic rollback) ----------
+        # Chunk 10 (verifier refresh): the original pin expected the owner's
+        # LIVE admin data to be mid-range (it was when written). The state-
+        # derivation coverage is preserved with a deterministic rollback
+        # scenario instead: inside the Quiz I cycle window (which for cycle 1
+        # equals the cumulative window, so one shaping determines both
+        # criteria) leave ~31% of the sessions pending — pooled current < 70
+        # while attending every pending class reaches 100% -> RECOVERABLE.
+        async with AsyncSessionLocal() as db:
+            q1_session_ids = (await db.execute(
+                select(ClassSession.id).where(
+                    ClassSession.subject_id == bcs501_id,
+                    ClassSession.date.between(
+                        date.fromisoformat(bcs501_q1["window_start"]),
+                        date.fromisoformat(bcs501_q1["window_end"])),
+                    ~(ClassSession.timetable_entry_id.is_(None)
+                      & ~ClassSession.is_extra
+                      & (ClassSession.class_type == ClassType.LECTURE)),
+                ).order_by(ClassSession.date, ClassSession.id))).scalars().all()
+            q1_existing = (await db.execute(
+                select(AttendanceRecord).where(
+                    AttendanceRecord.user_id == admin_user.id,
+                    AttendanceRecord.class_session_id.in_(q1_session_ids)))).scalars().all()
+            for rec in q1_existing:
+                await db.delete(rec)
+            await db.flush()
+            _n = len(q1_session_ids)
+            _attend_n = int(_n * 0.69)
+            for i, sid in enumerate(q1_session_ids):
+                if i < _attend_n:
+                    db.add(AttendanceRecord(user_id=admin_user.id,
+                                            class_session_id=sid,
+                                            status=AttendanceStatus.ATTENDED))
+            await db.flush()
+            service = EligibilityService(db)
+            result = await service.get_quiz_eligibility(admin_user.id, bcs501_id, 1, semester_start=semester_start)
+            # Eligibility counts include pending classes in the window totals
+            # (canonical count contract): criterion % = attended / window-total.
+            # Under the POOLED constraint the denominator is candidate-invariant,
+            # so the pooled minimum Must-Attend is ceil(target x total) - att
+            # (attending each pending class can only help; MISSED never helps).
+            import math as _math
+            _window_total = (result.lecture.total or 0) + (result.tutorial.total or 0)
+            _att_total = (result.lecture.attended or 0) + (result.tutorial.attended or 0)
+            _min_attend = max(0, _math.ceil(0.70 * _window_total) - _att_total)
+            check("12. RECOVERABLE = below target but reachable (deterministic "
+                  "rollback scenario)",
+                  result.state == EligibilityState.RECOVERABLE.value
+                  and result.recoverable is True
+                  and result.is_eligible is False
+                  and result.criterion_i.passed is False
+                  and result.criterion_ii.passed is False
+                  and result.optimization.is_reachable is True
+                  and result.criterion_i.value == _att_total / _window_total * 100.0
+                  and result.optimization.lecture_deficit + result.optimization.tutorial_deficit
+                      == _min_attend
+                  and (_att_total + _min_attend) / _window_total * 100.0 >= 70.0,
+                  f"state={result.state} reachable={result.optimization.is_reachable} "
+                  f"att={_att_total}/{_window_total} pend="
+                  f"{result.optimization.lecture_deficit + result.optimization.tutorial_deficit} "
+                  f"min_attend={_min_attend} cI={result.criterion_i.value}")
+            await db.rollback()
 
         # --- 16. Criterion I contract --------------------------------------------
         # Phase 1 (eligibility mathematics correction): Criterion I no longer
@@ -423,9 +493,15 @@ async def main() -> int:
             max_date_now = (await db.execute(
                 select(func.max(ClassSession.date)).join(
                     AttendanceRecord, AttendanceRecord.class_session_id == ClassSession.id))).scalar()
-        check("23. attendance history intact: >= 92 records, none future-dated",
-              records_now >= 92 and max_date_now <= institution_today(),
-              f"records={records_now} max_date={max_date_now}")
+        # Chunk 10 (verifier refresh): the absolute >= 92 lower bound was a
+        # historical snapshot of the previous production-shaped DB; on a freshly
+        # provisioned dev DB it is meaningless. The invariant is re-anchored to
+        # the run's own baseline snapshot (history never shrinks during the
+        # run) plus the unchanged hard invariant "no future-dated records".
+        check("23. attendance history intact: records >= this run's baseline "
+              "snapshot, none future-dated",
+              records_now >= records_before and max_date_now <= institution_today(),
+              f"records={records_now} baseline={records_before} max_date={max_date_now}")
 
         # --- 13-15. State derivation scenarios (rollback transactions) ----------------
         # BCS-501 Q1 window sessions, from the already-verified API window bounds.

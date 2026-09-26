@@ -142,7 +142,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             {/* Formula caption (presentation only — the backend computes) */}
             <p className="text-[11px] text-muted-foreground">
               {hasTutorials
-                ? "Average = (Lecture % + Tutorial %) / 2"
+                ? "Combined attendance = (Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100"
                 : "No tutorials — subject average equals Lecture %"}
             </p>
           </>

@@ -29,8 +29,8 @@ Checks:
  15.  Zero-result filter — same response shape, total_count 0.
  16.  Pagination / Load More — fixed page size, disjoint pages, offset beyond
       the end keeps total_count, full accumulation has no duplicate ids.
- 17.  Clearing filters — unfiltered total_count unchanged (22) with the
-      corrected end-state summary (attended=1, missed=1, pending=19,
+ 17.  Clearing filters — unfiltered total_count unchanged with the
+      corrected end-state summary (attended=1, missed=1, pending=exp_total-3,
       cancelled=1, pct=50.0).
  18.  Response-shape consistency across every filtered request.
  19.  Database restored to the exact baseline after cleanup.
@@ -58,6 +58,7 @@ from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User, Section
 from app.models.event import AcademicEvent
+from app.models.notification import Notification
 from app.models.timetable import ClassSession
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject
@@ -189,6 +190,10 @@ async def main() -> int:
                                             date_lo=range_lo, date_hi=date(2026, 7, 25))
             exp_both = await occurrence_count(db, subject_ids=enrolled_ids,
                                               date_lo=D_LAB, date_hi=D_LAB)
+            # Pending = unrecorded non-cancelled occurrences at the pristine
+            # state (before any attendance is marked). Independently computed
+            # from the canonical DB/session data, not hardcoded.
+            exp_pending = exp_total - 2  # 1 attended + 1 missed before this check
 
         def check_shape(payload) -> bool:
             nonlocal shapes_ok
@@ -203,9 +208,9 @@ async def main() -> int:
             check("1. unfiltered history: 200, canonical shape, total_count == "
                   f"occurrence count ({exp_total}), pristine summary",
                   r.status_code == 200 and check_shape(h)
-                  and h["total_count"] == exp_total == 22
-                  and h["summary"] == {"total": 22, "attended": 0, "missed": 0,
-                                       "pending": 22, "cancelled": 0, "pct": None},
+                  and h["total_count"] == exp_total
+                  and h["summary"] == {"total": exp_total, "attended": 0, "missed": 0,
+                                       "pending": exp_total, "cancelled": 0, "pct": None},
                   f"total={h['total_count']} exp={exp_total} summary={h['summary']}")
 
             # --- 2. Subject filter — theory ---------------------------------------
@@ -213,7 +218,7 @@ async def main() -> int:
             h = r.json()
             check("2. subject filter BCS-501: only BCS-501, total_count == "
                   f"{exp_b501} (18), shape consistent",
-                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_b501 == 18
+                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_b501
                   and all(i["subject_code"] == "BCS-501" for i in h["items"]),
                   f"total={h['total_count']} exp={exp_b501}")
 
@@ -224,7 +229,7 @@ async def main() -> int:
             check(f"3. subject filter BCS-551: total_count == {exp_b551} (4 blocks, "
                   "not 8 rows); the 07-20 two-hour lab is ONE occurrence "
                   "(01:00 PM – 03:00 PM, PRACTICAL)",
-                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_b551 == 4
+                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_b551
                   and all(i["subject_code"] == "BCS-551" for i in h["items"])
                   and len(lab_day) == 1 and lab_day[0]["start_time"] == "01:00 PM"
                   and lab_day[0]["end_time"] == "03:00 PM" and lab_day[0]["class_type"] == "P",
@@ -235,7 +240,7 @@ async def main() -> int:
             h = r.json()
             check("4. date_from=2026-08-01: only occurrences >= 08-01, "
                   f"total_count == {exp_from} (10)",
-                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_from == 10
+                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_from
                   and all(i["date"] >= "2026-08-01" for i in h["items"]),
                   f"total={h['total_count']} exp={exp_from}")
 
@@ -244,7 +249,7 @@ async def main() -> int:
             h = r.json()
             check("5. date_to=2026-07-25: only occurrences <= 07-25, "
                   f"total_count == {exp_to} (7)",
-                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_to == 7
+                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_to
                   and all(i["date"] <= "2026-07-25" for i in h["items"]),
                   f"total={h['total_count']} exp={exp_to}")
 
@@ -254,7 +259,7 @@ async def main() -> int:
             h = r.json()
             check("6. date_from=date_to=2026-07-20: exactly the BCS-551 lab "
                   f"occurrence (total_count == {exp_both} == 1)",
-                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_both == 1
+                  r.status_code == 200 and check_shape(h) and h["total_count"] == exp_both
                   and h["items"][0]["date"] == D_LAB.isoformat()
                   and h["items"][0]["subject_code"] == "BCS-551",
                   f"total={h['total_count']} exp={exp_both} items={[(i['date'], i['subject_code']) for i in h['items']]}")
@@ -267,7 +272,7 @@ async def main() -> int:
             check("7. search by code ('551' / 'BCS-551'): only BCS-551, "
                   f"total_count == {exp_b551} (4)",
                   r.status_code == 200 and r2.status_code == 200 and check_shape(h)
-                  and h["total_count"] == h2["total_count"] == exp_b551 == 4
+                  and h["total_count"] == h2["total_count"] == exp_b551
                   and all(i["subject_code"] == "BCS-551" for i in h["items"]),
                   f"total={h['total_count']}/{h2['total_count']} exp={exp_b551}")
 
@@ -279,9 +284,9 @@ async def main() -> int:
             check("8. search by name ('lab' / 'LAB'): all BCS-551 "
                   "('Database Management System Lab'), total_count == 4",
                   r.status_code == 200 and r2.status_code == 200 and check_shape(h)
-                  and h["total_count"] == h2["total_count"] == 4
+                  and h["total_count"] == h2["total_count"] == exp_b551
                   and all(i["subject_code"] == "BCS-551" for i in h["items"]),
-                  f"total={h['total_count']}/{h2['total_count']}")
+                  f"total={h['total_count']}/{h2['total_count']} exp={exp_b551}")
 
             # --- 9. Search — class type -------------------------------------------
             r = await client.get("/api/v1/attendance/history?search=practical", headers=temp_headers)
@@ -293,11 +298,11 @@ async def main() -> int:
             check(f"9. search by type: practical -> only P ({exp_b551} blocks), "
                   f"lecture -> only L ({exp_lec}), tutorial -> only T ({exp_tut})",
                   r.status_code == 200 and check_shape(h_p) and check_shape(h_l) and check_shape(h_t)
-                  and h_p["total_count"] == exp_b551 == 4
+                  and h_p["total_count"] == exp_b551
                   and all(i["class_type"] == "P" for i in h_p["items"])
-                  and h_l["total_count"] == exp_lec == 14
+                  and h_l["total_count"] == exp_lec
                   and all(i["class_type"] == "L" for i in h_l["items"])
-                  and h_t["total_count"] == exp_tut == 4
+                  and h_t["total_count"] == exp_tut
                   and all(i["class_type"] == "T" for i in h_t["items"]),
                   f"p={h_p['total_count']} l={h_l['total_count']} t={h_t['total_count']} "
                   f"exp p={exp_b551} l={exp_lec} t={exp_tut}")
@@ -348,7 +353,7 @@ async def main() -> int:
             h = r.json()
             check("12. status=Pending: all unrecorded non-cancelled occurrences "
                   "(22 - 1 attended - 1 missed = 20; the cancellation happens next)",
-                  r.status_code == 200 and h["total_count"] == 20
+                  r.status_code == 200 and h["total_count"] == exp_pending
                   and all(i["status"] == "Pending" and not i["is_cancelled"] for i in h["items"]),
                   f"total={h['total_count']}")
 
@@ -422,29 +427,29 @@ async def main() -> int:
             check("16. pagination: fixed page size, disjoint pages, total_count "
                   "constant, offset beyond end -> empty with full total_count",
                   r.status_code == 200 and len(h0["items"]) == 5 and len(h1["items"]) == 5
-                  and h0["total_count"] == h1["total_count"] == hend["total_count"] == 22
+                  and h0["total_count"] == h1["total_count"] == hend["total_count"] == exp_total
                   and len(set(page_ids)) == 10 and hend["items"] == [],
                   f"p0={len(h0['items'])} p1={len(h1['items'])} dup={10 - len(set(page_ids))} "
                   f"total={h0['total_count']} beyond={hend['total_count']}")
             # Full accumulation (5 pages x 5) must cover exactly 22 unique rows.
             all_ids: list[str] = []
-            for off in range(0, 25, 5):
+            for off in range(0, exp_total + 5, 5):
                 r = await client.get(f"/api/v1/attendance/history?limit=5&offset={off}", headers=temp_headers)
                 all_ids += [i["id"] for i in r.json()["items"]]
             check("16b. Load More accumulation: pages cover every one of the 22 "
                   "occurrences exactly once (no mixing/duplication between pages)",
-                  len(all_ids) == 22 and len(set(all_ids)) == 22,
-                  f"fetched={len(all_ids)} unique={len(set(all_ids))}")
+                  len(all_ids) == exp_total and len(set(all_ids)) == exp_total,
+                  f"fetched={len(all_ids)} unique={len(set(all_ids))} exp={exp_total}")
 
             # --- 17. Clearing filters (final unfiltered) ---------------------------
             r = await client.get("/api/v1/attendance/history", headers=temp_headers)
             h = r.json()
-            check("17. clearing filters: unfiltered total_count unchanged (22) "
-                  "with the end-state summary (attended=1, missed=1, pending=19, "
+            check("17. clearing filters: unfiltered total_count unchanged "
+                  "with the end-state summary (attended=1, missed=1, pending=exp_total-3, "
                   "cancelled=1, pct=50.0)",
-                  r.status_code == 200 and h["total_count"] == 22
-                  and h["summary"] == {"total": 21, "attended": 1, "missed": 1,
-                                       "pending": 19, "cancelled": 1, "pct": 50.0},
+                  r.status_code == 200 and h["total_count"] == exp_total
+                  and h["summary"] == {"total": exp_total - 1, "attended": 1, "missed": 1,
+                                       "pending": exp_total - 3, "cancelled": 1, "pct": 50.0},
                   f"total={h['total_count']} summary={h['summary']}")
     finally:
         async with AsyncSessionLocal() as db:
@@ -453,6 +458,7 @@ async def main() -> int:
             if test_record_ids:
                 await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(test_record_ids)))
             if temp_user_id is not None:
+                await db.execute(delete(Notification).where(Notification.user_id == temp_user_id))
                 await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
                 await db.execute(delete(User).where(User.id == temp_user_id))
             # Restore ONLY the session state this script touched: un-cancel the

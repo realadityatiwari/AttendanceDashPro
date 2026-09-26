@@ -112,6 +112,37 @@ async def main() -> int:
         print(f"baseline: events={events_before} sessions={sessions_before} cancelled={cancelled_before} "
               f"extra={extra_before} records={records_before}")
 
+        # [Chunk 10, E-class fixture repair] §3/§4/§5 exercise the
+        # attendance-boundary rule "closures never cancel ATTENDED sessions" on
+        # 2026-07-15 and assume that date is fully attended. The re-seeded
+        # canonical DB carries the timetable but no historical records on that
+        # date, so the owner (ADMIN section CSE-51) now holds the missing
+        # ATTENDED fixture records — provisioned here AFTER the baseline
+        # snapshot (so records_before stays the true pre-run count) and removed
+        # again in the finally block, keeping the §35 assertion exact.
+        # Production cancellation logic is untouched (it was correct: with zero
+        # records the closure DID cancel the unattended sessions).
+        fixture_added = 0
+        f_sessions = (await db.execute(
+            select(ClassSession).where(ClassSession.date == date(2026, 7, 15))
+        )).scalars().all()
+        for fs in f_sessions:
+            exists = (await db.execute(
+                select(AttendanceRecord.id).where(
+                    AttendanceRecord.user_id == student_user.id,
+                    AttendanceRecord.class_session_id == fs.id)
+            )).scalars().first()
+            if exists is None:
+                db.add(AttendanceRecord(
+                    user_id=student_user.id,
+                    class_session_id=fs.id,
+                    status=AttendanceStatus.ATTENDED))
+                fixture_added += 1
+        if fixture_added:
+            await db.commit()
+            print(f"fixture: provisioned {fixture_added} ATTENDED record(s) "
+                  f"for the owner on 2026-07-15 (historical fixture date)")
+
     admin_token = create_access_token(str(admin_user.id), admin_user.roll_number)
     student_token = create_access_token(str(student_user.id), student_user.roll_number)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
@@ -445,7 +476,19 @@ async def main() -> int:
     finally:
         # Hard-delete this script's own event rows. Deactivation already
         # reverted every session effect, so the DB returns to baseline.
+        #
+        # [Chunk 10] Also remove the §3 fixture records (owner ATTENDED on
+        # 2026-07-15) so the §35 records baseline stays exact.
         async with AsyncSessionLocal() as db:
+            f_sessions = (await db.execute(
+                select(ClassSession.id).where(ClassSession.date == date(2026, 7, 15))
+            )).scalars().all()
+            if f_sessions:
+                fr = await db.execute(delete(AttendanceRecord).where(
+                    AttendanceRecord.user_id == student_user.id,
+                    AttendanceRecord.class_session_id.in_(f_sessions)))
+                if fr.rowcount:
+                    print(f"cleanup: removed {fr.rowcount} fixture attendance record(s) on 2026-07-15")
             if test_event_ids:
                 await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
                 await db.commit()

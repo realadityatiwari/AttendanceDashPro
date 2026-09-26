@@ -437,6 +437,16 @@ async def main() -> int:
                     await db.execute(delete(StudentEnrollment).where(
                         StudentEnrollment.user_id.in_([fx["stuA"], fx["stuB"]]))
                     )
+                    # [Chunk 16] Remove FK child rows (notifications etc.
+                    # created by this run's API flows) BEFORE the user rows,
+                    # or the user delete raises ForeignKeyViolationError and
+                    # the whole cleanup rolls back (leaking all fixtures).
+                    _fx_users = [fx[k] for k in ("classA", "elecA", "subA", "stu", "stuA", "stuB") if fx.get(k)]
+                    from app.models.notification import Notification as _N
+                    from app.models.refresh_token import RefreshToken as _R
+                    from app.models.push_subscription import PushSubscription as _P
+                    for _t in (_N, _R, _P):
+                        await db.execute(delete(_t).where(_t.user_id.in_(_fx_users)))
                     for k in ("classA", "elecA", "subA", "stu", "stuA", "stuB"):
                         await db.execute(delete(User).where(User.id == fx[k]))
                     await db.execute(delete(Section).where(Section.id == fx["section"]))

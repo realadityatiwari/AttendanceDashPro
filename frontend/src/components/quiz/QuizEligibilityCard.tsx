@@ -30,10 +30,12 @@ function fmtPct(value: number | null): string {
   return formatPct1(value);
 }
 
-// Presentation-only criterion titles: both criteria use the SAME
-// (Lecture % + Tutorial %) / 2 average and differ only in the counting window,
-// so both render as "Attendance Average". The backend-emitted name remains the
-// fallback for any unrecognized title. No values or math are touched.
+// Presentation-only criterion titles: both criteria use the SAME pooled
+// L+T count-level average — (Lecture Present + Tutorial Present) /
+// (Lecture Conducted + Tutorial Conducted) × 100 — and differ only in the
+// counting window, so both render as "Attendance Average". The backend-emitted
+// name remains the fallback for any unrecognized title. No values or math are
+// touched.
 const CRITERION_TITLES: Record<string, string> = {
   "Criterion I — Lecture + Tutorial Average": "Criterion I — Attendance Average",
   "Criterion II — Lecture + Tutorial Average": "Criterion II — Attendance Average",
@@ -65,7 +67,7 @@ function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null
             </span>
           </span>
           <span className="text-muted-foreground">
-            Formula: <span className="text-foreground">(Lecture % + Tutorial %) / 2</span>
+            Formula: <span className="text-foreground">(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100</span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{criterion?.explanation ?? "—"}</p>
@@ -162,7 +164,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
           <div className="p-4 space-y-4">
             <div className="space-y-3">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Criterion I window counts · Average = (Lecture % + Tutorial %) / 2
+                Criterion I window counts · Combined attendance = (Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100
               </p>
               <div>
                 <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">

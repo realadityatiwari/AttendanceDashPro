@@ -52,7 +52,12 @@ from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject
 from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.timetable import ClassSession
-from app.models.enums import UserRole
+from app.models.enums import ClassType, UserRole
+from app.models.notification import Notification
+from app.models.preference import UserPreference
+from app.models.push_subscription import PushSubscription
+from app.models.refresh_token import RefreshToken
+from app.models.feedback import Feedback
 from app.services.event_registry import EVENT_TYPE_RULES
 from app.engines.attendance_engine import classify_attendance_status
 from sqlalchemy import select, delete
@@ -161,15 +166,27 @@ async def main() -> int:
 
             # --- 3. Quiz-day sessions follow the future-date rule -----------------
             async with AsyncSessionLocal() as db:
-                # Earliest quiz-day-only session (timetable_entry_id NULL). All
-                # scheduled quiz days are ahead of today, so this session is a
-                # FUTURE date: it stays visible (view-only) but cannot be marked.
+                # [Chunk 10, C-class fix] The original pin assumed "all scheduled
+                # quiz days are ahead of today" and picked the EARLIEST
+                # quiz-day-only session. The canonical calendar has since rolled
+                # past the first cycles (e.g. BNC-501 Q1 = 2026-08-24 while
+                # today = 2026-09-26), so that session is PAST and the canonical
+                # mutation correctly accepted it (200). The future-date rule is
+                # unchanged; derive the target so the check always exercises a
+                # genuinely FUTURE quiz-day session on any run date.
+                from app.core.timezone import institution_today
+                _today = institution_today()
                 target = (await db.execute(
                     select(ClassSession).where(
                         ClassSession.timetable_entry_id.is_(None),
                         ClassSession.is_extra.is_(False),
+                        ClassSession.is_cancelled.is_(False),
+                        ClassSession.date > _today,
                     ).order_by(ClassSession.date)
                 )).scalars().first()
+                assert target is not None, (
+                    "no future quiz-day-only session exists in the canonical "
+                    "calendar — re-run materialize_quiz_day_sessions.py")
             target_code = None
             async with AsyncSessionLocal() as db:
                 subj = (await db.execute(select(Subject).where(Subject.id == target.subject_id))).scalars().first()
@@ -195,15 +212,33 @@ async def main() -> int:
             ra = await client.get(f"/api/v1/attendance/summary/{target_code}?as_of_date={on_day}", headers=student_token_headers(student_token))
             lec_before = rb.json().get("lecture", {}).get("total")
             lec_on = ra.json().get("lecture", {}).get("total")
-            # Option A (separate occurrence): the earliest quiz-day session now
-            # sits on 2026-08-24 (BNC-501), a date that carries BOTH the normal
-            # lecture AND the independent quiz-day session — crossing the as_of
-            # boundary adds both (+2). Both are canonical lecture-class rows
-            # counted in subject attendance.
+            # Option A (separate occurrence): the quiz-day session is an
+            # independent LECTURE-class row counted in subject attendance.
+            # [Chunk 10] The +2 delta was pinned to the 2026-08-24 (BNC-501)
+            # calendar state; derive the crossing delta from the canonical DB
+            # instead: the canonical, non-cancelled LECTURE occurrences for this
+            # subject inside (before_day, on_day] — normally the day's normal
+            # timetable lecture + the independent quiz-day occurrence (+2).
+            async with AsyncSessionLocal() as db:
+                _subj = (await db.execute(
+                    select(Subject).where(Subject.code == target_code)
+                )).scalars().first()
+                crossing = len((await db.execute(
+                    select(ClassSession.id).where(
+                        ClassSession.subject_id == _subj.id,
+                        ClassSession.class_type == ClassType.LECTURE,
+                        ClassSession.is_cancelled.is_(False),
+                        ClassSession.date > date.fromisoformat(before_day),
+                        ClassSession.date <= date.fromisoformat(on_day),
+                    )
+                )).all())
             check("3b. quiz-day session counts toward subject attendance on its date "
-                  "(as_of; +2 = normal lecture + independent quiz-day occurrence)",
-                  rb.status_code == 200 and ra.status_code == 200 and lec_on == lec_before + 2,
-                  f"as_of {before_day} L={lec_before} -> as_of {on_day} L={lec_on}")
+                  f"(as_of; +{crossing} derived from canonical {target_code} "
+                  "LECTURE occurrences crossing the boundary)",
+                  rb.status_code == 200 and ra.status_code == 200
+                  and lec_on == lec_before + crossing,
+                  f"as_of {before_day} L={lec_before} -> as_of {on_day} L={lec_on} "
+                  f"(expected +{crossing})")
 
             # Additive summary fields (attendance UI refinement).
             summary = ra.json()
@@ -317,15 +352,37 @@ async def main() -> int:
         # Remove every artifact this script created (events, attendance
         # records, temp user + enrollment, orphan extras / cancelled rows on
         # its test window).
+        #
+        # [Chunk 10] Each step is exception-tolerant: a crash mid-run used to
+        # abort the whole finally block, leaving partial artifacts (temp user,
+        # test events, cancelled sessions) behind for the NEXT run to trip over
+        # (duplicate SPEC_AUDIT_TMP). Also, the temp user now has FK child rows
+        # beyond StudentEnrollment (notifications, refresh tokens, push
+        # subscriptions, feedback, preferences, admin scope) created by the
+        # §4–§6 event flows — all are removed before the user row.
         async with AsyncSessionLocal() as db:
             from sqlalchemy import func as _f
-            if test_event_ids:
-                await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
-            if test_record_ids:
-                await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(test_record_ids)))
-            if temp_user_id is not None:
-                await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
-                await db.execute(delete(User).where(User.id == temp_user_id))
+            try:
+                if test_event_ids:
+                    await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
+            except Exception as exc:
+                print(f"[cleanup] event delete failed (continuing): {exc}")
+            try:
+                if test_record_ids:
+                    await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(test_record_ids)))
+            except Exception as exc:
+                print(f"[cleanup] record delete failed (continuing): {exc}")
+            try:
+                if temp_user_id is not None:
+                    await db.execute(delete(Notification).where(Notification.user_id == temp_user_id))
+                    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == temp_user_id))
+                    await db.execute(delete(PushSubscription).where(PushSubscription.user_id == temp_user_id))
+                    await db.execute(delete(Feedback).where(Feedback.user_id == temp_user_id))
+                    await db.execute(delete(UserPreference).where(UserPreference.user_id == temp_user_id))
+                    await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id == temp_user_id))
+                    await db.execute(delete(User).where(User.id == temp_user_id))
+            except Exception as exc:
+                print(f"[cleanup] temp-user delete failed (continuing): {exc}")
             # Restore sessions my events touched: delete unattended extras,
             # un-cancel unattended cancelled sessions, on the test window.
             window_start, window_end = date(2026, 11, 9), date(2026, 11, 13)

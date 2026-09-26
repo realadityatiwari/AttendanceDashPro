@@ -7,14 +7,16 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, field_validator
 
 from app.models.user import User, Section
-from app.models.enums import UserRole, ElectiveSlot, EnrollmentType
-from app.models.academic import AcademicSession, Semester, Subject, StudentEnrollment, StudentElectiveChoice
+from app.models.enums import UserRole, ElectiveSlot
+from app.models.academic import AcademicSession, Semester, Subject
 from app.core.security import verify_password, create_access_token, hash_password, DUMMY_PASSWORD_HASH
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
 from app.api.dependencies.deps import get_db
 from app.services.refresh_token_service import RefreshTokenService, RefreshTokenError
+from app.services.enrollment_service import apply_new_student_enrollments
+from types import SimpleNamespace
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -202,49 +204,55 @@ async def register(
 
     try:
         await db.flush()  # materialize user.id; duplicate roll_number surfaces here
-        # Phase 22.3: enroll in every non-elective subject PLUS the student's
-        # chosen Department Elective-I / Elective-II subjects. The other
-        # elective options are NOT enrolled (each student has their own
+        # Phase 22.3/23.5: enroll in every non-elective subject PLUS the
+        # student's chosen Department Elective-I / Elective-II subjects. The
+        # other elective options are NOT enrolled (each student has their own
         # selections; the shared timetable resolves the slot per student).
-        # Phase 23.5: slot membership comes from subjects.elective_slot (the
-        # authoritative catalog), not the legacy free-form tag.
-        elective_i_subject = None
-        elective_ii_subject = None
+        # Slot membership comes from subjects.elective_slot (the authoritative
+        # catalog).
+        #
+        # [Chunk 16] The enrollment construction is centralized in
+        # EnrollmentService (the single authoritative writer implementing
+        # "non-elective subjects UNION the StudentElectiveChoice-resolved
+        # selection per configured slot"), so every writer shares one
+        # invariant. Registration's own semantics are unchanged: the two
+        # selected codes become the per-slot choices below, EnrollmentType is
+        # set explicitly by the service, and an unresolvable selection aborts
+        # atomically (same 503 as before, nothing enrolled).
+        fallback_subjects: dict = {}
         for subject in subjects:
-            if subject.elective_slot == ElectiveSlot.ELECTIVE_I:
-                if subject.code == elective_i_code:
-                    elective_i_subject = subject
-            elif subject.elective_slot == ElectiveSlot.ELECTIVE_II:
-                if subject.code == elective_ii_code:
-                    elective_ii_subject = subject
-            else:
-                db.add(StudentEnrollment(
-                    user_id=user.id,
-                    subject_id=subject.id,
-                    enrollment_type=EnrollmentType.COMPULSORY,
-                ))
+            if subject.elective_slot == ElectiveSlot.ELECTIVE_I and subject.code == elective_i_code:
+                fallback_subjects[ElectiveSlot.ELECTIVE_I] = subject
+            elif subject.elective_slot == ElectiveSlot.ELECTIVE_II and subject.code == elective_ii_code:
+                fallback_subjects[ElectiveSlot.ELECTIVE_II] = subject
 
-        if elective_i_subject is None or elective_ii_subject is None:
+        choices_by_slot = {
+            ElectiveSlot.ELECTIVE_I: SimpleNamespace(elective_slot=ElectiveSlot.ELECTIVE_I,
+                                                     subject=fallback_subjects.get(ElectiveSlot.ELECTIVE_I)),
+            ElectiveSlot.ELECTIVE_II: SimpleNamespace(elective_slot=ElectiveSlot.ELECTIVE_II,
+                                                      subject=fallback_subjects.get(ElectiveSlot.ELECTIVE_II)),
+        }
+
+        specs, missing_slots = apply_new_student_enrollments(
+            db,
+            user.id,
+            subjects,
+            choices_by_slot,
+            fallback_subjects=fallback_subjects,
+            include_choice_rows=True,
+        )
+
+        if missing_slots or not fallback_subjects.get(ElectiveSlot.ELECTIVE_I) or not fallback_subjects.get(ElectiveSlot.ELECTIVE_II):
             # The codes passed the catalog validation above, so a missing
             # subject row here means the semester configuration is broken.
+            # [Chunk 16] The service added NOTHING when a slot is unresolvable
+            # (atomic no-op), so this rollback discards only the user row.
             await db.rollback()
             raise HTTPException(
                 status_code=503,
                 detail="The selected elective subjects are not configured for the active semester",
             )
 
-        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_i_subject.id, enrollment_type=EnrollmentType.ELECTIVE))
-        db.add(StudentEnrollment(user_id=user.id, subject_id=elective_ii_subject.id, enrollment_type=EnrollmentType.ELECTIVE))
-        db.add(StudentElectiveChoice(
-            user_id=user.id,
-            elective_slot=ElectiveSlot.ELECTIVE_I,
-            subject_id=elective_i_subject.id,
-        ))
-        db.add(StudentElectiveChoice(
-            user_id=user.id,
-            elective_slot=ElectiveSlot.ELECTIVE_II,
-            subject_id=elective_ii_subject.id,
-        ))
         await db.commit()
     except IntegrityError:
         await db.rollback()

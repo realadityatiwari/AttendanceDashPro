@@ -94,6 +94,28 @@ async def main() -> int:
                 "(SELECT id FROM users WHERE roll_number LIKE '2401229%')"
             )
         )
+        # [Chunk 10] FK children created by this run's API flows (§22_4
+        # notification/refresh flows reference users.id) must be removed
+        # before the user rows, or the raw-SQL delete raises
+        # ForeignKeyViolationError and the whole run rolls back.
+        await db.execute(
+            text(
+                "DELETE FROM notifications WHERE user_id IN "
+                "(SELECT id FROM users WHERE roll_number LIKE '2401229%')"
+            )
+        )
+        await db.execute(
+            text(
+                "DELETE FROM refresh_tokens WHERE user_id IN "
+                "(SELECT id FROM users WHERE roll_number LIKE '2401229%')"
+            )
+        )
+        await db.execute(
+            text(
+                "DELETE FROM push_subscriptions WHERE user_id IN "
+                "(SELECT id FROM users WHERE roll_number LIKE '2401229%')"
+            )
+        )
         await db.execute(text("DELETE FROM users WHERE roll_number LIKE '2401229%'"))
         await db.commit()
         check(True, "startup cleanup executed")
@@ -596,6 +618,21 @@ async def main() -> int:
                     )
                     await clean_db.execute(
                         text("DELETE FROM student_enrollments WHERE user_id = :uid"),
+                        {"uid": user_id},
+                    )
+                    # [Chunk 10] Remove FK children created by this run's API
+                    # flows before the user row, or the delete raises
+                    # ForeignKeyViolationError (notifications_user_id_fkey).
+                    await clean_db.execute(
+                        text("DELETE FROM notifications WHERE user_id = :uid"),
+                        {"uid": user_id},
+                    )
+                    await clean_db.execute(
+                        text("DELETE FROM refresh_tokens WHERE user_id = :uid"),
+                        {"uid": user_id},
+                    )
+                    await clean_db.execute(
+                        text("DELETE FROM push_subscriptions WHERE user_id = :uid"),
                         {"uid": user_id},
                     )
                     await clean_db.execute(

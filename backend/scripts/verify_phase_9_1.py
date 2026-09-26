@@ -347,7 +347,11 @@ async def main() -> int:
             # block (13:00 + 14:00) = ONE attendance occurrence. Through 08-15 there
             # are 5 lab blocks; 07-31 is cancelled (excluded): total 4.
             # attended=1 (07-17 block), missed=1 (07-24 block) -> pct = 50.
-            r = await client.get("/api/v1/attendance/summary/BCS-553", headers=temp_headers)
+            # Chunk 10 (verifier refresh): the scenario is defined "through
+            # 08-15" (5 lab blocks, 07-31 cancelled -> total 4); pin the
+            # request to that documented cutoff instead of relying on the run
+            # date being before 08-16.
+            r = await client.get("/api/v1/attendance/summary/BCS-553?as_of_date=2026-08-15", headers=temp_headers)
             b = r.json()
             check("12. practical percentage changes correctly through the canonical "
                   "summary (occurrence-based: 2-hour lab counts once, 1/2 = 50%)",
@@ -358,11 +362,23 @@ async def main() -> int:
 
             r = await client.get("/api/v1/analytics/overview", headers=temp_headers)
             ov = r.json()["overall"]
+            # Chunk 10 (verifier refresh): attended/missed/cancelled and the
+            # recorded-only current pct are date-invariant verifier fixtures;
+            # the pending count depends on the run date, so it (and the
+            # pending-as-attended forecast) is asserted against the canonical
+            # per-subject summary for the same "today" rather than a stale
+            # hard-coded 2.
+            r_today = await client.get("/api/v1/attendance/summary/BCS-553", headers=temp_headers)
+            b_today = r_today.json()
             check("13. overall analytics follow canonical rules (cancelled excluded, "
                   "pending stays pending, lab counted once, current recorded-only: 1/2 = 50%)",
-                  ov["attended"] == 1 and ov["recorded"] == 2 and ov["pending"] == 2
-                  and ov["cancelled"] == 1 and abs(ov["current_pct"] - 50.0) < 1e-9,
-                  f"overall={ov}")
+                  ov["attended"] == 1 and ov["recorded"] == 2
+                  and ov["cancelled"] == 1 and abs(ov["current_pct"] - 50.0) < 1e-9
+                  and ov["pending"] == b_today["practical"]["pending"]
+                  and abs(ov["forecast_pct"]
+                          - (ov["attended"] + ov["pending"])
+                          / (ov["recorded"] + ov["pending"]) * 100.0) < 1e-9,
+                  f"overall={ov} today_summary={b_today['practical']}")
 
             # --- 14. Quiz eligibility unchanged ------------------------------------
             r_lab = await client.get("/api/v1/quiz-eligibility/BCS-553/1", headers=temp_headers)

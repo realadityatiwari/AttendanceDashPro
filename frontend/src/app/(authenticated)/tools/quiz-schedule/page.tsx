@@ -56,8 +56,8 @@ export default function QuizEligibilityPage() {
               <span className="font-medium text-foreground">75%</span> for Quiz II and III.
             </p>
             <p>
-              Both criteria use the same{" "}
-              <span className="font-medium text-foreground">(Lecture % + Tutorial %) / 2</span> average and differ only
+              Both criteria use the same pooled{" "}
+              <span className="font-medium text-foreground">(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100</span> average and differ only
               in the counting window — Criterion I counts from the previous quiz, Criterion II from the semester start.
             </p>
             <p>Only theory subjects with confirmed quiz dates appear here.</p>

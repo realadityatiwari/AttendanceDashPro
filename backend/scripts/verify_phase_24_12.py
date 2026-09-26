@@ -59,6 +59,13 @@ async def purge_fixtures(db):
         await db.execute(delete(StudentElectiveChoice).where(StudentElectiveChoice.user_id.in_(ids)))
         await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id.in_(ids)))
         await db.execute(delete(AdminScope).where(AdminScope.user_id.in_(ids)))
+        # [Chunk 16] FK child rows (notifications etc. from API flows) must go
+        # before the user rows or the delete raises and the cleanup rolls back.
+        from app.models.notification import Notification as _N
+        from app.models.refresh_token import RefreshToken as _R
+        from app.models.push_subscription import PushSubscription as _P
+        for _t in (_N, _R, _P):
+            await db.execute(delete(_t).where(_t.user_id.in_(ids)))
         await db.execute(delete(User).where(User.id.in_(ids)))
     await db.execute(delete(Subsection).where(Subsection.name.like("Ph2412 SS %")))
     await db.execute(delete(Section).where(Section.name.like("Ph2412 S2 %")))
@@ -102,6 +109,16 @@ async def main() -> int:
             bcs058 = (await db.execute(select(Subject).where(Subject.code == "BCS-058"))).scalars().first()
             if not all([bcs501, bcs502, bcs058]): check("0. subjects", False); return 1
             _FX["bcs501"] = bcs501.id; _FX["bcs502"] = bcs502.id; _FX["bcs058"] = bcs058.id
+
+            # [Chunk 16] Pre-fixture STUDENT-role roster of BCS-501 (same
+            # definition as AdminAttendanceRepository.roster_size) — used by
+            # check D2 for a derived, environment-independent expectation.
+            _pre_roster_b501 = int((await db.execute(
+                select(func.count(func.distinct(StudentEnrollment.user_id)))
+                .join(User, User.id == StudentEnrollment.user_id)
+                .where(StudentEnrollment.subject_id == bcs501.id,
+                       User.role == UserRole.STUDENT)
+            )).scalar_one())
 
             # Fixture users: target student (receives attendance), plus scoped admins
             target = User(roll_number=f"2401400{uuid.uuid4().hex[:6]}", name="Ph2412 Student", hashed_password="x", section_id=section.id)
@@ -188,13 +205,21 @@ async def main() -> int:
                   and sec_item["attended"] >= 1, str(sec_item))
 
             # D. HEAD: subject analytics include BCS-501/BCS-502 with the target records
+            # [Chunk 16] The roster expectation is derived, not pinned: the
+            # Phase 24.13 truthfulness fix changed roster_size to count only
+            # STUDENT-role users, so the absolute "roster >= 3" was calibrated
+            # against the legacy 30-user environment. On the canonical 3-user
+            # DB the STUDENT roster is 1 + this run's fixture target. Capture
+            # the pre-fixture roster via the same endpoint before fixture
+            # creation and assert relative growth + attendance instead.
             r = await c.get(f"{A}/subjects", headers=h)
             check("D1. HEAD subjects -> 200", r.status_code == 200)
             d = r.json()
             b501 = next((i for i in d["items"] if i["subject_id"] == str(_FX["bcs501"])), None)
             b502 = next((i for i in d["items"] if i["subject_id"] == str(_FX["bcs502"])), None)
-            check("D2. BCS-501 roster >= 3 and attended >= 1", b501 and b501["roster"] >= 3 and b501["attended"] >= 1,
-                  str(b501))
+            check("D2. BCS-501 roster grew by the fixture target and attended >= 1",
+                  b501 and b501["roster"] >= _pre_roster_b501 + 1 and b501["attended"] >= 1,
+                  f"pre={_pre_roster_b501} now={b501['roster'] if b501 else None} {b501 if b501 else ''}")
             check("D3. BCS-502 present (target pending)", b502 is not None and b502["pending"] >= 0, str(b502))
 
             # E. HEAD: per-student read

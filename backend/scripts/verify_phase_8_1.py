@@ -67,8 +67,8 @@ from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, ScheduleStatus
-from app.models.enums import AttendanceStatus, UserRole
-from app.engines.attendance_engine import optimize_attendance
+from app.models.enums import AttendanceStatus, UserRole, ClassType
+from app.engines.attendance_engine import optimize_attendance, pooled_pct
 from app.engines.practical_occurrence import group_practical_occurrences
 from app.repositories.quiz_repo import QuizRepository
 from app.repositories.attendance_repo import AttendanceRepository
@@ -236,15 +236,38 @@ async def main() -> int:
         r_ov_s = await client.get("/api/v1/analytics/overview", headers=student_headers)
         ov_s = r_ov_s.json()
         bcs551 = next(s for s in ov_s["subjects"] if s["subject_code"] == "BCS-551")
-        # 4 Monday lab blocks through today (each a 2-period timetable block = ONE
-        # occurrence), all pending for this user: total 4, pending 4.
+        # Chunk 10 (verifier refresh): the "4 Monday lab blocks through today"
+        # count was a historical snapshot. The all-pending-collapse invariant
+        # (current null, forecast 100, total == pending — every scheduled
+        # occurrence pending for this zero-record student) is timetable-
+        # derived, so the totals are asserted against the canonical session
+        # table via the same occurrence collapse, not a hard-coded 4.
+        bcs551_id = subject_ids["BCS-551"]
+        async with AsyncSessionLocal() as db:
+            raw551 = (await db.execute(
+                select(ClassSession.id, ClassSession.date, ClassSession.is_cancelled,
+                       TimetableEntry.start_time, TimetableEntry.end_time)
+                .outerjoin(TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id)
+                .where(ClassSession.subject_id == bcs551_id,
+                       ClassSession.date <= date.today())
+                .order_by(ClassSession.date, TimetableEntry.start_time.asc().nulls_last(),
+                          ClassSession.id))).all()
+        occ551 = group_practical_occurrences([
+            {"id": r.id, "date": r.date, "class_type": ClassType.PRACTICAL, "is_cancelled": r.is_cancelled,
+             "start_time": r.start_time, "end_time": r.end_time, "status": None}
+            for r in raw551
+        ])
+        active551 = [o for o in occ551 if not o["is_cancelled"]]
         check("7. practical % uses the canonical class-session pipeline (no quiz "
               "window): all-pending lab -> current null, forecast pending-as-attended; "
               "a 2-hour lab block counts as ONE occurrence",
-              bcs551["practical"]["total"] == 4 and bcs551["practical"]["pending"] == 4
+              bcs551["practical"]["total"] == len(active551)
+              and bcs551["practical"]["pending"] == len(active551)
+              and len(active551) > 0
               and bcs551["current_practical_pct"] is None
               and bcs551["forecast_practical_pct"] == 100.0,
-              f"total={bcs551['practical']['total']} cur={bcs551['current_practical_pct']} "
+              f"total={bcs551['practical']['total']} occurrences={len(active551)} "
+              f"cur={bcs551['current_practical_pct']} "
               f"fore={bcs551['forecast_practical_pct']}")
 
         # --- 8-10. Subject 75% optimization --------------------------------------
@@ -357,10 +380,23 @@ async def main() -> int:
               f"dash={dash['overall']} overview={ov['overall']}")
 
         # Quiz snapshot == recomputed per-subject eligibility (batch == single).
+        # Chunk 10 (verifier refresh): iterate the user's ACTUAL quiz-applicable
+        # subjects (the Phase 23.5 elective catalog added subjects beyond the
+        # frozen 6-code THEORY set); the invariant "batch == single-call" is
+        # unchanged.
         snapshot = dash["quiz_snapshot"]
         cycle = snapshot["quiz_cycle"]
+        # The dashboard's batch domain: the user's quiz-applicable enrolled
+        # subjects (canonical enrollment + subjects.quiz_applicable flag).
+        async with AsyncSessionLocal() as db:
+            _rows = (await db.execute(
+                select(Subject.code)
+                .join(StudentEnrollment, StudentEnrollment.subject_id == Subject.id)
+                .where(StudentEnrollment.user_id == admin_user.id,
+                       Subject.quiz_applicable.is_(True)))).all()
+        quiz_codes = {r[0] for r in _rows}
         eligible = attention = not_eligible = 0
-        for code in sorted(THEORY):
+        for code in sorted(quiz_codes):
             rr = await client.get(f"/api/v1/quiz-eligibility/{code}/{cycle}", headers=admin_headers)
             b = rr.json()
             if b["is_eligible"]:
@@ -404,8 +440,12 @@ async def main() -> int:
               f"queries={counter['n']} (pre-optimization estimate ~54; bound 25)")
 
         # --- 14. Runtime-date behavior ------------------------------------------
+        # Chunk 10 (verifier refresh): "explicit today" is now derived at run
+        # time (institution-local) instead of the stale 2026-08-15 pin.
+        from app.core.timezone import institution_today
+        _today_iso = institution_today().isoformat()
         r_default = await client.get("/api/v1/attendance/summary/BCS-501", headers=admin_headers)
-        r_today = await client.get("/api/v1/attendance/summary/BCS-501?as_of_date=2026-08-15",
+        r_today = await client.get(f"/api/v1/attendance/summary/BCS-501?as_of_date={_today_iso}",
                                    headers=admin_headers)
         r_past = await client.get("/api/v1/attendance/summary/BCS-501?as_of_date=2026-07-20",
                                   headers=admin_headers)
@@ -447,10 +487,25 @@ async def main() -> int:
         for code in LABS:
             rr = await client.get(f"/api/v1/quiz-eligibility/{code}/1", headers=admin_headers)
             lab_codes[code] = rr.status_code
-        check("18a. frozen 7.2 invariant: current-cycle resolves Quiz I (2026-08-24, "
-              "next_upcoming) unchanged",
-              cc["quiz_cycle"] == 1 and cc["quiz_date"] == "2026-08-24" and cc["basis"] == "next_upcoming",
-              f"got {cc}")
+        # Chunk 10 (verifier refresh): derive the next upcoming quiz date from
+        # the canonical QUIZ_DAY events — the historical "Quiz I 2026-08-24"
+        # pin only held while that date was still in the future.
+        from app.models.event import AcademicEvent as _AE
+        from app.models.enums import EventType as _ET
+        from app.core.timezone import institution_today as _inst_today
+        async with AsyncSessionLocal() as _db:
+            _evs = (await _db.execute(
+                select(_AE.start_date).where(
+                    _AE.event_type == _ET.QUIZ_DAY,
+                    _AE.active.is_(True),
+                    _AE.start_date >= _inst_today(),
+                ).order_by(_AE.start_date))).scalars().all()
+        _next_quiz = _evs[0] if _evs else None
+        check("18a. frozen 7.2 invariant: current-cycle resolves the next "
+              "upcoming quiz from the canonical schedule (basis next_upcoming)",
+              cc["basis"] == "next_upcoming" and cc.get("has_schedule") is True
+              and (_next_quiz is None or cc["quiz_date"] == _next_quiz.isoformat()),
+              f"got {cc} next={_next_quiz}")
         check("18b. frozen 7.2 invariant: BCS-054 Quiz III = 2026-10-23 unchanged",
               bcs["quiz_date"] == "2026-10-23" and bcs["window_end"] == "2026-10-22",
               f"date={bcs.get('quiz_date')}")

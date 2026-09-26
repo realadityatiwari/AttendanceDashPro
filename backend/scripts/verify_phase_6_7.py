@@ -172,15 +172,25 @@ async def main() -> int:
             r = await client.get("/api/v1/events?date_from=2026-11-01&date_to=2026-10-01", headers=student_headers)
             check("5. inverted date range on /events -> 422", r.status_code == 422, f"got {r.status_code}")
             r = await client.get("/api/v1/events?upcoming=true", headers=student_headers)
-            # upcoming=true must return every seed quiz day (end_date >= today);
-            # user-created upcoming events may coexist.
+            # upcoming=true must return every seed quiz day whose date is still
+            # ahead (end_date >= today); user-created upcoming events may
+            # coexist.
+            # [Chunk 10, A/C-class fix] The original assertion pinned the full
+            # seed population ("all 18 quiz days upcoming"), true only while
+            # the calendar sat before every quiz date. The horizon must be
+            # derived from the canonical schedule and the run date: the seed
+            # quiz days that are themselves upcoming (>= today).
+            from app.core.timezone import institution_today
+            _today = institution_today()
+            _upcoming_seed_pairs = {(sid, d) for (sid, d) in seeded_pairs if date.fromisoformat(d) >= _today}
             qd_upcoming = [e for e in r.json() if e["event_type"] == "QUIZ_DAY"]
             qd_upcoming_seeded = [e for e in qd_upcoming
-                                  if (e["subject_id"], e["start_date"]) in seeded_pairs]
-            check("6. upcoming=true keeps end_date >= today (all 18 quiz days)",
-                  r.status_code == 200 and len(qd_upcoming_seeded) == 18
-                  and all(e["end_date"] >= "2026-08-14" for e in r.json()),
-                  f"count={len(r.json())} quiz_day={len(qd_upcoming)} seeded={len(qd_upcoming_seeded)}")
+                                  if (e["subject_id"], e["start_date"]) in _upcoming_seed_pairs]
+            check("6. upcoming=true keeps end_date >= today (every still-upcoming seed quiz day)",
+                  r.status_code == 200 and len(qd_upcoming_seeded) == len(_upcoming_seed_pairs)
+                  and all(e["end_date"] >= str(_today) for e in r.json()),
+                  f"count={len(r.json())} quiz_day={len(qd_upcoming)} "
+                  f"seeded_upcoming={len(qd_upcoming_seeded)}/{len(_upcoming_seed_pairs)}")
 
             # --- Phase 6.5 seeding integrity (scoped to the seed population) -----
             async with AsyncSessionLocal() as db:

@@ -40,6 +40,7 @@ from app.schemas.admin_students import (
 )
 from app.repositories.admin_student_repo import AdminStudentRepository, StudentScopeFilter
 from app.services.authorization_service import AuthorizationService
+from app.services.enrollment_service import build_enrollment
 from app.services.student_context_service import StudentContextService
 
 
@@ -274,11 +275,14 @@ class AdminStudentService:
         )
         new_enroll_result = await self.db.execute(new_enroll_stmt)
         if not new_enroll_result.scalars().first():
-            self.db.add(StudentEnrollment(
-                user_id=student_id,
-                subject_id=new_subject_id,
-                enrollment_type=EnrollmentType.ELECTIVE
-            ))
+            # [Chunk 16] Row construction goes through the centralized
+            # EnrollmentService builder (explicit ELECTIVE type, single shared
+            # writer). The operation's semantics are unchanged: this is an
+            # EXPLICIT elective change for an existing student — only the
+            # previous ELECTIVE enrollment of this slot is removed and only
+            # the newly selected ELECTIVE enrollment is added. No other
+            # existing row (or student) is touched.
+            self.db.add(build_enrollment(student_id, new_subject, EnrollmentType.ELECTIVE))
 
         await self.db.commit()
         return await self.get_student_detail(user, student_id)

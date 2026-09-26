@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from app.models.user import User, Section
 from app.models.academic import StudentEnrollment, StudentElectiveChoice, Subject, Semester, AcademicSession
+from app.models.event import AcademicEvent
 from app.models.enums import EventType, ElectiveSlot
 
 class UserRepository:

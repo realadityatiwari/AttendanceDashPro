@@ -14,7 +14,7 @@ finally block restores the frozen baseline):
                   inside the Q1-Q2 gap). The new quiz becomes cycle 2
                   (positional re-ranking: 09-21 -> cycle 3, 10-16 -> cycle 4).
                   Every hop of the chain for cycle 2 and the re-ranked cycle 3
-                  is compared against a DB-derived reference                  (calendar-engine
+                  is compared against a DB-derived reference (calendar-engine
                   windows, attendance-repo counts with quiz-day exclusion,
                   pooled L+T counts, per-criterion optimizer, OR-combined final).
   2.  RESCHEDULE: PATCH start_date 09-14 -> 09-16. Stale 09-14 gone; window

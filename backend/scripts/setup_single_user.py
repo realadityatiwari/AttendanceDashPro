@@ -9,8 +9,11 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.session import AsyncSessionLocal
 from app.models.user import User, Section
-from app.models.academic import Semester, Subject, StudentEnrollment
+from app.models.academic import Semester, Subject, StudentEnrollment, StudentElectiveChoice
+from app.models.enums import ElectiveSlot
+from app.services.enrollment_service import build_enrollment, plan_new_student_enrollments
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 async def setup_single_user():
     print("Starting single-user academic setup...")
@@ -53,32 +56,60 @@ async def setup_single_user():
         user.section_id = section.id
         await session.flush()
 
-        # 4. Create StudentEnrollments
+        # 4. Create StudentEnrollments — [Chunk 16] invariant-conformant.
+        #
+        # ROOT-CAUSE NOTE (Chunk 15 forensic audit): this section previously
+        # enrolled EVERY Subject row for the target user WITHOUT an explicit
+        # enrollment_type, so the SQLAlchemy model default 'COMPULSORY'
+        # applied. For a freshly registered student (7 COMPULSORY + 2 ELECTIVE
+        # rows already present) this added exactly the four UNSELECTED
+        # elective-pool subjects (BCS-052/053/055/056) as COMPULSORY — the
+        # phantom-enrollment pattern observed on 2026-09-25.
+        #
+        # The construction now routes through the centralized
+        # EnrollmentService: only non-elective subjects PLUS the student's
+        # StudentElectiveChoice-resolved selection per configured elective
+        # slot are ever added, with an explicit EnrollmentType. Existing rows
+        # are skipped; NOTHING is deleted or updated (this script never
+        # normalizes existing students); an unresolvable elective slot is
+        # skipped with a warning and never invented.
         result = await session.execute(select(Subject))
-        subjects = result.scalars().all()
-        print(f"Found {len(subjects)} subjects. Verifying enrollments...")
-        
-        # Get existing enrollments
-        result = await session.execute(
+        subjects = list(result.scalars().all())
+        print(f"Found {len(subjects)} subjects. Verifying invariant-conformant enrollments...")
+
+        choices = (await session.execute(
+            select(StudentElectiveChoice)
+            .options(selectinload(StudentElectiveChoice.subject))
+            .where(StudentElectiveChoice.user_id == user.id)
+        )).scalars().all()
+        choices_by_slot = {c.elective_slot: c for c in choices}
+        for slot in (ElectiveSlot.ELECTIVE_I, ElectiveSlot.ELECTIVE_II):
+            if slot not in choices_by_slot:
+                print(f"WARNING: no {slot.value} choice recorded for user "
+                      f"{user.roll_number}; that elective slot will NOT be enrolled.")
+
+        existing_rows = (await session.execute(
             select(StudentEnrollment).where(StudentEnrollment.user_id == user.id)
-        )
-        existing_enrollments = {e.subject_id: e for e in result.scalars().all()}
-        
+        )).scalars().all()
+        existing_enrollments = {e.subject_id for e in existing_rows}
+
+        specs, missing_slots = plan_new_student_enrollments(subjects, choices_by_slot)
+        for slot in missing_slots:
+            print(f"WARNING: {slot.value} selection could not be resolved; skipping that slot.")
+
         new_enrollments = 0
-        for subject in subjects:
-            if subject.id not in existing_enrollments:
-                enrollment = StudentEnrollment(
-                    user_id=user.id,
-                    subject_id=subject.id
-                )
-                session.add(enrollment)
-                new_enrollments += 1
-                
+        for subject, enrollment_type in specs:
+            if subject.id in existing_enrollments:
+                continue
+            session.add(build_enrollment(user.id, subject, enrollment_type))
+            new_enrollments += 1
+            print(f"  + {subject.code} ({enrollment_type.value})")
+
         if new_enrollments > 0:
-            print(f"Created {new_enrollments} new enrollments.")
+            print(f"Created {new_enrollments} invariant-conformant enrollment(s).")
         else:
-            print("All enrollments already exist. No new enrollments created.")
-            
+            print("All invariant-conformant enrollments already exist. No new enrollments created.")
+
         await session.commit()
         print("Setup completed successfully.")
 

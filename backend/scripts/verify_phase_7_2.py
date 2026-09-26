@@ -91,6 +91,10 @@ from app.models.academic import StudentEnrollment, Subject, Semester
 from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.enums import AttendanceStatus, ClassType, EventType, UserRole
 from app.services.eligibility_service import EligibilityService
+from app.services.elective_resolver import ElectiveResolver
+from app.repositories.quiz_repo import QuizRepository
+from app.repositories.user_repo import UserRepository
+from app.core.timezone import institution_today
 from app.schemas.attendance import EligibilityState
 from app.engines.calendar_engine import get_teaching_days_between, DEFAULT_WEEKENDS
 from app.engines.practical_occurrence import group_practical_occurrences
@@ -535,12 +539,26 @@ async def main() -> int:
         # --- Step 4: date-aware default tab -------------------------------------
         r = await client.get("/api/v1/quiz-eligibility/current-cycle", headers=admin_headers)
         cc_admin = r.json()
-        check("13. current-cycle (admin): Quiz I selected from the canonical "
-              "schedule  -  next upcoming quiz date 2026-08-24, basis next_upcoming",
-              r.status_code == 200 and cc_admin["quiz_cycle"] == 1
-              and cc_admin["quiz_date"] == "2026-08-24" and cc_admin["has_schedule"] is True
+        # Chunk 10 (verifier refresh): the expected current-cycle quiz date is
+        # DERIVED from the canonical effective quiz dates for the admin's
+        # quiz-applicable subjects — the "Quiz I = 2026-08-24" pin only held
+        # while that date was still in the future.
+        _scope = await ElectiveResolver(db).chosen_elective_map(admin_user.id)
+        _quiz_subjects = [s for s in await UserRepository(db).get_enrolled_subjects(admin_user.id)
+                          if s.quiz_applicable]
+        _eff = await QuizRepository(db).get_effective_quiz_dates_for_subjects(
+            [s.id for s in _quiz_subjects], elective_scope=_scope)
+        _resolved = [(c, d) for lst in _eff.values() for (c, d) in lst]
+        _future = [(c, d) for c, d in _resolved if d >= institution_today()]
+        _exp_cycle, _exp_date = (min(_future, key=lambda x: x[1]) if _future
+                                 else max(_resolved, key=lambda x: x[0]))
+        check("13. current-cycle (admin): next upcoming quiz derived from the "
+              "canonical schedule, basis next_upcoming",
+              r.status_code == 200 and cc_admin["quiz_cycle"] == _exp_cycle
+              and cc_admin["quiz_date"] == _exp_date.isoformat()
+              and cc_admin["has_schedule"] is True
               and cc_admin["basis"] == "next_upcoming",
-              f"got {cc_admin}")
+              f"got {cc_admin} expected=({_exp_cycle}, {_exp_date})")
 
         r = await client.get("/api/v1/quiz-eligibility/current-cycle", headers=student_headers)
         cc_student = r.json()
@@ -570,11 +588,22 @@ async def main() -> int:
                         e.start_date = date(2026, 8, 1)
                         e.end_date = date(2026, 8, 1)
                 cc = await service.get_current_quiz_cycle(admin_user.id)
+                # Chunk 10 (verifier refresh): the expected answer is derived
+                # from the canonical resolution of the MUTATED schedule (the
+                # hard-coded "Quiz II = 2026-09-14" was both a historical date
+                # and only valid while it lay in the future).
+                _eff_a = await QuizRepository(db).get_effective_quiz_dates_for_subjects(
+                    [s.id for s in _quiz_subjects], elective_scope=_scope)
+                _res_a = [(c, d) for lst in _eff_a.values() for (c, d) in lst]
+                _fut_a = [(c, d) for c, d in _res_a if d >= institution_today()]
+                _exp_cycle, _exp_date = (min(_fut_a, key=lambda x: x[1]) if _fut_a
+                                         else max(_res_a, key=lambda x: x[0]))
                 check("15a. date-aware: with every Quiz I quiz event moved to the "
-                      "past, current-cycle selects Quiz II (next upcoming "
-                      "2026-09-14, basis next_upcoming)",
-                      cc["quiz_cycle"] == 2 and cc["quiz_date"] == date(2026, 9, 14)
-                      and cc["basis"] == "next_upcoming", f"got {cc}")
+                      "past, current-cycle selects the next upcoming cycle per "
+                      "the canonical pick semantics (derived, basis next_upcoming)",
+                      cc["quiz_cycle"] == _exp_cycle and cc["quiz_date"] == _exp_date
+                      and cc["basis"] == "next_upcoming",
+                      f"got {cc} expected=({_exp_cycle}, {_exp_date})")
 
                 # Scenario B: ranks 1+2 moved to the past (distinct past dates
                 # keep the effective dates from collapsing by date-dedup)
@@ -668,12 +697,34 @@ async def main() -> int:
                 attention += 1
             else:
                 not_eligible += 1
+        # Chunk 10 (verifier refresh): total_theory is the user's quiz-
+        # applicable subject count (Phase 23.5 catalog expanded it beyond the
+        # historical 6), and the recomputation loop covers exactly those.
+        async with AsyncSessionLocal() as db:
+            _qa_rows = (await db.execute(
+                select(Subject.code)
+                .join(StudentEnrollment, StudentEnrollment.subject_id == Subject.id)
+                .where(StudentEnrollment.user_id == admin_user.id,
+                       Subject.quiz_applicable.is_(True)))).all()
+        _qa_codes = {r[0] for r in _qa_rows}
+        eligible = attention = not_eligible = 0
+        for code in sorted(_qa_codes):
+            rr = await client.get(f"/api/v1/quiz-eligibility/{code}/{cycle}", headers=admin_headers)
+            b = rr.json()
+            if b["is_eligible"]:
+                eligible += 1
+            elif b["optimization"] is not None and b["optimization"]["is_reachable"]:
+                attention += 1
+            else:
+                not_eligible += 1
         check("19. dashboard quiz snapshot consumes the canonical eligibility "
               "result (recomputed counts match; snapshot cycle == current-cycle)",
               snapshot["has_snapshot"] is True and snapshot["quiz_cycle"] == cc["quiz_cycle"]
               and snapshot["eligible"] == eligible and snapshot["attention"] == attention
-              and snapshot["not_eligible"] == not_eligible and snapshot["total_theory"] == 6,
-              f"snapshot={snapshot} recomputed=({eligible},{attention},{not_eligible})")
+              and snapshot["not_eligible"] == not_eligible
+              and snapshot["total_theory"] == len(_qa_codes),
+              f"snapshot={snapshot} recomputed=({eligible},{attention},{not_eligible}) "
+              f"quiz_subjects={len(_qa_codes)}")
 
         # 20. Track / History / Eligibility consistency (same canonical records)
         r = await client.get("/api/v1/attendance/daily/2026-07-15", headers=admin_headers)
@@ -692,13 +743,23 @@ async def main() -> int:
                     ClassSession.date.between(date.fromisoformat(elig["window_start"]),
                                               date.fromisoformat(elig["window_end"])),
                     ClassSession.is_cancelled.is_(False)))).scalar()
+        # Chunk 10 (verifier refresh): the historical pin assumed the owner had
+        # marked attendance on every semester-start session (daily == records).
+        # The real invariant: Track's daily view equals the DB session truth
+        # (one entry per session) and the marked statuses equal the records.
+        async with AsyncSessionLocal() as db:
+            _sess_count_0715 = (await db.execute(
+                select(func.count()).select_from(ClassSession).where(
+                    ClassSession.date == date(2026, 7, 15),
+                    ClassSession.is_cancelled.is_(False)))).scalar()
         check("20. Track/History/Eligibility consistency: daily view matches the "
-              "canonical records; eligibility window totals equal a direct "
-              "session count",
-              len(daily["sessions"]) == len(db_rows)
+              "canonical session/record truth; eligibility window totals equal a "
+              "direct session count",
+              len(daily["sessions"]) == _sess_count_0715
               and db_statuses == api_statuses
               and bcs501_window_total == elig["lecture"]["total"] + elig["tutorial"]["total"],
-              f"daily={len(daily['sessions'])} db={len(db_rows)} "
+              f"daily={len(daily['sessions'])} db_sessions={_sess_count_0715} "
+              f"records={len(db_rows)} "
               f"window={bcs501_window_total} api_lt={elig['lecture']['total'] + elig['tutorial']['total']}")
 
         # 21. Student authorization isolation

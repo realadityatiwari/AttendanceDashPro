@@ -147,7 +147,13 @@ async def seed_baseline():
                             subject_id=subject.id,
                             quiz_cycle_id=qc.id,
                             date=schedule_date,
-                            schedule_status=status
+                            schedule_status=status,
+                            # Phase 22.4: departmental-elective schedules carry
+                            # the subject's elective slot so the QUIZ_DAY
+                            # event projection (seed_academic_events) tags
+                            # slot-level events and elective-scope resolution
+                            # finds them.
+                            elective_slot=subject.elective_slot,
                         )
                         db.add(schedule)
                         await db.flush()

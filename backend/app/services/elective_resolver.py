@@ -173,15 +173,20 @@ class ElectiveResolver:
     ) -> list:
         """Resolve every subject-scoped event's effective subject for a user.
 
-        Returns the same event objects with `resolved_subject_id` /
+        Returns AcademicEventResponse objects with `resolved_subject_id` /
         `resolved_subject_code` / `resolved_subject_name` attached:
         - elective-slot events resolve to the student's chosen subject (or the
           anchor when no choice exists — ADMIN keeps the anchor behavior);
         - regular subject events resolve to their own subject.
+        
+        This method is NON-MUTATING: it creates new response objects instead
+        of modifying the original ORM event instances. This ensures that
+        resolving events for one student does not affect resolution for another.
+        
         Two queries total (choices + subjects), independent of event count.
         """
         from app.models.academic import Subject as SubjectModel
-        from app.models.event import AcademicEvent
+        from app.schemas.calendar import AcademicEventResponse
 
         anchor_map = await self.anchor_subjects()
 
@@ -198,13 +203,36 @@ class ElectiveResolver:
             )
             subject_by_id = {s.id: s for s in result.scalars().all()}
 
+        # Build response objects without mutating the original events
+        responses = []
         for e in events:
             if e.elective_slot is not None:
                 choice = choice_map.get(e.elective_slot)
                 subject = choice.subject if choice is not None else anchor_map.get(e.elective_slot)
             else:
                 subject = subject_by_id.get(e.subject_id) if e.subject_id is not None else None
-            e.resolved_subject_id = subject.id if subject is not None else None
-            e.resolved_subject_code = subject.code if subject is not None else None
-            e.resolved_subject_name = subject.name if subject is not None else None
-        return list(events)
+            
+            # Create a new AcademicEventResponse with resolved fields
+            resolved_id = subject.id if subject is not None else None
+            resolved_code = subject.code if subject is not None else None
+            resolved_name = subject.name if subject is not None else None
+            
+            response = AcademicEventResponse(
+                id=e.id,
+                event_type=e.event_type,
+                start_date=e.start_date,
+                end_date=e.end_date,
+                subject_id=e.subject_id,
+                elective_slot=e.elective_slot,
+                resolved_subject_id=resolved_id,
+                resolved_subject_code=resolved_code,
+                resolved_subject_name=resolved_name,
+                class_type=e.class_type,
+                is_working_day=e.is_working_day,
+                substitution_schedule_override=e.substitution_schedule_override,
+                note=e.note,
+                active=e.active,
+            )
+            responses.append(response)
+            
+        return responses

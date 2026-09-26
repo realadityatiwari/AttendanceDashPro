@@ -456,7 +456,6 @@ async def main() -> int:
                     for mT in range(0, CT + 1):
                         if mL + mT == 0:
                             continue
-                        lec_i = (CL - mL) / CL * 100.0 if CL else 0.0
                         # CHUNK 6 COMPLETION: the J-section shaping conditions
                         # use the SAME canonical pooled L+T model the engine
                         # evaluates (imported `pooled_pct` on the window
@@ -466,7 +465,6 @@ async def main() -> int:
                         avg_i = _pooled_pct(CL - mL, CL, CT - mT, CT)
                         if avg_i is not None and avg_i >= 75.0:
                             continue
-                            continue
                         for pendL in (0, 1):
                             for pendT in (0, 1):
                                 if pendL + pendT == 0:
@@ -474,7 +472,6 @@ async def main() -> int:
                                 for pmL in range(0, PL - pendL + 1):
                                     for pmT in range(0, PT - pendT + 1):
                                         paL, paT = PL - pmL - pendL, PT - pmT - pendT
-                                        lec_ii = (paL + CL - mL) / (PL + CL) * 100.0
                                         # Pooled CURRENT cumulative percentage
                                         cur_ii = _pooled_pct(paL + CL - mL, PL + CL,
                                                              paT + CT - mT, PT + CT)

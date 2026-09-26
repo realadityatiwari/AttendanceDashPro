@@ -69,6 +69,13 @@ async def purge_fixtures(db):
         await db.execute(delete(StudentElectiveChoice).where(StudentElectiveChoice.user_id.in_(ids)))
         await db.execute(delete(StudentEnrollment).where(StudentEnrollment.user_id.in_(ids)))
         await db.execute(delete(AdminScope).where(AdminScope.user_id.in_(ids)))
+        # [Chunk 16] FK child rows (notifications etc. from API flows) must go
+        # before the user rows or the delete raises and the cleanup rolls back.
+        from app.models.notification import Notification as _N
+        from app.models.refresh_token import RefreshToken as _R
+        from app.models.push_subscription import PushSubscription as _P
+        for _t in (_N, _R, _P):
+            await db.execute(delete(_t).where(_t.user_id.in_(ids)))
         await db.execute(delete(User).where(User.id.in_(ids)))
     await db.execute(delete(Subject).where(Subject.code.like(f"{FIXTURE_PREFIX}%")))
     await db.execute(delete(Subsection).where(Subsection.name.like(f"{FIXTURE_PREFIX} %")))
@@ -278,7 +285,13 @@ async def main() -> int:
                 oo = (await db.execute(select(func.count()).select_from(OccurrenceOutcome))).scalar_one()
                 check("H1. occurrence_outcomes >= 1 (fixture + any baseline)", oo >= 1, str(oo))
                 # The baseline had 0, we created 1, so oo == 1.
-                check("H2. occurrence_outcomes = 1 (only our fixture)", oo == 1, str(oo))
+                # [Chunk 16] The absolute "= 1" assumed an empty pre-existing
+                # outcome table. The canonical DB legitimately carries one
+                # Phase 23.6 anchor row (BCS-058 MODIFIED on 2026-09-23), so
+                # the expectation is baseline + this run's fixture (derived
+                # from the captured _BASELINE, not pinned).
+                check("H2. occurrence_outcomes = baseline + 1 (only our fixture added)",
+                      oo == _BASELINE.get("occurrence_outcomes", 0) + 1, str(oo))
 
         passed = sum(1 for _, ok in results if ok)
         print(f"\nPhase 24.13 verifier (core): {passed}/{len(results)} PASS")
