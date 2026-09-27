@@ -93,7 +93,16 @@ class SessionRepository:
         is_extra: bool,
         timetable_entry_id: Optional[UUID],
         elective_slot: Optional[ElectiveSlot] = None,
+        source_event_id: Optional[UUID] = None,
     ) -> ClassSession:
+        """Creates a ClassSession row.
+
+        ``source_event_id`` records the AcademicEvent that caused an
+        event-created extra to exist (provenance for the deactivation/
+        reactivation lifecycle). Timetable-linked sessions and quiz-day
+        sessions pass the default None; legacy rows stay NULL — provenance
+        is never invented for historical data.
+        """
         session = ClassSession(
             subject_id=subject_id,
             date=date,
@@ -102,6 +111,8 @@ class SessionRepository:
             is_cancelled=False,
             timetable_entry_id=timetable_entry_id,
             elective_slot=elective_slot,
+            is_deactivated=False,
+            source_event_id=source_event_id,
         )
         self.db.add(session)
         return session

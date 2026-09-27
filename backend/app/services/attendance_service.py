@@ -162,6 +162,15 @@ class AttendanceService:
         if session.is_cancelled:
             raise HTTPException(status_code=409, detail="Cannot mark attendance for a cancelled class session")
 
+        # Deactivated-extra lifecycle: the session is preserved with its
+        # records but does not exist logically — it is hidden from every
+        # logical read, so it must never receive a NEW attendance mark either.
+        if session.is_deactivated:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot mark attendance for a deactivated class session",
+            )
+
         # Phase 22.3/22.4: elective slot sessions carry the anchor subject
         # (BCS-054 / BCS-058). Check enrollment against the student's
         # RESOLVED subject (their selection for that slot) instead. The slot

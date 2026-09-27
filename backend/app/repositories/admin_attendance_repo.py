@@ -101,6 +101,7 @@ class AdminAttendanceRepository:
                 ClassSession.class_type,
                 ClassSession.is_extra,
                 ClassSession.is_cancelled,
+                ClassSession.is_deactivated,
                 ClassSession.designation,
                 ClassSession.elective_slot,
                 resolved_subject_id.label("subject_id"),

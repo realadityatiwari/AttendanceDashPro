@@ -104,6 +104,18 @@ def group_practical_occurrences(rows: List[Dict[str, Any]]) -> List[Dict[str, An
       designation   the first non-null member designation (e.g. a mid-sem
                     designated session makes the whole block the mid-sem)
       is_extra      True when the (single) member is an extra
+
+    Logical deactivation (deactivated-extra lifecycle): a row whose
+    ``is_deactivated`` is True — an event-created extra whose source EXTRA_*
+    event was withdrawn after the occurrence was recorded — DOES NOT EXIST
+    logically. It is dropped here, at the single common occurrence layer,
+    before grouping, so every counting and read-model consumer (subject
+    summary, ERP overall, analytics/forecast, optimization, quiz windows,
+    calendar counts, notifications, Track, History, admin analytics) excludes
+    it without implementing its own rule. The underlying ClassSession and its
+    AttendanceRecord remain preserved in the database. Rows WITHOUT the key
+    (pure-function fixtures, legacy callers) are treated as active —
+    production queries always select the column explicitly.
     """
     occurrences: List[Dict[str, Any]] = []
     pending: List[Dict[str, Any]] = []
@@ -114,6 +126,8 @@ def group_practical_occurrences(rows: List[Dict[str, Any]]) -> List[Dict[str, An
             pending.clear()
 
     for row in rows:
+        if row.get("is_deactivated"):
+            continue
         if row.get("class_type") != ClassType.PRACTICAL:
             flush()
             occurrences.append(row)

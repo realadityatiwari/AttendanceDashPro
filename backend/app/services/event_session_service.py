@@ -38,6 +38,14 @@ Design rules:
   Cancelled sessions never receive new attendance (record_attendance already
   rejects them with 409), so the "cancelled != absent" rule is preserved end
   to end.
+- Deactivated-extra lifecycle: every event-created extra carries
+  source_event_id (provenance set at creation; legacy rows stay NULL and are
+  never guessed). When an EXTRA_* event is withdrawn, its unattended extras
+  are deleted (as before) while ATTENDED extras are preserved with
+  is_deactivated=True — never deleted, never is_cancelled. Reactivating the
+  event restores the SAME provenance-linked row (identity pass — never a
+  duplicate); legacy NULL-provenance rows are restored only count-based.
+  Provenance identity takes priority over count matching for linked rows.
 - Quiz-day attendance (product decision — Option A): QUIZ_DAY is NOT
   calendar-only — an active QUIZ_DAY event materializes exactly one
   attendance-bearing quiz-day session for its subject/date (bucket in
@@ -215,7 +223,7 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, desired_extras, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed, desired_outcomes = (
+            desired_scheduled, extras_event_ids, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed, desired_outcomes = (
                 self._desired_schedule(
                     current, all_active_events, entries_by_dow,
                     by_date.get(current, []), attended_ids,
@@ -225,7 +233,7 @@ class EventSessionSynchronizer:
             await self._reconcile_date(
                 current,
                 desired_scheduled,
-                desired_extras,
+                extras_event_ids,
                 extras_slots,
                 mid_sem_active,
                 desired_quiz_days,
@@ -282,13 +290,17 @@ class EventSessionSynchronizer:
         existing: List[ClassSession],
         attended_ids: set,
         subject_elective_slots: Dict[object, ElectiveSlot],
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], int], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set, Dict[object, OccurrenceOutcomeType]]:
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], List[object]], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set, Dict[object, OccurrenceOutcomeType]]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
                              classes the engine says should exist on the date.
-          desired_extras:    {(subject_id, class_type): count} of extra
-                             occurrences to materialize.
+          extras_event_ids:  {(subject_id, class_type): [event_id, ...]} of the
+                             ACTIVE events demanding an extra occurrence, in
+                             deterministic order (one entry per desired extra;
+                             count = len). The event id is the provenance the
+                             reconciler matches sessions by (identity-exact
+                             deactivation/reactivation).
           extras_slots:      {(subject_id, class_type): ElectiveSlot | None} —
                              the logical elective slot of each extra occurrence
                              (Phase 22.4). None for regular extras.
@@ -350,7 +362,7 @@ class EventSessionSynchronizer:
             reverse=True,
         )
 
-        extras: Dict[Tuple[object, object], int] = {}
+        extras: Dict[Tuple[object, object], List[object]] = {}
         extras_slots: Dict[Tuple[object, object], Optional[ElectiveSlot]] = {}
         cancelled_practical_subjects: set = set()
         cancellation_removed: set = set()
@@ -439,7 +451,9 @@ class EventSessionSynchronizer:
                         cancellation_removed.add(match.id)
             elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                 key = (event.subject_id, event.class_type)
-                extras[key] = extras.get(key, 0) + 1
+                # Provenance: record WHICH event demands this extra so the
+                # reconciler can match sessions by identity, not just counts.
+                extras.setdefault(key, []).append(event.id)
                 # Phase 22.4: an extra materialized from an elective-slot event
                 # carries the logical slot so per-student resolution works on
                 # the resulting session (it has no timetable link).
@@ -468,7 +482,9 @@ class EventSessionSynchronizer:
             )
             if not has_timetable_practical:
                 key = (subject_id, ClassType.PRACTICAL)
-                extras[key] = extras.get(key, 0) + 1
+                # Mid-sem fallback extras carry the causing event's provenance
+                # too (same deactivation/reactivation lifecycle as EXTRA_*).
+                extras.setdefault(key, []).append(event.id)
 
         # Quiz-day subjects: every active QUIZ_DAY event on this date implies
         # one attendance-bearing occurrence for its subject (product decision;
@@ -508,7 +524,7 @@ class EventSessionSynchronizer:
         self,
         target: date,
         desired_scheduled: Dict[object, object],
-        desired_extras: Dict[Tuple[object, object], int],
+        extras_event_ids: Dict[Tuple[object, object], List[object]],
         extras_slots: Dict[Tuple[object, object], Optional[ElectiveSlot]],
         mid_sem_active: set,
         desired_quiz_days: set,
@@ -598,48 +614,141 @@ class EventSessionSynchronizer:
                 )
             )
 
-        # Extra sessions: matched by (subject_id, class_type) count. They are
-        # indistinguishable in their real fields (the model has no event
-        # linkage), so count reconciliation is deterministic and correct.
-        existing_extra_counts: Dict[Tuple[object, object], int] = {}
-        for session in extras:
-            key = (session.subject_id, session.class_type)
-            existing_extra_counts[key] = existing_extra_counts.get(key, 0) + 1
+        # Extra sessions: provenance-aware reconciliation. Every event-created
+        # extra now carries source_event_id, so sessions are matched to their
+        # causing event by IDENTITY first; count matching remains only for
+        # legacy rows (NULL provenance — their true event is unknowable and is
+        # never guessed).
+        #
+        # Lifecycle invariants (deactivated-attended-extra contract):
+        #   - an attended extra is NEVER deleted and NEVER is_cancelled; when
+        #     its event is withdrawn it is preserved with is_deactivated=True;
+        #   - reactivating an event restores the SAME provenance-linked row
+        #     (never a duplicate) via the identity pass;
+        #   - unattended extras are deleted when no longer desired (existing
+        #     behavior unchanged).
+        all_keys = set(extras_event_ids) | {
+            (s.subject_id, s.class_type) for s in extras
+        }
+        for key in all_keys:
+            desired_ids = list(extras_event_ids.get(key, []))
+            desired_count = len(desired_ids)
+            desired_set = set(desired_ids)
+            key_extras = [
+                s for s in extras if (s.subject_id, s.class_type) == key
+            ]
 
-        for key, desired_count in desired_extras.items():
-            missing = desired_count - existing_extra_counts.get(key, 0)
-            for _ in range(missing):
-                created.append(
-                    self.session_repo.add_session(
-                        subject_id=key[0],
-                        date=target,
-                        class_type=key[1],
-                        is_extra=True,
-                        timetable_entry_id=None,
-                        elective_slot=extras_slots.get(key),
-                    )
-                )
-
-        for key, existing_count in existing_extra_counts.items():
-            excess = existing_count - desired_extras.get(key, 0)
-            if excess <= 0:
-                continue
-            # Delete the excess extras that have no attendance records
-            # (deterministic by id); extras with attendance are kept — the
-            # class happened and was logged, which is historical truth.
-            candidates = sorted(
-                (s for s in extras if (s.subject_id, s.class_type) == key),
-                key=lambda s: str(s.id),
-            )
-            removed = 0
-            for session in candidates:
-                if removed >= excess:
-                    break
-                if session.id in attended_ids:
+            # Identity pass — provenance-linked rows only.
+            # Reactivate: a deactivated session whose source event is desired
+            # again becomes the active occurrence (SAME row — never a
+            # duplicate; its preserved attendance records return with it).
+            for session in key_extras:
+                if session.is_deactivated and session.source_event_id in desired_set:
+                    session.is_deactivated = False
+            # Withdraw: an active session whose source event is no longer
+            # desired is preserved when attended (is_deactivated=True — the
+            # historical record survives; is_cancelled is never touched) and
+            # deleted when unattended (unchanged legacy behavior).
+            for session in key_extras:
+                if session.is_deactivated:
                     continue
-                await self.session_repo.delete_session(session)
-                removed_ids.add(session.id)
-                removed += 1
+                if (
+                    session.source_event_id is not None
+                    and session.source_event_id not in desired_set
+                ):
+                    if session.id in attended_ids:
+                        session.is_deactivated = True
+                    else:
+                        await self.session_repo.delete_session(session)
+                        removed_ids.add(session.id)
+
+            # Count pass — balances what remains active (provenance-matched
+            # actives plus legacy NULL-provenance actives) against the number
+            # of active events demanding this key.
+            key_extras = [s for s in key_extras if s.id not in removed_ids]
+            active = [s for s in key_extras if not s.is_deactivated]
+            excess = len(active) - desired_count
+            if excess > 0:
+                # Remove legacy (NULL provenance) actives first — they cannot
+                # be identity-matched. Unattended are deleted (existing
+                # behavior); attended are marked is_deactivated=True (the
+                # withdrawn-event fix: previously they were skipped, leaving a
+                # withdrawn event's class counting as conducted).
+                legacy = sorted(
+                    (s for s in active if s.source_event_id is None),
+                    key=lambda s: str(s.id),
+                )
+                for session in legacy:
+                    if excess <= 0:
+                        break
+                    if session.id in attended_ids:
+                        session.is_deactivated = True
+                    else:
+                        await self.session_repo.delete_session(session)
+                        removed_ids.add(session.id)
+                    excess -= 1
+                # Defensive remainder: duplicate provenance-linked actives for
+                # one event would violate the provenance invariant; treat them
+                # like any other excess (unattended delete, attended mark).
+                if excess > 0:
+                    linked = sorted(
+                        (s for s in active if s.source_event_id is not None),
+                        key=lambda s: str(s.id),
+                    )
+                    for session in linked:
+                        if excess <= 0:
+                            break
+                        if session.id in attended_ids:
+                            session.is_deactivated = True
+                        else:
+                            await self.session_repo.delete_session(session)
+                            removed_ids.add(session.id)
+                        excess -= 1
+            elif excess < 0:
+                deficit = -excess
+                # Restore legacy deactivated rows first (count-based; their
+                # true event is unknowable, so count matching is the only
+                # option — never an identity guess). Provenance-linked
+                # deactivated rows are NOT restored here: their lifecycle is
+                # owned exclusively by their source event (the identity pass
+                # above restores them exactly when that event is desired).
+                legacy_deactivated = sorted(
+                    (s for s in key_extras
+                     if s.is_deactivated and s.source_event_id is None),
+                    key=lambda s: str(s.id),
+                )
+                for session in legacy_deactivated:
+                    if deficit <= 0:
+                        break
+                    session.is_deactivated = False
+                    deficit -= 1
+                # Remaining deficit: create WITH provenance for desired events
+                # not yet covered by an active linked session (identity-exact).
+                # An event already covered by an active legacy row stays
+                # session-less-linked — legacy count matching must not
+                # fabricate a second occurrence.
+                matched_sources = {
+                    s.source_event_id for s in key_extras
+                    if s.source_event_id is not None and not s.is_deactivated
+                }
+                for event_id in desired_ids:
+                    if deficit <= 0:
+                        break
+                    if event_id in matched_sources:
+                        continue
+                    created.append(
+                        self.session_repo.add_session(
+                            subject_id=key[0],
+                            date=target,
+                            class_type=key[1],
+                            is_extra=True,
+                            timetable_entry_id=None,
+                            elective_slot=extras_slots.get(key),
+                            source_event_id=event_id,
+                        )
+                    )
+                    matched_sources.add(event_id)
+                    deficit -= 1
 
         # Quiz-day attendance bucket (product decision): an active QUIZ_DAY
         # event is ONE attendance-bearing occurrence for its subject —

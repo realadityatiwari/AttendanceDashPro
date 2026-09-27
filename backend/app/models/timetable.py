@@ -114,6 +114,28 @@ class ClassSession(Base):
     designation: Mapped[SessionDesignation | None] = mapped_column(
         Enum(SessionDesignation), nullable=True, default=None
     )
+    # Deactivated-extra lifecycle flag. TRUE means the source EXTRA_* event
+    # was withdrawn/deactivated AFTER this occurrence existed: the historical
+    # ClassSession (and any AttendanceRecord on it) is preserved — never
+    # deleted, never is_cancelled — but the session no longer represents a
+    # conducted class. Distinct from is_cancelled (class-reality: the class
+    # did not happen). Only the EventSessionSynchronizer sets this flag;
+    # reactivating the source event flips it back to False (same row, never a
+    # duplicate). Legacy rows default False (logically active) until an
+    # explicit, human-verified repair says otherwise.
+    is_deactivated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    # Optional provenance: the AcademicEvent that caused an event-created
+    # EXTRA_* session to exist. Set at creation by the synchronizer for every
+    # NEW event-created extra; NULL for timetable-linked sessions and for
+    # legacy rows (no provenance was recorded before this column existed —
+    # never backfilled, never guessed). Enables identity-exact
+    # deactivation/reactivation instead of count-based matching.
+    source_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("academic_events.id"), nullable=True,
+        default=None, index=True,
+    )
 
     subject: Mapped["Subject"] = relationship(back_populates="class_sessions")
     timetable_entry: Mapped["TimetableEntry"] = relationship(back_populates="class_sessions")
