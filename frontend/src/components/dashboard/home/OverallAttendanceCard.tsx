@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDelta, formatPct } from "@/lib/date";
+import { RecordedPct } from "@/components/shared/RecordedPct";
 import { attendanceStatusLabel } from "@/lib/statusLabels";
 import { attendanceStatusVariant } from "./status";
 
@@ -34,12 +35,19 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
       <CardContent>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
-              {formatPct(pct)}
-            </div>
+            {/* UIA-001: the headline figure carries its recorded-only basis so
+                "83%" beside "280 pending" can never read as 83% of all
+                sessions. */}
+            <RecordedPct
+              value={pct}
+              valueClassName="text-3xl font-bold tabular-nums tracking-tight text-foreground"
+              suffixClassName="text-xs font-medium text-muted-foreground"
+            />
             <p className="mt-1 text-xs text-muted-foreground">
-              {overall.attended} attended · {overall.recorded} recorded
-              {overall.pending > 0 && ` · ${overall.pending} pending`}
+              {overall.recorded > 0
+                ? `${overall.attended} attended · ${overall.recorded} recorded`
+                : "No sessions recorded yet"}
+              {overall.recorded > 0 && overall.pending > 0 && ` · ${overall.pending} pending`}
             </p>
             {forecastPct !== null && forecastPct !== undefined && (
               <p className="mt-1 text-xs text-muted-foreground">

@@ -31,6 +31,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 from httpx import ASGITransport
@@ -611,6 +615,10 @@ async def main() -> int:
                         text("DELETE FROM academic_events WHERE id = :eid"),
                         {"eid": uuid.UUID(eid)},
                     )
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (elective-slot fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(
+                    clean_db, created_events, label="phase_22_4")
                 for user_id in (student_a.id, student_b.id):
                     await clean_db.execute(
                         text("DELETE FROM student_elective_choices WHERE user_id = :uid"),
@@ -642,6 +650,8 @@ async def main() -> int:
                 await clean_db.commit()
 
             async with AsyncSessionLocal() as verify_db:
+                await assert_no_orphaned_fixture_notifications(
+                    verify_db, created_events, label="phase_22_4")
                 remaining = (
                     await verify_db.execute(
                         select(func.count()).select_from(User).where(

@@ -43,6 +43,10 @@ from datetime import date
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -652,6 +656,13 @@ async def main() -> int:
                     await db.commit()
                     await db.delete(ev)
                     await db.commit()
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(
+                    db, [surprise_event_id], label="phase_7_1")
+                await db.commit()
+                await assert_no_orphaned_fixture_notifications(
+                    db, [surprise_event_id], label="phase_7_1")
                 extra = (await db.execute(
                     select(ClassSession).where(
                         ClassSession.subject_id == bcs503_id,

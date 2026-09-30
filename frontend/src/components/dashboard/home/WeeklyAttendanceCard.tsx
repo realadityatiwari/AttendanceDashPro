@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatShortDate, formatDelta, formatPct } from "@/lib/date";
 import { WEEKLY_BAR_SAFE_PCT, WEEKLY_BAR_WATCH_PCT } from "@/lib/statusLabels";
+import { RecordedPct } from "@/components/shared/RecordedPct";
 
 interface WeeklyAttendanceCardProps {
   weekly: WeeklySection;
@@ -35,9 +36,13 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
             </p>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-              {formatPct(weekly.weekly_pct)}
-            </div>
+            {/* UIA-001: weekly percentage is recorded-only too — same basis
+                qualifier as the Overall card so the two never diverge. */}
+            <RecordedPct
+              value={weekly.weekly_pct}
+              valueClassName="text-2xl font-bold tabular-nums tracking-tight text-foreground"
+              suffixClassName="text-xs font-medium text-muted-foreground"
+            />
             {delta !== null && (
               <div
                 className={`mt-0.5 flex items-center justify-end gap-1 text-xs font-medium tabular-nums ${

@@ -50,7 +50,19 @@ async def get_current_user(
     
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        
+
+    # H-2 (Phase 2A): deactivation is an account kill switch. A valid access
+    # token issued BEFORE deactivation must not keep authorizing requests for
+    # up to the access-token lifetime (8h default). 401 (not 403) so the
+    # frontend's existing apiFetch flow runs its single-flight refresh retry
+    # (which fails permanently for a deactivated user) and then clears auth /
+    # redirects to login.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is deactivated",
+        )
+
     return user
 
 async def require_admin(current_user: User = Depends(get_current_user)):

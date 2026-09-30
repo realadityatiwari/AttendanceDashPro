@@ -54,6 +54,10 @@ import math
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -632,6 +636,10 @@ async def main() -> int:
                 ev = await db.get(AcademicEvent, test_event_id)
                 if ev is not None:
                     await db.delete(ev)
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(
+                    db, [test_event_id], label="phase_3_quiz_eligibility_propagation")
             await db.flush()
             # residue sweep: any quiz-day-shaped sessions this run could have
             # created on the three candidate dates (baseline has none).
@@ -650,6 +658,8 @@ async def main() -> int:
                     await db.delete(rec)
                 await db.execute(delete(ClassSession).where(ClassSession.id == sid))
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(
+                db, [test_event_id], label="phase_3_quiz_eligibility_propagation")
 
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
             sessions_after = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()

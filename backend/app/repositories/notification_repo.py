@@ -3,11 +3,61 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, delete
+from sqlalchemy import and_, delete, exists, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models.notification import Notification
+from app.models.event import AcademicEvent
 from app.models.enums import NotificationKind
 from app.db.base_class import IST
+
+
+# H-4c (Phase 2A): bounded inbox reads.  The inbox is a newest-first page;
+# the server caps the page size so no unbounded SELECT can be issued and an
+# oversized/poisoned inbox can never flood a single response.  Age-based
+# retention is deliberately NOT implemented here: no retention period is
+# documented anywhere in the project, so it remains a product decision
+# (see docs/REMEDIATION_READINESS_REPORT.md D-5 / the Phase 2A report).
+DEFAULT_INBOX_PAGE_SIZE = 50
+MAX_INBOX_PAGE_SIZE = 200
+
+
+def clamp_inbox_page_size(limit: Optional[int]) -> int:
+    """Clamp a requested inbox page size into [1, MAX_INBOX_PAGE_SIZE]."""
+    try:
+        value = int(limit) if limit is not None else DEFAULT_INBOX_PAGE_SIZE
+    except (TypeError, ValueError):
+        value = DEFAULT_INBOX_PAGE_SIZE
+    return max(1, min(value, MAX_INBOX_PAGE_SIZE))
+
+
+def orphaned_event_ref_clause():
+    """The exact H-4a orphan predicate: notification rows whose ``event_id``
+    points at an academic event that no longer exists (``notifications.event_id``
+    carries no FK, so these projections outlive their event). This is the
+    complement of the live guard below and the ONLY criterion the one-time
+    purge script (``scripts/purge_orphaned_event_notifications.py``) deletes
+    on — no other kind or row can match it."""
+    return and_(
+        Notification.event_id.isnot(None),
+        ~exists(
+            select(AcademicEvent.id).where(AcademicEvent.id == Notification.event_id)
+        ),
+    )
+
+
+def _live_event_ref_clause():
+    """A notification with an ``event_id`` is only live while its academic
+    event still exists (``notifications.event_id`` carries no FK).  Rows whose
+    event was deleted — the orphaned ACADEMIC_EVENT projections of H-4a — can
+    never surface through the inbox or the unread badge, even before the
+    one-time purge runs.  Non-event kinds (``event_id IS NULL``) and rows
+    whose event still exists are unaffected."""
+    return or_(
+        Notification.event_id.is_(None),
+        exists(
+            select(AcademicEvent.id).where(AcademicEvent.id == Notification.event_id)
+        ),
+    )
 
 
 class NotificationRepository:
@@ -155,16 +205,46 @@ class NotificationRepository:
         await self.db.execute(stmt)
         await self.db.commit()
 
-    async def get_inbox(self, user_id: UUID) -> List[Notification]:
-        """The user's inbox, newest first (audit 11B objective). Dismissed
-        notifications are excluded from the inbox."""
+    async def get_inbox(
+        self,
+        user_id: UUID,
+        *,
+        limit: Optional[int] = DEFAULT_INBOX_PAGE_SIZE,
+        offset: int = 0,
+    ) -> List[Notification]:
+        """The user's inbox, newest first (audit 11B objective).
+
+        H-4c (Phase 2A): the read is bounded — page size is clamped to
+        [1, MAX_INBOX_PAGE_SIZE] and the offset is non-negative, so no
+        unbounded SELECT can be issued. Dismissed notifications are excluded;
+        so are orphaned event projections whose academic event no longer
+        exists (they can never surface). Ordering is deterministic:
+        created_at DESC, id DESC."""
+        page_size = clamp_inbox_page_size(limit)
+        page_offset = max(0, int(offset or 0))
         stmt = (
             select(Notification)
-            .where(Notification.user_id == user_id, Notification.is_dismissed.is_(False))
+            .where(
+                Notification.user_id == user_id,
+                Notification.is_dismissed.is_(False),
+                _live_event_ref_clause(),
+            )
             .order_by(Notification.created_at.desc(), Notification.id.desc())
+            .limit(page_size)
+            .offset(page_offset)
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_inbox(self, user_id: UUID) -> int:
+        """Total non-dismissed LIVE rows (the pagination ``total``). Excludes
+        orphaned event projections for the same reason get_inbox does."""
+        stmt = select(func.count()).select_from(Notification).where(
+            Notification.user_id == user_id,
+            Notification.is_dismissed.is_(False),
+            _live_event_ref_clause(),
+        )
+        return (await self.db.execute(stmt)).scalar() or 0
 
     async def get_by_id(self, user_id: UUID, notification_id: UUID) -> Optional[Notification]:
         """Owner-scoped row fetch — returns None for another user's row."""
@@ -242,11 +322,15 @@ class NotificationRepository:
         return await self.get_by_id(user_id, row_id)
 
     async def count_unread(self, user_id: UUID) -> int:
-        """Unread, non-dismissed notifications (the bell badge count)."""
+        """Unread, non-dismissed, LIVE notifications (the bell badge count).
+
+        H-4c: orphaned event projections are excluded so the badge always
+        matches the rows the inbox can actually surface."""
         stmt = select(func.count()).select_from(Notification).where(
             Notification.user_id == user_id,
             Notification.is_read.is_(False),
             Notification.is_dismissed.is_(False),
+            _live_event_ref_clause(),
         )
         return (await self.db.execute(stmt)).scalar() or 0
 

@@ -94,11 +94,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     week_starts_on: preferences?.week_starts_on ?? "MONDAY",
   };
 
+  // UIA-002: dirty only when an in-progress draft actually differs from the
+  // persisted preferences. The draft starts as null, so optional-chained
+  // comparisons against it must never run — `draft?.field !== value` is true
+  // for every field when no draft exists, which used to flag the modal dirty
+  // the moment it opened (with an enabled Save that could only no-op).
   const dirty =
+    !!draft &&
     !!preferences &&
-    (draft?.class_reminders !== preferences.class_reminders ||
-      draft?.auto_mark_present !== preferences.auto_mark_present ||
-      draft?.week_starts_on !== preferences.week_starts_on);
+    (draft.class_reminders !== preferences.class_reminders ||
+      draft.auto_mark_present !== preferences.auto_mark_present ||
+      draft.week_starts_on !== preferences.week_starts_on);
 
   const controlsDisabled = isLoading || !preferences || saveState.status === "saving";
 
@@ -172,15 +178,21 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     updateDraft({ class_reminders: checked })
                   }
                   disabled={controlsDisabled}
+                  aria-label="Class reminders"
                   className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
                 >
                   <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
                 </Switch.Root>
               </div>
-              <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
-                <div className="flex min-w-0 items-start gap-3">
+              {/* UIA-010: the action can be a wide button ("Enable browser
+                  notifications") that must not squeeze the description into
+                  one-word lines. min-w on the text block keeps it readable so
+                  the row wraps — content above, action below — when the two
+                  no longer fit side by side at the dialog's fixed width. */}
+              <div className="mt-2 flex flex-wrap items-start justify-between gap-x-3 gap-y-2.5 rounded-lg border border-border bg-background px-3 py-2.5">
+                <div className="flex min-w-48 items-start gap-3">
                   <BellRing className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground">
                       Browser notifications
                     </p>
@@ -205,7 +217,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                   {!browserNotificationsSupported ? null
                   : browserNotificationPermission === "denied" ? (
                     <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
@@ -278,6 +290,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     updateDraft({ auto_mark_present: checked })
                   }
                   disabled={controlsDisabled}
+                  aria-label="Auto-mark present"
                   className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
                 >
                   <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />

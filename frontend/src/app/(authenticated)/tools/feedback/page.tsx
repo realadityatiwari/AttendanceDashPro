@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useProfile, useAdminFeedback } from "@/hooks/useApi";
+import { useAuth } from "@/contexts/AuthContext";
 import { FeedbackType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -35,13 +37,15 @@ const PAGE_SIZE = 20;
  * Admin feedback review surface (Phase 21B).
  *
  * Lists feedback submissions from the admin-only backend contract
- * GET /api/v1/feedback/admin (require_admin). Students calling this endpoint
- * receive 403; the backend is the authorization boundary — the role-gated
- * nav link here is UX only. Data is always real: loading / empty / error
- * states reflect the actual API response.
+ * GET /api/v1/feedback/admin (require_admin). The backend is the
+ * authorization boundary; the route additionally guards itself client-side
+ * (UIA-008): students who deep-link or refresh here are redirected to the
+ * dashboard instead of being shown an error that reads like a data failure.
  */
 export default function FeedbackAdminPage() {
-  const { profile } = useProfile();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const { profile, isLoading: profileLoading, isError: profileError } = useProfile();
   const isAdmin = profile?.role === "ADMIN";
 
   const [feedbackType, setFeedbackType] = useState<FeedbackType | "">("");
@@ -53,14 +57,62 @@ export default function FeedbackAdminPage() {
     feedback_type: feedbackType,
   });
 
-  // Non-admin UX guard (backend still enforces 403 on the API itself).
-  if (!isAdmin) {
+  // UIA-008: this surface is admin-only. The route itself is guarded — a
+  // student who deep-links or refreshes here is redirected to the dashboard
+  // instead of being shown an error that looks like a data failure. The
+  // backend stays the authorization boundary (GET /api/v1/feedback/admin
+  // still 403s non-admins); the role check only avoids rendering the admin
+  // surface. Loading and unauthenticated states render nothing admin-flavored
+  // while AuthContext resolves, mirroring the (admin) route-group layout.
+  useEffect(() => {
+    if (authLoading || !user || profileLoading || profileError) return;
+    if (profile && !isAdmin) {
+      router.replace("/dashboard");
+    }
+  }, [authLoading, user, profileLoading, profileError, profile, isAdmin, router]);
+
+  if (authLoading) {
     return (
       <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
         <PageHeader title="Feedback" />
-        <ErrorState message="You do not have access to the feedback admin surface." />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <GlassCard key={i} className="p-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="mt-3 h-4 w-full" />
+            </GlassCard>
+          ))}
+        </div>
       </div>
     );
+  }
+
+  // Unauthenticated: AuthContext owns the redirect to /login — render nothing
+  // admin-flavored meanwhile (same contract as the (admin) route-group layout).
+  if (!user) {
+    return null;
+  }
+
+  if (profileLoading || profileError || !profile) {
+    return (
+      <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
+        <PageHeader title="Feedback" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <GlassCard key={i} className="p-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="mt-3 h-4 w-full" />
+            </GlassCard>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Confirmed non-admin: the redirect effect above is in flight; render
+  // nothing so no part of the admin surface (not even its header) appears.
+  if (!isAdmin) {
+    return null;
   }
 
   const handleTypeChange = (next: FeedbackType | "") => {

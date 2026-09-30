@@ -17,7 +17,8 @@ import {
   ClassType,
   HistoryStatusFilter,
 } from "@/types/api";
-import { formatLongDate, formatPct, formatShortDate } from "@/lib/date";
+import { formatLongDate, formatShortDate } from "@/lib/date";
+import { RecordedPct } from "@/components/shared/RecordedPct";
 import { Search, Loader2, Calendar, FilterX, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -199,14 +200,28 @@ export default function HistoryPage() {
 
       {/* Summary */}
       <Card className="p-4 bg-muted border-border flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm font-semibold text-foreground">
             {hasFilters ? "Filtered sessions" : "Semester sessions"}
           </span>
-          <span className="text-sm font-bold text-foreground">
-            {summary ? `${formatPct(summary.pct)} overall` : "—"}
-          </span>
+          {/* UIA-001: the recorded-only percentage carries its basis — a
+              semester with 280 pending sessions must never read as "83%
+              overall" when the figure is 5 of 6 recorded. */}
+          {summary ? (
+            <RecordedPct
+              value={summary.pct}
+              valueClassName="text-sm font-bold text-foreground"
+              suffixClassName="text-xs font-medium text-muted-foreground"
+            />
+          ) : (
+            <span className="text-sm font-bold text-foreground">—</span>
+          )}
         </div>
+        {summary && summary.attended + summary.missed === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No sessions recorded yet — mark classes to build your history.
+          </p>
+        )}
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           <SummaryStat label="Total" value={summary?.total} className="text-foreground" />
           <SummaryStat label="Present" value={summary?.attended} className="text-success" />

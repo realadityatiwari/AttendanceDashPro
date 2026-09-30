@@ -77,6 +77,10 @@ from datetime import date
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -151,8 +155,13 @@ async def main() -> int:
                     AcademicEvent.subject_id == bcs054_id),
             )
         )).scalars().all()
+        stale_event_ids = [ev.id for ev in stale_events]
         for ev in stale_events:
             await db.delete(ev)
+        # H-4b: stale fixture events from a crashed run - remove their
+        # notification projections for ALL affected users too.
+        await cleanup_fixture_event_notifications(
+            db, stale_event_ids, label="phase_7_2_startup")
         if removed or restored or stale_events:
             await db.commit()
         # Option A (separate quiz-day occurrence): a closure on the seeded
@@ -381,7 +390,14 @@ async def main() -> int:
                         await db.commit()
                         await db.delete(ev)
                         await db.commit()
+                    # H-4b: remove this fixture's notification projections for
+                    # ALL affected users (the fan-out reaches real accounts).
+                    await cleanup_fixture_event_notifications(
+                        db, [event_id], label="phase_7_2")
+                    await db.commit()
             async with AsyncSessionLocal() as db:
+                await assert_no_orphaned_fixture_notifications(
+                    db, test_event_ids, label="phase_7_2")
                 # Restore any residue the synchronizer left on the test dates
                 # (same scoping as the startup cleanup: extras/surprises are
                 # only ever BCS-054; the closure's cancelled rows - any

@@ -220,6 +220,61 @@ class AdminQuizService:
             )
         return subject, None
 
+    async def _validate_cycle_chronology(
+        self,
+        subject_id: UUID,
+        elective_slot: Optional[ElectiveSlot],
+        cycle_number: int,
+        new_date: Optional[date],
+        *,
+        exclude_schedule_id: Optional[UUID] = None,
+    ) -> None:
+        """H-5 (Phase 2A): keep a subject/slot's quiz cycle dates chronological.
+
+        Runtime cycle numbers are derived POSITIONALLY from the effective
+        quiz dates (``QuizRepository.get_effective_quiz_dates_for_subjects``
+        ranks the active QUIZ_DAY events chronologically), while
+        ``QuizSchedule.cycle`` is never consulted at read time. Without this
+        guard an admin could set Q3's date before Q2's; the change would
+        commit and silently renumber cycles across eligibility windows,
+        QUIZ_APPROACHING occurrence keys, and the dashboard snapshot.
+
+        Rule for one (subject, elective_slot): Q1.date < Q2.date < Q3.date.
+        A lower-numbered cycle must be strictly earlier than ``new_date``; a
+        higher-numbered cycle must be strictly later; an equal date between
+        two cycles is ambiguous and rejected. Unresolved (no date) siblings
+        do not constrain. ``elective_slot`` scopes the comparison so each
+        elective slot validates independently and unrelated subjects never
+        interfere.
+        """
+        if new_date is None:
+            return
+        siblings = await self.repo.list_sibling_schedules(
+            subject_id, elective_slot, exclude_id=exclude_schedule_id
+        )
+        for sibling in siblings:
+            if sibling.date is None or sibling.quiz_cycle is None:
+                continue
+            sibling_cycle = sibling.quiz_cycle.cycle_number
+            if sibling.date == new_date:
+                raise AdminQuizValidationError(
+                    f"Quiz date {new_date} is already assigned to cycle "
+                    f"{sibling_cycle} for this subject; each cycle must have "
+                    "a distinct date"
+                )
+            if sibling_cycle < cycle_number and sibling.date > new_date:
+                raise AdminQuizValidationError(
+                    f"Quiz date {new_date} would place cycle {cycle_number} "
+                    f"before cycle {sibling_cycle} ({sibling.date}); quiz "
+                    "cycle dates must stay chronological (Q1 < Q2 < Q3)"
+                )
+            if sibling_cycle > cycle_number and sibling.date < new_date:
+                raise AdminQuizValidationError(
+                    f"Quiz date {new_date} would place cycle {cycle_number} "
+                    f"after cycle {sibling_cycle} ({sibling.date}); quiz "
+                    "cycle dates must stay chronological (Q1 < Q2 < Q3)"
+                )
+
     async def _validate_date_in_context(self, subject, quiz_date: date) -> None:
         """Reject a quiz date outside the subject's semester when the semester
         has concrete bounds (established invariant)."""
@@ -326,6 +381,14 @@ class AdminQuizService:
             )
         if request.date is not None:
             await self._validate_date_in_context(subject, request.date)
+            # H-5: reject a new date that would break this subject/slot's
+            # cycle chronology before anything is created.
+            await self._validate_cycle_chronology(
+                request.subject_id,
+                effective_slot,
+                cycle.cycle_number,
+                request.date,
+            )
         if request.schedule_status == ScheduleStatus.SCHEDULED and request.date is None:
             # A SCHEDULED schedule without a date is an unresolved state.
             request.schedule_status = ScheduleStatus.UNRESOLVED
@@ -372,6 +435,17 @@ class AdminQuizService:
             subject = await self.repo.get_subject(schedule.subject_id)
             if subject is not None:
                 await self._validate_date_in_context(subject, new_date)
+            # H-5: reject a date that would break this subject/slot's cycle
+            # chronology (lower cycle earlier, higher cycle later, no equal
+            # dates) before any event/notification side effect.
+            if schedule.quiz_cycle is not None:
+                await self._validate_cycle_chronology(
+                    schedule.subject_id,
+                    schedule.elective_slot,
+                    schedule.quiz_cycle.cycle_number,
+                    new_date,
+                    exclude_schedule_id=schedule.id,
+                )
 
         old_date = schedule.date
 

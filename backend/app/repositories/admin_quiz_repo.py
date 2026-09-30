@@ -79,6 +79,32 @@ class AdminQuizRepository:
         )
         return result.scalars().first()
 
+    async def list_sibling_schedules(
+        self,
+        subject_id: UUID,
+        elective_slot: Optional[ElectiveSlot],
+        exclude_id: Optional[UUID] = None,
+    ) -> List[QuizSchedule]:
+        """All schedules sharing the same (subject, elective_slot) identity —
+        the H-5 cycle-chronology validation set. The sibling comparison is
+        scoped to ONE subject and ONE slot: common subjects validate against
+        their own cycles only, and each elective slot validates independently
+        (an ELECTIVE_I date never constrains an ELECTIVE_II schedule). Cycles
+        are eager-loaded (the validator compares cycle numbers)."""
+        stmt = (
+            select(QuizSchedule)
+            .options(selectinload(QuizSchedule.quiz_cycle))
+            .where(QuizSchedule.subject_id == subject_id)
+        )
+        if elective_slot is None:
+            stmt = stmt.where(QuizSchedule.elective_slot.is_(None))
+        else:
+            stmt = stmt.where(QuizSchedule.elective_slot == elective_slot)
+        if exclude_id is not None:
+            stmt = stmt.where(QuizSchedule.id != exclude_id)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def schedule_exists_for_subject_cycle(
         self, subject_id: UUID, quiz_cycle_id: UUID, exclude_id: Optional[UUID] = None
     ) -> bool:

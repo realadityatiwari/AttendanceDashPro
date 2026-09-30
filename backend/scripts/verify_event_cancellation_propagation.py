@@ -34,6 +34,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 from sqlalchemy import delete, func, select, text
@@ -368,6 +372,10 @@ async def main() -> int:
             if test_event_ids:
                 await db.execute(delete(AcademicEvent).where(
                     AcademicEvent.id.in_(test_event_ids)))
+            # H-4b: remove this fixture's notification projections for ALL
+            # affected users (the fan-out reaches real accounts).
+            await cleanup_fixture_event_notifications(
+                db, test_event_ids, label="event_cancellation_propagation")
             await db.execute(delete(StudentEnrollment).where(
                 StudentEnrollment.user_id.in_([tmp1_id, tmp2_id])))
             await db.execute(delete(User).where(User.id.in_([tmp1_id, tmp2_id])))
@@ -379,6 +387,8 @@ async def main() -> int:
                     s.is_cancelled = was_cancelled
                     drifted.append(str(sid))
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(
+                db, test_event_ids, label="event_cancellation_propagation")
             if drifted:
                 print(f"cleanup: restored {len(drifted)} drifted window session state(s)")
 

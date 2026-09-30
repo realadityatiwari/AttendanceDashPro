@@ -41,6 +41,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -327,7 +331,13 @@ async def main() -> int:
                 ev = await db.get(AcademicEvent, test_event_id)
                 if ev is not None:
                     await db.delete(ev)
+            # H-4b: remove this fixture's notification projections for ALL
+            # affected users (the fan-out reaches real accounts).
+            await cleanup_fixture_event_notifications(
+                db, [test_event_id], label="quiz_day_occurrence")
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(
+                db, [test_event_id], label="quiz_day_occurrence")
 
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
             sessions_after = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()

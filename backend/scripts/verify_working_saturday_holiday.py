@@ -62,6 +62,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -119,8 +123,13 @@ async def cleanup_residue(db) -> None:
     note_events = (await db.execute(
         select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
     )).scalars().all()
+    stale_event_ids = [ev.id for ev in note_events]
     for ev in note_events:
         await db.delete(ev)
+    # H-4b: crashed-run residue - remove its notification projections for ALL
+    # affected users (the fan-out reaches real accounts).
+    await cleanup_fixture_event_notifications(
+        db, stale_event_ids, label="working_saturday_holiday_startup")
     await db.commit()
 
 
@@ -499,8 +508,13 @@ async def main() -> int:
             events = (await db.execute(
                 select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
             )).scalars().all()
+            fixture_event_ids = [ev.id for ev in events]
             for ev in events:
                 await db.delete(ev)
+            # H-4b: remove this fixture's notification projections for ALL
+            # affected users (the fan-out reaches real accounts).
+            await cleanup_fixture_event_notifications(
+                db, fixture_event_ids, label="working_saturday_holiday")
 
             if my_record_ids:
                 await db.execute(delete(AttendanceRecord).where(
@@ -517,6 +531,8 @@ async def main() -> int:
                     .values(is_cancelled=False)
                 )
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(
+                db, fixture_event_ids, label="working_saturday_holiday")
 
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
             sessions_after = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()

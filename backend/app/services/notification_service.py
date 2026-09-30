@@ -17,7 +17,11 @@ from app.models.enums import NotificationKind, ElectiveSlot
 from app.models.user import User
 from app.models.notification import Notification
 from app.models.academic import Subject
-from app.repositories.notification_repo import NotificationRepository
+from app.repositories.notification_repo import (
+    DEFAULT_INBOX_PAGE_SIZE,
+    NotificationRepository,
+    clamp_inbox_page_size,
+)
 from app.core.logging import get_logger
 
 logger = get_logger("app.notification")
@@ -27,8 +31,10 @@ _CLASS_TYPE_LABELS = {"L": "Lecture", "T": "Tutorial", "P": "Practical"}
 
 # Phase B (2026-08-31): short-lived, per-user, in-process TTL cache for the
 # notification inbox response.
+# H-4c (Phase 2A): the cache key is (user_id, limit, offset) — each bounded
+# page is cached independently; invalidation clears every page for the user.
 _NOTIFICATION_CACHE_TTL_SECONDS = 60.0
-_notification_cache: dict[UUID, tuple[float, NotificationsResponse]] = {}
+_notification_cache: dict[tuple[UUID, int, int], tuple[float, NotificationsResponse]] = {}
 
 # Phase 11C-P4: deep-link URLs for each notification kind.
 _KIND_DEEP_LINKS: dict[NotificationKind, str] = {
@@ -75,42 +81,72 @@ class NotificationService:
     # ── Cache ────────────────────────────────────────────────────────────────
 
     @classmethod
-    def _cache_get(cls, user_id: UUID) -> Optional[NotificationsResponse]:
-        entry = _notification_cache.get(user_id)
+    def _cache_get(
+        cls, user_id: UUID, limit: int, offset: int
+    ) -> Optional[NotificationsResponse]:
+        key = (user_id, limit, offset)
+        entry = _notification_cache.get(key)
         if entry is None:
             return None
         stored_at, response = entry
         if time.monotonic() - stored_at >= _NOTIFICATION_CACHE_TTL_SECONDS:
-            _notification_cache.pop(user_id, None)
+            _notification_cache.pop(key, None)
             return None
         return response
 
     @classmethod
-    def _cache_put(cls, user_id: UUID, response: NotificationsResponse) -> None:
-        _notification_cache[user_id] = (time.monotonic(), response)
+    def _cache_put(
+        cls, user_id: UUID, limit: int, offset: int, response: NotificationsResponse
+    ) -> None:
+        _notification_cache[(user_id, limit, offset)] = (time.monotonic(), response)
 
     @classmethod
     def _cache_invalidate(cls, user_id: UUID) -> None:
-        _notification_cache.pop(user_id, None)
+        """Evict every cached page of the user's inbox."""
+        for key in [k for k in _notification_cache if k[0] == user_id]:
+            _notification_cache.pop(key, None)
 
     # ── Read-only inbox (Phase 11C-P4: no generation, no writes) ────────────
 
-    async def get_notifications(self, user) -> NotificationsResponse:
-        """Read-only: serve the persisted inbox from the cache or the database.
-        Never generates or writes notification rows."""
-        cached = self._cache_get(user.id)
+    async def get_notifications(
+        self,
+        user,
+        *,
+        limit: int = DEFAULT_INBOX_PAGE_SIZE,
+        offset: int = 0,
+    ) -> NotificationsResponse:
+        """Read-only: serve one bounded newest-first page of the persisted
+        inbox from the cache or the database. Never generates or writes
+        notification rows.
+
+        H-4c (Phase 2A): the page size is clamped to [1, 200] and the offset
+        is non-negative, so no unbounded SELECT can be issued. The response
+        carries additive pagination metadata (total/limit/offset/has_more);
+        unread_count still counts ALL unread live rows, not just this page
+        (the bell badge is page-independent). Orphaned event projections are
+        excluded by the repository read layer."""
+        page_size = clamp_inbox_page_size(limit)
+        page_offset = max(0, int(offset or 0))
+        cached = self._cache_get(user.id, page_size, page_offset)
         if cached is not None:
             return cached
 
         as_of = institution_today()
-        rows = await self.notification_repo.get_inbox(user.id)
+        rows = await self.notification_repo.get_inbox(
+            user.id, limit=page_size, offset=page_offset
+        )
         unread_count = await self.notification_repo.count_unread(user.id)
+        total = await self.notification_repo.count_inbox(user.id)
         response = NotificationsResponse(
             items=[self._to_item(r) for r in rows],
             as_of=as_of,
             unread_count=unread_count,
+            total=total,
+            limit=page_size,
+            offset=page_offset,
+            has_more=page_offset + len(rows) < total,
         )
-        self._cache_put(user.id, response)
+        self._cache_put(user.id, page_size, page_offset, response)
         return response
 
     # ── Emission boundary (Phase 11C-P4) ────────────────────────────────────

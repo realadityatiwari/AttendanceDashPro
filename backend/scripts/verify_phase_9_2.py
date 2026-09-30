@@ -54,6 +54,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -439,6 +443,9 @@ async def main() -> int:
                 await db.execute(delete(LaboratoryExperiment).where(LaboratoryExperiment.id.in_(test_experiment_ids)))
             if test_event_ids:
                 await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(db, test_event_ids, label="phase_9_2")
                 # The EXTRA_LECTURE smoke event materialized an extra lecture
                 # session (2026-07-28, BCS-501). Deleting the event does not
                 # remove the already-materialized session — remove any
@@ -470,6 +477,7 @@ async def main() -> int:
                 if ct is not None:
                     ct.is_cancelled = False
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(db, test_event_ids, label="phase_9_2")
 
     async with AsyncSessionLocal() as db:
         events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()

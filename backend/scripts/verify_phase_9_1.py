@@ -58,6 +58,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -551,6 +555,9 @@ async def main() -> int:
         async with AsyncSessionLocal() as db:
             if test_event_ids:
                 await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(db, test_event_ids, label="phase_9_1")
             if test_record_ids:
                 await db.execute(delete(AttendanceRecord).where(AttendanceRecord.id.in_(test_record_ids)))
             if temp_user_id is not None:
@@ -580,6 +587,7 @@ async def main() -> int:
                 s.is_cancelled = pre[0]
                 s.designation = pre[1]
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(db, test_event_ids, label="phase_9_1")
 
     async with AsyncSessionLocal() as db:
         events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()

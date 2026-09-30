@@ -40,8 +40,17 @@ class NotificationsResponse(BaseModel):
     items: List[NotificationItem] = []
     # Institution-local current date (server-generated; never the client clock).
     as_of: date
-    # Phase 11B: number of unread, non-dismissed notifications (the badge).
+    # Phase 11B: number of unread, non-dismissed, live notifications (the
+    # badge). H-4c: orphaned event projections are excluded, so the badge
+    # always matches what the inbox can surface.
     unread_count: int = 0
+    # H-4c (Phase 2A, additive): bounded newest-first pagination metadata.
+    # `total` counts all non-dismissed live rows; `has_more` is true when
+    # `offset + len(items) < total`. Older clients ignore these fields.
+    total: int = 0
+    limit: int = 0
+    offset: int = 0
+    has_more: bool = False
 
 class NotificationUpdate(BaseModel):
     """Phase 11B PATCH body: state transitions for one persisted notification.

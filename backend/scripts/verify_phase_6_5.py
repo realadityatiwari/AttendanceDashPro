@@ -20,6 +20,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -28,6 +32,8 @@ from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.event import AcademicEvent
+from app.models.attendance import AttendanceRecord
+from app.models.timetable import ClassSession
 from sqlalchemy import select, delete
 
 results = []
@@ -194,8 +200,24 @@ async def main() -> int:
         # not deactivated seed rows, not user data).
         async with AsyncSessionLocal() as db:
             if test_event_ids:
+                # [H-4b prerequisite] Sessions materialized by these fixture
+                # events reference them via fk_class_sessions_source_event_id;
+                # remove the unattended ones first or the event delete raises
+                # (and leaks the whole fixture). Never a session that holds an
+                # attendance record.
+                materialized = (await db.execute(select(ClassSession).where(
+                    ClassSession.source_event_id.in_(test_event_ids)))).scalars().all()
+                for s in materialized:
+                    recs = (await db.execute(select(AttendanceRecord.id).where(
+                        AttendanceRecord.class_session_id == s.id))).scalars().all()
+                    if not recs:
+                        await db.delete(s)
                 await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(test_event_ids)))
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(db, test_event_ids, label="phase_6_5")
                 await db.commit()
+                await assert_no_orphaned_fixture_notifications(db, test_event_ids, label="phase_6_5")
                 print(f"cleanup: removed {len(test_event_ids)} verification event row(s)")
 
     failed = [name for name, ok in results if not ok]

@@ -19,6 +19,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 LOCAL_URI = "postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/attendancedash"
 os.environ["DATABASE_URI"] = LOCAL_URI
@@ -429,6 +433,10 @@ async def main() -> int:
                     ))
                 if ev_ids:
                     await db.execute(delete(AcademicEvent).where(AcademicEvent.id.in_(ev_ids)))
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(
+                    db, ev_ids, label="phase_24_10")
                 if fx.get("section"):
                     await db.execute(delete(AdminScope).where(
                         AdminScope.user_id.in_([fx["classA"], fx["elecA"], fx["subA"]])))
@@ -455,6 +463,10 @@ async def main() -> int:
                         AcademicSession.id == _ACTIVE_SESSION_ID).values(is_active=True))
                 await db.commit()
             except Exception as e: print(f"cleanup: {e}"); await db.rollback()
+            await assert_no_orphaned_fixture_notifications(
+                db, [fx.get(k) for k in ("sq58", "cc56", "extra58", "standalone", "ev55",
+                                         "class_extra_id", "elec_extra_id") if fx.get(k)],
+                label="phase_24_10")
 
 async def post_cleanup():
     async with AsyncSessionLocal() as db:

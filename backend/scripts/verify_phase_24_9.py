@@ -13,6 +13,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 LOCAL_URI = "postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/attendancedash"
 os.environ["DATABASE_URI"] = LOCAL_URI
@@ -351,9 +355,15 @@ async def main() -> int:
                                     ClassSession.date == datetime.date(2026, 11, 24))
                             )
                         ))
+                fixture_event_ids = [fx[k] for k in ("extra_id", "holiday_id", "standalone_qd",
+                                                     "class_extra_id", "elec_extra_id") if fx.get(k)]
                 for k in ("extra_id", "holiday_id", "standalone_qd", "class_extra_id", "elec_extra_id"):
                     if fx.get(k):
                         await db.execute(delete(AcademicEvent).where(AcademicEvent.id == fx[k]))
+                # H-4b: remove this fixture's notification projections for ALL
+                # affected users (the fan-out reaches real accounts).
+                await cleanup_fixture_event_notifications(
+                    db, fixture_event_ids, label="phase_24_9")
                 if fx.get("section"):
                     await db.execute(delete(AdminScope).where(
                         AdminScope.user_id.in_([fx["classA"], fx["elecA"], fx["subA"]])))
@@ -366,6 +376,10 @@ async def main() -> int:
                     await db.execute(update(AcademicSession).where(AcademicSession.id == _ACTIVE_SESSION_ID).values(is_active=True))
                 await db.commit()
             except Exception as e: print(f"cleanup: {e}"); await db.rollback()
+            await assert_no_orphaned_fixture_notifications(
+                db, [fx[k] for k in ("extra_id", "holiday_id", "standalone_qd",
+                                     "class_extra_id", "elec_extra_id") if fx.get(k)],
+                label="phase_24_9")
 
 async def post_cleanup():
     async with AsyncSessionLocal() as db:

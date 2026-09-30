@@ -44,6 +44,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+from _verifier_harness import (  # noqa: E402 - after sys.path setup
+    assert_no_orphaned_fixture_notifications,
+    cleanup_fixture_event_notifications,
+)
 
 import httpx
 
@@ -328,8 +332,13 @@ async def main() -> int:
             events = (await db.execute(
                 select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
             )).scalars().all()
+            fixture_event_ids = [ev.id for ev in events]
             for ev in events:
                 await db.delete(ev)
+            # H-4b: remove this fixture's notification projections for ALL
+            # affected users (the fan-out reaches real accounts).
+            await cleanup_fixture_event_notifications(
+                db, fixture_event_ids, label="quiz_day_materialization")
 
             qd_sessions = (await db.execute(select(ClassSession).where(
                 ClassSession.date.in_(my_dates),
@@ -343,6 +352,8 @@ async def main() -> int:
                     AttendanceRecord.class_session_id.in_(doomed)))
                 await db.execute(delete(ClassSession).where(ClassSession.id.in_(doomed)))
             await db.commit()
+            await assert_no_orphaned_fixture_notifications(
+                db, fixture_event_ids, label="quiz_day_materialization")
 
             events_after = (await db.execute(select(func.count()).select_from(AcademicEvent))).scalar()
             sessions_after = (await db.execute(select(func.count()).select_from(ClassSession))).scalar()
