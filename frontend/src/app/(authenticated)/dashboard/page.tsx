@@ -74,7 +74,11 @@ export default function DashboardPage() {
       {/* UI-027: single first-use hint — shown only for accounts with no
           recorded sessions yet, non-blocking, and dismissible for good. */}
       {showGettingStarted && (
-        <Card className="mb-6 flex items-start justify-between gap-3 border-primary/30 p-4">
+        // UIA-022: Card's base layout is a column, which used to place the
+        // dismiss control below the text at the bottom-left. flex-row pins it
+        // to the top-right, visually associated with the hint it dismisses
+        // and away from primary content actions.
+        <Card className="mb-6 flex-row items-start justify-between gap-3 border-primary/30 p-4">
           <div className="flex min-w-0 items-start gap-3">
             <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="min-w-0 text-sm">
@@ -99,6 +103,7 @@ export default function DashboardPage() {
           <Button
             variant="ghost"
             size="icon-sm"
+            className="shrink-0"
             aria-label="Dismiss getting started hint"
             onClick={dismissGettingStarted}
           >

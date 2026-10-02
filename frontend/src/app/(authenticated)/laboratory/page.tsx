@@ -15,12 +15,13 @@ import {
   PenLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useToast } from "@/components/feedback/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ import {
   LaboratoryExperimentResponse,
   LaboratoryRecordResponse,
   LaboratoryActivityItem,
+  LaboratorySummary,
   ClassType,
 } from "@/types/api";
 
@@ -67,7 +69,7 @@ export default function LaboratoryPage() {
     <div className="flex-1 py-8 w-full">
       <PageHeader
         title="Lab Experiments"
-        description="Practical attendance, experiment progress, and lab activity — all values are backend-derived from the canonical attendance pipeline."
+        description="Practical attendance, experiment progress, and lab activity for your lab subjects."
       />
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -120,12 +122,17 @@ export default function LaboratoryPage() {
       </div>
 
       {resolvedCode === "" ? (
-        <GlassCard className="p-8 text-center text-muted-foreground">
+        <Card className="p-8 text-center text-muted-foreground">
           No lab subjects available for your enrollment.
-        </GlassCard>
+        </Card>
       ) : (
         <>
-          {tab === "attendance" && <PracticalAttendanceTab subjectCode={resolvedCode} />}
+          {tab === "attendance" && (
+            <PracticalAttendanceTab
+              subjectCode={resolvedCode}
+              onViewExperiments={() => setTab("experiments")}
+            />
+          )}
           {tab === "experiments" && (
             <ExperimentsTab subjectCode={resolvedCode} isAdmin={profile?.role === "ADMIN"} />
           )}
@@ -140,7 +147,13 @@ export default function LaboratoryPage() {
 // Tab 1 — Practical Attendance (canonical summary + mid-sem status)
 // ---------------------------------------------------------------------------
 
-function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
+function PracticalAttendanceTab({
+  subjectCode,
+  onViewExperiments,
+}: {
+  subjectCode: string;
+  onViewExperiments: () => void;
+}) {
   const { summary, isLoading, isError } = useLabSummary(subjectCode);
 
   if (isLoading) {
@@ -148,18 +161,19 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
       <div className="space-y-4">
         <Skeleton className="h-24 w-full bg-muted/50" />
         <Skeleton className="h-24 w-full bg-muted/50" />
+        <Skeleton className="h-20 w-full bg-muted/50" />
       </div>
     );
   }
 
   if (isError || !summary) {
     return (
-      <GlassCard className="p-4 border border-red-900/50 bg-red-950/20">
+      <Card className="p-4 border border-red-900/50 bg-red-950/20">
         <div className="flex items-center gap-2 text-red-400">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm font-medium">Failed to load laboratory summary.</span>
         </div>
-      </GlassCard>
+      </Card>
     );
   }
 
@@ -167,30 +181,34 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
   const ms = summary.mid_sem;
 
   return (
+    // UIA-043: the default tab now carries the backend-provided experiment
+    // progress as a third, full-width block — denser at desktop without
+    // inventing a single new value or fixed height.
     <div className="grid gap-4 lg:grid-cols-2">
-      <GlassCard className="p-5">
+      <Card className="p-5">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground">Practical Attendance</h3>
           <Badge variant="primary">{pa.total} sessions</Badge>
         </div>
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-2 text-center">
-          <Stat label="Present" value={pa.attended} tone="text-emerald-400" />
-          <Stat label="Absent" value={pa.missed} tone="text-red-400" />
-          <Stat label="Pending" value={pa.pending} tone="text-amber-400" />
+          <Stat label="Present" value={pa.attended} tone="text-success" />
+          <Stat label="Absent" value={pa.missed} tone="text-destructive" />
+          <Stat label="Pending" value={pa.pending} tone="text-warning" />
           <Stat label="Attendance" value={formatPct1(pa.current_practical_pct)} tone="text-foreground" />
         </div>
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${Math.min(pa.current_practical_pct, 100)}%` }}
-          />
-        </div>
+        {/* UIA-018: shared Progress primitive (size lg = former 8px bar). */}
+        <Progress
+          className="mt-4"
+          value={Math.min(100, Math.max(0, pa.current_practical_pct))}
+          variant="default"
+          size="lg"
+        />
         <p className="mt-2 text-xs text-muted-foreground">
           Recorded practical attendance percentage (cancelled sessions excluded, pending not counted as absent).
         </p>
-      </GlassCard>
+      </Card>
 
-      <GlassCard className="p-5">
+      <Card className="p-5">
         <h3 className="text-sm font-bold text-foreground">Mid-Semester Practical</h3>
         {!ms.designated ? (
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
@@ -221,8 +239,69 @@ function PracticalAttendanceTab({ subjectCode }: { subjectCode: string }) {
             </p>
           </div>
         )}
-      </GlassCard>
+      </Card>
+
+      <ExperimentProgressCard
+        className="lg:col-span-2"
+        progress={summary.experiment_progress}
+        onViewExperiments={onViewExperiments}
+      />
     </div>
+  );
+}
+
+// UIA-043: backend-provided experiment progress, surfaced on the default tab
+// so the lab page reads as a working page instead of a sparse card pair. No
+// value is computed beyond the signed/total fill ratio for the bar.
+function ExperimentProgressCard({
+  progress,
+  onViewExperiments,
+  className,
+}: {
+  progress: LaboratorySummary["experiment_progress"];
+  onViewExperiments: () => void;
+  className?: string;
+}) {
+  const { catalog_available, total, signed, pending_self_tracked, advisory } = progress;
+  const pct = total > 0 ? (signed / total) * 100 : 0;
+
+  return (
+    <Card className={cn("p-5", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-foreground">Experiment Progress</h3>
+        {catalog_available && total > 0 && (
+          <Badge variant="neutral">
+            {signed} of {total} signed off
+          </Badge>
+        )}
+      </div>
+
+      {!catalog_available ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No experiment catalog has been published for this subject yet.
+          Progress appears here as soon as it is available.
+        </p>
+      ) : (
+        <>
+          <Progress
+            className="mt-4"
+            value={pct}
+            variant={signed >= total && total > 0 ? "success" : "default"}
+            size="md"
+          />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>{advisory ?? `${signed} of ${total} experiments completed.`}</span>
+            {pending_self_tracked > 0 && (
+              <span>{pending_self_tracked} awaiting sign-off</span>
+            )}
+          </div>
+          <Button variant="outline" size="sm" className="mt-4" onClick={onViewExperiments}>
+            <FlaskConical className="size-4" aria-hidden="true" />
+            View experiments
+          </Button>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -310,13 +389,13 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
 
   if (!catalogAvailable) {
     return (
-      <GlassCard className="p-8 text-center">
+      <Card className="p-8 text-center">
         <FlaskConical className="mx-auto size-8 text-muted-foreground/50" aria-hidden="true" />
         <h3 className="mt-3 font-bold text-foreground">Experiment curriculum not yet available</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           No experiment catalog has been published for {subjectCode} yet. Progress is shown as soon as the curriculum is available.
         </p>
-      </GlassCard>
+      </Card>
     );
   }
 
@@ -334,12 +413,12 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
   return (
     <div className="space-y-4">
       {error && (
-        <GlassCard className="p-3 border border-red-900/50 bg-red-950/20">
+        <Card className="p-3 border border-red-900/50 bg-red-950/20">
           <div className="flex items-center gap-2 text-sm text-red-400">
             <AlertCircle className="size-4" />
             {error}
           </div>
-        </GlassCard>
+        </Card>
       )}
 
       <div className="flex items-center justify-between">
@@ -354,7 +433,7 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
       </div>
 
       {isAdmin && showIngest && (
-        <GlassCard className="p-4">
+        <Card className="p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex-1">
               <label htmlFor="exp-num" className="text-xs text-muted-foreground">
@@ -386,10 +465,10 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
               Add
             </Button>
           </div>
-        </GlassCard>
+        </Card>
       )}
 
-      <GlassCard className="overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="divide-y divide-border/50">
           {(experiments || []).map((exp) => (
             <ExperimentRow
@@ -415,7 +494,7 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
             />
           ))}
         </div>
-      </GlassCard>
+      </Card>
 
       {/* UI-015 / D-11: destructive actions require explicit confirmation.
           The dialog stays open and locks its controls until the mutation
@@ -553,21 +632,21 @@ function ActivityTab({ subjectCode }: { subjectCode: string }) {
 
   if (isError || !activity) {
     return (
-      <GlassCard className="p-4 border border-red-900/50 bg-red-950/20">
+      <Card className="p-4 border border-red-900/50 bg-red-950/20">
         <div className="flex items-center gap-2 text-red-400">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm font-medium">Failed to load laboratory activity.</span>
         </div>
-      </GlassCard>
+      </Card>
     );
   }
 
   if (activity.items.length === 0) {
     return (
-      <GlassCard className="p-8 text-center text-muted-foreground">
+      <Card className="p-8 text-center text-muted-foreground">
         <CalendarDays className="mx-auto size-8 text-muted-foreground/50" aria-hidden="true" />
         <p className="mt-2 text-sm">No practical sessions scheduled yet for {subjectCode}.</p>
-      </GlassCard>
+      </Card>
     );
   }
 
@@ -585,7 +664,7 @@ function ActivityRow({ item }: { item: LaboratoryActivityItem }) {
   const experiments = item.experiments || [];
 
   return (
-    <GlassCard className="p-4">
+    <Card className="p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm text-foreground">{item.date}</span>
         <Badge variant={item.class_type === ClassType.PRACTICAL ? "primary" : "outline"}>
@@ -624,7 +703,7 @@ function ActivityRow({ item }: { item: LaboratoryActivityItem }) {
           Practical session — no experiment recorded.
         </p>
       )}
-    </GlassCard>
+    </Card>
   );
 }
 

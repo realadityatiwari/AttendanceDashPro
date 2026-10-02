@@ -40,6 +40,12 @@ export function formatDateMedium(value: string | Date): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** Formatted date range: "28 Sep 2026 – 4 Oct 2026". Consistent separator and
+ * human-readable dates for week/semester bounds. */
+export function formatDateRange(start: string | Date, end: string | Date): string {
+  return `${formatDateMedium(start)} – ${formatDateMedium(end)}`;
+}
+
 export function getGreeting(date: Date = new Date()): string {
   const hour = date.getHours();
   if (hour < 12) return 'Good Morning';

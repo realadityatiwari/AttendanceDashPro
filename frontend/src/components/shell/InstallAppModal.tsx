@@ -77,7 +77,7 @@ export function InstallAppModal({
                 <MonitorSmartphone className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Your browser offers to install this app. The app will launch
-                  in its own window, with an offline shell, once installed.
+                  in its own window, with offline access, once installed.
                 </p>
               </div>
               <Button onClick={handleInstall} disabled={installing}>

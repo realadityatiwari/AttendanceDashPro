@@ -2,8 +2,9 @@ import { ArrowDownRight, ArrowUpRight, CalendarRange } from "lucide-react";
 import { WeeklySection, WeeklyAnalyticsItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatShortDate, formatDelta, formatPct } from "@/lib/date";
+import { formatShortDate, formatDateRange, formatDelta, formatPct } from "@/lib/date";
 import { WEEKLY_BAR_SAFE_PCT, WEEKLY_BAR_WATCH_PCT } from "@/lib/statusLabels";
 import { RecordedPct } from "@/components/shared/RecordedPct";
 
@@ -32,7 +33,7 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
             <CardTitle>This Week</CardTitle>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarRange className="size-3.5" />
-              {weekly.week_start} → {weekly.week_end}
+              {formatDateRange(weekly.week_start, weekly.week_end)}
             </p>
           </div>
           <div className="text-right">
@@ -83,20 +84,22 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                   <span className="w-16 shrink-0 text-xs font-medium text-foreground">
                     {formatShortDate(week.week_start)}
                   </span>
-                  <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${
-                        pct === null
-                          ? "bg-muted"
-                          : pct >= WEEKLY_BAR_SAFE_PCT
-                            ? "bg-success"
-                            : pct >= WEEKLY_BAR_WATCH_PCT
-                              ? "bg-warning"
-                              : "bg-destructive"
-                      }`}
-                      style={{ width: pct === null ? "0%" : `${Math.min(100, pct)}%` }}
-                    />
-                  </div>
+                  {/* UIA-018: the shared Progress primitive (size md = the
+                      former hand-rolled 6px bar) replaces the local track. */}
+                  <Progress
+                    value={pct === null ? 0 : Math.min(100, Math.max(0, pct))}
+                    variant={
+                      pct === null
+                        ? "default"
+                        : pct >= WEEKLY_BAR_SAFE_PCT
+                          ? "success"
+                          : pct >= WEEKLY_BAR_WATCH_PCT
+                            ? "warning"
+                            : "danger"
+                    }
+                    size="md"
+                    className="min-w-0 flex-1"
+                  />
                   <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                     {pct !== null ? `${Math.round(pct)}%` : "—"}
                   </span>

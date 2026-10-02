@@ -21,7 +21,7 @@ import {
   useAdminStructureMutations,
 } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -171,10 +171,10 @@ export default function SessionHierarchyPage({ params }: { params: Promise<{ ses
       </div>
 
       {!semesters || semesters.length === 0 ? (
-        <GlassCard className="p-10 text-center text-muted-foreground">
+        <Card className="p-10 text-center text-muted-foreground">
           <FolderTree className="h-10 w-10 mx-auto mb-3 opacity-20" />
           <p>This session has no semesters yet.</p>
-        </GlassCard>
+        </Card>
       ) : (
         <div className="space-y-6">
           {semesters.map((sem) => (
@@ -263,7 +263,7 @@ function SemesterBlock({
 
   if (isError) {
     return (
-      <GlassCard className="overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="bg-muted/30 border-b border-border p-4 flex items-center justify-between">
           <h3 className="font-semibold">{semester.name}</h3>
         </div>
@@ -275,12 +275,12 @@ function SemesterBlock({
             Retry
           </Button>
         </div>
-      </GlassCard>
+      </Card>
     );
   }
 
   return (
-    <GlassCard className="overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="bg-muted/30 border-b border-border p-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold">{semester.name}</h3>
@@ -309,7 +309,7 @@ function SemesterBlock({
           </div>
         )}
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
@@ -359,7 +359,7 @@ function SectionBlock({ section, onCreateSubsection }: { section: { id: string; 
 
 function ForbiddenState() {
   return (
-    <GlassCard className="max-w-2xl mx-auto mt-8">
+    <Card className="max-w-2xl mx-auto mt-8">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <ShieldAlert className="h-10 w-10 text-warning mb-4" />
         <h1 className="text-lg font-semibold text-foreground">
@@ -370,13 +370,13 @@ function ForbiddenState() {
           (HEAD_ADMIN) only. Your account does not hold that authority.
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl mx-auto mt-8 border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl mx-auto mt-8 border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
         <h1 className="text-lg font-semibold text-red-400">
@@ -387,7 +387,7 @@ function ErrorState({ message, onRetry }: { message?: string; onRetry: () => voi
           Retry
         </Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

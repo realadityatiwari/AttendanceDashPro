@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useDailySessions, useMutateAttendance, useDashboardSummary, useProfile } from "@/hooks/useApi";
-import { getLocalDateString, formatLongDate, addDays, isToday, formatShortDate, parseLocalDate } from "@/lib/date";
+import { getLocalDateString, formatLongDate, formatDateMedium, addDays, isToday, parseLocalDate } from "@/lib/date";
 import { AttendanceStatus, AttendanceMutationRequest } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -158,10 +158,13 @@ export default function TrackAttendancePage() {
   return (
     <div className="flex-1 py-6 w-full max-w-2xl mx-auto flex flex-col gap-6">
 
-      {/* Header */}
+      {/* Header — UIA-021: one title and one date display. The remaining
+          date surfaces are the native date input and this human-readable
+          companion (UIA-025); the former "29 SEP" caption is gone, and the
+          mobile header no longer stacks a second "Mark Attendance" title. */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Mark Attendance</h1>
-        <p className="text-sm text-muted-foreground">
+        <p id="mark-attendance-date" className="text-sm text-muted-foreground">
           {formatLongDate(selectedDate)}
           {atSemesterStart && <span className="text-primary"> · Semester start</span>}
         </p>
@@ -179,6 +182,7 @@ export default function TrackAttendancePage() {
           <Input
             type="date"
             aria-label="Jump to date"
+            aria-describedby="mark-attendance-date"
             value={dateStr}
             min={semesterStart ?? undefined}
             max={semesterEnd ?? undefined}
@@ -198,10 +202,6 @@ export default function TrackAttendancePage() {
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
-      <div className="text-center -mt-2">
-        <span className="text-xs text-muted-foreground">{formatShortDate(selectedDate)}</span>
-      </div>
-
       {isLoading ? (
         <div className="space-y-4">
           <div className="h-32 animate-pulse bg-muted rounded-xl border border-border" />
@@ -240,18 +240,19 @@ export default function TrackAttendancePage() {
               </div>
               <span className="text-sm font-bold">{recorded}/{total}</span>
             </div>
-            <Progress value={progressValue} variant="default" className="h-2" />
+            <Progress value={progressValue} variant="default" size="lg" />
 
             {isFutureDate ? (
               <p className="text-xs text-muted-foreground">
-                View-only — attendance unlocks on {dateStr}.
+                View-only — attendance unlocks on {formatDateMedium(selectedDate)}.
               </p>
             ) : (
               pending > 0 && (
                 <Button
                   onClick={() => setMarkAllOpen(true)}
                   disabled={isMarkingAll}
-                  className="w-full bg-success hover:bg-success/90 text-success-foreground"
+                  variant="success"
+                  className="w-full"
                 >
                   {isMarkingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Mark all present
@@ -283,6 +284,7 @@ export default function TrackAttendancePage() {
         title={`Mark ${pending} ${pending === 1 ? "class" : "classes"} present?`}
         description="This will mark all currently pending classes as present. You can still change each class afterwards."
         confirmLabel="Mark all present"
+        variant="success"
         onConfirm={handleMarkAllPresent}
       />
     </div>

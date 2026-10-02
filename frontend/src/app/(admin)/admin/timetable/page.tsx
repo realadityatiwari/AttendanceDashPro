@@ -13,7 +13,7 @@ import {
   useAdminSubjects,
 } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -358,7 +358,7 @@ function EntryCard({
         style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: "6px" }}
         aria-hidden="true"
       />
-      <GlassCard className="p-3">
+      <Card className="p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -411,14 +411,14 @@ function EntryCard({
           </button>
         </div>
       )}
-    </GlassCard>
+    </Card>
     </div>
   );
 }
 
 function ForbiddenState() {
   return (
-    <GlassCard className="max-w-2xl">
+    <Card className="max-w-2xl">
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <ShieldAlert className="mb-4 h-10 w-10 text-warning" />
         <h1 className="text-lg font-semibold text-foreground">Administrative access required</h1>
@@ -426,20 +426,20 @@ function ForbiddenState() {
           The timetable is available to authorized administrators only.
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <AlertCircle className="mb-4 h-10 w-10 text-red-500" />
         <h1 className="text-lg font-semibold text-red-400">Could not load the timetable</h1>
         {message && <p className="mt-2 max-w-md text-sm text-red-400/80">{message}</p>}
         <Button variant="outline" size="sm" className="mt-6" onClick={onRetry}>Retry</Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

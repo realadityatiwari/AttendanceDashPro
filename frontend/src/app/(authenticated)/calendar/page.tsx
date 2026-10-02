@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useCalendarMonth, usePreferences } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -136,7 +136,7 @@ export default function CalendarPage() {
         <PageHeader title="Calendar" description="Monthly view of your academic calendar">
           {navControls}
         </PageHeader>
-        <GlassCard className="border-red-900/50 bg-red-950/20">
+        <Card className="border-red-900/50 bg-red-950/20">
           <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
             <AlertCircle className="size-10 text-red-500" aria-hidden />
             <h3 className="text-lg font-semibold text-red-400">Unable to load calendar</h3>
@@ -148,7 +148,7 @@ export default function CalendarPage() {
               Try again
             </Button>
           </div>
-        </GlassCard>
+        </Card>
       </div>
     );
   }
@@ -184,7 +184,7 @@ export default function CalendarPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <GlassCard className={cn("p-2 sm:p-4", switching && "pointer-events-none opacity-70")}>
+          <Card className={cn("p-2 sm:p-4", switching && "pointer-events-none opacity-70")}>
             {switching && (
               <div className="mb-2 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -199,14 +199,14 @@ export default function CalendarPage() {
               onSelect={handleSelect}
               weekStartsOn={preferences?.week_starts_on ?? "MONDAY"}
             />
-          </GlassCard>
+          </Card>
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
             {selectedDay ? (
               <DayDetail day={selectedDay} />
             ) : (
-              <GlassCard className="p-5">
+              <Card className="p-5">
                 <p className="text-sm text-muted-foreground">Select a day to see its details.</p>
-              </GlassCard>
+              </Card>
             )}
           </div>
         </div>
@@ -218,7 +218,7 @@ export default function CalendarPage() {
 function GridSkeleton() {
   return (
     <>
-      <GlassCard className="p-2 sm:p-4">
+      <Card className="p-2 sm:p-4">
         <div className="mb-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">
           {Array.from({ length: 7 }).map((_, i) => (
             <Skeleton key={i} className="h-3" />
@@ -229,7 +229,7 @@ function GridSkeleton() {
             <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
         </div>
-      </GlassCard>
+      </Card>
       <Skeleton className="h-72 rounded-xl" />
     </>
   );

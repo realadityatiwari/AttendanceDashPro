@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlertCircle, Search, ShieldAlert, Users } from "lucide-react";
 import { useAdminStudents } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -117,7 +117,7 @@ function StudentList({
   onPage: (p: number) => void;
 }) {
   return (
-    <GlassCard>
+    <Card>
       <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
         <p className="text-sm text-muted-foreground">
           {total} student{total === 1 ? "" : "s"}
@@ -180,13 +180,13 @@ function StudentList({
           </Button>
         </div>
       )}
-    </GlassCard>
+    </Card>
   );
 }
 
 function ForbiddenState() {
   return (
-    <GlassCard className="max-w-2xl">
+    <Card className="max-w-2xl">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <ShieldAlert className="h-10 w-10 text-warning mb-4" />
         <h1 className="text-lg font-semibold text-foreground">
@@ -197,13 +197,13 @@ function ForbiddenState() {
           student list is available to authorized administrators only.
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
         <h1 className="text-lg font-semibold text-red-400">
@@ -214,7 +214,7 @@ function ErrorState({ message, onRetry }: { message?: string; onRetry: () => voi
           Retry
         </Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

@@ -16,11 +16,12 @@ import {
 } from "@/components/ui/sheet";
 
 /**
- * Mobile primary navigation — Phase 12A, Phase 4 refinements.
+ * Mobile primary navigation — Phase 12A, Phase 4 refinements, UIA-005 IA.
  *
- * Three fixed bottom tabs (Home, Attendance, History) plus a "More" sheet
- * hosting the secondary destinations. Navigation data comes from the shared
- * navItems.ts source (D-01 labels) so desktop and mobile can never drift.
+ * Three fixed bottom tabs (Home, Mark Attendance, History) plus a "More"
+ * sheet hosting the secondary destinations. Navigation data comes from the
+ * shared navItems.ts source (D-01 labels) so desktop and mobile can never
+ * drift.
  *
  * Phase 4 (D-04/UI-008): when the current route belongs to the "More" group,
  * the More control is highlighted and marked aria-current, so the user's
@@ -50,7 +51,10 @@ export function MobileBottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md py-2.5 text-[0.65rem] font-medium transition-colors",
+                  // UIA-031: 12px labels — the previous 10.4px was below a
+                  // readable primary-navigation floor. min-h-14 keeps the
+                  // navigation footprint unchanged at 375px.
+                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md py-2.5 text-xs font-medium transition-colors",
                   active
                     ? "text-primary"
                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -68,7 +72,7 @@ export function MobileBottomNav() {
             aria-current={moreActive ? "true" : undefined}
             onClick={() => setMoreOpen((v) => !v)}
             className={cn(
-              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md py-2.5 text-[0.65rem] font-medium transition-colors",
+              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md py-2.5 text-xs font-medium transition-colors",
               moreOpen || moreActive
                 ? "text-primary"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"

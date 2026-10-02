@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CircleUserRound,
   Palette,
@@ -22,7 +23,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export type ShellModalId =
-  | "profile"
   | "appearance"
   | "settings"
   | "feedback"
@@ -76,7 +76,9 @@ export function UserMenu({ onOpenModal }: UserMenuProps) {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onOpenModal("profile")}>
+        {/* UIA-029: "Profile" opens the canonical /profile page — one Profile
+            surface instead of a modal/page pair with divergent content. */}
+        <DropdownMenuItem render={<Link href="/profile" />}>
           <CircleUserRound className="mr-2 size-4" aria-hidden="true" />
           Profile
         </DropdownMenuItem>

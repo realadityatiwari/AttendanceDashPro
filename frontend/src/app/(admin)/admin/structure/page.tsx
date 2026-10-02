@@ -17,7 +17,7 @@ import {
 
 import { useAdminSessions, useAdminStructureMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,14 +106,14 @@ export default function StructurePage() {
           <ErrorState message={(isError as Error).message} onRetry={() => mutate()} />
         )
       ) : !sessions || sessions.length === 0 ? (
-        <GlassCard className="p-10 text-center text-muted-foreground">
+        <Card className="p-10 text-center text-muted-foreground">
           <FolderTree className="h-10 w-10 mx-auto mb-3 opacity-20" />
           <p>No academic sessions found.</p>
-        </GlassCard>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sessions.map((session) => (
-            <GlassCard key={session.id} className="flex flex-col">
+            <Card key={session.id} className="flex flex-col">
               <div className="p-5 flex-1 space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
@@ -154,7 +154,7 @@ export default function StructurePage() {
                   </Button>
                 </Link>
               </div>
-            </GlassCard>
+            </Card>
           ))}
         </div>
       )}
@@ -205,7 +205,7 @@ export default function StructurePage() {
 
 function ForbiddenState() {
   return (
-    <GlassCard className="max-w-2xl">
+    <Card className="max-w-2xl">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <ShieldAlert className="h-10 w-10 text-warning mb-4" />
         <h1 className="text-lg font-semibold text-foreground">
@@ -216,13 +216,13 @@ function ForbiddenState() {
           (HEAD_ADMIN) only. Your account does not hold that authority.
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
         <h1 className="text-lg font-semibold text-red-400">
@@ -233,7 +233,7 @@ function ErrorState({ message, onRetry }: { message?: string; onRetry: () => voi
           Retry
         </Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

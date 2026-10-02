@@ -20,8 +20,11 @@ interface ConfirmDialogProps {
   /** Label describing the actual operation (never generic "Yes"/"OK"). */
   confirmLabel: string;
   cancelLabel?: string;
-  /** "destructive" renders the confirm action in the destructive treatment. */
-  variant?: "destructive" | "default";
+  /** "destructive" renders the confirm action in the destructive treatment;
+   *  "success" matches positive page CTAs (e.g. "Mark all present") so the
+   *  same action never changes color between the page and its confirmation
+   *  (UIA-016). Default behavior is unchanged. */
+  variant?: "destructive" | "default" | "success";
   /**
    * The confirmed action. The dialog disables its controls and stays open
    * until the promise settles, then closes — the caller owns mutation
@@ -78,7 +81,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant={variant === "destructive" ? "destructive" : "default"}
+            variant={variant}
             onClick={handleConfirm}
             disabled={pending}
           >

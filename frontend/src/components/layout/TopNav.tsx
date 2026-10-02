@@ -10,7 +10,6 @@ import { useProfile } from "@/hooks/useApi";
 import { UserMenu, ShellModalId } from "@/components/layout/UserMenu";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
-import { ProfileModal } from "@/components/shell/ProfileModal";
 import { AppearanceModal } from "@/components/shell/AppearanceModal";
 import { SettingsModal } from "@/components/shell/SettingsModal";
 import { FeedbackModal } from "@/components/shell/FeedbackModal";
@@ -165,10 +164,6 @@ export function TopNav() {
         <UserMenu onOpenModal={setActiveModal} />
       </div>
 
-      <ProfileModal
-        open={activeModal === "profile"}
-        onOpenChange={closeModal}
-      />
       <AppearanceModal
         open={activeModal === "appearance"}
         onOpenChange={closeModal}

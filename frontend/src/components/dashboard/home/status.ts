@@ -1,47 +1,24 @@
 import { ClassType, DashboardClassStatus, AttendanceStatusLabel } from "@/types/api";
+import {
+  getSessionStatus,
+  getSubjectHealthStatus,
+  type BadgeVariant,
+} from "@/lib/canonicalStatus";
 
-export function classStatusVariant(
-  status: DashboardClassStatus
-): "success" | "danger" | "neutral" | "outline" {
-  switch (status) {
-    case DashboardClassStatus.ATTENDED:
-      return "success";
-    case DashboardClassStatus.MISSED:
-      return "danger";
-    case DashboardClassStatus.CANCELLED:
-      return "neutral";
-    default:
-      return "outline";
-  }
+export function classStatusVariant(status: DashboardClassStatus): BadgeVariant {
+  return getSessionStatus(status).variant;
 }
 
 export function classStatusLabel(status: DashboardClassStatus): string {
-  switch (status) {
-    case DashboardClassStatus.ATTENDED:
-      // D-07: canonical attendance state vocabulary (Present/Absent).
-      return "Present";
-    case DashboardClassStatus.MISSED:
-      return "Absent";
-    case DashboardClassStatus.CANCELLED:
-      return "Cancelled";
-    default:
-      return "Pending";
-  }
+  // D-07: canonical attendance state vocabulary (Present/Absent/Pending/
+  // Cancelled) — normalized in one place.
+  return getSessionStatus(status).label;
 }
 
 export function attendanceStatusVariant(
   status: AttendanceStatusLabel | null
-): "success" | "warning" | "danger" | "neutral" {
-  switch (status) {
-    case "SAFE":
-      return "success";
-    case "WATCH":
-      return "warning";
-    case "CRITICAL":
-      return "danger";
-    default:
-      return "neutral";
-  }
+): BadgeVariant {
+  return getSubjectHealthStatus(status).variant;
 }
 
 export function classTypeLabel(classType: ClassType): string {

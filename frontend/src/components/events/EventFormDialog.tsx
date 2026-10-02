@@ -6,6 +6,8 @@ import { useSubjects, useTimetable, useEventMutations } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { DateInput } from "@/components/shared/DateInput";
+import { formatDateMedium } from "@/lib/date";
 import {
   Dialog,
   DialogContent,
@@ -419,33 +421,31 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={fieldClass}>
                   <label className={labelClass} htmlFor="event-form-start">Start date</label>
-                  <Input
+                  {/* UIA-025: native date input + formatted companion. */}
+                  <DateInput
                     id="event-form-start"
-                    type="date"
-                    className="[color-scheme:dark]"
                     value={form.start_date}
-                    onChange={e => handleStartDateChange(e.target.value)}
+                    onValueChange={handleStartDateChange}
+                    emptyHint="Pick a date"
                   />
                 </div>
                 <div className={fieldClass}>
                   <label className={labelClass} htmlFor="event-form-end">End date</label>
-                  <Input
+                  <DateInput
                     id="event-form-end"
-                    type="date"
-                    className="[color-scheme:dark]"
                     value={form.end_date}
-                    onChange={e => handleEndDateChange(e.target.value)}
+                    onValueChange={handleEndDateChange}
+                    emptyHint="Pick a date"
                   />
                 </div>
               </div>
             ) : (
-              <Input
+              <DateInput
                 id="event-form-start"
-                type="date"
-                className="[color-scheme:dark]"
                 value={form.start_date}
-                onChange={e => handleStartDateChange(e.target.value)}
+                onValueChange={handleStartDateChange}
                 aria-label="Event date"
+                emptyHint="Pick a date"
               />
             )}
           </div>
@@ -479,7 +479,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
               </Select>
               {isClassCancelled && subjectsForEvent.length === 0 && form.start_date && (
                 <p className="text-[11px] text-muted-foreground">
-                  No lectures or tutorials scheduled on {form.start_date} for your enrolled subjects.
+                  No lectures or tutorials scheduled on {formatDateMedium(form.start_date)} for your enrolled subjects.
                 </p>
               )}
               {quizScopedEvent && (

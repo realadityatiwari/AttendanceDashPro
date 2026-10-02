@@ -8,7 +8,7 @@ import { FeedbackType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -77,10 +77,10 @@ export default function FeedbackAdminPage() {
         <PageHeader title="Feedback" />
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <GlassCard key={i} className="p-4">
+            <Card key={i} className="p-4">
               <Skeleton className="h-4 w-40" />
               <Skeleton className="mt-3 h-4 w-full" />
-            </GlassCard>
+            </Card>
           ))}
         </div>
       </div>
@@ -99,10 +99,10 @@ export default function FeedbackAdminPage() {
         <PageHeader title="Feedback" />
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <GlassCard key={i} className="p-4">
+            <Card key={i} className="p-4">
               <Skeleton className="h-4 w-40" />
               <Skeleton className="mt-3 h-4 w-full" />
-            </GlassCard>
+            </Card>
           ))}
         </div>
       </div>
@@ -155,21 +155,21 @@ export default function FeedbackAdminPage() {
       ) : isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <GlassCard key={i} className="p-4">
+            <Card key={i} className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-5 w-20" />
               </div>
               <Skeleton className="mt-3 h-4 w-full" />
               <Skeleton className="mt-2 h-4 w-2/3" />
-            </GlassCard>
+            </Card>
           ))}
         </div>
       ) : feedback && feedback.items.length > 0 ? (
         <>
           <div className="space-y-3">
             {feedback.items.map((item) => (
-              <GlassCard key={item.id} className="p-4">
+              <Card key={item.id} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-medium text-foreground">{item.name}</span>
@@ -192,7 +192,7 @@ export default function FeedbackAdminPage() {
                     Context: {item.context}
                   </p>
                 )}
-              </GlassCard>
+              </Card>
             ))}
           </div>
 

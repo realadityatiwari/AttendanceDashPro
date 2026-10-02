@@ -12,7 +12,7 @@ import {
   useAdminSemesters,
 } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -147,7 +147,7 @@ export default function QuizSchedulesPage() {
           icon={<ClipboardList className="h-10 w-10 text-muted-foreground mb-4" />}
         />
       ) : (
-        <GlassCard className="overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -197,7 +197,7 @@ export default function QuizSchedulesPage() {
               ))}
             </tbody>
           </table>
-        </GlassCard>
+        </Card>
       )}
 
       {isGlobal && (
@@ -229,7 +229,7 @@ export default function QuizSchedulesPage() {
 
 function ForbiddenState() {
   return (
-    <GlassCard className="max-w-2xl">
+    <Card className="max-w-2xl">
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <ShieldAlert className="mb-4 h-10 w-10 text-warning" />
         <h1 className="text-lg font-semibold text-foreground">Administrative access required</h1>
@@ -237,20 +237,20 @@ function ForbiddenState() {
           Quiz schedules are available to authorized administrators only.
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <AlertCircle className="mb-4 h-10 w-10 text-red-500" />
         <h1 className="text-lg font-semibold text-red-400">Could not load quiz schedules</h1>
         {message && <p className="mt-2 max-w-md text-sm text-red-400/80">{message}</p>}
         <Button variant="outline" size="sm" className="mt-6" onClick={onRetry}>Retry</Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

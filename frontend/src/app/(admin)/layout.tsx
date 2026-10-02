@@ -7,7 +7,7 @@ import { useAdminMe } from "@/hooks/useApi";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 
 /**
  * Admin Portal route-group layout (Phase 24.1).
@@ -47,7 +47,7 @@ export default function AdminPortalLayout({
     if (status === 403) {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
-          <GlassCard className="max-w-md">
+          <Card className="max-w-md">
             <div className="flex flex-col items-center justify-center text-center p-8">
               <ShieldAlert className="h-10 w-10 text-warning mb-4" />
               <h1 className="text-lg font-semibold text-foreground">
@@ -68,14 +68,14 @@ export default function AdminPortalLayout({
                 Go to student app
               </Button>
             </div>
-          </GlassCard>
+          </Card>
         </div>
       );
     }
 
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
-        <GlassCard className="max-w-md border-red-900/50 bg-red-950/20">
+        <Card className="max-w-md border-red-900/50 bg-red-950/20">
           <div className="flex flex-col items-center justify-center text-center p-8">
             <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
             <h1 className="text-lg font-semibold text-red-400">
@@ -96,7 +96,7 @@ export default function AdminPortalLayout({
               Retry
             </Button>
           </div>
-        </GlassCard>
+        </Card>
       </div>
     );
   }

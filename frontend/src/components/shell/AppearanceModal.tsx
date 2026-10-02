@@ -68,9 +68,9 @@ export function AppearanceModal({ open, onOpenChange }: AppearanceModalProps) {
       <div className="mt-4 flex gap-2.5 rounded-lg border border-border bg-background p-3">
         <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Only Dark mode is currently supported. Light and System themes need a
-          light palette in the Phase 1 design tokens before they can be enabled;
-          the preference will be persisted once switching is implemented.
+          Only Dark mode is currently supported. Light and System themes are
+          coming in a future update — your preference will be saved once they
+          are available.
         </p>
       </div>
     </ShellDialog>

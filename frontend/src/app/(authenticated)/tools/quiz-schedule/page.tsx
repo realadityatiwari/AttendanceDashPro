@@ -5,9 +5,10 @@ import { useSubjects, useCurrentQuizCycle } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { QuizEligibilityCard } from "@/components/quiz/QuizEligibilityCard";
 import { cn } from "@/lib/utils";
+import { POOLED_ATTENDANCE_FORMULA } from "@/lib/formula";
 import { Calendar, Info } from "lucide-react";
 
 const CYCLES = [
@@ -42,10 +43,10 @@ export default function QuizEligibilityPage() {
     <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
       <PageHeader
         title="Quiz Eligibility"
-        description="Eligibility per the institutional attendance criteria — evaluated by the backend from your actual attendance."
+        description="Eligibility per the institutional attendance criteria, based on your recorded attendance."
       />
 
-      <GlassCard className="mb-6 p-4 border border-border/50 bg-muted/30">
+      <Card className="mb-6 p-4 border border-border/50 bg-muted/30">
         <div className="flex items-start gap-3 text-sm text-muted-foreground">
           <Info className="h-5 w-5 text-primary mt-0.5 shrink-0" />
           <div className="space-y-1">
@@ -55,15 +56,18 @@ export default function QuizEligibilityPage() {
               percentage: <span className="font-medium text-foreground">70%</span> for Quiz I,{" "}
               <span className="font-medium text-foreground">75%</span> for Quiz II and III.
             </p>
+            {/* UIA-004: the formula appears exactly once on this page (here),
+                not uppercase on every card or inside every criterion row. */}
             <p>
-              Both criteria use the same pooled{" "}
-              <span className="font-medium text-foreground">(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100</span> average and differ only
-              in the counting window — Criterion I counts from the previous quiz, Criterion II from the semester start.
+              Both criteria use the same combined attendance —{" "}
+              <span className="font-medium text-foreground">{POOLED_ATTENDANCE_FORMULA}</span> —
+              and differ only in the counting window: Criterion I counts from
+              the previous quiz, Criterion II from the semester start.
             </p>
             <p>Only theory subjects with confirmed quiz dates appear here.</p>
           </div>
         </div>
-      </GlassCard>
+      </Card>
 
       {/* UI-020: these buttons filter the card list below (including loading
           and empty states) — they are not a tab interface, so the false
@@ -92,7 +96,7 @@ export default function QuizEligibilityPage() {
       {isLoading ? (
         <div className="space-y-6">
           {[1, 2].map((i) => (
-            <GlassCard key={i} className="h-44 animate-pulse bg-muted/50" />
+            <Card key={i} className="h-44 animate-pulse bg-muted/50" />
           ))}
         </div>
       ) : quizApplicableSubjects.length === 0 ? (

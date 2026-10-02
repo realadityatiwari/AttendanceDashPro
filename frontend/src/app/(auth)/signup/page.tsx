@@ -160,7 +160,10 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6" noValidate>
           {(serverError || Object.values(errors).some(Boolean)) && (
-            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive border border-destructive">
+            <div
+              role="alert"
+              className="rounded-md bg-destructive/15 p-3 text-sm text-destructive border border-destructive"
+            >
               {serverError || Object.values(errors)[0]}
             </div>
           )}
@@ -207,6 +210,7 @@ export default function SignupPage() {
               <button
                 type="button"
                 aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
                 onClick={() => setShowPassword(v => !v)}
                 className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
@@ -230,7 +234,8 @@ export default function SignupPage() {
               />
               <button
                 type="button"
-                aria-label={showConfirm ? "Hide password" : "Show password"}
+                aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+                aria-pressed={showConfirm}
                 onClick={() => setShowConfirm(v => !v)}
                 className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
@@ -270,11 +275,8 @@ export default function SignupPage() {
               ))}
             </Select>
             {errors.electiveII && <p className="text-xs text-destructive">{errors.electiveII}</p>}
-            {/* UI-028: honest framing — the options mirror the current
-                semester's catalog and the server is authoritative. */}
             <p className="text-xs text-muted-foreground">
-              Elective options reflect the current semester&apos;s catalog; the
-              server verifies your selection against it.
+              Elective options reflect the courses offered this semester.
             </p>
           </div>
 

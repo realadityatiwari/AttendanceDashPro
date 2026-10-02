@@ -31,7 +31,9 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="p-4">
+      {/* UIA-024: the content column centers within the shared row height so
+          a sparse snapshot never strands a large void above the footer. */}
+      <CardContent className="flex flex-1 flex-col justify-center p-4">
         {!quiz.has_snapshot ? (
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <ClipboardList className="size-8 text-muted-foreground" />

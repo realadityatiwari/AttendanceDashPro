@@ -16,6 +16,12 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  /** True once a persisted session token exists (auth resolved). UIA-013:
+   * the authenticated shell gates on this so an anonymous visit renders no
+   * app chrome before the redirect to /login. It never replaces the
+   * profile-based `user` check — a token with a transiently failing profile
+   * fetch still counts as a session. */
+  hasSession: boolean;
   getToken: () => Promise<string | null>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -24,6 +30,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  hasSession: false,
   getToken: async () => null,
   logout: () => {},
   refreshUser: async () => {},
@@ -174,7 +181,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, getToken, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, hasSession: tokenStatus === "present", getToken, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

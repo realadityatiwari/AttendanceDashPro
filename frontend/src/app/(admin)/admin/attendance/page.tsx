@@ -5,7 +5,7 @@ import { AlertCircle, BarChart3, CalendarClock } from "lucide-react";
 
 import { useAdminAttendanceSections, useAdminAttendanceSubjects } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ function pct(v: number | null | undefined): string {
 
 function SectionTable({ items, range }: { items: AdminSectionAttendanceSummary[]; range?: string | null }) {
   return (
-    <GlassCard className="overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-4">
         <h2 className="text-sm font-semibold text-foreground">Section attendance</h2>
         {range && <span className="text-xs text-muted-foreground">through {range}</span>}
@@ -56,13 +56,13 @@ function SectionTable({ items, range }: { items: AdminSectionAttendanceSummary[]
           </tbody>
         </table>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function SubjectTable({ items, range }: { items: AdminSubjectAttendanceSummary[]; range?: string | null }) {
   return (
-    <GlassCard className="overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-4">
         <h2 className="text-sm font-semibold text-foreground">Subject attendance (roster)</h2>
         {range && <span className="text-xs text-muted-foreground">through {range}</span>}
@@ -104,20 +104,20 @@ function SubjectTable({ items, range }: { items: AdminSubjectAttendanceSummary[]
           </tbody>
         </table>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <AlertCircle className="mb-4 h-10 w-10 text-red-500" />
         <h1 className="text-lg font-semibold text-red-400">Could not load attendance analytics</h1>
         {message && <p className="mt-2 max-w-md text-sm text-red-400/80">{message}</p>}
         <Button variant="outline" size="sm" className="mt-6" onClick={onRetry}>Retry</Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
@@ -153,7 +153,7 @@ export default function AdminAttendancePage() {
             <SubjectTable items={subjects.data!.items} range={subjects.data!.range_end} />
           )}
           {(sections.data?.items.length ?? 0) === 0 && (subjects.data?.items.length ?? 0) === 0 && (
-            <GlassCard>
+            <Card>
               <div className="flex flex-col items-center justify-center p-8 text-center">
                 <BarChart3 className="mb-4 h-10 w-10 text-muted-foreground" />
                 <h2 className="text-base font-semibold text-foreground">No attendance data in scope</h2>
@@ -161,13 +161,13 @@ export default function AdminAttendancePage() {
                   No sections or subjects are within the current admin scope for the active academic session.
                 </p>
               </div>
-            </GlassCard>
+            </Card>
           )}
         </div>
       )}
 
       <div className="mt-8">
-        <GlassCard className="p-4">
+        <Card className="p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -188,7 +188,7 @@ export default function AdminAttendancePage() {
               Browse students
             </Button>
           </div>
-        </GlassCard>
+        </Card>
       </div>
     </div>
   );

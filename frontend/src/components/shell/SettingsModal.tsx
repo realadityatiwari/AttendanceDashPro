@@ -125,7 +125,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       const detail =
         error instanceof Error && error.message !== "API request failed"
           ? error.message
-          : "The backend did not accept the request.";
+          : "We couldn't save your preferences. Please try again.";
       setSaveState({ status: "error", message: detail });
     }
   };
@@ -179,7 +179,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   }
                   disabled={controlsDisabled}
                   aria-label="Class reminders"
-                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
+                  // UIA-030: the visual track stays 44×24; the before: hit area
+                  // extends the interactive target to the touch floor without
+                  // changing the switch's appearance.
+                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors before:absolute before:-inset-2 before:content-[''] data-checked:bg-primary data-disabled:opacity-50"
                 >
                   <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
                 </Switch.Root>

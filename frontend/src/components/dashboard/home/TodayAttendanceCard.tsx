@@ -28,9 +28,12 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
             </p>
           </div>
           {today.is_teaching_day && (
+            // UIA-019: "LIVE" implied real-time state on a card that only
+            // knows the day is a teaching day. The badge now names the state
+            // it actually represents, matching the Calendar wording.
             <Badge variant="success">
-              <span className="size-1.5 rounded-full bg-current" />
-              {today.is_working_day ? "LIVE" : "TEACHING DAY"}
+              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              Teaching day
             </Badge>
           )}
         </div>

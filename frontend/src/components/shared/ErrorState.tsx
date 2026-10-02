@@ -1,5 +1,5 @@
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { GlassCard } from "./GlassCard";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 interface ErrorStateProps {
@@ -20,7 +20,7 @@ export function ErrorState({
   action,
 }: ErrorStateProps) {
   return (
-    <GlassCard className="bg-red-950/20 border-red-900/50">
+    <Card className="bg-red-950/20 border-red-900/50">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
         <h3 className="text-lg font-semibold text-red-400">{title}</h3>
@@ -39,6 +39,6 @@ export function ErrorState({
           </div>
         )}
       </div>
-    </GlassCard>
+    </Card>
   );
 }

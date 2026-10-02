@@ -1,5 +1,5 @@
 import { useLabExperiments, useLabRecords } from "@/hooks/useApi";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateMedium } from "@/lib/date";
 import { CheckCircle2, Circle, AlertCircle, Clock } from "lucide-react";
@@ -16,7 +16,7 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <GlassCard key={i} className="h-16 animate-pulse bg-muted/50" />
+          <Card key={i} className="h-16 animate-pulse bg-muted/50" />
         ))}
       </div>
     );
@@ -24,12 +24,12 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
 
   if (isError) {
     return (
-      <GlassCard className="p-4 border border-red-900/50 bg-red-950/20">
+      <Card className="p-4 border border-red-900/50 bg-red-950/20">
         <div className="flex items-center gap-2 text-red-400">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm font-medium">Failed to load laboratory data for {subjectCode}</span>
         </div>
-      </GlassCard>
+      </Card>
     );
   }
 
@@ -38,14 +38,14 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
 
   if (expList.length === 0) {
     return (
-      <GlassCard className="p-8 text-center text-muted-foreground">
+      <Card className="p-8 text-center text-muted-foreground">
         No experiments defined for {subjectCode}.
-      </GlassCard>
+      </Card>
     );
   }
 
   return (
-    <GlassCard className="overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="bg-muted/50 px-4 py-3 border-b border-border/50 flex justify-between items-center">
         <h3 className="font-bold text-foreground text-base">{subjectCode} Experiments</h3>
         <Badge variant="outline" className="bg-muted border-border">
@@ -101,6 +101,6 @@ export function SubjectLaboratoryView({ subjectCode }: { subjectCode: string }) 
           );
         })}
       </div>
-    </GlassCard>
+    </Card>
   );
 }

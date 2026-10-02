@@ -2,26 +2,15 @@
 
 import { useState } from "react";
 import { useQuizEligibility } from "@/hooks/useApi";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { EligibilityState, type CriterionResult } from "@/types/api";
 import { formatDateMedium, formatPct1 } from "@/lib/date";
-import { AlertCircle, Calendar, ChevronDown, ChevronUp, Calculator, Check, X } from "lucide-react";
+import { getQuizEligibilityStatus } from "@/lib/canonicalStatus";
+import { AlertCircle, Calendar, ChevronDown, ChevronUp, Calculator, Check, X, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const STATE_BADGE: Partial<Record<EligibilityState, { label: string; variant: "success" | "warning" | "danger" | "neutral" }>> = {
-  [EligibilityState.ELIGIBLE]: { label: "Eligible", variant: "success" },
-  [EligibilityState.RECOVERABLE]: { label: "Recoverable", variant: "warning" },
-  [EligibilityState.NOT_ELIGIBLE]: { label: "Not Eligible", variant: "danger" },
-  [EligibilityState.UNRESOLVED]: { label: "Unresolved", variant: "neutral" },
-};
-
-// Defensive fallback (D2): a future/unknown state emitted by the backend must
-// never crash the card. Render a neutral "Unknown" badge and keep the rest of
-// the card intact — the state is NOT reinterpreted as any known state.
-const UNKNOWN_STATE_BADGE = { label: "Unknown", variant: "neutral" } as const;
 
 // D-10 (as corrected): every quiz percentage on this card represents actual
 // calculated attendance/eligibility, so all rows — including the detailed
@@ -46,13 +35,26 @@ function criterionTitle(name: string | null | undefined): string {
   return CRITERION_TITLES[name] ?? name;
 }
 
-function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null; passed: boolean }) {
+function CriterionRow({
+  criterion,
+  passed,
+  noData,
+}: {
+  criterion: CriterionResult | null;
+  passed: boolean;
+  noData: boolean;
+}) {
   const opt = criterion?.optimization;
-  const hasOpt = !!opt && (opt.lecture_deficit > 0 || opt.tutorial_deficit > 0 || opt.safe_skip_lecture > 0 || opt.safe_skip_tutorial > 0);
+  const hasOpt =
+    !!opt &&
+    (opt.lecture_deficit > 0 ||
+      opt.tutorial_deficit > 0 ||
+      opt.safe_skip_lecture > 0 ||
+      opt.safe_skip_tutorial > 0);
   // D1: only a reachable route is actionable guidance. An unreachable
-  // criterion still shows its counts, percentages, threshold, PASS/FAIL and
-  // explanation above — only the "Must attend / Safe skip" line is withheld.
-  const showGuidance = hasOpt && opt.is_reachable === true;
+  // criterion still shows its counts, percentages, threshold and explanation
+  // above — only the "Must attend / Safe skip" line is withheld.
+  const showGuidance = !noData && hasOpt && opt.is_reachable === true;
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -62,26 +64,42 @@ function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null
             Average: <span className="font-bold tabular-nums text-foreground">{fmtPct(criterion?.value ?? null)}</span>
           </span>
           <span className="text-muted-foreground">
-            Required: <span className="font-bold tabular-nums text-foreground">
+            Required:{" "}
+            <span className="font-bold tabular-nums text-foreground">
               {criterion?.threshold != null ? `${criterion.threshold.toFixed(0)}%` : "—"}
             </span>
-          </span>
-          <span className="text-muted-foreground">
-            Formula: <span className="text-foreground">(Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100</span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{criterion?.explanation ?? "—"}</p>
         {showGuidance && (
           <p className="text-xs text-muted-foreground mt-1">
-            Must attend: <span className="font-bold tabular-nums">{opt.lecture_deficit} lecture{opt.lecture_deficit === 1 ? "" : "s"}</span>
-            {opt.tutorial_deficit > 0 && <span className="font-bold tabular-nums"> · {opt.tutorial_deficit} tutorial{opt.tutorial_deficit === 1 ? "" : "s"}</span>}
-            {" "}· Safe skip: <span className="font-bold tabular-nums">{opt.safe_skip_lecture} lecture{opt.safe_skip_lecture === 1 ? "" : "s"}</span>
-            {opt.safe_skip_tutorial > 0 && <span className="font-bold tabular-nums"> · {opt.safe_skip_tutorial} tutorial{opt.safe_skip_tutorial === 1 ? "" : "s"}</span>}
+            Must attend:{" "}
+            <span className="font-bold tabular-nums">
+              {opt.lecture_deficit} lecture{opt.lecture_deficit === 1 ? "" : "s"}
+            </span>
+            {opt.tutorial_deficit > 0 && (
+              <span className="font-bold tabular-nums">
+                {" "}
+                · {opt.tutorial_deficit} tutorial{opt.tutorial_deficit === 1 ? "" : "s"}
+              </span>
+            )}{" "}
+            · Safe skip:{" "}
+            <span className="font-bold tabular-nums">
+              {opt.safe_skip_lecture} lecture{opt.safe_skip_lecture === 1 ? "" : "s"}
+            </span>
+            {opt.safe_skip_tutorial > 0 && (
+              <span className="font-bold tabular-nums">
+                {" "}
+                · {opt.safe_skip_tutorial} tutorial{opt.safe_skip_tutorial === 1 ? "" : "s"}
+              </span>
+            )}
           </p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {passed ? (
+        {noData ? (
+          <Badge variant="neutral">NO DATA</Badge>
+        ) : passed ? (
           <Badge variant="success">
             <Check className="size-3" /> PASS
           </Badge>
@@ -95,38 +113,134 @@ function CriterionRow({ criterion, passed }: { criterion: CriterionResult | null
   );
 }
 
+/**
+ * UIA-012: one direct, always-visible action statement instead of parallel
+ * criteria math the student has to reconcile. Purely a presentation layer
+ * over the backend optimization object — no value is recomputed.
+ */
+function GuidanceCallout({
+  state,
+  noData,
+  lectureDeficit,
+  tutorialDeficit,
+  safeSkipLecture,
+  safeSkipTutorial,
+  reachable,
+  criterion,
+}: {
+  state: EligibilityState;
+  noData: boolean;
+  lectureDeficit: number;
+  tutorialDeficit: number;
+  safeSkipLecture: number;
+  safeSkipTutorial: number;
+  reachable: boolean;
+  criterion: string | null | undefined;
+}) {
+  const route = criterion || "best route";
+  const lectureWord = (n: number) => `lecture${n === 1 ? "" : "s"}`;
+  const tutorialWord = (n: number) => `tutorial${n === 1 ? "" : "s"}`;
+
+  let tone: "success" | "warning" | "danger" | "neutral";
+  let message: string;
+
+  if (noData) {
+    tone = "neutral";
+    message = "Attendance needs to be recorded before eligibility can be determined.";
+  } else if (state === EligibilityState.ELIGIBLE && (safeSkipLecture > 0 || safeSkipTutorial > 0)) {
+    tone = "success";
+    const parts: string[] = [];
+    if (safeSkipLecture > 0) parts.push(`${safeSkipLecture} ${lectureWord(safeSkipLecture)}`);
+    if (safeSkipTutorial > 0) parts.push(`${safeSkipTutorial} ${tutorialWord(safeSkipTutorial)}`);
+    message = `You can safely miss up to ${parts.join(" and ")} (${route}).`;
+  } else if (state === EligibilityState.RECOVERABLE && reachable) {
+    tone = "warning";
+    const parts: string[] = [];
+    if (lectureDeficit > 0) parts.push(`${lectureDeficit} ${lectureWord(lectureDeficit)}`);
+    if (tutorialDeficit > 0) parts.push(`${tutorialDeficit} ${tutorialWord(tutorialDeficit)}`);
+    message =
+      parts.length > 0
+        ? `You need to attend the next ${parts.join(" and ")} to qualify (${route}).`
+        : `You can still reach the requirement (${route}).`;
+  } else if (state === EligibilityState.NOT_ELIGIBLE) {
+    tone = "danger";
+    message = "The attendance requirement cannot be met within the remaining attendance window.";
+  } else {
+    return null;
+  }
+
+  const toneClasses: Record<typeof tone, string> = {
+    success: "border-success/30 bg-success/10 text-success",
+    warning: "border-warning/30 bg-warning/10 text-warning",
+    danger: "border-destructive/30 bg-destructive/10 text-destructive",
+    neutral: "border-border bg-muted/40 text-muted-foreground",
+  };
+
+  return (
+    <p className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-xs font-medium", toneClasses[tone])}>
+      <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      {message}
+    </p>
+  );
+}
+
 export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjectCode: string; cycle: number; cycleLabel: string }) {
   const [showCalculation, setShowCalculation] = useState(false);
   const { eligibility, isLoading, isError, mutate } = useQuizEligibility(subjectCode, cycle);
 
   if (isLoading) {
-    return <GlassCard className="h-44 animate-pulse bg-muted/50" />;
+    return <Card className="h-44 animate-pulse bg-muted/50" />;
   }
 
   if (isError || !eligibility) {
+    // UIA-017: the error treatment uses semantic destructive tokens instead of
+    // a raw red palette, so it can never drift from the token set.
     return (
-      <GlassCard className="p-4 border border-red-900/50 bg-red-950/20">
+      <Card className="border-destructive/40 bg-destructive/10 p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-red-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="text-sm font-medium">Could not load eligibility for {subjectCode}</span>
           </div>
-          <Button variant="outline" size="xs" onClick={() => mutate()}>Retry</Button>
+          <Button variant="outline" size="sm" onClick={() => mutate()}>Retry</Button>
         </div>
-      </GlassCard>
+      </Card>
     );
   }
 
-  const status = STATE_BADGE[eligibility.state] ?? UNKNOWN_STATE_BADGE;
+  // UIA-028: zero recorded sessions is a "no data yet" state, never a FAIL —
+  // the thresholds cannot be evaluated before any class is marked. This is a
+  // presentation guard only; eligibility values and math stay untouched.
+  const totalRecorded =
+    (eligibility.lecture?.attended ?? 0) +
+    (eligibility.lecture?.missed ?? 0) +
+    (eligibility.tutorial?.attended ?? 0) +
+    (eligibility.tutorial?.missed ?? 0);
+  const noData =
+    eligibility.state !== EligibilityState.UNRESOLVED && totalRecorded === 0;
+
+  const status = getQuizEligibilityStatus(eligibility.state, noData);
   const hasTutorials = (eligibility.tutorial?.total ?? 0) > 0;
   const required = eligibility.required_percentage ?? eligibility.lecture_threshold ?? 75;
 
-  const lectureVariant = eligibility.lecture_pct !== null && eligibility.lecture_pct >= required ? "success" : "warning";
-  const tutorialVariant = eligibility.tutorial_pct !== null && eligibility.tutorial_pct >= required ? "success" : "warning";
-  const averageVariant = eligibility.average_pct !== null && eligibility.average_pct >= required ? "success" : "warning";
+  const lectureVariant = noData
+    ? "neutral"
+    : eligibility.lecture_pct !== null && eligibility.lecture_pct >= required
+      ? "success"
+      : "warning";
+  const tutorialVariant = noData
+    ? "neutral"
+    : eligibility.tutorial_pct !== null && eligibility.tutorial_pct >= required
+      ? "success"
+      : "warning";
+  const averageVariant = noData
+    ? "neutral"
+    : eligibility.average_pct !== null && eligibility.average_pct >= required
+      ? "success"
+      : "warning";
 
   return (
-    <GlassCard className="overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="p-4 border-b border-border/50">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -156,117 +270,123 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
         <div className="p-4">
           <p className="text-sm text-muted-foreground">{eligibility.explanation ?? "No confirmed schedule for this cycle yet."}</p>
           {eligibility.policy_ambiguity_notes && (
-            <p className="text-xs text-amber-400 mt-2">{eligibility.policy_ambiguity_notes}</p>
+            <p className="text-xs text-warning mt-2">{eligibility.policy_ambiguity_notes}</p>
           )}
         </div>
       ) : (
-        <>
-          <div className="p-4 space-y-4">
-            <div className="space-y-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Criterion I window counts · Combined attendance = (Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100
-              </p>
+        <div className="p-4 space-y-4">
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Criterion I window counts
+            </p>
+            <div>
+              <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
+                <span className="font-medium text-foreground min-w-0">
+                  Lecture <span className="text-muted-foreground font-normal">· {eligibility.lecture.attended}/{eligibility.lecture.total} attended</span>
+                  {eligibility.lecture.pending > 0 && (
+                    <span className="text-muted-foreground font-normal"> · {eligibility.lecture.pending} pending</span>
+                  )}
+                </span>
+                <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.lecture_pct)}</span>
+              </div>
+              <Progress value={eligibility.lecture_pct ?? 0} variant={lectureVariant} size="md" />
+            </div>
+            {hasTutorials && (
               <div>
                 <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
                   <span className="font-medium text-foreground min-w-0">
-                    Lecture <span className="text-muted-foreground font-normal">· {eligibility.lecture.attended}/{eligibility.lecture.total} attended</span>
-                    {eligibility.lecture.pending > 0 && (
-                      <span className="text-muted-foreground font-normal"> · {eligibility.lecture.pending} pending</span>
+                    Tutorial <span className="text-muted-foreground font-normal">· {eligibility.tutorial.attended}/{eligibility.tutorial.total} attended</span>
+                    {eligibility.tutorial.pending > 0 && (
+                      <span className="text-muted-foreground font-normal"> · {eligibility.tutorial.pending} pending</span>
                     )}
                   </span>
-                  <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.lecture_pct)}</span>
+                  <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.tutorial_pct)}</span>
                 </div>
-                <Progress value={eligibility.lecture_pct ?? 0} variant={lectureVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
+                <Progress value={eligibility.tutorial_pct ?? 0} variant={tutorialVariant} size="md" />
               </div>
-              {hasTutorials && (
-                <div>
-                  <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
-                    <span className="font-medium text-foreground min-w-0">
-                      Tutorial <span className="text-muted-foreground font-normal">· {eligibility.tutorial.attended}/{eligibility.tutorial.total} attended</span>
-                      {eligibility.tutorial.pending > 0 && (
-                        <span className="text-muted-foreground font-normal"> · {eligibility.tutorial.pending} pending</span>
-                      )}
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">{formatPct1(eligibility.tutorial_pct)}</span>
-                  </div>
-                  <Progress value={eligibility.tutorial_pct ?? 0} variant={tutorialVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
-                </div>
-              )}
-              <div>
-                <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
-                  <span className="font-medium text-foreground min-w-0">
-                    Average <span className="text-muted-foreground font-normal">· required {required.toFixed(0)}%</span>
-                  </span>
-                  <span className={cn("tabular-nums font-medium", eligibility.average_pct !== null && eligibility.average_pct >= required ? "text-success" : "text-warning")}>
-                    {formatPct1(eligibility.average_pct)}
-                  </span>
-                </div>
-                <Progress value={eligibility.average_pct ?? 0} variant={averageVariant} className="[&_[data-slot=progress-track]]:h-1.5" />
+            )}
+            <div>
+              <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
+                <span className="font-medium text-foreground min-w-0">
+                  Average <span className="text-muted-foreground font-normal">· required {required.toFixed(0)}%</span>
+                </span>
+                <span className={cn("tabular-nums font-medium", noData ? "text-muted-foreground" : eligibility.average_pct !== null && eligibility.average_pct >= required ? "text-success" : "text-warning")}>
+                  {formatPct1(eligibility.average_pct)}
+                </span>
               </div>
+              <Progress value={eligibility.average_pct ?? 0} variant={averageVariant} size="md" />
             </div>
+          </div>
 
-            <Button variant="outline" size="sm" onClick={() => setShowCalculation((v) => !v)} className="w-full justify-between">
-              <span className="inline-flex items-center gap-1.5">
-                <Calculator className="size-3.5" />
-                View Calculation
-              </span>
-              {showCalculation ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            </Button>
+          <GuidanceCallout
+            state={eligibility.state}
+            noData={noData}
+            lectureDeficit={eligibility.optimization?.lecture_deficit ?? 0}
+            tutorialDeficit={eligibility.optimization?.tutorial_deficit ?? 0}
+            safeSkipLecture={eligibility.optimization?.safe_skip_lecture ?? 0}
+            safeSkipTutorial={eligibility.optimization?.safe_skip_tutorial ?? 0}
+            reachable={eligibility.optimization?.is_reachable === true}
+            criterion={eligibility.must_attend_criterion ?? eligibility.safe_skip_criterion}
+          />
 
-            {showCalculation && (
-              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4">
-                <CriterionRow criterion={eligibility.criterion_i} passed={eligibility.criterion_i?.passed ?? false} />
-                <CriterionRow criterion={eligibility.criterion_ii} passed={eligibility.criterion_ii?.passed ?? false} />
-                <div className="flex items-start justify-between gap-3 border-t border-border/50 pt-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">Final Result</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{eligibility.final_criterion?.combination ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{eligibility.final_criterion?.explanation ?? "—"}</p>
-                  </div>
-                  <Badge variant={eligibility.final_criterion?.passed ? "success" : "danger"}>
-                    {eligibility.final_criterion?.passed ? "ELIGIBLE" : "NOT ELIGIBLE"}
-                  </Badge>
+          <Button variant="outline" size="sm" onClick={() => setShowCalculation((v) => !v)} className="w-full justify-between">
+            <span className="inline-flex items-center gap-1.5">
+              <Calculator className="size-3.5" />
+              View Calculation
+            </span>
+            {showCalculation ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          </Button>
+
+          {showCalculation && (
+            <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4">
+              <CriterionRow criterion={eligibility.criterion_i} passed={eligibility.criterion_i?.passed ?? false} noData={noData} />
+              <CriterionRow criterion={eligibility.criterion_ii} passed={eligibility.criterion_ii?.passed ?? false} noData={noData} />
+              <div className="flex items-start justify-between gap-3 border-t border-border/50 pt-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">Final Result</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{eligibility.final_criterion?.combination ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {noData
+                      ? "No attendance recorded yet for this quiz window."
+                      : eligibility.final_criterion?.explanation ?? "—"}
+                  </p>
                 </div>
-                {eligibility.optimization && eligibility.optimization.is_reachable === true && (
-                  <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
+                <Badge variant={noData ? "neutral" : eligibility.final_criterion?.passed ? "success" : "danger"}>
+                  {noData ? "NO DATA YET" : eligibility.final_criterion?.passed ? "ELIGIBLE" : "NOT ELIGIBLE"}
+                </Badge>
+              </div>
+              {!noData && eligibility.optimization && eligibility.optimization.is_reachable === true && (
+                <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
+                  <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
+                    <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
+                      Must Attend{eligibility.must_attend_criterion ? ` — ${eligibility.must_attend_criterion}` : " (best route)"}
+                    </p>
+                    <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
+                    {hasTutorials && (
+                      <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.tutorial_deficit}</span></p>
+                    )}
+                  </div>
+                  {eligibility.safe_skip_optimization && (
                     <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
                       <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
-                        Must Attend{eligibility.must_attend_criterion ? ` — ${eligibility.must_attend_criterion}` : " (best route)"}
+                        Safe Skip{eligibility.safe_skip_criterion ? ` — ${eligibility.safe_skip_criterion}` : " (best route)"}
                       </p>
-                      <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
-                      {hasTutorials && (
-                        <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.optimization.tutorial_deficit}</span></p>
+                      <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_lecture}</span></p>
+                      {eligibility.safe_skip_optimization.safe_skip_tutorial > 0 && (
+                        <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_tutorial}</span></p>
                       )}
                     </div>
-                    {eligibility.safe_skip_optimization && (
-                      <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
-                        <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
-                          Safe Skip{eligibility.safe_skip_criterion ? ` — ${eligibility.safe_skip_criterion}` : " (best route)"}
-                        </p>
-                        <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_lecture}</span></p>
-                        {eligibility.safe_skip_optimization.safe_skip_tutorial > 0 && (
-                          <p className="text-foreground">Tutorial: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_tutorial}</span></p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {eligibility.optimization && eligibility.optimization.is_reachable === false && eligibility.state === EligibilityState.NOT_ELIGIBLE && (
-                  <div className="border-t border-border/50 pt-3">
-                    <div className="rounded bg-muted/50 border border-border/50 px-3 py-2 text-xs text-muted-foreground">
-                      Eligibility cannot be recovered within the remaining attendance window.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-            {eligibility.explanation && (
-              <p className="text-xs text-muted-foreground">{eligibility.explanation}</p>
-            )}
-          </div>
-        </>
+          {eligibility.explanation && (
+            <p className="text-xs text-muted-foreground">{eligibility.explanation}</p>
+          )}
+        </div>
       )}
-    </GlassCard>
+    </Card>
   );
 }

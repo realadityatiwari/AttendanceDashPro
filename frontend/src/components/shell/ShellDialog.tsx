@@ -103,7 +103,7 @@ export function ShellField({ label, value, unavailable, mono }: ShellFieldProps)
         {label}
       </span>
       {unavailable ? (
-        <span className="text-sm text-muted-foreground" title="Not available in the backend data model">
+        <span className="text-sm text-muted-foreground" title="Not recorded yet">
           —
         </span>
       ) : (

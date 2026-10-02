@@ -80,7 +80,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       const detail =
         error instanceof Error && error.message !== "API request failed"
           ? error.message
-          : "The backend did not accept the request.";
+          : "We couldn't send your feedback. Please try again.";
       setState({
         status: "error",
         message:

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AcademicEventResponse, CalendarDayItem, EventType } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { classTypeLabel, humanizeEventType } from "@/components/events/eventRules";
 import { formatDateMedium, formatLongDate } from "@/lib/date";
 import { CalendarDays, CalendarRange, Info } from "lucide-react";
@@ -26,7 +26,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
       : `${day.session_count} ${day.session_count === 1 ? "class" : "classes"}`;
 
   return (
-    <GlassCard className="flex h-full flex-col p-4 sm:p-5">
+    <Card className="flex h-full flex-col p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-foreground">{formatLongDate(day.date)}</h3>
         <div className="flex flex-wrap gap-1.5">
@@ -85,7 +85,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
           </ul>
         )}
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

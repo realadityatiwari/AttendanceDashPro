@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, ShieldAlert, Users, Pencil } from "lucide-react";
 import { useAdminStudentDetail } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,7 @@ export default function AdminStudentDetailPage() {
             icon={<Users className="h-10 w-10 text-muted-foreground mb-4" />}
           />
         ) : status === 403 ? (
-          <GlassCard className="max-w-2xl">
+          <Card className="max-w-2xl">
             <div className="flex flex-col items-center justify-center text-center p-8">
               <ShieldAlert className="h-10 w-10 text-warning mb-4" />
               <h1 className="text-lg font-semibold text-foreground">
@@ -70,7 +70,7 @@ export default function AdminStudentDetailPage() {
                 administrators only.
               </p>
             </div>
-          </GlassCard>
+          </Card>
         ) : (
           <ErrorState message={(isError as Error).message} onRetry={() => mutate()} />
         )
@@ -114,7 +114,7 @@ function DetailContent({ student }: { student: AdminStudentDetail }) {
       />
 
       {student.inconsistencies.length > 0 && (
-        <GlassCard className="border-warning/40">
+        <Card className="border-warning/40">
           <div className="p-4">
             <h2 className="text-sm font-semibold text-warning">
               Data-quality warnings
@@ -127,7 +127,7 @@ function DetailContent({ student }: { student: AdminStudentDetail }) {
               ))}
             </ul>
           </div>
-        </GlassCard>
+        </Card>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -169,7 +169,7 @@ function PlacementCard({ student }: { student: AdminStudentDetail }) {
   ];
   return (
     <>
-      <GlassCard>
+      <Card>
         <div className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Placement</h2>
           <dl className="mt-2 divide-y divide-border/60">
@@ -197,7 +197,7 @@ function PlacementCard({ student }: { student: AdminStudentDetail }) {
             ))}
           </dl>
         </div>
-      </GlassCard>
+      </Card>
       
       {student.section_id && (
         <AssignSubsectionDialog 
@@ -215,7 +215,7 @@ function ElectiveCard({ student }: { student: AdminStudentDetail }) {
   const entries = Object.entries(student.elective_choices);
   return (
     <>
-      <GlassCard>
+      <Card>
         <div className="p-4">
           <h2 className="text-sm font-semibold text-foreground">
             Department electives
@@ -249,7 +249,7 @@ function ElectiveCard({ student }: { student: AdminStudentDetail }) {
             </dl>
           )}
         </div>
-      </GlassCard>
+      </Card>
 
       {editingSlot && (
         <CorrectElectiveDialog 
@@ -271,7 +271,7 @@ function EnrollmentsCard({
   subjects: AdminStudentDetail["compulsory_subjects"];
 }) {
   return (
-    <GlassCard>
+    <Card>
       <div className="p-4">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {subjects.length === 0 ? (
@@ -296,13 +296,13 @@ function EnrollmentsCard({
           </ul>
         )}
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <GlassCard className="max-w-2xl border-red-900/50 bg-red-950/20">
+    <Card className="max-w-2xl border-red-900/50 bg-red-950/20">
       <div className="flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
         <h1 className="text-lg font-semibold text-red-400">
@@ -313,7 +313,7 @@ function ErrorState({ message, onRetry }: { message?: string; onRetry: () => voi
           Retry
         </Button>
       </div>
-    </GlassCard>
+    </Card>
   );
 }
 

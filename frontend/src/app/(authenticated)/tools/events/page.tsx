@@ -4,12 +4,11 @@ import { useMemo, useRef, useState } from "react";
 import { useEvents, useProfile, useCalendarMonth, useEventMutations } from "@/hooks/useApi";
 import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { GlassCard } from "@/components/shared/GlassCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { DateInput } from "@/components/shared/DateInput";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventRow } from "@/components/events/EventRow";
@@ -162,14 +161,14 @@ export default function EventsPage() {
         description="Upcoming, current, and past academic events for your program."
       />
 
-      <GlassCard className="border-amber-500/20 bg-amber-500/10 p-4">
+      <Card className="border-amber-500/20 bg-amber-500/10 p-4">
         <p className="flex items-start gap-2 text-sm text-amber-400">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           {isAdmin
             ? "Admin view: you can add, edit, and deactivate any academic event. Deactivation is safe — the event can be re-enabled later."
             : "Events are flexible: record what actually happened by adding extra classes, cancellations, or surprise quizzes for your enrolled subjects. Holidays and global events are managed by administrators."}
         </p>
-      </GlassCard>
+      </Card>
 
       {/* Event management surface (Phase 6.5 + attendance-spec alignment).
           Admins manage every event type; students add/remove the flexible
@@ -180,8 +179,8 @@ export default function EventsPage() {
           <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
           <p className="text-xs text-muted-foreground">
             {isAdmin
-              ? "Create subject-scoped or global events. Validation rules are enforced by the server."
-              : "Add extras, cancellations, or surprise quizzes for your subjects. The server enforces enrollment and event rules."}
+              ? "Create subject-scoped or global events. Validation rules are checked when you save."
+              : "Add extras, cancellations, or surprise quizzes for your subjects. Your enrollment and the event rules are checked automatically."}
           </p>
         </div>
         <Button size="sm" onClick={openCreate} className="shrink-0">
@@ -194,10 +193,11 @@ export default function EventsPage() {
       <Card className="flex flex-col gap-3 border-border p-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</span>
-          {/* UI-024: h-7 scoped to sm+ so the filter row keeps the
-              foundation's 40px mobile height (desktop unchanged). */}
+          {/* UIA-030: the per-component sm:h-7 override is removed — the
+              shared button size enforces the 40px touch / 32px pointer
+              floor. */}
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="text-xs sm:h-7" onClick={resetFilters}>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={resetFilters}>
               Reset
             </Button>
           )}
@@ -218,9 +218,8 @@ export default function EventsPage() {
               ))}
             </Select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
-              State
+          <div className="flex flex-col gap-1">              <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
+              Status
             </label>
             <Select
               id="events-active"
@@ -235,24 +234,21 @@ export default function EventsPage() {
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
               From
             </label>
-            <Input
+            {/* UIA-025: native date input + formatted companion. */}
+            <DateInput
               id="events-from"
-              type="date"
-              className="[color-scheme:dark]"
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onValueChange={setDateFrom}
             />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
               To
             </label>
-            <Input
+            <DateInput
               id="events-to"
-              type="date"
-              className="[color-scheme:dark]"
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onValueChange={setDateTo}
             />
           </div>
         </div>
@@ -263,7 +259,7 @@ export default function EventsPage() {
 
       {/* Error */}
       {isError ? (
-        <GlassCard className="border-red-900/50 bg-red-950/20">
+        <Card className="border-red-900/50 bg-red-950/20">
           <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
             <AlertCircle className="size-10 text-red-500" aria-hidden />
             <h3 className="text-lg font-semibold text-red-400">Unable to load events</h3>
@@ -275,7 +271,7 @@ export default function EventsPage() {
               Try again
             </Button>
           </div>
-        </GlassCard>
+        </Card>
       ) : // Loading — never flash a fake empty state.
       isLoading || !events ? (
         <div className="flex flex-col gap-6">
@@ -294,7 +290,7 @@ export default function EventsPage() {
           title={hasFilters ? "No events match the selected filters" : "No events scheduled"}
           message={
             hasFilters
-              ? "Try adjusting the event type, state, or date range."
+              ? "Try adjusting the event type, status, or date range."
               : "There are no academic events in the calendar right now."
           }
           icon={<CalendarX2 className="mb-4 size-10 text-muted-foreground" aria-hidden />}

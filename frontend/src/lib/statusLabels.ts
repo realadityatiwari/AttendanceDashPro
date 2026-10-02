@@ -1,25 +1,27 @@
-// Canonical student-facing status vocabulary (Phase 7, D-08).
+// Canonical student-facing status vocabulary (Phase 7, D-08; consolidated in
+// UIA-006). Presentation only — backend enum values remain the domain truth.
 //
-// Backend enum values remain the domain truth; only presentation mappings
-// live here. The dashboard/analytics surfaces emit the legacy bands
-// SAFE/WATCH/CRITICAL; the per-subject Attendance Health set
-// (HEALTHY/WATCH/AT_RISK/CRITICAL) already renders canonical labels in
-// SubjectAttendanceCard. Both vocabularies use the same student-facing words.
+// The dashboard/analytics surfaces emit the legacy bands SAFE/WATCH/CRITICAL;
+// every other surface emits HEALTHY/WATCH/AT_RISK/CRITICAL. Both are
+// normalized to the ONE canonical health vocabulary in `lib/canonicalStatus`:
+// Healthy / At Risk / Critical / N/A. No per-surface label map lives here.
 
-const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
-  SAFE: "Healthy",
-  WATCH: "Watch",
-  CRITICAL: "Critical",
-};
+import { getSubjectHealthStatus, type BadgeVariant } from "@/lib/canonicalStatus";
 
-/** Maps a legacy attendance status (SAFE/WATCH/CRITICAL) to its
- * student-facing label (Healthy/Watch/Critical). Unknown/null values fall
+/** Maps a legacy attendance status (SAFE/WATCH/CRITICAL) to its canonical
+ * student-facing label (Healthy/At Risk/Critical). Unknown/null values fall
  * back to "N/A" so missing data stays explicit. */
 export function attendanceStatusLabel(
   status: string | null | undefined
 ): string {
-  if (!status) return "N/A";
-  return ATTENDANCE_STATUS_LABELS[status] ?? status;
+  return getSubjectHealthStatus(status).label;
+}
+
+/** Canonical badge variant for the same legacy attendance status. */
+export function attendanceStatusVariant(
+  status: string | null | undefined
+): BadgeVariant {
+  return getSubjectHealthStatus(status).variant;
 }
 
 // Weekly trend bar thresholds (UI-013). PRESENTATION ONLY — the values mirror

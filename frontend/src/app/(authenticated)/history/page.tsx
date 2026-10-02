@@ -17,15 +17,16 @@ import {
   ClassType,
   HistoryStatusFilter,
 } from "@/types/api";
-import { formatLongDate, formatShortDate } from "@/lib/date";
+import { formatDateRange, formatShortDate } from "@/lib/date";
 import { RecordedPct } from "@/components/shared/RecordedPct";
+import { DateInput } from "@/components/shared/DateInput";
 import { Search, Loader2, Calendar, FilterX, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 
 const STATUS_OPTIONS: { value: HistoryStatusFilter; label: string }[] = [
-  { value: "", label: "All states" },
+  { value: "", label: "All statuses" },
   { value: AttendanceStatus.ATTENDED, label: "Present" },
   { value: AttendanceStatus.MISSED, label: "Absent" },
   { value: AttendanceStatus.PENDING, label: "Pending" },
@@ -82,14 +83,12 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
           <div className="text-sm text-muted-foreground mt-0.5 truncate max-w-md">
             {item.subject_name}
           </div>
+          {/* UIA-026: the record-creation timestamp ("Logged 2:09 AM") was
+              internal operational metadata that invited misreading as the
+              class time. Only the session time remains. */}
           <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-            <Clock className="h-3 w-3" />
+            <Clock className="h-3 w-3" aria-hidden="true" />
             {timeLabel}
-            {item.marked_at && (
-              <span className="text-muted-foreground/70">
-                · Logged {new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(item.marked_at))}
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -178,7 +177,7 @@ export default function HistoryPage() {
   const contextLine = [
     profile?.semester_name,
     semesterStart && semesterEnd
-      ? `${formatLongDate(semesterStart).replace(" · ", " ")} – ${formatLongDate(semesterEnd).replace(" · ", " ")}`
+      ? formatDateRange(semesterStart, semesterEnd)
       : null,
   ]
     .filter(Boolean)
@@ -193,7 +192,7 @@ export default function HistoryPage() {
         description={
           contextLine ||
           (history?.range_start && history?.range_end
-            ? `${history.range_start} → ${history.range_end}`
+            ? formatDateRange(history.range_start, history.range_end)
             : "Your complete semester attendance history.")
         }
       />
@@ -237,10 +236,11 @@ export default function HistoryPage() {
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Filters
           </span>
-          {/* UI-024: h-7 scoped to sm+ so the filter row keeps the
-              foundation's 40px mobile height (desktop unchanged). */}
+          {/* UIA-030: the per-component sm:h-7 override is removed — the
+              shared button size now enforces the 40px touch / 32px pointer
+              floor. */}
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="text-xs sm:h-7" onClick={resetFilters}>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={resetFilters}>
               <FilterX className="h-3.5 w-3.5 mr-1" />
               Reset
             </Button>
@@ -261,7 +261,9 @@ export default function HistoryPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-status">State</label>
+            {/* UIA-027: the filter group is "Status" — the same user-facing
+                vocabulary the status badges use. */}
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-status">Status</label>
             <Select
               id="history-status"
               value={status}
@@ -274,26 +276,23 @@ export default function HistoryPage() {
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-from">From</label>
-            <Input
+            {/* UIA-025: native date input + visible formatted companion. */}
+            <DateInput
               id="history-from"
-              type="date"
-              className="[color-scheme:dark]"
               min={semesterStart ?? undefined}
               max={semesterEnd ?? undefined}
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onValueChange={setDateFrom}
             />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-to">To</label>
-            <Input
+            <DateInput
               id="history-to"
-              type="date"
-              className="[color-scheme:dark]"
               min={semesterStart ?? undefined}
               max={semesterEnd ?? undefined}
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onValueChange={setDateTo}
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -364,7 +363,7 @@ export default function HistoryPage() {
           title={hasFilters ? "No sessions match your filters" : "No classes scheduled this semester"}
           message={
             hasFilters
-              ? "Try adjusting the subject, state, dates, or search query."
+              ? "Try adjusting the subject, status, dates, or search query."
               : "There are no scheduled sessions in your current semester range."
           }
           icon={<Calendar className="h-10 w-10 text-muted-foreground mb-4" />}

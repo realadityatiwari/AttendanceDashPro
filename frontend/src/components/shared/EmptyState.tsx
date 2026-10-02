@@ -1,5 +1,5 @@
 import { FileQuestion } from "lucide-react";
-import { GlassCard } from "./GlassCard";
+import { Card } from "@/components/ui/card";
 
 interface EmptyStateProps {
   title?: string;
@@ -13,7 +13,7 @@ export function EmptyState({
   icon = <FileQuestion className="h-10 w-10 text-muted-foreground mb-4" />
 }: EmptyStateProps) {
   return (
-    <GlassCard>
+    <Card>
       <div className="flex flex-col items-center justify-center text-center p-12">
         {icon}
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
@@ -21,6 +21,6 @@ export function EmptyState({
           {message}
         </p>
       </div>
-    </GlassCard>
+    </Card>
   );
 }

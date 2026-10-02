@@ -42,7 +42,9 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Mark Attendance",
     href: "/tools/laboratory",
     icon: ClipboardCheck,
-    title: "Mark Attendance",
+    // UIA-021: no mobile header title for this route — the page renders its
+    // own h1, so the fixed header would otherwise stack the same title twice.
+    // The tab label above still names the destination.
   },
   {
     label: "Lab Experiments",
@@ -69,15 +71,20 @@ export const ADMIN_NAV_ITEM: NavItem = {
   title: "Feedback",
 };
 
-/** Fixed mobile bottom tabs (existing Phase 12A IA, unchanged). */
-const MOBILE_TAB_HREFS = ["/dashboard", "/subjects", "/history"];
+/**
+ * Fixed mobile bottom tabs (UIA-005): the daily marking destination is a
+ * primary tab, and the per-subject analytics page moves under "More" so the
+ * tab named "Mark Attendance" is exactly the action it promises (no
+ * competing Attendance items, no duplicate links).
+ */
+const MOBILE_TAB_HREFS = ["/dashboard", "/tools/laboratory", "/history"];
 
 /**
  * Destinations surfaced under "More" — the mobile bottom sheet and the
  * md–lg desktop dropdown. Order defines display order in both.
  */
 const MORE_HREFS = [
-  "/tools/laboratory",
+  "/subjects",
   "/laboratory",
   "/tools/quiz-schedule",
   "/calendar",

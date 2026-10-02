@@ -5,6 +5,7 @@ import { SubjectResponse, AnalyticsSubjectItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { formatDateMedium, formatPct, formatPct1 } from "@/lib/date";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -103,18 +104,14 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
               </div>
             </div>
           </div>
-          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mt-2.5">
-            <div
-              className={cn(
-                "h-full rounded-full",
-                progressVariant === "success" && "bg-success",
-                progressVariant === "warning" && "bg-warning",
-                progressVariant === "danger" && "bg-destructive",
-                progressVariant === "default" && "bg-primary"
-              )}
-              style={{ width: `${primaryPct !== null ? Math.min(100, Math.max(0, primaryPct)) : 0}%` }}
-            />
-          </div>
+          {/* UIA-018: shared Progress primitive (size md = the former 6px
+              hand-rolled track), keeping the backend-derived variant. */}
+          <Progress
+            className="mt-2.5"
+            value={primaryPct !== null ? Math.min(100, Math.max(0, primaryPct)) : 0}
+            variant={progressVariant}
+            size="md"
+          />
         </div>
 
         {!isLabOnly ? (
@@ -139,12 +136,6 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
               )}
             </div>
 
-            {/* Formula caption (presentation only — the backend computes) */}
-            <p className="text-[11px] text-muted-foreground">
-              {hasTutorials
-                ? "Combined attendance = (Lecture Present + Tutorial Present) / (Lecture Conducted + Tutorial Conducted) × 100"
-                : "No tutorials — subject average equals Lecture %"}
-            </p>
           </>
         ) : (
           /* Lab / practical-only: practical attendance + mid-sem state (backend-backed) */

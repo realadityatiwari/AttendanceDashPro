@@ -22,9 +22,11 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
         <CardTitle>Attention Required</CardTitle>
       </CardHeader>
 
-      <CardContent className="p-0">
+      {/* UIA-024: content fills the shared row height; the empty state centers
+          in the available space instead of floating in a top-anchored void. */}
+      <CardContent className="flex flex-1 flex-col p-0">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
             <div className="flex size-9 items-center justify-center rounded-full bg-success/15">
               <AlertTriangle className="size-4 text-success" />
             </div>
