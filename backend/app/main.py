@@ -1,4 +1,6 @@
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,9 +10,30 @@ from app.api.api import api_router
 
 logger = get_logger("app.main")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan (EVT-005): start the CLASS_REMINDER scheduler as
+    a background task in THIS process, and stop it on shutdown.
+
+    Production deployment (backend/Dockerfile CMD: uvicorn app.main:app) has
+    no other scheduler/worker process — without this, CLASS_REMINDER
+    generation is unreachable (deep-audit finding EVT-005 / H-4d). The task
+    is idempotent per process and its sweep is DB-idempotent (ON CONFLICT),
+    so multi-worker deployments stay duplicate-free."""
+    from app.services.notification_scheduler import (
+        start_class_reminder_scheduler,
+        stop_class_reminder_scheduler,
+    )
+    start_class_reminder_scheduler()
+    yield
+    await stop_class_reminder_scheduler()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan,
 )
 
 # Set all CORS enabled origins

@@ -167,7 +167,15 @@ async def main() -> int:
         out_week = week_end + timedelta(days=1)
         s1 = ClassSession(subject_id=subject.id, date=in_week, class_type=ClassType.LECTURE,
                           is_extra=False, is_cancelled=False, timetable_entry_id=None)
-        s2 = ClassSession(subject_id=subject.id, date=in_week, class_type=ClassType.LECTURE,
+        # EVT-004 note: the cancelled fixture session is a TUTORIAL. Production
+        # code never materializes TWO same-(subject, date) LECTURE sessions
+        # without a timetable binding (the only entry-NULL non-extra LECTURE
+        # shape is the quiz-day occurrence, unique per (subject, date) under
+        # uq_class_sessions_quiz_day_subject_date), so the former LECTURE
+        # fixture can no longer be inserted. The cancelled-exclusion checks
+        # below key on session id, not class type; TUTORIAL models the same
+        # cancelled-in-week fact inside the constraint's envelope.
+        s2 = ClassSession(subject_id=subject.id, date=in_week, class_type=ClassType.TUTORIAL,
                           is_extra=False, is_cancelled=True, timetable_entry_id=None)
         s3 = ClassSession(subject_id=subject.id, date=out_week, class_type=ClassType.LECTURE,
                           is_extra=False, is_cancelled=False, timetable_entry_id=None)

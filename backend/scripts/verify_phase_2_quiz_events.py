@@ -60,6 +60,7 @@ from app.services.eligibility_service import EligibilityService
 from app.schemas.attendance import EligibilityState
 from app.schemas.academic import Subject as SubjectSchema, Milestone, Timeline
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 
 results = []
 
@@ -220,21 +221,36 @@ async def main() -> int:
         await db.rollback()
 
     # ---------------------------------------- 3. Dedup (rollback transaction)
+    # EVT-004: the (subject, elective_slot, start_date) identity of ACTIVE
+    # QUIZ_DAY events is now DB-unique (uq_academic_events_quiz_day_identity),
+    # so a "partial duplicate with a wider range" can no longer be
+    # materialized at all — the dedup this check used to prove at the
+    # eligibility layer is superseded by the database authority. The insert
+    # must fail, and the effective quiz dates remain the seeded three.
     async with AsyncSessionLocal() as db:
         repo = QuizRepository(db)
-        db.add(AcademicEvent(
+        dup = AcademicEvent(
             event_type=EventType.QUIZ_DAY,
             start_date=date(2026, 9, 17),
             end_date=date(2026, 9, 18),
             subject_id=bcs501_id,
             active=True,
-        ))
-        await db.flush()
+        )
+        db.add(dup)
+        rejected = False
+        try:
+            async with db.begin_nested():
+                await db.flush()
+        except IntegrityError:
+            rejected = True
+        await db.rollback()
         effective = await repo.get_effective_quiz_dates_for_subject(bcs501_id)
-        check("7. partial duplicate (same subject/date, wider range) collapses to "
-              "ONE effective quiz date (still 08-27, 09-17, 10-12)",
-              effective == [(1, date(2026, 8, 27)), (2, date(2026, 9, 17)), (3, date(2026, 10, 12))],
-              f"effective={effective}")
+        check("7. partial duplicate (same subject/date, wider range) rejected by "
+              "the EVT-004 identity index; effective quiz dates unchanged "
+              "(08-27, 09-17, 10-12)",
+              rejected
+              and effective == [(1, date(2026, 8, 27)), (2, date(2026, 9, 17)), (3, date(2026, 10, 12))],
+              f"rejected={rejected} effective={effective}")
         await db.rollback()
 
     # ---------------------------------------- 4. Reschedule (rollback transaction)

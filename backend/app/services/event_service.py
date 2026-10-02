@@ -15,6 +15,7 @@ from app.repositories.event_repo import (
     EventNotFound,
     EventConflict,
     is_evt004_unique_violation,
+    is_evt004_session_violation,
 )
 from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
 from app.services.authorization_service import AuthorizationService
@@ -337,9 +338,15 @@ class EventService:
             # uncommitted row), translate exactly that violation into the
             # ordinary duplicate semantics — the same 409/EventConflict the
             # pre-check raises — after rolling back cleanly. Unrelated
-            # integrity failures keep propagating.
+            # integrity failures keep propagating. A session-index violation
+            # is a reconciliation race, not a duplicate event, and says so.
             await self.db.rollback()
             if is_evt004_unique_violation(exc):
+                if is_evt004_session_violation(exc):
+                    raise EventConflict(
+                        "The event's class sessions changed concurrently; "
+                        "retry the mutation"
+                    ) from exc
                 raise EventConflict(
                     "An identical active event already exists "
                     "(same type, subject, class type, and date range)"
@@ -387,89 +394,101 @@ class EventService:
         old_start = event.start_date
         old_end = event.end_date
 
-        # Partial update: absent fields keep their current values. `subject_id`
-        # and friends can be explicitly nulled to convert scoping.
-        fields = data.model_fields_set
-        if "event_type" in fields:
-            event.event_type = data.event_type
-        if "start_date" in fields:
-            event.start_date = data.start_date
-        if "end_date" in fields:
-            event.end_date = data.end_date
-        if "subject_id" in fields:
-            event.subject_id = data.subject_id
-        if "elective_slot" in fields:
-            event.elective_slot = data.elective_slot
-        if "class_type" in fields:
-            event.class_type = data.class_type
-        if "is_working_day" in fields:
-            event.is_working_day = data.is_working_day
-        if "substitution_schedule_override" in fields:
-            event.substitution_schedule_override = data.substitution_schedule_override
-        if "note" in fields:
-            event.note = data.note
-        if "active" in fields:
-            event.active = data.active
+        # EVT-004 follow-up (integrity review): the fields below mutate the
+        # event row IN MEMORY before the final-state guards run. With the
+        # session's default autoflush, ANY intermediate query (final
+        # re-authorization, subject lookup, duplicate pre-check) would flush
+        # the mutated row first — and under the EVT-004 natural-key indexes a
+        # conflicting final state would surface as a raw IntegrityError (500)
+        # instead of the guards' 403/409/422. Autoflush is suspended for this
+        # whole guard phase: the guards read clean DB state, and the only
+        # flush is the explicit one inside the transactional try below, where
+        # a losing race is translated into EventConflict.
+        with self.db.no_autoflush:
+            # Partial update: absent fields keep their current values.
+            # `subject_id` and friends can be explicitly nulled to convert
+            # scoping.
+            fields = data.model_fields_set
+            if "event_type" in fields:
+                event.event_type = data.event_type
+            if "start_date" in fields:
+                event.start_date = data.start_date
+            if "end_date" in fields:
+                event.end_date = data.end_date
+            if "subject_id" in fields:
+                event.subject_id = data.subject_id
+            if "elective_slot" in fields:
+                event.elective_slot = data.elective_slot
+            if "class_type" in fields:
+                event.class_type = data.class_type
+            if "is_working_day" in fields:
+                event.is_working_day = data.is_working_day
+            if "substitution_schedule_override" in fields:
+                event.substitution_schedule_override = data.substitution_schedule_override
+            if "note" in fields:
+                event.note = data.note
+            if "active" in fields:
+                event.active = data.active
 
-        # Phase 22.4: a slot-scoped event must resolve to its shared anchor
-        # subject. ADMIN-only (same rule as creation); the final state may
-        # never carry both a concrete subject and a slot, nor a mismatch.
-        if event.elective_slot is not None:
-            # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN.
-            if not await AuthorizationService(self.db).is_head_admin(user):
-                raise EventForbidden(
-                    "Elective-slot events are restricted to administrators."
-                )
-            anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(event.elective_slot)
-            if anchor is None:
-                raise EventValidationError(
-                    f"No shared anchor subject is configured for {event.elective_slot.value}"
-                )
-            if event.subject_id is not None and event.subject_id != anchor.id:
-                raise EventValidationError(
-                    "An elective-slot event must not carry a different concrete subject"
-                )
-            event.subject_id = anchor.id
+            # Phase 22.4: a slot-scoped event must resolve to its shared anchor
+            # subject. ADMIN-only (same rule as creation); the final state may
+            # never carry both a concrete subject and a slot, nor a mismatch.
+            if event.elective_slot is not None:
+                # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN.
+                if not await AuthorizationService(self.db).is_head_admin(user):
+                    raise EventForbidden(
+                        "Elective-slot events are restricted to administrators."
+                    )
+                anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(event.elective_slot)
+                if anchor is None:
+                    raise EventValidationError(
+                        f"No shared anchor subject is configured for {event.elective_slot.value}"
+                    )
+                if event.subject_id is not None and event.subject_id != anchor.id:
+                    raise EventValidationError(
+                        "An elective-slot event must not carry a different concrete subject"
+                    )
+                event.subject_id = anchor.id
 
-        # Re-authorize on the FINAL state: a student changing the subject or
-        # type must still land on a flexible, enrolled-subject event.
-        await self.assert_mutation_allowed(
-            user, event_type=event.event_type, subject_id=event.subject_id
-        )
-        # EVT-003 (final state): the PROPOSED state must not become a
-        # quiz-manager-owned QUIZ_DAY either. This closes the type-change
-        # bypass (e.g. EXTRA_LECTURE -> QUIZ_DAY onto a schedule-backed
-        # identity), which the former endpoint-layer guard never covered.
-        await self._assert_not_quiz_schedule_managed(
-            event_type=event.event_type,
-            subject_id=event.subject_id,
-            elective_slot=event.elective_slot,
-            quiz_date=event.start_date,
-        )
+            # Re-authorize on the FINAL state: a student changing the subject or
+            # type must still land on a flexible, enrolled-subject event.
+            await self.assert_mutation_allowed(
+                user, event_type=event.event_type, subject_id=event.subject_id
+            )
+            # EVT-003 (final state): the PROPOSED state must not become a
+            # quiz-manager-owned QUIZ_DAY either. This closes the type-change
+            # bypass (e.g. EXTRA_LECTURE -> QUIZ_DAY onto a schedule-backed
+            # identity), which the former endpoint-layer guard never covered.
+            await self._assert_not_quiz_schedule_managed(
+                event_type=event.event_type,
+                subject_id=event.subject_id,
+                elective_slot=event.elective_slot,
+                quiz_date=event.start_date,
+            )
 
-        subject_category = None
-        if event.subject_id is not None:
-            subject = await self._ensure_subject(event.subject_id)
-            subject_category = subject.category
-        validate_event(
-            event_type=event.event_type,
-            start_date=event.start_date,
-            end_date=event.end_date,
-            subject_id=event.subject_id,
-            elective_slot=event.elective_slot,
-            class_type=event.class_type,
-            subject_category=subject_category,
-            substitution_schedule_override=event.substitution_schedule_override,
-            is_working_day=event.is_working_day,
-        )
-        await self._check_duplicate(
-            event.event_type,
-            event.start_date,
-            event.end_date,
-            event.subject_id,
-            event.class_type,
-            exclude_id=event.id,
-        )
+            subject_category = None
+            if event.subject_id is not None:
+                subject = await self._ensure_subject(event.subject_id)
+                subject_category = subject.category
+            validate_event(
+                event_type=event.event_type,
+                start_date=event.start_date,
+                end_date=event.end_date,
+                subject_id=event.subject_id,
+                elective_slot=event.elective_slot,
+                class_type=event.class_type,
+                subject_category=subject_category,
+                substitution_schedule_override=event.substitution_schedule_override,
+                is_working_day=event.is_working_day,
+            )
+            await self._check_duplicate(
+                event.event_type,
+                event.start_date,
+                event.end_date,
+                event.subject_id,
+                event.class_type,
+                exclude_id=event.id,
+            )
 
         try:
             # Reconcile the union of the old and new spans: dates the event
@@ -494,9 +513,16 @@ class EventService:
             # or two synchronizers racing to materialize the same canonical
             # session) is rejected by the natural-key indexes — translate it
             # into the ordinary conflict semantics. The state-based
-            # reconciliation is self-healing: a retry converges.
+            # reconciliation is self-healing: a retry converges. A
+            # session-index violation is a reconciliation race, not a
+            # duplicate event, and says so.
             await self.db.rollback()
             if is_evt004_unique_violation(exc):
+                if is_evt004_session_violation(exc):
+                    raise EventConflict(
+                        "The event's class sessions changed concurrently; "
+                        "retry the mutation"
+                    ) from exc
                 raise EventConflict(
                     "An identical active event already exists "
                     "(same type, subject, class type, and date range)"

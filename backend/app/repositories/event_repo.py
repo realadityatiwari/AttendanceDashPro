@@ -34,6 +34,16 @@ EVT004_UNIQUE_CONSTRAINTS = frozenset({
     "uq_class_sessions_quiz_day_subject_date",
 })
 
+# The class_sessions natural-key indexes: a violation on one of these is a
+# SESSION materialization race (the reconciler's canonical identities), not a
+# duplicate event row — the translated conflict must say so instead of the
+# misleading "identical active event" wording (integrity review).
+EVT004_SESSION_CONSTRAINTS = frozenset({
+    "uq_class_sessions_entry_date",
+    "uq_class_sessions_source_event_date",
+    "uq_class_sessions_quiz_day_subject_date",
+})
+
 
 def is_evt004_unique_violation(exc: Exception) -> bool:
     """Whether `exc` is a PostgreSQL unique violation (SQLSTATE 23505) raised
@@ -45,6 +55,17 @@ def is_evt004_unique_violation(exc: Exception) -> bool:
         return False
     message = str(exc)
     return any(name in message for name in EVT004_UNIQUE_CONSTRAINTS)
+
+
+def is_evt004_session_violation(exc: Exception) -> bool:
+    """Whether the EVT-004 violation came from one of the class_sessions
+    natural-key indexes — i.e. a concurrent reconciliation race rather than a
+    duplicate event row (used only to pick the conflict MESSAGE; both map to
+    the same 409)."""
+    if not is_evt004_unique_violation(exc):
+        return False
+    message = str(exc)
+    return any(name in message for name in EVT004_SESSION_CONSTRAINTS)
 
 
 class EventRepository:
