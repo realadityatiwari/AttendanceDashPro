@@ -49,10 +49,13 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
     || event.event_type === EventType.LAB_CANCELLED;
   const classLabel = classTypeLabel(event.class_type);
 
-  const dateRange =
-    event.start_date === event.end_date
-      ? formatEventDate(event.start_date)
-      : `${formatEventDate(event.start_date)} – ${formatEventDate(event.end_date)}`;
+  // UIA-032: the round date tile already carries the start date for a
+  // single-day event — the full date text is only rendered for ranges, where
+  // the tile alone cannot express the end date. No information is lost.
+  const isRange = event.start_date !== event.end_date;
+  const dateRange = isRange
+    ? `${formatEventDate(event.start_date)} – ${formatEventDate(event.end_date)}`
+    : null;
 
   return (
     <Card
@@ -82,10 +85,12 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
             )}
             {!event.active && <Badge variant="neutral" className="h-4 py-0 leading-none text-[11px]">Inactive</Badge>}
           </div>
-          <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CalendarDays className="size-3.5 shrink-0" aria-hidden />
-            {dateRange}
-          </p>
+          {dateRange && (
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CalendarDays className="size-3.5 shrink-0" aria-hidden />
+              {dateRange}
+            </p>
+          )}
           {/* Phase 22.4: the effective subject of the event as resolved for
               the authenticated student (their selected elective for
               Departmental Elective slot events; null for global events). */}

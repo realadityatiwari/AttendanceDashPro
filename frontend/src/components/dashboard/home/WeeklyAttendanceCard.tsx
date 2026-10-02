@@ -1,7 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, CalendarRange } from "lucide-react";
 import { WeeklySection, WeeklyAnalyticsItem } from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatShortDate, formatDateRange, formatDelta, formatPct } from "@/lib/date";
@@ -74,6 +73,11 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
             {weeks.map((week) => {
               const pct = week.current_pct; // backend-provided; null = gap week
               const isCurrentWeek = week.week_start === weekly.week_start;
+              // UIA-036: a week that has fully passed can no longer be marked,
+              // so its not-recorded sessions are described as "unmarked" —
+              // "pending" reads as still-actionable. The canonical session
+              // status labels (badges) are untouched.
+              const isPastWeek = week.week_start < weekly.week_start;
               return (
                 <li
                   key={week.week_start}
@@ -105,7 +109,9 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                   </span>
                   <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                     {week.attended}/{week.recorded}
-                    {week.pending > 0 ? ` · ${week.pending} pending` : ""}
+                    {week.pending > 0
+                      ? ` · ${week.pending} ${isPastWeek ? "unmarked" : "pending"}`
+                      : ""}
                   </span>
                 </li>
               );
@@ -139,8 +145,10 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
             </p>
           )}
           {!weekly.best_subject && !weekly.needs_attention_subject && (
+            // UIA-036: plain paragraph text — a status Badge was an odd choice
+            // for a non-status sentence.
             <p className="text-muted-foreground">
-              <Badge variant="neutral">No subjects with recorded attendance</Badge>
+              No subjects with recorded attendance yet.
             </p>
           )}
         </div>

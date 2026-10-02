@@ -302,7 +302,9 @@ export default function HistoryPage() {
               <Input
                 id="history-search"
                 type="search"
-                placeholder="Code, name, type, date..."
+                // UIA-034: short enough to render fully in the narrow filter
+                // column (the long field list used to clip mid-word).
+                placeholder="e.g. BCS-501"
                 className="pl-8"
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}

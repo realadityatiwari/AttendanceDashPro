@@ -9,6 +9,10 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* UIA-039: CardTitle/DialogTitle/SheetTitle use font-heading — the token
+     must exist so the utility resolves instead of silently falling back to
+     the inherited font. Mirrors --font-sans (Geist Sans via next/font). */
+  --font-heading: var(--font-geist-sans);
   
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

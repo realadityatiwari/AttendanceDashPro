@@ -147,13 +147,18 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
               </span>
             </div>
             {/* Mid-sem state comes only from the backend designation (actual
-                scheduled session); nothing is fabricated when unset. */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Mid-Sem Practical</span>
-              <span className="font-medium text-foreground tabular-nums">
-                {summary?.mid_sem_session_date ? formatDateMedium(summary.mid_sem_session_date) : "Not scheduled"}
-              </span>
-            </div>
+                scheduled session); nothing is fabricated when unset.
+                UIA-044: the row renders only once a session is designated —
+                an inert "Not scheduled" line on every lab card was noise, and
+                the dedicated Lab page explains how designation works. */}
+            {summary?.mid_sem_session_date && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Mid-Sem Practical</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatDateMedium(summary.mid_sem_session_date)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -232,7 +237,7 @@ function DetailRow({
           <span className="text-muted-foreground">
             {" "}
             · {counts.attended}/{counts.total} attended
-            {counts.missed > 0 ? ` · ${counts.missed} missed` : ""}
+            {counts.missed > 0 ? ` · ${counts.missed} absent` : ""}
             {counts.pending > 0 ? ` · ${counts.pending} pending` : ""}
           </span>
         )}

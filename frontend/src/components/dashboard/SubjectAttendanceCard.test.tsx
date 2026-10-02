@@ -36,6 +36,24 @@ const summary: AnalyticsSubjectItem = {
   mid_sem_session_date: null,
 };
 
+const labSubject: SubjectResponse = {
+  id: "s2",
+  code: "BCS-351",
+  name: "DBMS Lab",
+  tag: null,
+  category: SubjectCategory.LAB,
+  quiz_applicable: false,
+  attendance_applicable: true,
+};
+
+const labSummary: AnalyticsSubjectItem = {
+  ...summary,
+  subject_code: "BCS-351",
+  subject_name: "DBMS Lab",
+  practical: { total: 9, attended: 6, missed: 1, pending: 2 },
+  current_practical_pct: 85.7,
+};
+
 /**
  * UIA-004/UIA-018 regression coverage: the subject card uses the shared
  * Progress primitive (size md) and no longer repeats the pooled formula as
@@ -62,5 +80,37 @@ describe("UIA-004/UIA-018: SubjectAttendanceCard", () => {
     expect(
       screen.getByText(/percentages are current and recorded-only/i)
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * UIA-037/UIA-044 regression coverage: expanded detail rows use the canonical
+ * "absent" wording, and lab cards only render the mid-sem row once a session
+ * is actually designated (no inert "Not scheduled" line on every lab card).
+ */
+describe("UIA-037/UIA-044: detail vocabulary and mid-sem noise", () => {
+  it("labels missed sessions as absent in the expanded details", () => {
+    render(<SubjectAttendanceCard subject={subject} summary={summary} />);
+    fireEvent.click(screen.getByRole("button", { name: /view details/i }));
+    expect(screen.getByText(/· 2 absent/)).toBeInTheDocument();
+    expect(screen.queryByText(/· 2 missed/)).not.toBeInTheDocument();
+  });
+
+  it("omits the mid-sem row on an unscheduled lab card", () => {
+    render(<SubjectAttendanceCard subject={labSubject} summary={labSummary} />);
+    expect(screen.getByText("Practical sessions attended")).toBeInTheDocument();
+    expect(screen.queryByText("Mid-Sem Practical")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
+  });
+
+  it("renders the mid-sem row once a session is designated", () => {
+    render(
+      <SubjectAttendanceCard
+        subject={labSubject}
+        summary={{ ...labSummary, mid_sem_session_date: "2026-11-03" }}
+      />
+    );
+    expect(screen.getByText("Mid-Sem Practical")).toBeInTheDocument();
+    expect(screen.getByText("3 Nov 2026")).toBeInTheDocument();
   });
 });

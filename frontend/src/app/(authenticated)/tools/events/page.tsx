@@ -173,16 +173,12 @@ export default function EventsPage() {
       {/* Event management surface (Phase 6.5 + attendance-spec alignment).
           Admins manage every event type; students add/remove the flexible
           subject-scoped types. The dialog exposes only the types the current
-          role may create, and the backend enforces authorization. */}
+          role may create, and the backend enforces authorization.
+          UIA-033: the banner above already explains what can be added and who
+          manages what, so this card is the action itself — heading + button,
+          no third restatement of the same explanation. */}
       <Card className="flex items-center justify-between gap-3 border-border p-4">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
-          <p className="text-xs text-muted-foreground">
-            {isAdmin
-              ? "Create subject-scoped or global events. Validation rules are checked when you save."
-              : "Add extras, cancellations, or surprise quizzes for your subjects. Your enrollment and the event rules are checked automatically."}
-          </p>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Manage events</h2>
         <Button size="sm" onClick={openCreate} className="shrink-0">
           <Plus className="size-3.5" aria-hidden />
           Add Event

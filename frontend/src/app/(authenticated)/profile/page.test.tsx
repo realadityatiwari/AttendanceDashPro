@@ -48,4 +48,11 @@ describe("UIA-007: Profile Page UUID removal", () => {
     // Sign out button remains present
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
+
+  it("shows the roll number exactly once on the single profile surface", () => {
+    // UIA-045: the former ProfileModal duplicated the roll number (avatar
+    // block + field); the canonical page renders it once.
+    render(<ProfilePage />);
+    expect(screen.getAllByText("2401220999001")).toHaveLength(1);
+  });
 });

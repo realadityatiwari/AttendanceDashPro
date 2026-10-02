@@ -77,4 +77,13 @@ describe("UIA-026/UIA-027: History metadata and status vocabulary", () => {
     expect(screen.getByLabelText("From")).toHaveAttribute("type", "date");
     expect(screen.getByLabelText("To")).toHaveAttribute("type", "date");
   });
+
+  it("keeps the search placeholder short enough to render fully", () => {
+    // UIA-034: the narrow filter column used to clip the long field-list
+    // placeholder mid-word; a short example never truncates.
+    render(<HistoryPage />);
+    const search = screen.getByPlaceholderText("e.g. BCS-501");
+    expect(search).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Code, name, type, date/)).not.toBeInTheDocument();
+  });
 });

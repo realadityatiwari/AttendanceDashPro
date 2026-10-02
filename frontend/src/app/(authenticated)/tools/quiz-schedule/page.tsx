@@ -64,6 +64,14 @@ export default function QuizEligibilityPage() {
               and differ only in the counting window: Criterion I counts from
               the previous quiz, Criterion II from the semester start.
             </p>
+            {/* UIA-041: define the status badge a first-time visitor sees,
+                once per page (the per-card guidance callout stays the
+                actionable on-ramp). */}
+            <p>
+              A subject below the required percentage that can still reach it
+              before the quiz is labeled{" "}
+              <span className="font-medium text-foreground">Recoverable</span>.
+            </p>
             <p>Only theory subjects with confirmed quiz dates appear here.</p>
           </div>
         </div>

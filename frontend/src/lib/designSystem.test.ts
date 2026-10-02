@@ -64,6 +64,29 @@ describe("UIA-017: quiz error card uses semantic tokens", () => {
   });
 });
 
+describe("UIA-033: events explanation appears once", () => {
+  it("does not restate the event-types explanation in the manage card", () => {
+    // The amber banner carries the explanation; the manage row is the action.
+    expect(read("app/(authenticated)/tools/events/page.tsx")).not.toMatch(
+      /Add extras, cancellations/
+    );
+  });
+});
+
+describe("UIA-035: calendar class-count wording", () => {
+  it("spells out classes instead of the cryptic 'cl.' abbreviation", () => {
+    const grid = read("components/calendar/CalendarGrid.tsx");
+    expect(grid).not.toMatch(/\bcl\./);
+    expect(grid).toContain("classLabel");
+  });
+});
+
+describe("UIA-039: font-heading token exists", () => {
+  it("defines --font-heading so font-heading utilities resolve", () => {
+    expect(read("app/globals.css")).toMatch(/--font-heading\s*:/);
+  });
+});
+
 describe("UIA-029: one profile surface", () => {
   it("removed the duplicate ProfileModal shell dialog", () => {
     expect(fs.existsSync(path.join(SRC, "components/shell/ProfileModal.tsx"))).toBe(false);

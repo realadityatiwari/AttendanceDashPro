@@ -105,6 +105,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           <p className="text-sm text-muted-foreground">
             Your feedback has been saved.
           </p>
+          {/* UIA-038: an explicit way out of the success state — previously
+              the only close affordance was the dialog header. */}
+          <Button className="mt-1" onClick={() => handleOpenChange(false)}>
+            Done
+          </Button>
         </div>
       ) : state.status === "error" ? (
         <div className="flex flex-col gap-3 py-2">
