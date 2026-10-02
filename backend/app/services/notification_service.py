@@ -26,6 +26,17 @@ from app.core.logging import get_logger
 
 logger = get_logger("app.notification")
 
+
+def event_is_stale_for_notification(event, as_of: date) -> bool:
+    """EVT-001/EVT-002 (Phase 2): the single lifecycle predicate for an
+    event's ACADEMIC_EVENT projection. An event is notification-stale when it
+    is inactive (soft-deactivated) or no longer a future event (its range
+    ended before the institutional "today"). Exactly one definition — the
+    post-commit emission trigger's early-return and the in-transaction
+    reconciliation (``reconcile_event_notification``) both use it, so the
+    "emit" side and the "reconcile" side can never diverge."""
+    return (not event.active) or (event.end_date < as_of)
+
 # Human-readable class-type labels for notification messages (presentation only).
 _CLASS_TYPE_LABELS = {"L": "Lecture", "T": "Tutorial", "P": "Practical"}
 
@@ -308,7 +319,7 @@ class NotificationService:
         """
         try:
             as_of = institution_today()
-            if not event.active or event.end_date < as_of:
+            if event_is_stale_for_notification(event, as_of):
                 return
 
             notified: set[UUID] = set()
@@ -348,6 +359,42 @@ class NotificationService:
                 "Event notification trigger failed for event %s: %s",
                 getattr(event, "id", None), exc,
             )
+
+    async def reconcile_event_notification(self, event) -> int:
+        """EVT-001/EVT-002 (Phase 2): reconcile an event's ACADEMIC_EVENT
+        projection with its lifecycle — the in-transaction counterpart of
+        ``after_event_mutation``.
+
+        When the event is notification-stale (deactivated, or no longer a
+        future event), every recipient's projection row for the event is
+        REMOVED (the row is keyed (user_id, kind, occurrence_key=event id) —
+        rows belonging to other events and other notification kinds are
+        never touched, and no replacement notification is created). When the
+        event is still active and future, this is a no-op: the legitimate
+        future-event refresh remains the post-commit ``after_event_mutation``
+        trigger.
+
+        Called by EventService/quiz-manager mutations INSIDE the event
+        mutation transaction — this method deliberately NEVER commits, so
+        the event change and its notification reconciliation commit or roll
+        back together. Deletion is idempotent (a second call deletes zero
+        rows). Read-state is not preserved for removed rows by design: the
+        projection only exists while its source condition holds, so a
+        reactivated future event legitimately re-notifies through the
+        normal trigger.
+        """
+        if not event_is_stale_for_notification(event, institution_today()):
+            return 0
+        user_ids = await self.notification_repo.get_event_projection_user_ids(event.id)
+        deleted = await self.notification_repo.delete_event_projection(event.id)
+        for uid in user_ids:
+            self._cache_invalidate(uid)
+        if deleted:
+            logger.info(
+                "Reconciled ACADEMIC_EVENT projection for event %s (%d row(s) removed)",
+                event.id, deleted,
+            )
+        return deleted
 
     async def after_quiz_mutation(self, user_id: UUID) -> None:
         """Post-commit quiz schedule trigger: re-evaluate the QUIZ_APPROACHING

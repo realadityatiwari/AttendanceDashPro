@@ -21,6 +21,32 @@ class EventConflict(Exception):
     """
 
 
+# EVT-004 (Phase 3): the natural-key unique indexes that make the DATABASE
+# the final duplicate authority. A concurrent duplicate insertion surfaces
+# as a PostgreSQL unique violation on one of these names; the translation
+# helper below turns exactly those violations into EventConflict (409) and
+# lets every unrelated integrity failure propagate untouched.
+EVT004_UNIQUE_CONSTRAINTS = frozenset({
+    "uq_academic_events_quiz_day_identity",
+    "uq_academic_events_global_range",
+    "uq_class_sessions_entry_date",
+    "uq_class_sessions_source_event_date",
+    "uq_class_sessions_quiz_day_subject_date",
+})
+
+
+def is_evt004_unique_violation(exc: Exception) -> bool:
+    """Whether `exc` is a PostgreSQL unique violation (SQLSTATE 23505) raised
+    by one of the EVT-004 natural-key indexes. Deliberately narrow: unique
+    violations from ANY other constraint (and every other integrity failure)
+    return False and keep propagating as-is."""
+    orig = getattr(exc, "orig", exc)
+    if getattr(orig, "pgcode", None) != "23505":
+        return False
+    message = str(exc)
+    return any(name in message for name in EVT004_UNIQUE_CONSTRAINTS)
+
+
 class EventRepository:
     """Persistence layer for academic-event mutations (Phase 6.5)."""
 

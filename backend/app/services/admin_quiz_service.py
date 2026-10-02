@@ -34,6 +34,7 @@ from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import ElectiveSlot, EventType, SubjectCategory
@@ -41,7 +42,7 @@ from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.event import AcademicEvent
 from app.models.user import User
 from app.repositories.admin_quiz_repo import AdminQuizRepository
-from app.repositories.event_repo import EventRepository
+from app.repositories.event_repo import EventRepository, is_evt004_unique_violation
 from app.services.authorization_service import AuthorizationService
 from app.services.event_registry import validate_event
 from app.services.event_session_service import EventSessionSynchronizer
@@ -319,6 +320,14 @@ class AdminQuizService:
         if event is None:
             return False
         event.active = False
+        # EVT-001 (Phase 2): retirement deactivates the event, so its
+        # ACADEMIC_EVENT projection (if any — e.g. a standalone QUIZ_DAY the
+        # schedule adopted) is reconciled in the SAME transaction (this call
+        # never commits; update_quiz_schedule owns the commit). Idempotent
+        # and a no-op for projections that do not exist (quiz-manager-created
+        # events carry none).
+        from app.services.notification_service import NotificationService
+        await NotificationService(self.db).reconcile_event_notification(event)
         await self.sync.sync_event(event)
         return True
 
@@ -356,8 +365,22 @@ class AdminQuizService:
             active=True,
         )
         self.event_repo.add(event)
-        await self.event_repo.flush()
-        await self.sync.sync_event(event)
+        try:
+            await self.event_repo.flush()
+            await self.sync.sync_event(event)
+        except IntegrityError as exc:
+            # EVT-004 (Phase 3): the natural-key index is the final authority
+            # when two quiz-manager mutations race to create the same
+            # (subject, slot, date) QUIZ_DAY. Roll back and surface the
+            # ordinary quiz-manager conflict (409) — never a raw 500.
+            await self.db.rollback()
+            if is_evt004_unique_violation(exc):
+                raise AdminQuizConflictError(
+                    "An identical active QUIZ_DAY event already exists "
+                    "(same subject, slot, and date); a concurrent quiz "
+                    "schedule mutation created it"
+                ) from exc
+            raise
         return True
 
     # ------------------------------------------------------------------
@@ -405,6 +428,17 @@ class AdminQuizService:
         created = await self._ensure_quiz_event(schedule, schedule.date)
         try:
             await self.db.commit()
+        except IntegrityError as exc:
+            # EVT-004 (Phase 3): a session-reconciliation race surfacing at
+            # commit maps to the ordinary quiz-manager conflict (409); the
+            # mutation rolls back atomically and a retry converges.
+            await self.db.rollback()
+            if is_evt004_unique_violation(exc):
+                raise AdminQuizConflictError(
+                    "A concurrent mutation created the same quiz-day "
+                    "reality; retry"
+                ) from exc
+            raise
         except Exception:
             await self.db.rollback()
             raise
@@ -469,6 +503,16 @@ class AdminQuizService:
             created = await self._ensure_quiz_event(schedule, new_date)
         try:
             await self.db.commit()
+        except IntegrityError as exc:
+            # EVT-004 (Phase 3): same commit-time race translation as above
+            # (retire/ensure session reconciliation under concurrency).
+            await self.db.rollback()
+            if is_evt004_unique_violation(exc):
+                raise AdminQuizConflictError(
+                    "A concurrent mutation created the same quiz-day "
+                    "reality; retry"
+                ) from exc
+            raise
         except Exception:
             await self.db.rollback()
             raise

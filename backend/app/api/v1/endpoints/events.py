@@ -152,5 +152,9 @@ async def delete_event(
         raise HTTPException(status_code=403, detail=str(exc))
     except EventNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except EventConflict as exc:
+        # EVT-003: a quiz-schedule-managed QUIZ_DAY cannot be deactivated
+        # through the generic path (the domain guard raises EventConflict).
+        raise HTTPException(status_code=409, detail=str(exc))
     resolver = ElectiveResolver(db)
     return (await resolver.resolve_events([event], await resolver.load_choices(current_user.id)))[0]

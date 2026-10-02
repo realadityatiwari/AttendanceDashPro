@@ -7,27 +7,31 @@ Additive admin control-plane over the EXISTING event architecture:
   - writes: reuse `EventService` (canonical registry validation + duplicate
     guard + EventSessionSynchronizer + single-transaction semantics).
 
-QUIZ_DAY OWNERSHIP GUARD (critical):
+QUIZ_DAY OWNERSHIP GUARD (critical — enforced in EventService since the
+  EVT-003 Phase 1 remediation):
   Phase 24.8 owns QuizSchedule <-> QUIZ_DAY synchronization.  A QUIZ_DAY
   AcademicEvent that is backed by a SCHEDULED QuizSchedule row (same subject,
   elective_slot, date) is "quiz-schedule managed" and must NOT be created,
-  edited, or deactivated through the generic Event Manager â€” doing so would
-  desynchronize quiz schedule reality.  The generic manager refuses such
-  mutations with 409 and directs the admin to /admin/quizzes.  Standalone
-  QUIZ_DAY events NOT backed by a QuizSchedule remain editable.  There are no
-  circular calls between AdminQuizService and this service.
+  edited, or deactivated through the generic Event Manager — doing so would
+  desynchronize quiz schedule reality.  The invariant now lives in
+  ``EventService`` (create/update/deactivate raise ``EventConflict`` -> 409),
+  so the canonical ``/api/v1/events`` endpoints inherit the same protection;
+  this service no longer maintains its own copy.  The resolver is delegated
+  to ``EventService.is_quiz_schedule_managed`` for the read model's
+  ``quiz_schedule_managed`` field.  Standalone QUIZ_DAY events NOT backed by
+  a QuizSchedule remain editable.  There are no circular calls between
+  AdminQuizService and this service (AdminQuizService mutates its events
+  directly and never routes through EventService).
 """
 
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import EventType
 from app.models.event import AcademicEvent
-from app.models.quiz import QuizSchedule, ScheduleStatus
 from app.models.user import User
 from app.repositories.event_repo import EventRepository
 from app.repositories.calendar_repo import CalendarRepository
@@ -52,11 +56,6 @@ class AdminEventDomainError(Exception):
         super().__init__(detail)
 
 
-class AdminEventQuizManagedError(AdminEventDomainError):
-    def __init__(self, detail: str):
-        super().__init__(detail, http_status=409)
-
-
 class AdminEventService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -66,7 +65,7 @@ class AdminEventService:
         self.event_service = EventService(db)
 
     # ------------------------------------------------------------------
-    # QUIZ_DAY ownership (Phase 24.9 guard)
+    # QUIZ_DAY ownership (delegates to the EventService domain guard)
     # ------------------------------------------------------------------
 
     async def _is_quiz_schedule_managed(
@@ -77,50 +76,18 @@ class AdminEventService:
         quiz_date,
     ) -> bool:
         """True when a SCHEDULED QuizSchedule row backs this QUIZ_DAY event
-        (same subject, elective_slot, and date)."""
-        if event_type != EventType.QUIZ_DAY or subject_id is None or quiz_date is None:
-            return False
-        stmt = select(QuizSchedule.id).where(
-            QuizSchedule.subject_id == subject_id,
-            QuizSchedule.date == quiz_date,
-            QuizSchedule.schedule_status == ScheduleStatus.SCHEDULED,
+        (same subject, elective_slot, and date).
+
+        EVT-003 Phase 1: this delegates to the canonical
+        ``EventService.is_quiz_schedule_managed`` resolver — the ownership
+        query lives in exactly one place (the mutation guards enforce it in
+        EventService), so the read model and the guard can never diverge."""
+        return await self.event_service.is_quiz_schedule_managed(
+            event_type=event_type,
+            subject_id=subject_id,
+            elective_slot=elective_slot,
+            quiz_date=quiz_date,
         )
-        if elective_slot is None:
-            stmt = stmt.where(QuizSchedule.elective_slot.is_(None))
-        else:
-            stmt = stmt.where(QuizSchedule.elective_slot == elective_slot)
-        result = await self.db.execute(stmt)
-        return result.scalars().first() is not None
-
-    async def _assert_not_quiz_managed(self, event: AcademicEvent) -> None:
-        """Reject mutation of a quiz-schedule-managed QUIZ_DAY event."""
-        if await self._is_quiz_schedule_managed(
-            event.event_type, event.subject_id, event.elective_slot, event.start_date
-        ):
-            raise AdminEventQuizManagedError(
-                "This QUIZ_DAY event is managed by the Quiz Schedule Manager "
-                "(it is backed by a scheduled quiz). Changing its date, "
-                "subject, or active state here would desynchronize the quiz "
-                "schedule. Use /admin/quizzes to manage quiz dates and status."
-            )
-
-    async def _assert_prospective_not_quiz_managed(
-        self,
-        event_type: EventType,
-        subject_id: Optional[UUID],
-        elective_slot,
-        start_date,
-    ) -> None:
-        """Reject creating a QUIZ_DAY that would be quiz-schedule managed, or
-        updating an event so it becomes quiz-schedule managed."""
-        if await self._is_quiz_schedule_managed(
-            event_type, subject_id, elective_slot, start_date
-        ):
-            raise AdminEventQuizManagedError(
-                "This QUIZ_DAY configuration is managed by the Quiz Schedule "
-                "Manager (a scheduled quiz backs the same subject/date). "
-                "Manage quiz dates and status in /admin/quizzes instead."
-            )
 
     # ------------------------------------------------------------------
     # Read model composition
@@ -245,11 +212,9 @@ class AdminEventService:
     # ------------------------------------------------------------------
 
     async def create_event(self, user: User, payload: AcademicEventCreate) -> AdminEventMutationResponse:
-        if payload.event_type == EventType.QUIZ_DAY:
-            await self._assert_prospective_not_quiz_managed(
-                payload.event_type, payload.subject_id, payload.elective_slot,
-                payload.start_date,
-            )
+        # EVT-003 Phase 1: the quiz-manager ownership guard now lives in
+        # EventService.create_event (EventConflict -> 409 below), so the
+        # canonical /api/v1/events path is protected identically.
         try:
             event = await self.event_service.create_event(user, payload)
         except EventForbidden as exc:
@@ -263,19 +228,10 @@ class AdminEventService:
         return AdminEventMutationResponse(event=await self._to_response(event, user))
 
     async def update_event(self, user: User, event_id: UUID, payload: AcademicEventUpdate) -> AdminEventMutationResponse:
-        event = await self.event_repo.get_by_id(event_id)
-        if event is None:
-            raise AdminEventDomainError("Event not found", http_status=404)
-        await self._assert_not_quiz_managed(event)
-        # A PATCH could move a QUIZ_DAY onto a schedule-managed date, or turn
-        # an unmanaged event into a schedule-managed one.
-        if event.event_type == EventType.QUIZ_DAY:
-            new_start = payload.start_date if "start_date" in payload.model_fields_set else event.start_date
-            new_subject = payload.subject_id if "subject_id" in payload.model_fields_set else event.subject_id
-            new_slot = payload.elective_slot if "elective_slot" in payload.model_fields_set else event.elective_slot
-            await self._assert_prospective_not_quiz_managed(
-                EventType.QUIZ_DAY, new_subject, new_slot, new_start,
-            )
+        # EVT-003 Phase 1: both former pre-checks (old-state managed guard and
+        # the prospective managed-QUIZ_DAY check) are enforced inside
+        # EventService.update_event — on the OLD state AND the FINAL proposed
+        # state, which also closes the type-change-INTO-managed bypass.
         try:
             updated = await self.event_service.update_event(user, event_id, payload)
         except EventForbidden as exc:
@@ -289,14 +245,14 @@ class AdminEventService:
         return AdminEventMutationResponse(event=await self._to_response(updated, user))
 
     async def deactivate_event(self, user: User, event_id: UUID) -> AdminEventMutationResponse:
-        event = await self.event_repo.get_by_id(event_id)
-        if event is None:
-            raise AdminEventDomainError("Event not found", http_status=404)
-        await self._assert_not_quiz_managed(event)
+        # EVT-003 Phase 1: the managed-QUIZ_DAY rejection now comes from
+        # EventService.deactivate_event as EventConflict (-> 409 below).
         try:
             deactivated = await self.event_service.deactivate_event(user, event_id)
         except EventForbidden as exc:
             raise AdminEventDomainError(str(exc), http_status=403)
         except EventNotFound as exc:
             raise AdminEventDomainError(str(exc), http_status=404)
+        except EventConflict as exc:
+            raise AdminEventDomainError(str(exc), http_status=409)
         return AdminEventMutationResponse(event=await self._to_response(deactivated, user))

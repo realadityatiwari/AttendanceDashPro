@@ -371,3 +371,36 @@ class NotificationRepository:
         )
         await self.db.commit()
         return result.rowcount > 0
+
+    # ── EVT-001/EVT-002 (Phase 2): source-event lifecycle reconciliation ────
+
+    async def get_event_projection_user_ids(self, event_id: UUID) -> List[UUID]:
+        """The owners of the ACADEMIC_EVENT projection rows for one event
+        (used to invalidate their inbox caches after reconciliation)."""
+        stmt = select(Notification.user_id).where(
+            Notification.kind == NotificationKind.ACADEMIC_EVENT,
+            Notification.occurrence_key == str(event_id),
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_event_projection(self, event_id: UUID) -> int:
+        """Remove EVERY ACADEMIC_EVENT projection row for one event, across
+        all users (the projection's idempotency key is
+        (user_id, kind, occurrence_key=str(event.id))).
+
+        EVT-001/EVT-002: when the source event is deactivated or ceases to
+        be a future event, its notification must no longer be live. This is
+        the reconciliation write — it deliberately does NOT commit: it
+        participates in the CALLER's transaction so the event mutation and
+        its notification reconciliation are atomic. Rows belonging to other
+        events (different occurrence_key) are never touched, and other
+        notification kinds are never touched."""
+        stmt = delete(Notification).where(
+            Notification.kind == NotificationKind.ACADEMIC_EVENT,
+            Notification.occurrence_key == str(event_id),
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount or 0
+
+

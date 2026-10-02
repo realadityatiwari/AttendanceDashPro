@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     REGISTER_MAX_ATTEMPTS: int = 5
     REGISTER_WINDOW_SECONDS: int = 3600   # 1 hour
 
+    # CLASS_REMINDER Sweep (EVT-005)
+    # Production periodic sweep to generate CLASS_REMINDER notifications.
+    # Runs as a background asyncio task in the FastAPI lifespan.
+    CLASS_REMINDER_SWEEP_ENABLED: bool = True
+    CLASS_REMINDER_SWEEP_INTERVAL_MINUTES: int = 60
+    CLASS_REMINDER_SWEEP_STARTUP_DELAY_SECONDS: int = 60
+
     # VAPID (Phase 11C-P3 Web Push delivery)
     # Public key exposed to the frontend (NEXT_PUBLIC_VAPID_PUBLIC_KEY); private
     # key is server-side only. VAPID_SUBJECT should be a mailto: or https: URI

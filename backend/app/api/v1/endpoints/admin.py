@@ -91,7 +91,6 @@ from app.services.admin_quiz_service import (
 from app.services.admin_event_service import (
     AdminEventService,
     AdminEventDomainError,
-    AdminEventQuizManagedError,
 )
 from app.services.authorization_service import AuthorizationService
 from app.services.admin_dashboard_service import AdminDashboardService
