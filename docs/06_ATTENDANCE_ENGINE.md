@@ -40,6 +40,22 @@ Prior to Phase A2.4, attendance math was partially duplicated in the Quiz Engine
 
 ## Core Algorithm: The Optimizer
 
+> **HISTORICAL — legacy JS engine.** The mean-of-percentages formula below and
+> the JavaScript optimizers in this section describe the RETIRED
+> `js/attendance-engine.js`. The canonical Python engine
+> (`backend/app/engines/attendance_engine.py`) uses the owner-approved POOLED
+> count-level constraint (Chunks 2–5):
+>
+> ```
+> (L_present + T_present)
+> -----------------------  x 100  >= target
+> (L_conducted + T_conducted)
+> ```
+>
+> Full precision (never rounded percentages), same minimum-attendance +
+> fewest-lectures tie-break. See `test_attendance_formula_baseline.py`,
+> `test_pooled_formula_end_to_end.py` and `test_attendance_engine.py`.
+
 The eligibility formula for AKTU/SRMCEM is:
 
 ```
@@ -50,6 +66,40 @@ Where:
 ```
 
 Subjects with no tutorials are evaluated on lecture percentage alone.
+
+### Optimizer window semantics (canonical Python engine — authoritative)
+
+One optimizer serves two surfaces; they deliberately see DIFFERENT windows
+(decision recorded in the Phase 8.1 implementation report §G and pinned by
+`verify_phase_8_1.py`; re-affirmed by the 2026-10 Safe Skip / Must Attend
+audit):
+
+1. **Quiz-window optimizer** (`EligibilityResult.optimization` /
+   `safe_skip_optimization`): forward planning. Counts come from the
+   eligibility windows — Criterion I (previous quiz boundary → day before the
+   quiz) and Criterion II (commencement → day before the quiz) — so "pending"
+   INCLUDES the not-yet-conducted sessions scheduled inside the window.
+   Must Attend / Safe Skip answer: "of the pending classes left before this
+   quiz, how many must I attend / may I skip and still end ≥ required".
+
+2. **Subject-level (non-quiz) 75 % optimizer**
+   (`SubjectAttendanceSummary.optimization`, Phase 8.1): END-OF-AS-OF
+   semantics, by design. Its counts are the subject's semester-to-date
+   summary counts (`get_subject_counts_up_to_date`, bounded
+   `date <= as_of_date`, institution-local "today" when omitted) — the SAME
+   counting as the summary itself. "Pending" therefore means conducted-but-
+   unmarked sessions through the as-of date only; future scheduled sessions
+   are NOT included and the projection is an end-of-as-of state, not
+   semester-forward planning. This is intentional: the field is an additive
+   extension of the canonical engine output defined over the summary's own
+   counts, the forward-planning need is owned by the quiz-window optimizer,
+   and the Subjects card intentionally renders no optimizer values
+   ("no forecast, no optimizer"). Do not "fix" this by widening the window —
+   that would be a new product decision, not a bug fix.
+
+In both surfaces, Must Attend + Safe Skip == pending (per type), the
+tie-break is minimum total attendance then fewest lectures attended, and an
+unreachable state reports full-pending deficits with zero skips.
 
 ### `optimize(totL, totT, targetPercentage)` — Static Optimizer
 

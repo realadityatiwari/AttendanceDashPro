@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, get_current_user
+from app.core.timezone import institution_today
 from app.models.user import User
 from app.models.enums import AttendanceStatus
 from app.services.attendance_service import AttendanceService
@@ -107,7 +108,11 @@ async def get_attendance_summary(
     if not enrolled:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    effective_date = as_of_date if as_of_date is not None else date.today()
+    # Institution-local date is the canonical boundary for the attendance
+    # summary (matches Dashboard, Calendar, History, and the quiz-window reads
+    # which all scope to `institution_today()`). An explicit `as_of_date`
+    # remains honored verbatim.
+    effective_date = as_of_date if as_of_date is not None else institution_today()
     service = AttendanceService(db)
     summary = await service.get_summary(
         user_id=current_user.id,
