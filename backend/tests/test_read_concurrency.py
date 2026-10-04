@@ -24,7 +24,7 @@ import pytest
 
 from sqlalchemy import select, text
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine
 from app.models.user import User, Subsection
 from app.models.academic import StudentElectiveChoice
 from app.core.security import hash_password
@@ -44,6 +44,16 @@ _loop = asyncio.new_event_loop()
 
 def _run(coro):
     return _loop.run_until_complete(coro)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _loop_lifecycle():
+    yield
+    try:
+        _loop.run_until_complete(engine.dispose())
+    except Exception:
+        pass
+    _loop.close()
 
 
 def _db_available():
