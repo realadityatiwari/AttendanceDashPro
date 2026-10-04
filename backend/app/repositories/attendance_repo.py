@@ -290,7 +290,6 @@ class AttendanceRepository:
         subject_id: UUID,
         start_date: date,
         end_date: date,
-        exclude_quiz_day: bool = False,
     ) -> List[Tuple[str, AttendanceStatus]]:
         # Same as get_subject_counts_up_to_date but strictly bounded to a date range.
         # Used for quiz-window-bounded eligibility counts (ADR 010: Quiz N counts
@@ -298,14 +297,15 @@ class AttendanceRepository:
         # Cancelled sessions are excluded for the same reason as above (practical
         # blocks collapsed to one occurrence).
         #
-        # exclude_quiz_day (product decision — Option A): Quiz-Day sessions are
-        # attendance occurrences for SUBJECT ATTENDANCE / ERP, but they must
-        # NOT become additional LECTURE/TUTORIAL opportunities inside the
-        # eligibility L/T calculation (the eligibility window starts inclusive
-        # on the previous quiz date, so a quiz-day session on that date would
-        # otherwise enter the next window). The canonical quiz-day shape is
-        # LECTURE + is_extra=false + timetable_entry_id IS NULL — normal
-        # lectures (timetable-bound) remain fully included.
+        # Quiz-day boundary (official SRMCEM rule): the window END
+        # (quiz date - 1) already excludes the CURRENT quiz day, and
+        # the window START (the previous quiz date, inclusive for
+        # cycles > 1) deliberately INCLUDES that date's sessions —
+        # including the quiz-day-shaped occurrence (LECTURE +
+        # is_extra=false + timetable_entry_id IS NULL) materialized on
+        # it. No shape-based exclusion is applied: every session inside
+        # the date range counts toward the eligibility L/T totals, and
+        # the current quiz day stays out purely via the date bound.
         stmt = select(
             ClassSession.class_type,
             AttendanceRecord.status,
@@ -331,12 +331,6 @@ class AttendanceRepository:
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
         )
-        if exclude_quiz_day:
-            stmt = stmt.filter(
-                ~(ClassSession.timetable_entry_id.is_(None)
-                  & ~ClassSession.is_extra
-                  & (ClassSession.class_type == ClassType.LECTURE))
-            )
         stmt = stmt.order_by(
             ClassSession.date,
             TimetableEntry.start_time.asc().nulls_last(),
@@ -367,16 +361,21 @@ class AttendanceRepository:
         subject_ids,
         start_date: date,
         end_date: date,
-        exclude_quiz_day: bool = False,
     ) -> List[dict]:
         """
         ONE date-bounded, enrollment-scoped scan for MANY subjects (Phase 26.3
         quiz-window bucketing). Mirrors get_subject_counts_between row-for-row
-        (same outcome join keyed on the resolved subject, same
-        exclude_quiz_day shape predicate, same (date, start_time, id)
-        ordering) but returns every matching session for ANY of `subject_ids`
-        with subject-attribution fields, so the caller can bucket per
-        (subject, window) and collapse per subject in memory.
+        (same outcome join keyed on the resolved subject, same (date,
+        start_time, id) ordering) but returns every matching session for ANY of
+        `subject_ids` with subject-attribution fields, so the caller can bucket
+        per (subject, window) and collapse per subject in memory.
+
+        Quiz-day boundary (official SRMCEM rule): identical to
+        get_subject_counts_between — the date range alone bounds the
+        window (current quiz day excluded via end_date = quiz - 1;
+        previous quiz day included as the inclusive start for cycles >
+        1, quiz-day-shaped occurrence included). No shape-based
+        exclusion is applied.
 
         Attribution fields (Phase 22.3/22.4 elective semantics, identical to
         `_resolved_subject_match`): a row belongs to subject X when
@@ -426,12 +425,6 @@ class AttendanceRepository:
             ClassSession.date >= start_date,
             ClassSession.date <= end_date,
         )
-        if exclude_quiz_day:
-            stmt = stmt.filter(
-                ~(ClassSession.timetable_entry_id.is_(None)
-                  & ~ClassSession.is_extra
-                  & (ClassSession.class_type == ClassType.LECTURE))
-            )
         stmt = stmt.order_by(
             ClassSession.date,
             TimetableEntry.start_time.asc().nulls_last(),

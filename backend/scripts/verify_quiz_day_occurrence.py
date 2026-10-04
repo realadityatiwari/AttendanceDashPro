@@ -277,22 +277,24 @@ async def main() -> int:
             # --- 8. Eligibility isolation (the critical invariant) ------------
             # Under events-authoritative quiz dates (Phase 2/3) the new event
             # on D IS Quiz I, so its window is [semester_start, D-1] and D is
-            # its own quiz date. The quiz-day occurrence must NOT enter the
-            # eligibility L/T counts: lecture/tutorial totals must equal the
-            # DB reference for that window with quiz-day-shaped sessions
-            # excluded (Rule 5 — the three-way separation rule), even though
-            # subject attendance (+2) and ERP include the quiz-day record.
+            # its own quiz date. The quiz-day occurrence on the CURRENT quiz
+            # date must NOT enter the eligibility L/T counts — it is excluded
+            # purely by the window end (D-1), with no shape-based filter —
+            # even though subject attendance (+2) and ERP include the
+            # quiz-day record. (The PREVIOUS quiz date, by contrast, is the
+            # inclusive start of the NEXT cycle's window and its sessions —
+            # including any quiz-day-shaped occurrence — DO count there.)
             elig_after = (await client.get(
                 f"/api/v1/quiz-eligibility/{SUBJECT_CODE}/1", headers=student_headers)).json()
             w_start = date.fromisoformat(elig_after["window_start"])
             w_end = date.fromisoformat(elig_after["window_end"])
             async with AsyncSessionLocal() as db:
                 ref_counts = aggregate(await AttendanceRepository(db).get_subject_counts_between(
-                    student_user.id, subject_ids[SUBJECT_CODE], w_start, w_end,
-                    exclude_quiz_day=True))
-            check("8. Eligibility isolation (Rule 5): quiz-day occurrence does "
-                  "NOT enter the L/T window counts (totals == quiz-day-excluded "
-                  "DB reference) while subject attendance and ERP include it",
+                    student_user.id, subject_ids[SUBJECT_CODE], w_start, w_end))
+            check("8. Eligibility isolation: the CURRENT quiz-day occurrence "
+                  "does NOT enter the L/T window counts (window ends at "
+                  "quiz-1; totals == unfiltered DB reference) while subject "
+                  "attendance and ERP include it",
                   elig_after["quiz_date"] == d.isoformat()
                   and w_start == semester_start and w_end == d - timedelta(days=1)
                   and elig_after["lecture"]["total"] == ref_counts["L"]["tot"]

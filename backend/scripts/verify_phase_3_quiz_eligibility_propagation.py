@@ -152,11 +152,9 @@ async def reference_chain(db, user_id, subject, effective_dates, cycle, semester
     window_ii = get_cumulative_attendance_window(domain, f"q{cycle}", events, DEFAULT_WEEKENDS)
     attendance_repo = AttendanceRepository(db)
     counts_i = aggregate(await attendance_repo.get_subject_counts_between(
-        user_id, subject.id, window_i["window_start"], window_i["window_end"],
-        exclude_quiz_day=True))
+        user_id, subject.id, window_i["window_start"], window_i["window_end"]))
     counts_ii = aggregate(await attendance_repo.get_subject_counts_between(
-        user_id, subject.id, window_ii["window_start"], window_ii["window_end"],
-        exclude_quiz_day=True))
+        user_id, subject.id, window_ii["window_start"], window_ii["window_end"]))
 
     lec_pct = _pct(counts_i['L'])
     tut_pct = _pct(counts_i['T'])

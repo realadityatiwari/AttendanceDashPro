@@ -19,9 +19,11 @@ every exit; identical to the other verifiers):
   5.  Deactivate: an inactive quiz event no longer participates in Quiz
       Eligibility (remaining cycles shift; a missing cycle is UNRESOLVED).
   6.  Reactivate: the quiz participates again, exactly as before.
-  7.  Option-A intact: the quiz-day-shaped session remains excluded from
-      L/T counts (cumulative-window exclusion); normal timetable sessions
-      remain included.
+  7.  Quiz-day boundary: the quiz-day-shaped session on the PREVIOUS
+      quiz date (the inclusive start of the next cycle's Criterion I
+      window) is INCLUDED in L/T counts; the CURRENT quiz day is
+      excluded purely by the window end (quiz - 1); normal timetable
+      sessions remain included.
   8.  Database restored to the exact baseline (no residue); the
       quiz_schedules projection (18 SCHEDULED) still matches the 18 active
       QUIZ_DAY events 1:1.
@@ -32,7 +34,7 @@ Usage:
 import asyncio
 import sys
 from pathlib import Path
-from datetime import date
+from datetime import date, timedelta
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -367,11 +369,12 @@ async def main() -> int:
                   and s.timetable_entry_id is None and not s.is_cancelled]
         normal_on_quiz_day = [s for s in quiz_day_sessions if s.timetable_entry_id is not None]
 
-        # Cumulative cycle-2 window contains the 08-27 quiz day: the exclusion
-        # must remove exactly the shaped session(s), nothing else. The
-        # eligibility result's lecture counts cover the CYCLE window (the
-        # cumulative counts are criterion-II-only), so compare against the
-        # cycle-window excluded query.
+        # The 08-27 quiz day is the INCLUSIVE start of the cycle-2
+        # Criterion I window (QT-I -> day before QT-II) and lies inside
+        # the cumulative window: the quiz-day-shaped occurrence on it
+        # MUST be counted (official rule — the previous quiz date is
+        # included in the next cycle's Criterion I). The CURRENT quiz
+        # day (09-17) stays excluded purely via the window end.
         effective = await repo.get_effective_quiz_dates_for_subject(bcs501_id)
         domain_subject = SubjectSchema(
             code="BCS-501", name="", category="theory",
@@ -384,26 +387,44 @@ async def main() -> int:
         )
         cycle_window = get_attendance_window(domain_subject, "q2", events, DEFAULT_WEEKENDS)
         cum_window = get_cumulative_attendance_window(domain_subject, "q2", events, DEFAULT_WEEKENDS)
-        raw_all = await attendance_repo.get_subject_counts_between(
-            admin_user.id, bcs501_id, cum_window["window_start"], cum_window["window_end"],
-            exclude_quiz_day=False)
-        raw_excl = await attendance_repo.get_subject_counts_between(
-            admin_user.id, bcs501_id, cum_window["window_start"], cum_window["window_end"],
-            exclude_quiz_day=True)
-        raw_cycle_excl = await attendance_repo.get_subject_counts_between(
-            admin_user.id, bcs501_id, cycle_window["window_start"], cycle_window["window_end"],
-            exclude_quiz_day=True)
-        diff_lecture = aggregate(raw_all)['L']['tot'] - aggregate(raw_excl)['L']['tot']
+        q1 = date(2026, 8, 27)
+        raw_cycle = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, cycle_window["window_start"], cycle_window["window_end"])
+        raw_cycle_after = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, q1 + timedelta(days=1), cycle_window["window_end"])
+        raw_q1 = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, q1, q1)
+        raw_cum = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, cum_window["window_start"], cum_window["window_end"])
+        raw_cum_before = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, cum_window["window_start"], q1 - timedelta(days=1))
+        raw_cum_after = await attendance_repo.get_subject_counts_between(
+            admin_user.id, bcs501_id, q1 + timedelta(days=1), cum_window["window_end"])
+        agg_cycle = aggregate(raw_cycle)
+        agg_cycle_after = aggregate(raw_cycle_after)
+        agg_q1 = aggregate(raw_q1)
+        agg_cum = aggregate(raw_cum)
+        agg_cum_before = aggregate(raw_cum_before)
+        agg_cum_after = aggregate(raw_cum_after)
         result2 = await service.get_quiz_eligibility(
             admin_user.id, bcs501_id, 2, semester_start=semester_start)
-        check("14. Option-A intact: the quiz-day-shaped session exists and is "
-              "excluded from L/T counts; normal timetable sessions stay included",
+        check("14. Quiz-day-shaped session on the PREVIOUS quiz date (08-27) "
+              "is INCLUDED in the cycle-2 and cumulative L/T counts; normal "
+              "timetable sessions stay included",
               len(shaped) == 1 and len(normal_on_quiz_day) == 1
-              and diff_lecture == 1
-              and result2.lecture.total == aggregate(raw_cycle_excl)['L']['tot']
+              and all(agg_cycle[k][m] == agg_cycle_after[k][m] + agg_q1[k][m]
+                      for k in ("L", "T")
+                      for m in ("tot", "att", "miss", "pending"))
+              and all(agg_cum[k][m] == agg_cum_before[k][m] + agg_q1[k][m]
+                      + agg_cum_after[k][m]
+                      for k in ("L", "T")
+                      for m in ("tot", "att", "miss", "pending"))
+              and agg_q1["L"]["tot"] >= 1
+              and result2.lecture.total == agg_cycle["L"]["tot"]
               and result2.lecture.total > 0,
               f"shaped={len(shaped)} normal={len(normal_on_quiz_day)} "
-              f"diff_L={diff_lecture} cycle_excl_L={aggregate(raw_cycle_excl)['L']['tot']} "
+              f"cycle_L={agg_cycle['L']['tot']} after_L={agg_cycle_after['L']['tot']} "
+              f"q1_L={agg_q1['L']['tot']} cum_L={agg_cum['L']['tot']} "
               f"elig_L={result2.lecture.total}")
 
     async with AsyncSessionLocal() as db:

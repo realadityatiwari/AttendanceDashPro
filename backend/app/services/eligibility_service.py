@@ -211,12 +211,20 @@ class EligibilityService:
         if not windowed or global_start is None or global_end is None:
             return {}
 
+        # ONE scan over the union of all windows, then in-memory
+        # bucketing per (subject, window). The scan range covers
+        # every window's dates; bucketing selects each window's
+        # rows by date. Quiz-day boundary: the date bounds alone
+        # implement the official rule — the current quiz day is
+        # outside every window (end = quiz - 1) and the previous
+        # quiz day is the inclusive start of the next window (its
+        # sessions, including the quiz-day-shaped occurrence, count
+        # toward the next cycle).
         rows = await self.attendance_repo.get_subject_counts_between_for_subjects(
             user_id,
             [s.id for s, _, _ in windowed],
             global_start,
             global_end,
-            exclude_quiz_day=True,
         )
 
         return {
@@ -319,19 +327,23 @@ class EligibilityService:
         #      - Criterion I  = cycle window (previous quiz -> day before quiz)
         #      - Criterion II = cumulative window (commencement -> day before quiz)
         #    Both use the same lecture/tutorial average formula.
+        #
+        #    Quiz-day boundary (official SRMCEM rule): the window bounds alone
+        #    implement it — the current quiz day is excluded (window end =
+        #    quiz date - 1) and the previous quiz day is the inclusive window
+        #    start for cycles > 1, so every session on that date — including
+        #    the quiz-day-shaped occurrence — counts toward the next cycle.
         milestone = next((m for m in milestones if m.metadata.get('quizCycle') == quiz_cycle), None)
         if milestone:
             if raw_counts is None:
                 window = get_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
                 raw_counts = await self.attendance_repo.get_subject_counts_between(
                     user_id, subject_model.id, window['window_start'], window['window_end'],
-                    exclude_quiz_day=True,
                 )
             if cumulative_raw_counts is None:
                 cumulative_window = get_cumulative_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)
                 cumulative_raw_counts = await self.attendance_repo.get_subject_counts_between(
                     user_id, subject_model.id, cumulative_window['window_start'], cumulative_window['window_end'],
-                    exclude_quiz_day=True,
                 )
         if raw_counts is None:
             raw_counts = []

@@ -21,8 +21,10 @@ transactions):
   F.  Final eligibility = Criterion I OR Criterion II (incl. a rollback
                  scenario where the routes disagree: Criterion II alone grants
                  eligibility).
-  G.  Quiz-Day-shaped ClassSession rows remain excluded from eligibility L/T
-                 counts (Option-A rule preserved; exclude_quiz_day=True).
+  G.  Quiz-Day-shaped ClassSession rows on the PREVIOUS quiz date
+                  (the inclusive start of the next cycle's window) are
+                  INCLUDED in eligibility L/T counts; the CURRENT quiz
+                  day is excluded purely by the window end (quiz - 1).
   H.  Normal timetable lecture/tutorial sessions remain included.
   25. Database restored to the exact baseline (no residue).
 
@@ -194,9 +196,9 @@ async def main() -> int:
         async with AsyncSessionLocal() as db:
             repo = AttendanceRepository(db)
             counts_i2 = aggregate(await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, q1, q2 - timedelta(days=1), exclude_quiz_day=True))
+                admin_user.id, bcs501_id, q1, q2 - timedelta(days=1)))
             counts_ii2 = aggregate(await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, semester_start, q2 - timedelta(days=1), exclude_quiz_day=True))
+                admin_user.id, bcs501_id, semester_start, q2 - timedelta(days=1)))
 
         exp_i2, exp_ii2 = expected_avg(counts_i2), expected_avg(counts_ii2)
         check("B2. Cycle II both criteria use the same average formula; "
@@ -221,9 +223,9 @@ async def main() -> int:
         async with AsyncSessionLocal() as db:
             repo = AttendanceRepository(db)
             counts_i3 = aggregate(await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, q2, q3 - timedelta(days=1), exclude_quiz_day=True))
+                admin_user.id, bcs501_id, q2, q3 - timedelta(days=1)))
             counts_ii3 = aggregate(await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, semester_start, q3 - timedelta(days=1), exclude_quiz_day=True))
+                admin_user.id, bcs501_id, semester_start, q3 - timedelta(days=1)))
 
         exp_i3, exp_ii3 = expected_avg(counts_i3), expected_avg(counts_ii3)
         check("C2. Cycle III both criteria use the same average formula; "
@@ -325,15 +327,22 @@ async def main() -> int:
                   f"opt=({result.optimization.lecture_deficit},{result.optimization.tutorial_deficit})")
             await db.rollback()
 
-        # ------------------------- G. Quiz-Day-shaped sessions excluded from L/T counts
+        # ------------------------- G. Quiz-Day-shaped sessions on the PREVIOUS
+        # quiz date are INCLUDED in the next cycle's L/T counts. Official rule:
+        # Criterion I for QT-II starts ON the QT-I date (inclusive), so the
+        # quiz-day-shaped occurrence materialized on QT-I counts toward QT-II;
+        # the CURRENT quiz day is excluded purely by the window end (quiz - 1).
         async with AsyncSessionLocal() as db:
             repo = AttendanceRepository(db)
-            excluded = await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, q1, q2 - timedelta(days=1), exclude_quiz_day=True)
-            included = await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, q1, q2 - timedelta(days=1), exclude_quiz_day=False)
-            agg_excluded = aggregate(excluded)
-            agg_included = aggregate(included)
+            counts_full = await repo.get_subject_counts_between(
+                admin_user.id, bcs501_id, q1, q2 - timedelta(days=1))
+            counts_after = await repo.get_subject_counts_between(
+                admin_user.id, bcs501_id, q1 + timedelta(days=1), q2 - timedelta(days=1))
+            counts_q1 = await repo.get_subject_counts_between(
+                admin_user.id, bcs501_id, q1, q1)
+            agg_full = aggregate(counts_full)
+            agg_after = aggregate(counts_after)
+            agg_q1 = aggregate(counts_q1)
             quiz_day_shaped = (await db.execute(
                 select(ClassSession).where(
                     ClassSession.subject_id == bcs501_id,
@@ -342,14 +351,21 @@ async def main() -> int:
                     ClassSession.is_extra.is_(False),
                     ClassSession.class_type == ClassType.LECTURE,
                 ))).scalars().all()
-        check("G. Quiz-Day-shaped sessions remain excluded from eligibility L/T counts "
-              "(QT-I day inside the Cycle II window start)",
+            service = EligibilityService(db)
+            result2 = await service.get_quiz_eligibility(
+                admin_user.id, bcs501_id, 2, semester_start=semester_start)
+        check("G. Quiz-Day-shaped session on the PREVIOUS quiz date (QT-I) is "
+              "INCLUDED in the QT-II Criterion I window counts "
+              "(window = full QT-I date + rest; production path matches)",
               len(quiz_day_shaped) == 1
-              and agg_excluded['L']['tot'] == agg_included['L']['tot'] - 1
-              and agg_excluded['T']['tot'] == agg_included['T']['tot'],
+              and all(agg_full[k][m] == agg_after[k][m] + agg_q1[k][m]
+                      for k in ("L", "T")
+                      for m in ("tot", "att", "miss", "pending"))
+              and agg_q1["L"]["tot"] >= 1
+              and result2.lecture.total == agg_full["L"]["tot"],
               f"quiz_day_shaped={len(quiz_day_shaped)} "
-              f"excluded_L={agg_excluded['L']['tot']} included_L={agg_included['L']['tot']} "
-              f"excluded_T={agg_excluded['T']['tot']} included_T={agg_included['T']['tot']}")
+              f"full_L={agg_full['L']['tot']} after_L={agg_after['L']['tot']} "
+              f"q1_L={agg_q1['L']['tot']} elig_L={result2.lecture.total}")
 
         # H. Normal timetable sessions remain included (rollback mutation)
         async with AsyncSessionLocal() as db:
@@ -386,7 +402,7 @@ async def main() -> int:
                         raise RuntimeError("no neutral normal lecture available for check H")
 
             raw_before = await repo.get_subject_counts_between(
-                admin_user.id, bcs501_id, semester_start, q1 - timedelta(days=1), exclude_quiz_day=True)
+                admin_user.id, bcs501_id, semester_start, q1 - timedelta(days=1))
             expected_att = aggregate(raw_before)['L']['att'] + 1
 
             if delete_first is not None:
@@ -517,9 +533,9 @@ async def main() -> int:
                 await db.flush()
 
                 counts_i = aggregate(await repo.get_subject_counts_between(
-                    admin_user.id, bcs501_id, *w_cyc, exclude_quiz_day=True))
+                    admin_user.id, bcs501_id, *w_cyc))
                 counts_ii = aggregate(await repo.get_subject_counts_between(
-                    admin_user.id, bcs501_id, *w_cum, exclude_quiz_day=True))
+                    admin_user.id, bcs501_id, *w_cum))
                 opt_i = optimize_attendance(
                     counts_i['L']['tot'], counts_i['L']['att'], counts_i['L']['miss'], counts_i['L']['pending'],
                     counts_i['T']['tot'], counts_i['T']['att'], counts_i['T']['miss'], counts_i['T']['pending'],

@@ -1510,20 +1510,40 @@ class TestWindowSemantics:
         assert wii["window_end"] >= wi["window_end"]
 
 
-def test_quiz_day_exclusion_contract_documented():
-    """Spec item 5, non-DB half. The date-boundary half is proven by
-    TestWindowSemantics (previous quiz date INSIDE the next window). The
-    shape half is repository logic that must NOT change in this chunk; its
-    contract, verbatim from attendance_repo.get_subject_counts_between
-    (exclude_quiz_day=True):
+def test_quiz_day_boundary_contract_documented():
+    """Quiz-day boundary contract (official SRMCEM rule), non-DB half.
 
-        NOT (timetable_entry_id IS NULL AND NOT is_extra
-             AND class_type = LECTURE)
-
-    i.e. ONLY the quiz-day-shaped session is excluded; regular L/T classes on
-    the same (previous-quiz) date remain included. The live behavior is
-    verified by backend/scripts/verify_quiz_day_occurrence.py.
+    The date-boundary half is proven by TestWindowSemantics: the
+    PREVIOUS quiz date is INSIDE the next cycle's Criterion I window
+    (inclusive start) and the CURRENT quiz day is OUTSIDE it
+    (window_end = quiz - 1). The repository half: the eligibility
+    count queries apply NO date-agnostic shape-based exclusion —
+    every session inside the window date range counts, INCLUDING the
+    quiz-day-shaped occurrence (LECTURE + is_extra=false +
+    timetable_entry_id IS NULL) materialized on the PREVIOUS quiz
+    date. The CURRENT quiz day is excluded purely because it is
+    outside the date range. Live behavior is verified by
+    backend/scripts/verify_quiz_day_boundary_fix.py and
+    backend/scripts/verify_quiz_day_occurrence.py.
     """
-    predicate_source = "timetable_entry_id.is_(None) & ~is_extra & class_type == LECTURE"
-    assert "timetable_entry_id" in predicate_source  # documentation anchor
+    import inspect
+
+    from app.repositories.attendance_repo import AttendanceRepository
+
+    for method_name in (
+        "get_subject_counts_between",
+        "get_subject_counts_between_for_subjects",
+    ):
+        method = getattr(AttendanceRepository, method_name)
+        params = inspect.signature(method).parameters
+        assert "exclude_quiz_day" not in params, (
+            f"{method_name} must not apply a date-agnostic quiz-day "
+            "shape filter; the window date bounds alone implement the "
+            "quiz-day boundary (previous quiz date included, current "
+            "quiz day excluded)"
+        )
+        source = inspect.getsource(method)
+        assert "timetable_entry_id.is_(None)" not in source, (
+            f"{method_name} must not filter quiz-day-shaped sessions"
+        )
     assert get_attendance_window is not None

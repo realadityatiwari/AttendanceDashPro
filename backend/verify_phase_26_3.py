@@ -76,8 +76,10 @@ def main() -> int:
               "start_time.asc().nulls_last()" in current_repo
               and "ClassSession.id" in current_repo[
                   current_repo.rfind("order_by"):current_repo.rfind("order_by") + 200])
-        check("bulk method supports exclude_quiz_day",
-              "exclude_quiz_day" in current_repo)
+        check("bulk method applies NO date-agnostic quiz-day shape filter "
+              "(quiz-day boundary is enforced purely by the window date bounds)",
+              "exclude_quiz_day" not in current_repo
+              and "timetable_entry_id.is_(None)" not in current_repo)
         check("bulk method uses same elective_choice_on join",
               "_elective_choice_on" in current_repo)
         check("bulk method uses same outcome_join_on",
@@ -156,13 +158,23 @@ def main() -> int:
         "docs/notification_delivery_investigation.md",
     }
     changed_for_this = {p for p in changed if p not in pre_existing}
+    # Phase 26.3 core files + the quiz-day boundary fix files
+    # (the boundary fix removed the date-agnostic exclude_quiz_day
+    # filter from the eligibility path and updated every verifier /
+    # unit test that encoded the old exclusion).
     this_phase = {
         "backend/app/repositories/attendance_repo.py",
         "backend/app/services/eligibility_service.py",
         "backend/verify_phase_26_3.py",
+        "backend/scripts/verify_phase_1_eligibility.py",
+        "backend/scripts/verify_phase_2_quiz_events.py",
+        "backend/scripts/verify_phase_3_quiz_eligibility_propagation.py",
+        "backend/scripts/verify_quiz_day_occurrence.py",
+        "backend/scripts/verify_quiz_day_boundary_fix.py",
+        "backend/tests/test_attendance_formula_baseline.py",
     }
     extra = changed_for_this - this_phase
-    check("only the 2 service files + verifier changed by this phase",
+    check("only the phase-26.3 + quiz-day-boundary-fix files changed",
           not extra, f"extra: {extra}")
     # Verify no prohibited categories
     for p in changed_for_this:
