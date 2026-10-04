@@ -36,7 +36,7 @@ from uuid import UUID
 from typing import Optional
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, Section, Subsection
@@ -51,6 +51,7 @@ from app.models.event import AcademicEvent
 from app.models.enums import EventType, ElectiveSlot, EnrollmentType
 from app.schemas.student_context import StudentContext, ContextSubject
 from app.services.elective_resolver import ElectiveResolver
+from app.services.read_concurrency import run_independent_reads
 
 
 class StudentContextService:
@@ -64,7 +65,90 @@ class StudentContextService:
     # ------------------------------------------------------------------
     async def get_placement(self, user: User) -> StudentContext:
         """Resolve placement only (section -> semester -> academic session,
-        subsection, program). Bounded query set; never fabricated."""
+        subsection, program). Bounded query set; never fabricated.
+
+        Phase 27 Batch 3C: the section -> semester -> academic-session FK
+        chain (plus the user's independently-keyed subsection) resolves in
+        ONE parameterized LEFT-JOIN query instead of up to four sequential
+        ``db.get`` round trips — the single SQL-level batching strategy for a
+        dependent chain. Row-for-row identical outcomes: a missing section or
+        any missing chain link nullifies everything downstream exactly like
+        the sequential path, and the subsection resolves solely from the
+        user's own subsection_id (never from the chain). The previous
+        sequential implementation is retained as
+        ``_get_placement_sequential`` — the documented comparison reference
+        for the equivalence tests and verify harness."""
+        ctx = StudentContext(
+            user_id=user.id,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        )
+        await self._load_placement(user, self._db, ctx)
+        return ctx
+
+    async def _load_placement(self, user: User, session: AsyncSession, ctx: StudentContext) -> None:
+        """Resolve the placement fields of ``ctx`` in ONE round trip (Batch
+        3C). Parameterized LEFT JOINs preserve the exact chain semantics: a
+        missing section (unplaced user) or any missing chain link yields
+        NULLs exactly like the sequential ``db.get`` path, and the subsection
+        resolves solely from the user's own subsection_id (independent of the
+        chain, exactly as before)."""
+        if user.section_id is None and user.subsection_id is None:
+            # Sequential fast path preserved: nothing can resolve — no query.
+            return
+        stmt = text(
+            """
+            SELECT
+                s.id            AS section_id,
+                s.name          AS section_name,
+                s.program       AS program,
+                sem.id          AS semester_id,
+                sem.name        AS semester_name,
+                sem.start_date  AS semester_start,
+                sem.end_date    AS semester_end,
+                acs.id          AS academic_session_id,
+                acs.name        AS academic_session_name,
+                sub.id          AS subsection_id,
+                sub.name        AS subsection_name
+            FROM (SELECT 1) AS one
+            LEFT JOIN sections s
+                ON s.id = :section_id
+            LEFT JOIN semesters sem
+                ON sem.id = s.semester_id
+            LEFT JOIN academic_sessions acs
+                ON acs.id = sem.session_id
+            LEFT JOIN subsections sub
+                ON sub.id = :subsection_id
+            """
+        )
+        row = (
+            await session.execute(
+                stmt, {"section_id": user.section_id, "subsection_id": user.subsection_id}
+            )
+        ).first()
+
+        ctx.section_id = row.section_id
+        ctx.section_name = row.section_name
+        ctx.program = row.program
+        ctx.semester_id = row.semester_id
+        ctx.semester_name = row.semester_name
+        ctx.semester_start = row.semester_start
+        ctx.semester_end = row.semester_end
+        ctx.academic_session_id = row.academic_session_id
+        ctx.academic_session_name = row.academic_session_name
+        ctx.subsection_id = row.subsection_id
+        ctx.subsection_name = row.subsection_name
+        ctx.is_placed = (
+            row.section_id is not None
+            and row.semester_id is not None
+            and row.academic_session_id is not None
+        )
+
+    async def _get_placement_sequential(self, user: User) -> StudentContext:
+        """Pre-Batch-3C reference implementation (comparison harness only —
+        never called by production code): the original per-entity ``db.get``
+        chain, kept so tests and the verify harness can prove the single-join
+        placement returns identical results for every user and for both
+        subsection-present and subsection-NULL cases."""
         section: Optional[Section] = None
         semester: Optional[Semester] = None
         academic_session: Optional[AcademicSession] = None
@@ -101,10 +185,10 @@ class StudentContextService:
     # ------------------------------------------------------------------
     # Enrollments
     # ------------------------------------------------------------------
-    async def _load_enrollments(self, user_id: UUID, ctx: StudentContext) -> None:
+    async def _load_enrollments(self, session: AsyncSession, user_id: UUID, ctx: StudentContext) -> None:
         """One query: every enrolled subject with its Phase 23.3 enrollment
         type. Never duplicated and never multiplied."""
-        result = await self._db.execute(
+        result = await session.execute(
             select(Subject, StudentEnrollment.enrollment_type)
             .join(StudentEnrollment, StudentEnrollment.subject_id == Subject.id)
             .where(StudentEnrollment.user_id == user_id)
@@ -125,16 +209,16 @@ class StudentContextService:
     # ------------------------------------------------------------------
     # Elective choices
     # ------------------------------------------------------------------
-    async def _load_elective_choices(self, user_id: UUID, ctx: StudentContext) -> None:
+    async def _load_elective_choices(self, session: AsyncSession, user_id: UUID, ctx: StudentContext) -> None:
         """One query: the student's recorded elective choices (slot -> concrete
         subject code). A choice whose subject contradicts the authoritative
         DB-backed catalog is recorded in ``inconsistencies`` and NOT repaired."""
-        result = await self._db.execute(
+        result = await session.execute(
             select(StudentElectiveChoice.elective_slot, Subject.code)
             .join(Subject, Subject.id == StudentElectiveChoice.subject_id)
             .where(StudentElectiveChoice.user_id == user_id)
         )
-        resolver = ElectiveResolver(self._db)
+        resolver = ElectiveResolver(session)
         for slot, code in result.all():
             expected_slot = await resolver.slot_for_code(code)
             if expected_slot is None or expected_slot != slot:
@@ -148,7 +232,7 @@ class StudentContextService:
     # ------------------------------------------------------------------
     # First quiz date
     # ------------------------------------------------------------------
-    async def _load_first_quiz_date(self, user_id: UUID, ctx: StudentContext) -> None:
+    async def _load_first_quiz_date(self, session: AsyncSession, user_id: UUID, ctx: StudentContext) -> None:
         """One query: earliest active QUIZ_DAY AcademicEvent across the
         student's enrolled subjects (same authoritative source the Profile UI
         has always used)."""
@@ -164,16 +248,30 @@ class StudentContextService:
                 AcademicEvent.active.is_(True),
             )
         )
-        ctx.first_quiz_date = (await self._db.execute(stmt)).scalar_one_or_none()
+        ctx.first_quiz_date = (await session.execute(stmt)).scalar_one_or_none()
 
     # ------------------------------------------------------------------
     # Full context
     # ------------------------------------------------------------------
     async def get_context(self, user: User) -> StudentContext:
         """Full authoritative context: placement + enrollments + elective
-        choices + first quiz date. Bounded query set (no N+1)."""
-        ctx = await self.get_placement(user)
-        await self._load_enrollments(user.id, ctx)
-        await self._load_elective_choices(user.id, ctx)
-        await self._load_first_quiz_date(user.id, ctx)
+        choices + first quiz date. Bounded query set (no N+1).
+
+        Phase 27 Batch 3C: the four groups are mutually independent (each
+        needs only the user's id/keys, never another group's result), so they
+        run concurrently on separate short-lived read sessions via the bounded
+        `run_independent_reads` helper instead of back-to-back round trips.
+        The composed StudentContext is field-for-field identical to the
+        previous sequential composition (the loaders are unchanged; only
+        their scheduling and session binding moved)."""
+        ctx = StudentContext(
+            user_id=user.id,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        )
+        await run_independent_reads([
+            lambda s: self._load_placement(user, s, ctx),
+            lambda s: self._load_enrollments(s, user.id, ctx),
+            lambda s: self._load_elective_choices(s, user.id, ctx),
+            lambda s: self._load_first_quiz_date(s, user.id, ctx),
+        ])
         return ctx

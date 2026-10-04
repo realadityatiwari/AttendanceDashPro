@@ -16,6 +16,7 @@ from app.models.enums import AttendanceStatus
 from app.engines.attendance_engine import classify_attendance_status
 from app.engines.practical_occurrence import occurrence_is_cancelled
 from app.services.student_context_service import StudentContextService
+from app.services.read_concurrency import run_independent_reads
 
 # Monday-start week bucketing for the weekly read model. A structure, not a
 # product "trend" definition (Phase 8.0 contract §I/§J/§15).
@@ -43,26 +44,39 @@ class AnalyticsService:
 
     async def get_overview(self, user: User) -> AnalyticsOverviewResponse:
         today = institution_today()
-        # Phase 23.4: authoritative placement from the student-context service.
-        ctx = await StudentContextService(self.db).get_placement(user)
+
+        # Perf batch 3C: two bounded parallel rounds replace the sequential
+        # chain. Round 1: placement ∥ enrolled subjects (mutually independent).
+        # Round 2: the range scan (its lower bound DEPENDS on the placement
+        # result) ∥ per-subject summaries (depend only on round-1 subjects).
+        # Same queries, same inputs, same outputs — only the scheduling of
+        # independent reads changed (bounded helper, pool-safe).
+        (ctx, subjects) = await run_independent_reads([
+            lambda s: StudentContextService(s).get_placement(user),
+            lambda s: UserRepository(s).get_enrolled_subjects(user.id),
+        ])
         semester_start: Optional[date] = ctx.semester_start
         semester_end: Optional[date] = ctx.semester_end
 
         start = semester_start if semester_start is not None else today
 
-        # ONE enrollment-scoped range scan feeds overall + forecast + weekly.
-        rows = await self.attendance_repo.get_sessions_with_status(user.id, start, today)
+        async def _scan(s):
+            # ONE enrollment-scoped range scan feeds overall + forecast + weekly.
+            return await AttendanceRepository(s).get_sessions_with_status(user.id, start, today)
+
+        async def _summaries(s):
+            return await AttendanceService(s).get_subject_summaries(user.id, subjects, today)
+
+        (rows, summaries_map) = await run_independent_reads([_scan, _summaries])
 
         overall = self._overall(rows)
         weekly = self._weekly_series(rows, start, today)
-        subjects = await self.user_repo.get_enrolled_subjects(user.id)
-        summaries = await self.attendance_service.get_subject_summaries(user.id, subjects, today)
 
         subject_items: List[AnalyticsSubjectItem] = []
         for subject in subjects:
             if not subject.attendance_applicable:
                 continue
-            summary = summaries[subject.id]
+            summary = summaries_map[subject.id]
             item = AnalyticsSubjectItem(
                 **summary.model_dump(),
                 subject_name=subject.name,
