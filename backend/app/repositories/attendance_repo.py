@@ -437,6 +437,93 @@ class AttendanceRepository:
             for row in result.all()
         ]
 
+    async def get_unified_dashboard_rows(self, user_id: UUID, end_date: date) -> List[dict]:
+        """Perf batch 2: ONE ClassSession retrieval feeding every dashboard
+        consumer (Today / Overall / Weekly builders, per-subject counts, quiz
+        snapshot). It replaces the three overlapping scans the dashboard used
+        to run:
+
+          - get_sessions_with_status            (read-model rows, [scan_start, today])
+          - get_subject_counts_for_user         (count tuples,      [.., today])
+          - get_subject_counts_between_for_subjects (quiz windows)
+
+        Construction vs the scans it replaces:
+          - Same joins as get_sessions_with_status (TimetableEntry, per-user
+            StudentElectiveChoice, per-subject OccurrenceOutcome on the
+            resolved subject, Subject, per-user AttendanceRecord) PLUS the
+            quiz-attribution columns of the quiz scan
+            (session_subject_id / slot / choice_subject_id), and WITHOUT the
+            StudentEnrollment INNER join: enrollment scoping is applied per
+            consumer in Python over the student's enrolled-subject set —
+            `resolved_subject_id(row) in enrolled_ids` is the identical
+            predicate the join expressed. This keeps the quiz snapshot's
+            established attribution intact (it has never been
+            enrollment-joined and can attribute a slot session via the
+            student's slot choice even when the anchor subject's own
+            enrollment is the only membership).
+          - Same outcome join and _apply_outcome_to_row rule each scan applied.
+          - Same ordering (date, start_time nulls-last, id) — the practical
+            collapse is order-sensitive.
+          - No lower bound: subject counts have always covered every session
+            up to end_date; the Today/Overall/Weekly builders re-apply their
+            own date bounds to the shared rows.
+          - end_date must be >= today: the quiz snapshot's windows can extend
+            past today (future pending sessions inside the quiz window), so
+            callers pass max(today, latest quiz date - 1). Consumers that
+            never saw future rows re-apply `date <= today` in Python.
+
+        Read-only: returns raw row dicts; no grouping/collapse happens here
+        (each consumer runs its own canonical collapse exactly as before).
+        """
+        resolved_subject_id = func.coalesce(
+            StudentElectiveChoice.subject_id, ClassSession.subject_id
+        )
+        resolved_slot = func.coalesce(
+            TimetableEntry.elective_slot, ClassSession.elective_slot
+        )
+        stmt = select(
+            ClassSession.id,
+            ClassSession.date,
+            ClassSession.class_type,
+            AttendanceRecord.status,
+            ClassSession.is_cancelled,
+            ClassSession.is_deactivated,
+            ClassSession.is_extra,
+            ClassSession.designation,
+            ClassSession.elective_slot,
+            ClassSession.subject_id.label("session_subject_id"),
+            resolved_slot.label("slot"),
+            StudentElectiveChoice.subject_id.label("choice_subject_id"),
+            Subject.id.label("subject_id"),
+            Subject.code.label("subject_code"),
+            Subject.name.label("subject_name"),
+            TimetableEntry.start_time,
+            TimetableEntry.end_time,
+            OccurrenceOutcome.outcome_type,
+        ).outerjoin(
+            AttendanceRecord, (AttendanceRecord.class_session_id == ClassSession.id) & (AttendanceRecord.user_id == user_id)
+        ).outerjoin(
+            TimetableEntry, ClassSession.timetable_entry_id == TimetableEntry.id
+        ).outerjoin(
+            StudentElectiveChoice, self._elective_choice_on(user_id)
+        ).outerjoin(
+            OccurrenceOutcome, self._outcome_join_on(resolved_subject_id)
+        ).join(
+            Subject, Subject.id == resolved_subject_id
+        ).filter(
+            ClassSession.date <= end_date,
+        ).order_by(
+            ClassSession.date,
+            TimetableEntry.start_time.asc().nulls_last(),
+            ClassSession.id,
+        )
+
+        result = await self.db.execute(stmt)
+        return [
+            self._apply_outcome_to_row(dict(row._mapping))
+            for row in result.all()
+        ]
+
     async def get_sessions_with_status(self, user_id: UUID, start_date: date, end_date: date) -> List[dict]:
         """
         Read-only dashboard aggregation source: every class session in the

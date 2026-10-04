@@ -163,10 +163,23 @@ class AttendanceService:
         """
         Batched per-subject summaries for an enrolled subject list (dashboard
         N+1 fix). ONE grouped count query replaces N per-subject queries; every
-        summary is built by the same `_build_subject_summary` path as
-        `get_summary`, so results are byte-identical.
+        summary is built by the same `build_subject_summaries` path, so results
+        are byte-identical to the per-subject path.
         """
         raw_counts = await self.repo.get_subject_counts_for_user(user_id, as_of_date)
+        mid_sems = await self.repo.get_mid_sem_sessions([s.id for s in subjects])
+        return self.build_subject_summaries(subjects, raw_counts, mid_sems)
+
+    @staticmethod
+    def build_subject_summaries(subjects, raw_counts, mid_sems=None) -> Dict[UUID, SubjectAttendanceSummary]:
+        """
+        Pure composition of the canonical per-subject summaries from
+        (subject_id, class_type, status) count tuples — the exact shape
+        `collapse_count_rows(include_subject=True)` emits. Shared by
+        `get_subject_summaries` (DB scan path) and the dashboard's unified
+        ClassSession retrieval (perf batch 2) so both produce byte-identical
+        summaries through the identical grouping + engine call.
+        """
         grouped: Dict[UUID, Dict[str, Any]] = {}
         for subject in subjects:
             grouped[subject.id] = {
@@ -188,7 +201,7 @@ class AttendanceService:
                 bucket[t]['miss'] += 1
             else:
                 bucket[t]['pending'] += 1
-        mid_sems = await self.repo.get_mid_sem_sessions(list(grouped.keys()))
+        mid_sems = mid_sems or {}
         return {
             s.id: _build_subject_summary(s.code, grouped[s.id], mid_sem=mid_sems.get(s.id))
             for s in subjects

@@ -81,6 +81,7 @@ class EligibilityService:
         events=None,
         elective_scope=None,
         effective_by_subject=None,
+        session_rows=None,
     ) -> List[EligibilityResult]:
         """
         Batched quiz eligibility for many subjects (dashboard quiz-snapshot
@@ -94,6 +95,12 @@ class EligibilityService:
         Phase 26.3 (optimization #3): the per-subject quiz-window attendance
         scans (2N total) are replaced by ONE date-bounded scan over the union
         of all subjects' windows, bucketed per (subject, window) in memory.
+
+        Perf batch 2: `session_rows` optionally supplies PRE-RETRIEVED
+        ClassSession rows (the dashboard's unified retrieval). When provided,
+        no scan runs — the window counts are bucketed from those rows through
+        the same `_bucket_window_counts` filter, producing byte-identical
+        engine input. When None, the scan path runs exactly as before.
         """
         if cycle_model is None:
             cycle_model = await self.quiz_repo.get_quiz_cycle_with_policy(quiz_cycle)
@@ -108,10 +115,16 @@ class EligibilityService:
                 [s.id for s in subjects], elective_scope=elective_scope
             )
 
-        # Phase 26.3: ONE scoped scan -> per-(subject, window) count buckets.
-        window_counts = await self._quiz_window_counts_by_subject(
-            user_id, subjects, quiz_cycle, events, semester_start, effective_by_subject,
-        )
+        # Phase 26.3: ONE scoped scan -> per-(subject, window) count buckets;
+        # perf batch 2: or bucket from the caller's pre-retrieved rows.
+        if session_rows is None:
+            window_counts = await self._quiz_window_counts_by_subject(
+                user_id, subjects, quiz_cycle, events, semester_start, effective_by_subject,
+            )
+        else:
+            window_counts = self._quiz_window_counts_from_rows(
+                subjects, quiz_cycle, events, semester_start, effective_by_subject, session_rows,
+            )
 
         results: List[EligibilityResult] = []
         for subject in subjects:
@@ -173,46 +186,25 @@ class EligibilityService:
         collapsed in memory via the same `collapse_count_rows` the per-subject
         repo path used — byte-identical engine input, without the 2N scans.
 
-        Returns {subject.id: {"raw_counts": [...], "cumulative_raw_counts": [...]}}
-        where each value is a list of (class_type, status) count tuples exactly
-        like `get_subject_counts_between` produced. Subjects without a
-        resolved milestone are absent (their evaluation takes the UNRESOLVED
-        empty-count path, identical to before).
+        Perf batch 2: the window computation now lives in the shared
+        `_quiz_windows_by_subject`; this method retains only the scan + bucket
+        step. The dashboard supplies pre-retrieved rows through
+        `get_quiz_eligibility_for_subjects(..., session_rows=...)` instead.
         """
-        windowed: List[tuple] = []
+        windowed = self._quiz_windows_by_subject(
+            subjects, quiz_cycle, events, semester_start, effective_by_subject
+        )
+        if not windowed:
+            return {}
+
         global_start: Optional[date] = None
         global_end: Optional[date] = None
-
-        for subject in subjects:
-            if not subject.quiz_applicable:
-                continue
-            effective_dates = effective_by_subject.get(subject.id, [])
-            milestones, domain_subject = self._build_domain_subject(
-                subject, effective_dates, semester_start
-            )
-            milestone = next(
-                (m for m in milestones if m.metadata.get("quizCycle") == quiz_cycle),
-                None,
-            )
-            if milestone is None:
-                # UNRESOLVED cycle — no window, no scan, empty counts (the
-                # engine emits the placeholder result as before).
-                continue
-            window_i = get_attendance_window(
-                domain_subject, milestone.milestone_id, events, DEFAULT_WEEKENDS
-            )
-            window_ii = get_cumulative_attendance_window(
-                domain_subject, milestone.milestone_id, events, DEFAULT_WEEKENDS
-            )
-            windowed.append((subject, window_i, window_ii))
+        for _, window_i, window_ii in windowed:
             for w in (window_i, window_ii):
                 if global_start is None or w["window_start"] < global_start:
                     global_start = w["window_start"]
                 if global_end is None or w["window_end"] > global_end:
                     global_end = w["window_end"]
-
-        if not windowed or global_start is None or global_end is None:
-            return {}
 
         # ONE scan over the union of all windows, then in-memory
         # bucketing per (subject, window). The scan range covers
@@ -234,6 +226,72 @@ class EligibilityService:
             subject.id: {
                 "raw_counts": self._bucket_window_counts(rows, subject.id, window_i),
                 "cumulative_raw_counts": self._bucket_window_counts(rows, subject.id, window_ii),
+            }
+            for subject, window_i, window_ii in windowed
+        }
+
+    @staticmethod
+    def _quiz_windows_by_subject(
+        subjects,
+        quiz_cycle: int,
+        events,
+        semester_start: date | None,
+        effective_by_subject,
+    ) -> List[tuple]:
+        """Per-subject attendance windows for the requested quiz cycle — the
+        exact window computation previously inlined in
+        `_quiz_window_counts_by_subject`, shared by its scan path and the
+        dashboard's pre-retrieved-rows path (perf batch 2). Returns
+        (subject, window_i, window_ii) tuples; subjects without a resolved
+        milestone for the cycle are absent (their evaluation takes the
+        UNRESOLVED empty-count path, identical to before)."""
+        windowed: List[tuple] = []
+        for subject in subjects:
+            if not subject.quiz_applicable:
+                continue
+            effective_dates = effective_by_subject.get(subject.id, [])
+            milestones, domain_subject = EligibilityService._build_domain_subject(
+                subject, effective_dates, semester_start
+            )
+            milestone = next(
+                (m for m in milestones if m.metadata.get("quizCycle") == quiz_cycle),
+                None,
+            )
+            if milestone is None:
+                # UNRESOLVED cycle — no window, no scan, empty counts (the
+                # engine emits the placeholder result as before).
+                continue
+            window_i = get_attendance_window(
+                domain_subject, milestone.milestone_id, events, DEFAULT_WEEKENDS
+            )
+            window_ii = get_cumulative_attendance_window(
+                domain_subject, milestone.milestone_id, events, DEFAULT_WEEKENDS
+            )
+            windowed.append((subject, window_i, window_ii))
+        return windowed
+
+    def _quiz_window_counts_from_rows(
+        self,
+        subjects,
+        quiz_cycle: int,
+        events,
+        semester_start: date | None,
+        effective_by_subject,
+        session_rows: List[dict],
+    ) -> Dict[UUID, Dict[str, Any]]:
+        """Per-(subject, window) counts bucketed from PRE-RETRIEVED session
+        rows (perf batch 2: the dashboard's unified ClassSession retrieval).
+        The bucketing filter (window date bounds + quiz attribution) and the
+        practical-block collapse are the SAME `_bucket_window_counts` the scan
+        path uses, applied to a strict superset of the rows that path fetches
+        — byte-identical engine input without the extra scan."""
+        windowed = self._quiz_windows_by_subject(
+            subjects, quiz_cycle, events, semester_start, effective_by_subject
+        )
+        return {
+            subject.id: {
+                "raw_counts": self._bucket_window_counts(session_rows, subject.id, window_i),
+                "cumulative_raw_counts": self._bucket_window_counts(session_rows, subject.id, window_ii),
             }
             for subject, window_i, window_ii in windowed
         }

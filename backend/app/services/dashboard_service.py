@@ -16,7 +16,11 @@ from app.engines.attendance_engine import (
     SAFE_BAND_PCT,
     classify_attendance_status,
 )
-from app.engines.practical_occurrence import occurrence_is_cancelled
+from app.engines.practical_occurrence import (
+    collapse_count_rows,
+    group_practical_occurrences,
+    occurrence_is_cancelled,
+)
 from app.schemas.dashboard import (
     DashboardSummaryResponse,
     TodaySection,
@@ -69,20 +73,6 @@ class DashboardService:
         ctx = await StudentContextService(self.db).get_placement(user)
         semester_start = ctx.semester_start
 
-        # Phase 8.1 N+1 fix: ONE enrollment-scoped range scan feeds the Today /
-        # Overall / Weekly sections (previously up to four overlapping scans).
-        # The scan starts at the earliest bound any section needs (semester
-        # start, or the previous week when the semester bound is unknown) and
-        # each builder slices its own date window from the shared rows.
-        prev_week_start = today - timedelta(days=today.weekday() + 7)
-        # Earliest bound any section needs: the semester start (overall) and
-        # the previous week (weekly delta). The strict min covers both; each
-        # builder re-applies its own bound.
-        scan_start = min(semester_start, prev_week_start) if semester_start is not None else prev_week_start
-        rows = await self.attendance_repo.get_sessions_with_status(user.id, scan_start, today)
-
-        summaries = await self._subject_summaries(user.id, subjects, today)
-
         # Phase 25.4 (optimization #1): request-scoped datasets fetched ONCE and
         # reused in memory by every builder that needs them, instead of each
         # builder (and the eligibility/calendar services beneath them) re-fetching
@@ -112,27 +102,91 @@ class DashboardService:
         resolver = ElectiveResolver(self.db)
         choices = await resolver.load_choices(user.id)
         elective_scope = {choice.subject_id: slot for slot, choice in choices.items()}
+        anchor_subjects = await resolver.anchor_subjects()
+
+        # Perf batch 2: ONE ClassSession retrieval feeds every section (the
+        # previous per-section scans — get_sessions_with_status,
+        # get_subject_counts_for_user and the quiz snapshot's
+        # get_subject_counts_between_for_subjects — are strict subsets of this
+        # row set; see get_unified_dashboard_rows). The quiz snapshot's windows
+        # can extend past today, so the retrieval's upper bound is
+        # max(today, latest effective quiz date - 1); consumers that never saw
+        # future rows re-apply `date <= today` below, and the builders re-apply
+        # their own lower bounds exactly as they always have.
+        quiz_applicable = [s for s in subjects if s.quiz_applicable]
+        effective_by_subject = (
+            await self.quiz_repo.get_effective_quiz_dates_for_subjects(
+                [s.id for s in quiz_applicable], elective_scope=elective_scope
+            )
+            if quiz_applicable
+            else {}
+        )
+        unified_end = today
+        for dates in effective_by_subject.values():
+            for _, quiz_date in dates:
+                latest = quiz_date - timedelta(days=1)
+                if latest > unified_end:
+                    unified_end = latest
+        unified_rows = await self.attendance_repo.get_unified_dashboard_rows(user.id, unified_end)
+
+        rows, raw_subject_counts = self._derive_legacy_inputs(unified_rows, {s.id for s in subjects}, today)
+        summaries = await self._subject_summaries(subjects, raw_subject_counts)
 
         return DashboardSummaryResponse(
             generated_at=today,
             today=await self._build_today(user.id, today, rows, events),
             overall=self._build_overall(rows, today, semester_start),
             weekly=self._build_weekly(rows, today, summaries),
-            quiz_snapshot=await self._build_quiz_snapshot(user, subjects, semester_start, events, elective_scope),
+            quiz_snapshot=await self._build_quiz_snapshot(
+                user, subjects, semester_start, events, elective_scope,
+                effective_by_subject, unified_rows,
+            ),
             attention_required=self._build_attention_required(subjects, summaries),
-            upcoming_events=await self._build_upcoming_events(user, subjects, events, choices),
+            upcoming_events=await self._build_upcoming_events(
+                user, subjects, events, choices, anchor_subjects,
+            ),
         )
 
-    async def _subject_summaries(self, user_id, subjects: List[Subject], as_of_date: date):
-        """Per-subject statistics via the existing AttendanceService (engine-owned).
-        Phase 8.1 N+1 fix: one grouped count query replaces one query per subject;
-        each summary is built by the identical canonical engine path."""
+    @staticmethod
+    def _resolved_subject_id(row):
+        """The canonical resolved subject of a unified row — the SQL
+        coalesce(choice.subject_id, session.subject_id) in Python."""
+        return row["choice_subject_id"] if row["choice_subject_id"] is not None else row["session_subject_id"]
+
+    @staticmethod
+    def _derive_legacy_inputs(unified_rows, enrolled_ids, today):
+        """Derive the per-consumer inputs the three pre-batch-2 scans produced,
+        from the shared unified rows (pure; exercised by the equivalence
+        harness in tests/test_dashboard_consolidation_equivalence.py):
+
+          - rows: the read-model occurrence rows Today/Overall/Weekly consume —
+            scoped exactly like get_sessions_with_status output (resolved
+            subject enrolled, date <= today; the builders re-apply their own
+            lower bounds), practical blocks collapsed in the same (date,
+            start_time, id) order;
+          - raw_subject_counts: the (subject_id, class_type, status) tuples
+            get_subject_counts_for_user produced (same scoped rows — its range
+            was unbounded below and bounded by today — through the same
+            collapse_count_rows).
+        """
+        scoped = [
+            r for r in unified_rows
+            if r["date"] <= today and DashboardService._resolved_subject_id(r) in enrolled_ids
+        ]
+        rows = group_practical_occurrences(scoped)
+        raw_subject_counts = collapse_count_rows(scoped, include_subject=True)
+        return rows, raw_subject_counts
+
+    async def _subject_summaries(self, subjects, raw_subject_counts):
+        """Per-subject statistics via the existing AttendanceService (engine-
+        owned). Phase 8.1 N+1 fix: one grouped count source replaces one query
+        per subject; each summary is built by the identical canonical engine
+        path. Perf batch 2: the counts come from the shared unified rows via
+        AttendanceService.build_subject_summaries (the same pure builder the
+        DB-scan path uses) instead of a second semester-wide scan."""
         applicable = [s for s in subjects if s.attendance_applicable]
-        summaries_map = await self.attendance_service.get_subject_summaries(
-            user_id=user_id,
-            subjects=applicable,
-            as_of_date=as_of_date,
-        )
+        mid_sems = await self.attendance_repo.get_mid_sem_sessions([s.id for s in applicable])
+        summaries_map = AttendanceService.build_subject_summaries(applicable, raw_subject_counts, mid_sems)
         return [(s, summaries_map[s.id]) for s in applicable]
 
     async def _build_today(self, user_id, today: date, rows, events) -> TodaySection:
@@ -319,17 +373,19 @@ class DashboardService:
             needs_attention_subject=needs_attention_subject,
         )
 
-    async def _build_quiz_snapshot(self, user, subjects: List[Subject], semester_start: Optional[date], events, elective_scope) -> QuizSnapshotSection:
+    async def _build_quiz_snapshot(
+        self, user, subjects: List[Subject], semester_start: Optional[date], events,
+        elective_scope, effective_by_subject, unified_rows,
+    ) -> QuizSnapshotSection:
         quiz_applicable = [s for s in subjects if s.quiz_applicable]
         empty = QuizSnapshotSection()
         if not quiz_applicable:
             return empty
 
-        # Phase 25.4 (optimization #1): events + elective_scope are pre-fetched
-        # in get_summary and reused here and inside the eligibility batch.
-        effective_by_subject = await self.quiz_repo.get_effective_quiz_dates_for_subjects(
-            [s.id for s in quiz_applicable], elective_scope=elective_scope
-        )
+        # Phase 25.4 (optimization #1) + perf batch 2: events, elective_scope
+        # and effective_by_subject are pre-fetched in get_summary and reused
+        # here and inside the eligibility batch; the batch buckets its window
+        # counts from the shared unified ClassSession rows (no extra scan).
         resolved = [(cyc, d) for lst in effective_by_subject.values() for cyc, d in lst]
         future = [(cyc, d) for cyc, d in resolved if d >= institution_today()]
         pick = min(future, key=lambda x: x[1]) if future else (max(resolved, key=lambda x: x[0]) if resolved else None)
@@ -346,11 +402,13 @@ class DashboardService:
             quiz_cycle=cycle_number,
             semester_start=semester_start,
             # Phase 25.4 (optimization #1): pass pre-fetched data so the
-            # eligibility batch skips its own redundant queries.
+            # eligibility batch skips its own redundant queries. Perf batch 2:
+            # pass the unified rows so the batch skips its ClassSession scan.
             cycle_model=cycle_model,
             events=events,
             elective_scope=elective_scope,
             effective_by_subject=effective_by_subject,
+            session_rows=unified_rows,
         )
         eligible = 0
         attention = 0
@@ -391,17 +449,14 @@ class DashboardService:
         items.sort(key=lambda x: (x.status == "CRITICAL", -(x.current_pct if x.current_pct is not None else 0)), reverse=True)
         return items
 
-    async def _build_upcoming_events(self, user, subjects: List[Subject], events, choices) -> List[UpcomingEventItem]:
+    async def _build_upcoming_events(self, user, subjects: List[Subject], events, choices, anchor_subjects) -> List[UpcomingEventItem]:
         today = institution_today()
         enrolled_ids = {s.id for s in subjects}
         subject_by_id = {s.id: s for s in subjects}
 
-        # Phase 25.4 (optimization #1): events + choices are pre-fetched in
-        # get_summary (same query, same ordering). anchor_subjects is still
-        # fetched here (one query, not duplicated within the request).
-        resolver = ElectiveResolver(self.db)
-        anchor_subjects = await resolver.anchor_subjects()
-
+        # Phase 25.4 (optimization #1) + perf batch 2: events, choices and the
+        # anchor subjects are pre-fetched once in get_summary (same resolver,
+        # no second ElectiveResolver instance or anchor lookup per request).
         upcoming: List[UpcomingEventItem] = []
         for e in events:
             if not e.active or e.end_date < today:
