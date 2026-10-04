@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from uuid import UUID
 from typing import Optional, Dict, Any, List
@@ -5,6 +6,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.session import AsyncSessionLocal
 from app.repositories.attendance_repo import AttendanceRepository
 from app.models.user import User
 from app.models.attendance import AttendanceRecord
@@ -32,6 +34,44 @@ from app.core.timezone import INSTITUTION_TZ, institution_today
 # This is the legacy `policies.attendance.targetPercentage` default (75) and the
 # attendance engine's own default (`compute_subject_stats(target_pct=75.0)`).
 SUBJECT_OPTIMIZATION_TARGET_PCT = 75.0
+
+# Strong references keep fire-and-forget background tasks from being
+# garbage-collected mid-flight; each task discards itself on completion.
+_BACKGROUND_NOTIFICATION_TASKS: set = set()
+
+
+def _schedule_attendance_notification(user_id: UUID, subject_id: UUID) -> None:
+    """Best-effort background notification trigger (perf batch 1).
+
+    Runs the exact Phase 11C-P4 post-commit logic — notification re-evaluation
+    plus push dispatch — but OFF the POST /attendance critical path, in a task
+    with its OWN database session (the request session closes with the
+    response). Attendance persistence never waits on notification creation or
+    push delivery; the trigger can never fail or roll back the committed
+    attendance write. Failures are logged, never silently lost. Lazy import
+    avoids a module cycle (notification_service imports this service).
+    """
+    async def _run() -> None:
+        try:
+            from app.services.notification_service import NotificationService
+            async with AsyncSessionLocal() as session:
+                subject_code = await AttendanceService._subject_code_for(session, subject_id)
+                if subject_code is None:
+                    return
+                await NotificationService(session).after_attendance_mutation(
+                    user_id=user_id,
+                    subject_code=subject_code,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Background notification trigger failed for attendance user %s subject %s",
+                user_id, subject_id,
+            )
+
+    task = asyncio.create_task(_run())
+    _BACKGROUND_NOTIFICATION_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_NOTIFICATION_TASKS.discard)
 
 
 def _build_subject_summary(subject_code: str, counts: Dict[str, Any], mid_sem=None) -> SubjectAttendanceSummary:
@@ -242,31 +282,24 @@ class AttendanceService:
         await self.db.commit()
 
         # Phase 11C-P4: post-commit canonical notification side-channel.
-        # The attendance mutation is committed and authoritative; notification
-        # emission + push dispatch are best-effort and fully isolated — they
-        # can never fail or roll back the attendance write. Lazy import avoids
-        # a module cycle (notification_service imports this service).
-        try:
-            from app.services.notification_service import NotificationService
-            await NotificationService(self.db).after_attendance_mutation(
-                user_id=user_id,
-                subject_code=await self._subject_code(effective_subject_id),
-            )
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception(
-                "Notification trigger failed for attendance user %s session %s",
-                user_id, class_session_id,
-            )
+        # Perf batch 1: the trigger now runs as a background task with its own
+        # database session instead of being awaited inside this request —
+        # attendance persistence never waits on notification creation or push
+        # delivery (push dispatch is sequential webpush with a 10 s timeout per
+        # subscription). The task reuses the exact previous logic and remains
+        # fully isolated — it can never fail or roll back the committed
+        # attendance write; failures are logged.
+        _schedule_attendance_notification(user_id, effective_subject_id)
         return record
 
-    async def _subject_code(self, subject_id: UUID) -> str:
-        """Resolve a subject's code (Phase 11C-P4 helper)."""
+    @staticmethod
+    async def _subject_code_for(db: AsyncSession, subject_id: UUID) -> Optional[str]:
+        """Resolve a subject's code (Phase 11C-P4 helper); None when the
+        subject no longer exists. Static so the background notification task
+        can resolve it against its own session."""
         from app.repositories.subject_repo import SubjectRepository
-        subject = await SubjectRepository(self.db).get_by_id(subject_id)
-        if subject is None:
-            raise HTTPException(status_code=404, detail="Subject not found")
-        return subject.code
+        subject = await SubjectRepository(db).get_by_id(subject_id)
+        return None if subject is None else subject.code
 
     async def get_history(
         self,
@@ -308,7 +341,11 @@ class AttendanceService:
         if search:
             search = search.strip()
 
-        records, total_count = await self.repo.get_history(
+        # Perf batch 1: ONE occurrence fetch feeds both the page and the
+        # summary (previously repo.get_history + repo.get_history_summary each
+        # ran the identical full-semester scan). Ordering, practical-collapse
+        # semantics, pagination behavior and the response shape are unchanged.
+        records, total_count, summary_counts = await self.repo.get_history_page_and_summary(
             user_id=user.id,
             limit=limit,
             offset=offset,
@@ -340,18 +377,10 @@ class AttendanceService:
                 "elective_slot": r.get("elective_slot"),
             })
 
-        # Summary over the FULL filtered result set (not the loaded page).
-        # Cancelled sessions are their own state (never counted absent),
-        # mirroring Track's daily counts.
-        summary_counts = await self.repo.get_history_summary(
-            user_id=user.id,
-            subject_code=subject_code,
-            status=status,
-            date_from=range_start,
-            date_to=range_end,
-            search=search or None,
-        )
-
+        # Summary over the FULL filtered result set (not the loaded page) —
+        # computed from the same single occurrence fetch as the page (perf
+        # batch 1). Cancelled sessions are their own state (never counted
+        # absent), mirroring Track's daily counts.
         cancelled = summary_counts["cancelled"]
         attended = summary_counts["attended"]
         missed = summary_counts["missed"]

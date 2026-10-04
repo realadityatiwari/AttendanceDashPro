@@ -8,19 +8,24 @@ import { useAuth } from "@/contexts/AuthContext";
  *
  * The authenticated route group must never paint the app chrome (nav,
  * greeting, cards) for a visitor with no session while AuthContext's
- * effect-driven redirect is still in flight. The gate renders the shell only
- * once auth has resolved AND a persisted token exists; until then it renders
- * a neutral full-screen loading state instead of the shell.
+ * effect-driven redirect is still in flight. The gate renders the shell once
+ * the persisted-token check has resolved AND a token exists.
+ *
+ * Perf batch 1: the gate opens on `authResolved` + `hasSession` (token
+ * presence) and deliberately does NOT wait for the profile fetch — page data
+ * hooks start in parallel with GET /student/me instead of behind it. The
+ * 401 → refresh → redirect behavior is unchanged (it lives in apiFetch), and
+ * a transiently failing profile fetch keeps the shell mounted and retries
+ * through SWR. Components that render profile fields read them through their
+ * own `useProfile()` hooks and already handle the in-flight state.
  *
  * Routing and auth semantics are unchanged: AuthContext still owns the
  * redirect to /login (no token) and /dashboard (token on a public route).
- * A session with a transiently failing profile fetch still passes the gate
- * and retries through SWR — `hasSession` reflects the token, not the profile.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { loading, hasSession } = useAuth();
+  const { authResolved, hasSession } = useAuth();
 
-  if (loading || !hasSession) {
+  if (!authResolved || !hasSession) {
     return (
       <div
         className="flex h-screen items-center justify-center bg-background"

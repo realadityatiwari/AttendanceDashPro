@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List, Dict, Any, Optional
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from app.core.timezone import institution_today
@@ -55,11 +55,14 @@ class EligibilityService:
         if not cycle_model or not cycle_model.policy:
             raise HTTPException(status_code=404, detail="Quiz cycle or policy not found")
 
-        # 3. Fetch Events (needed to resolve the attendance window)
-        events = await self.calendar_repo.get_all_events()
-
+        # 3. Events (calendar-engine window resolution) are fetched INSIDE
+        #    _evaluate_subject, bounded to the subject's own quiz windows
+        #    (perf batch 1) — the previous unbounded get_all_events() here read
+        #    the entire academic_events table (active and inactive, all dates)
+        #    for every single-subject eligibility request. The batched path
+        #    keeps its pre-fetched events (dashboard already bounds them).
         return await self._evaluate_subject(
-            user_id, subject_model, effective_dates, cycle_model, events,
+            user_id, subject_model, effective_dates, cycle_model, None,
             quiz_cycle, semester_start,
         )
 
@@ -306,6 +309,17 @@ class EligibilityService:
         `effective_dates` is the canonical (cycle_number, quiz_date) list from
         active QUIZ_DAY AcademicEvents (Phase 2); a cycle with no active event
         simply has no milestone, so the engine emits UNRESOLVED for it.
+
+        `events` feeds only the calendar engine's window resolution (teaching
+        days inside the attendance windows). Perf batch 1: when not pre-fetched
+        by the caller (batch path), the fetch is bounded to
+        [cumulative-window start, quiz date - 1] — the exact union of both
+        windows' bounds — with the repo's range-overlap semantics retaining
+        boundary-spanning events. Window bounds derive from milestone dates and
+        the commencement date, never from events, so the resolved windows (and
+        therefore eligibility) are byte-identical to the previous unbounded
+        fetch; inactive events are excluded because the calendar engine filters
+        them out in Python anyway (get_academic_day).
         """
         # Convert SQLAlchemy Subject to Domain Subject schema
         milestones, domain_subject = self._build_domain_subject(
@@ -334,6 +348,37 @@ class EligibilityService:
         #    start for cycles > 1, so every session on that date — including
         #    the quiz-day-shaped occurrence — counts toward the next cycle.
         milestone = next((m for m in milestones if m.metadata.get('quizCycle') == quiz_cycle), None)
+        # Perf batch 1: bounded events fetch (see method docstring). The bounds
+        # are the union of both windows' extents — the cumulative window starts
+        # at the commencement date, both windows end the day before the quiz —
+        # and window bounds themselves derive from milestone/commencement dates,
+        # never from events, so the resolved windows are byte-identical to the
+        # previous unbounded full-table fetch.
+        if events is None:
+            if milestone is None:
+                events = []  # unresolved cycle: no window, no events needed
+            else:
+                # Earliest date either window can reference: the cumulative
+                # window starts at commencement; the cycle window starts at
+                # the previous quiz date (when one exists). min() keeps the
+                # bound exact even if a quiz were configured before
+                # commencement. Latest date: the day before the quiz (both
+                # windows share that end).
+                prev_quiz = next(
+                    (m for m in milestones
+                     if m.type == 'QUIZ' and m.metadata.get('quizCycle') == quiz_cycle - 1),
+                    None,
+                )
+                window_floor = domain_subject.timeline.commencement_date
+                if prev_quiz is not None and prev_quiz.date < window_floor:
+                    window_floor = prev_quiz.date
+                window_ceiling = milestone.date - timedelta(days=1)
+                if window_floor > window_ceiling:
+                    events = []  # degenerate window: no countable teaching day
+                else:
+                    events = await self.calendar_repo.get_all_events(
+                        active=True, date_from=window_floor, date_to=window_ceiling,
+                    )
         if milestone:
             if raw_counts is None:
                 window = get_attendance_window(domain_subject, milestone.milestone_id, events, default_weekends)

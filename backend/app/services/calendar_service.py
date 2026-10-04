@@ -20,8 +20,17 @@ class CalendarService:
         # Phase 25.4 (optimization #1): accept pre-fetched events to avoid a
         # redundant query when the caller already has them (e.g. dashboard
         # summary). Default None = fetch (existing behavior unchanged).
+        # Perf batch 1: the default fetch is bounded to the requested date —
+        # the only consumer of these events is get_academic_day, which filters
+        # per-date (start_date <= target_date <= end_date, active) in Python,
+        # so the repo's range-overlap semantics (end_date >= date_from AND
+        # start_date <= date_to) retain exactly the events that can affect
+        # this day, including events spanning the boundary. Previously this
+        # fetched the entire academic_events table per day request.
         if events is None:
-            events = await self.repo.get_all_events()
+            events = await self.repo.get_all_events(
+                active=True, date_from=target_date, date_to=target_date
+            )
         # Single source of truth from the calendar engine (JS getDay() indices:
         # 0=Sunday, 6=Saturday). Previously a local [5, 6] (Python weekday
         # indices) was passed here, which the engine interpreted as JS indices

@@ -254,7 +254,7 @@ export function useCalendarMonth(year: number, month: number) {
   // keepPreviousData retains the last loaded month while the next one fetches,
   // so the grid never blanks during navigation.
   const { data, error, isLoading, mutate } = useSWR<CalendarMonthResponse>(
-    `/api/v1/calendar?year=${year}&month=${month}`,
+    calendarMonthKey(year, month),
     fetcher,
     { ...SEMI_STATIC_CACHE, keepPreviousData: true }
   );
@@ -368,9 +368,21 @@ export function useLabMutations() {
   return { createRecord, updateRecord, deleteRecord, createExperiment, updateExperiment, deleteExperiment };
 }
 
+// Perf batch 1: canonical SWR key builders for cross-page cache mutation.
+// The hooks below use these exact strings; pages that only need to
+// revalidate a resource (Track after an attendance tap, Events after an
+// event mutation) mutate by key via useSWRConfig().mutate instead of
+// mounting the full hook — which would fetch the payload on mount just to
+// obtain a mutate handle.
+export const DASHBOARD_SUMMARY_KEY = '/api/v1/dashboard/summary';
+
+export function calendarMonthKey(year: number, month: number): string {
+  return `/api/v1/calendar?year=${year}&month=${month}`;
+}
+
 export function useDashboardSummary() {
   const { data, error, isLoading, mutate } = useSWR<DashboardSummaryResponse>(
-    '/api/v1/dashboard/summary',
+    DASHBOARD_SUMMARY_KEY,
     fetcher,
     DASHBOARD_CACHE
   );

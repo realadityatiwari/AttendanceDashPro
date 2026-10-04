@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useEvents, useProfile, useCalendarMonth, useEventMutations } from "@/hooks/useApi";
+import { useSWRConfig } from "swr";
+import { useEvents, useProfile, useEventMutations, calendarMonthKey } from "@/hooks/useApi";
 import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -51,8 +52,13 @@ export default function EventsPage() {
 
   // Revalidate the current calendar month after an event mutation so the
   // calendar reflects the change without a separate event cache.
+  // Perf batch 1: revalidate by KEY (same cache key the calendar page uses)
+  // instead of mounting useCalendarMonth() just for its mutate handle — the
+  // mounted hook fetched the full month read model on every Events visit even
+  // though this page never renders it.
   const now = new Date();
-  const { mutate: mutateCalendar } = useCalendarMonth(now.getFullYear(), now.getMonth() + 1);
+  const { mutate: globalMutate } = useSWRConfig();
+  const mutateCalendar = () => globalMutate(calendarMonthKey(now.getFullYear(), now.getMonth() + 1));
 
   // Guard against an inverted server-side range (which the API rejects with
   // 422) — show a hint instead of letting the request fail.

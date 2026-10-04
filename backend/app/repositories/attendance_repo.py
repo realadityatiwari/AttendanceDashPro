@@ -672,6 +672,78 @@ class AttendanceRepository:
             return occ.get("status") is None
         return occ.get("status") == resolved
 
+    @staticmethod
+    def _history_sort_key(o: dict):
+        st = o.get("start_time")
+        st_secs = (st.hour * 3600 + st.minute * 60 + st.second) if st else 0
+        return (-o["date"].toordinal(), -st_secs, o.get("subject_code") or "")
+
+    async def _history_filtered(
+        self,
+        user_id: UUID,
+        subject_code: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        search: Optional[str] = None,
+    ) -> List[dict]:
+        """One occurrence fetch + status filter shared by the history page and
+        summary readers (perf batch 1: GET /attendance/history previously ran
+        this exact scan twice — once for the page, once for the summary)."""
+        conditions = self._history_base_conditions(
+            subject_code, date_from, date_to, search
+        )
+        occurrences = await self._fetch_history_occurrences(user_id, conditions)
+        return [
+            o for o in occurrences if self._history_status_match(o, status)
+        ]
+
+    async def get_history_page_and_summary(
+        self,
+        user_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        subject_code: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        search: Optional[str] = None,
+    ) -> Tuple[List[dict], int, dict]:
+        """History page + summary from ONE occurrence fetch.
+
+        Semantics identical to calling get_history and get_history_summary
+        separately (the pre-perf-batch-1 behavior): the summary counts cover
+        the FULL filtered result set (not the page), the sort is
+        (-date, -start_time, subject_code), and the page is the sorted slice
+        [offset:offset+limit]. Returns (page, total_count, summary_counts).
+        """
+        filtered = await self._history_filtered(
+            user_id, subject_code, status, date_from, date_to, search
+        )
+        total_count = len(filtered)
+
+        summary = {
+            "cancelled": sum(1 for o in filtered if o.get("is_cancelled")),
+            "attended": sum(
+                1 for o in filtered
+                if o.get("status") == AttendanceStatus.ATTENDED
+                and not occurrence_is_cancelled(o)
+            ),
+            "missed": sum(
+                1 for o in filtered
+                if o.get("status") == AttendanceStatus.MISSED
+                and not occurrence_is_cancelled(o)
+            ),
+            "pending": sum(
+                1 for o in filtered
+                if o.get("status") is None and not o.get("is_cancelled")
+            ),
+        }
+
+        filtered.sort(key=self._history_sort_key)
+        page = filtered[offset:offset + limit]
+        return page, total_count, summary
+
     async def get_history(
         self,
         user_id: UUID,
@@ -691,21 +763,12 @@ class AttendanceRepository:
         history row. Cancelled occurrences are included as their own state.
         Mirrors the daily/Track read semantics; never creates rows.
         """
-        conditions = self._history_base_conditions(
-            subject_code, date_from, date_to, search
+        filtered = await self._history_filtered(
+            user_id, subject_code, status, date_from, date_to, search
         )
-        occurrences = await self._fetch_history_occurrences(user_id, conditions)
-        filtered = [
-            o for o in occurrences if self._history_status_match(o, status)
-        ]
         total_count = len(filtered)
 
-        def sort_key(o: dict):
-            st = o.get("start_time")
-            st_secs = (st.hour * 3600 + st.minute * 60 + st.second) if st else 0
-            return (-o["date"].toordinal(), -st_secs, o.get("subject_code") or "")
-
-        filtered.sort(key=sort_key)
+        filtered.sort(key=self._history_sort_key)
         page = filtered[offset:offset + limit]
         return page, total_count
 
@@ -727,13 +790,9 @@ class AttendanceRepository:
         predates the cancellation (occurrence_is_cancelled); a recorded lab
         block keeps its frozen record-wins rule.
         """
-        conditions = self._history_base_conditions(
-            subject_code, date_from, date_to, search
+        filtered = await self._history_filtered(
+            user_id, subject_code, status, date_from, date_to, search
         )
-        occurrences = await self._fetch_history_occurrences(user_id, conditions)
-        filtered = [
-            o for o in occurrences if self._history_status_match(o, status)
-        ]
         cancelled = sum(1 for o in filtered if o.get("is_cancelled"))
         attended = sum(
             1 for o in filtered

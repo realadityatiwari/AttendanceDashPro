@@ -16,6 +16,13 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  /** True once the persisted-token check has resolved (auth hydration done).
+   * Perf batch 1: distinct from `loading` (which additionally covers the
+   * profile fetch) so the authenticated shell can open — and page data hooks
+   * can start — while /student/me resolves in parallel. Existing `loading`
+   * consumers (admin layout, profile page, feedback page) keep the old
+   * blocking semantics unchanged. */
+  authResolved: boolean;
   /** True once a persisted session token exists (auth resolved). UIA-013:
    * the authenticated shell gates on this so an anonymous visit renders no
    * app chrome before the redirect to /login. It never replaces the
@@ -30,6 +37,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  authResolved: false,
   hasSession: false,
   getToken: async () => null,
   logout: () => {},
@@ -182,7 +190,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, hasSession: tokenStatus === "present", getToken, logout, refreshUser }}
+      value={{
+        user,
+        loading,
+        authResolved: tokenStatus !== "unknown",
+        hasSession: tokenStatus === "present",
+        getToken,
+        logout,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

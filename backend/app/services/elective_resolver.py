@@ -142,9 +142,18 @@ class ElectiveResolver:
         }
 
     async def anchor_subjects(self) -> Dict[ElectiveSlot, Subject]:
-        """The shared anchor subjects for both slots (BCS-054 / BCS-058)."""
-        subjects = await self._subject_repo.get_all_subjects()
-        return {slot: s for slot, code in ANCHOR_CODES.items() for s in subjects if s.code == code}
+        """The shared anchor subjects for both slots (BCS-054 / BCS-058).
+
+        Perf batch 1: fetched by exact code (two unique-code lookups) instead
+        of loading the entire subjects table and filtering in Python — the
+        result dict is identical (a slot key is present only when its anchor
+        subject exists)."""
+        subjects: Dict[ElectiveSlot, Subject] = {}
+        for slot, code in ANCHOR_CODES.items():
+            subject = await self._subject_repo.get_by_code(code)
+            if subject is not None:
+                subjects[slot] = subject
+        return subjects
 
     async def anchor_subject_for_slot(self, slot: ElectiveSlot) -> Optional[Subject]:
         return await self._subject_repo.get_by_code(ANCHOR_CODES[slot])

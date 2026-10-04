@@ -604,7 +604,12 @@ class NotificationService:
         resolver = ElectiveResolver(self.db)
         choices = await resolver.load_choices(user.id)
         anchor_subjects = await resolver.anchor_subjects()
-        events = await self.calendar_repo.get_all_events()
+        # Perf batch 1: bounded event fetch. The in-Python filter below keeps
+        # exactly `active AND end_date >= as_of`; the repo's range-overlap
+        # semantics (end_date >= date_from) express the identical predicate in
+        # SQL, so the resulting event set is unchanged — previously this read
+        # the entire academic_events table on every sweep.
+        events = await self.calendar_repo.get_all_events(active=True, date_from=as_of)
         upcoming = []
         for e in events:
             if not e.active or e.end_date < as_of:

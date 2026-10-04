@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useSWRConfig } from "swr";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { useDailySessions, useMutateAttendance, useDashboardSummary, useProfile } from "@/hooks/useApi";
+import { useDailySessions, useMutateAttendance, useProfile, DASHBOARD_SUMMARY_KEY } from "@/hooks/useApi";
 import { getLocalDateString, formatLongDate, formatDateMedium, addDays, isToday, parseLocalDate } from "@/lib/date";
 import { AttendanceStatus, AttendanceMutationRequest } from "@/types/api";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,13 @@ export default function TrackAttendancePage() {
 
   const { dailySessions, isLoading, isError, mutate } = useDailySessions(dateStr);
   const { mutateAttendance } = useMutateAttendance();
-  const { mutate: mutateDashboard } = useDashboardSummary();
+  // Perf batch 1: revalidate the dashboard summary by KEY after a mutation
+  // instead of mounting useDashboardSummary() just for its mutate handle —
+  // the mounted hook fetched the whole dashboard payload on every Track visit
+  // (revalidateIfStale) even though this page never renders it. Same cache
+  // key, same revalidation semantics, zero on-mount fetch.
+  const { mutate: globalMutate } = useSWRConfig();
+  const mutateDashboard = () => globalMutate(DASHBOARD_SUMMARY_KEY);
 
   const atSemesterStart = semesterStart ? dateStr <= semesterStart : false;
   const atSemesterEnd = semesterEnd ? dateStr >= semesterEnd : false;
