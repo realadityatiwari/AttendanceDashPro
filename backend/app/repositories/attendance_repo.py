@@ -475,6 +475,8 @@ class AttendanceRepository:
         Read-only: returns raw row dicts; no grouping/collapse happens here
         (each consumer runs its own canonical collapse exactly as before).
         """
+        from app.models.academic import Subject
+
         resolved_subject_id = func.coalesce(
             StudentElectiveChoice.subject_id, ClassSession.subject_id
         )
