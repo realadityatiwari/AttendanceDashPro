@@ -160,18 +160,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     item.action?.onClick();
                     dismiss(item.id);
                   }}
-                  className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-primary outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60"
+                  className="flex shrink-0 items-center rounded-md px-2 text-xs font-semibold text-primary outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 min-h-10 sm:min-h-8"
                 >
                   {item.action.label}
                 </button>
               )}
-              {/* UI-024: p-1.5 keeps the compact icon but lifts the hit area
-                  above the 24px minimum (p-1 left it at 22px). */}
+              {/* UIA-030 (25.UX-1): the icon target now matches the shared
+                  floor — 40px touch / 32px pointer — instead of p-1.5's 26px. */}
               <button
                 type="button"
                 aria-label="Dismiss notification"
                 onClick={() => dismiss(item.id)}
-                className="shrink-0 rounded-md p-1.5 text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="flex shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 size-10 sm:size-8"
               >
                 <X className="size-3.5" aria-hidden="true" />
               </button>

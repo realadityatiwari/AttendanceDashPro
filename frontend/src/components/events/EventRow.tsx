@@ -6,8 +6,8 @@ import { AcademicEventResponse, EventType } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatDateMedium, formatShortDate } from "@/lib/date";
-import { classTypeLabel, humanizeEventType } from "@/components/events/eventRules";
+import { formatDateParts, formatDateMedium } from "@/lib/date";
+import { classTypeLabel, humanizeEventType, isHolidayEventType } from "@/components/events/eventRules";
 import { CalendarDays, CalendarRange, Info, Pencil, Power } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,13 +15,6 @@ import { cn } from "@/lib/utils";
 function formatEventDate(value: string): string {
   return formatDateMedium(value);
 }
-
-const HOLIDAY_TYPES = new Set([
-  EventType.HOLIDAY,
-  EventType.PUBLIC_HOLIDAY,
-  EventType.INSTITUTE_HOLIDAY,
-  EventType.FESTIVAL_HOLIDAY,
-]);
 
 interface EventRowProps {
   event: AcademicEventResponse;
@@ -41,7 +34,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
   const [confirming, setConfirming] = useState(false);
   const isAdmin = onEdit !== undefined || onDeactivate !== undefined;
   const title = humanizeEventType(event.event_type);
-  const isHoliday = HOLIDAY_TYPES.has(event.event_type);
+  const isHoliday = isHolidayEventType(event.event_type);
   const isExtra = event.event_type.startsWith("EXTRA_");
   // Phase 9.1: LAB_CANCELLED renders the same Cancelled treatment as
   // CLASS_CANCELLED (it is the practical-scoped cancellation event).
@@ -67,10 +60,10 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex w-12 shrink-0 flex-col items-center justify-center rounded-full border border-border bg-muted py-1.5">
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {formatShortDate(event.start_date).split(" ")[1]}
+            {formatDateParts(event.start_date).month}
           </span>
           <span className="text-sm font-bold leading-none text-foreground">
-            {formatShortDate(event.start_date).split(" ")[0]}
+            {formatDateParts(event.start_date).day}
           </span>
         </div>
         <div className="min-w-0">
@@ -117,13 +110,16 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
         </div>
       </div>
       <div className="flex flex-wrap shrink-0 items-center gap-1.5 self-start sm:self-auto">
+        {/* 25.UX-1: the former per-button h-7 override is removed — the size
+            primitive enforces the 40px touch / 32px pointer floor (UIA-030),
+            matching the identical override removal in TrackSessionCard. */}
         {isAdmin && (
           <>
             {onEdit && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 gap-1 px-2 text-xs"
+                className="gap-1 px-2 text-xs"
                 onClick={() => onEdit(event)}
               >
                 <Pencil className="size-3.5" aria-hidden />
@@ -136,7 +132,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="h-7 gap-1 px-2 text-xs"
+                    className="gap-1 px-2 text-xs"
                     onClick={() => { setConfirming(false); onDeactivate(event); }}
                   >
                     Confirm
@@ -144,7 +140,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="px-2 text-xs"
                     onClick={() => setConfirming(false)}
                   >
                     Cancel
@@ -154,7 +150,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                  className="gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
                   onClick={() => setConfirming(true)}
                   title="Deactivate this event (safe deactivation, reversible via edit)"
                 >

@@ -31,7 +31,7 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
           <div>
             <CardTitle>This Week</CardTitle>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarRange className="size-3.5" />
+              <CalendarRange className="size-3.5" aria-hidden="true" />
               {formatDateRange(weekly.week_start, weekly.week_end)}
             </p>
           </div>
@@ -50,9 +50,9 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                 }`}
               >
                 {delta >= 0 ? (
-                  <ArrowUpRight className="size-3.5" />
+                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
                 ) : (
-                  <ArrowDownRight className="size-3.5" />
+                  <ArrowDownRight className="size-3.5" aria-hidden="true" />
                 )}
                 {formatDelta(delta)} pts
               </div>

@@ -3,6 +3,11 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
+const MONTHS_FULL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function toDate(value: string | Date): Date {
@@ -25,6 +30,49 @@ export function parseLocalDate(value: string): Date {
 export function formatLongDate(value: string | Date): string {
   const d = toDate(value);
   return `${WEEKDAYS[d.getDay()]} · ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Weekday and date without the dot separator: "Monday 5 Oct 2026". Same
+ * vocabulary as formatLongDate — use it when concatenating into a sentence
+ * instead of post-processing formatLongDate output. */
+export function formatWeekdayDate(value: string | Date): string {
+  const d = toDate(value);
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Full month name: "October". Canonical month label for calendar surfaces. */
+export function getMonthName(value: string | Date): string {
+  const d = toDate(value);
+  return MONTHS_FULL[d.getMonth()];
+}
+
+/** Month and year: "October 2026". Canonical month header format. */
+export function formatMonthYear(value: string | Date): string {
+  const d = toDate(value);
+  return `${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Structured date parts for tile layouts: { day: "5", month: "OCT" } — the
+ * exact strings formatShortDate renders, without callers splitting its
+ * output. */
+export function formatDateParts(
+  value: string | Date
+): { day: string; month: string } {
+  const d = toDate(value);
+  return { day: String(d.getDate()), month: MONTHS[d.getMonth()].toUpperCase() };
+}
+
+/** Formats a full backend timestamp (ISO date-time, e.g. a `created_at`
+ * datetime) as its local calendar date. Date-only strings keep the local
+ * calendar contract of toDate; true timestamps parse through the standard
+ * Date constructor so the time component is honored. Unparseable input
+ * renders as an em dash — never silently today's date. */
+export function formatTimestampDate(value: string | Date): string {
+  if (value instanceof Date) return formatDateMedium(value);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? toDate(value)
+    : new Date(value);
+  return isNaN(parsed.getTime()) ? "—" : formatDateMedium(parsed);
 }
 
 export function formatShortDate(value: string | Date): string {

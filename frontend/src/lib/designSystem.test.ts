@@ -106,3 +106,89 @@ describe("UIA-029: one profile surface", () => {
     expect(read("components/layout/UserMenu.tsx")).toContain('href="/profile"');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 25.UX-1: canonical state surfaces. The audited student surfaces must keep
+// consuming the semantic token system and the canonical status/date layers —
+// the raw-palette and duplicated-map bypasses may not quietly reappear.
+// ---------------------------------------------------------------------------
+
+const UX1_TOKEN_FILES = [
+  "components/shared/ErrorState.tsx",
+  "app/(authenticated)/calendar/page.tsx",
+  "app/(authenticated)/tools/events/page.tsx",
+  "app/(authenticated)/laboratory/page.tsx",
+  "app/(authenticated)/history/page.tsx",
+  "components/notifications/NotificationBell.tsx",
+  "components/dashboard/SubjectAttendanceCard.tsx",
+];
+
+describe("25.UX-1: semantic tokens on the audited error/status surfaces", () => {
+  it("uses no raw red/emerald/amber palette classes in the migrated files", () => {
+    const offenders = UX1_TOKEN_FILES.filter((rel) =>
+      /(bg|border|text)-(red|emerald|amber)-/.test(read(rel))
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("uses no hardcoded white on token surfaces (bell badge, switch thumbs)", () => {
+    expect(read("components/notifications/NotificationBell.tsx")).not.toMatch(
+      /text-white\b/
+    );
+    expect(read("components/shell/SettingsModal.tsx")).not.toMatch(/bg-white\b/);
+  });
+
+  it("removes the EventRow h-7 touch-target override (UIA-030 floor)", () => {
+    // Scoped to className usage so explanatory comments never trip it.
+    expect(read("components/events/EventRow.tsx")).not.toMatch(
+      /className="[^"]*\bh-7\b/
+    );
+  });
+
+  it("keeps the laboratory experiment status text visible on mobile", () => {
+    const lab = read("app/(authenticated)/laboratory/page.tsx");
+    expect(lab).not.toMatch(/hidden sm:inline">\{statusText\}/);
+  });
+
+  it("sources subject-health labels from the canonical vocabulary", () => {
+    const card = read("components/dashboard/SubjectAttendanceCard.tsx");
+    expect(card).toContain("attendanceStatusLabel");
+    expect(card).not.toMatch(/label:\s*"Watch"/);
+  });
+
+  it("keeps the dashboard classTypeLabel delegated to the canonical module", () => {
+    expect(read("components/dashboard/home/status.ts")).not.toContain(
+      "export function classTypeLabel"
+    );
+  });
+
+  it("renders no raw YYYY-MM-DD laboratory dates to students", () => {
+    const lab = read("app/(authenticated)/laboratory/page.tsx");
+    expect(lab).not.toMatch(/\{item\.date\}/);
+    // Ban only *unformatted* renders (bare value or ?? fallback); the fixed
+    // ternary routes the value through formatDateMedium and is legitimate.
+    expect(lab).not.toMatch(/\{ms\.session_date\s*(\?\?|\})/);
+  });
+
+  it("has no formatter-output string surgery in student surfaces", () => {
+    expect(read("app/(authenticated)/calendar/page.tsx")).not.toMatch(
+      /formatLongDate\([^)]*\)\.replace/
+    );
+    for (const rel of [
+      "app/(authenticated)/history/page.tsx",
+      "components/events/EventRow.tsx",
+      "components/dashboard/home/UpcomingEventsCard.tsx",
+    ]) {
+      expect(read(rel)).not.toMatch(/formatShortDate\([^)]*\)\.split/);
+    }
+  });
+
+  it("has no Intl.DateTimeFormat month formatters outside lib/date", () => {
+    for (const rel of [
+      "app/(authenticated)/calendar/page.tsx",
+      "components/calendar/CalendarGrid.tsx",
+    ]) {
+      expect(read(rel)).not.toContain("Intl.DateTimeFormat");
+    }
+  });
+});

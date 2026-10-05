@@ -20,11 +20,14 @@ export function ErrorState({
   action,
 }: ErrorStateProps) {
   return (
-    <Card className="bg-red-950/20 border-red-900/50">
+    // 25.UX-1: semantic destructive tokens — the same recipe as the app's
+    // other inline error surfaces (border-destructive/30 bg-destructive/10),
+    // so the shared error state can never drift from the token set.
+    <Card className="border-destructive/30 bg-destructive/10">
       <div className="flex flex-col items-center justify-center text-center p-8">
-        <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-red-400">{title}</h3>
-        <p className="text-sm text-red-400/80 mt-2 max-w-md mx-auto">
+        <AlertCircle className="h-10 w-10 text-destructive mb-4" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-destructive">{title}</h3>
+        <p className="text-sm text-destructive/90 mt-2 max-w-md mx-auto">
           {message}
         </p>
         {(onRetry || action) && (

@@ -184,7 +184,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   // changing the switch's appearance.
                   className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors before:absolute before:-inset-2 before:content-[''] data-checked:bg-primary data-disabled:opacity-50"
                 >
-                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
+                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-primary-foreground" />
                 </Switch.Root>
               </div>
               {/* UIA-010: the action can be a wide button ("Enable browser
@@ -294,9 +294,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   }
                   disabled={controlsDisabled}
                   aria-label="Auto-mark present"
-                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors data-checked:bg-primary data-disabled:opacity-50"
+                  // 25.UX-1: same UIA-030 hit-area extension as the first
+                  // switch — the two identical-looking switches now have
+                  // identical touch targets.
+                  className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border bg-muted transition-colors before:absolute before:-inset-2 before:content-[''] data-checked:bg-primary data-disabled:opacity-50"
                 >
-                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-white" />
+                  <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-foreground/70 transition-transform data-checked:translate-x-[24px] data-checked:bg-primary-foreground" />
                 </Switch.Root>
               </div>
               {/* D-06: honest state — the preference is persisted but no

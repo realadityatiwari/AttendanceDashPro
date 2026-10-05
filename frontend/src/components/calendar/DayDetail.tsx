@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { AcademicEventResponse, CalendarDayItem, EventType } from "@/types/api";
+import { AcademicEventResponse, CalendarDayItem } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { classTypeLabel, humanizeEventType } from "@/components/events/eventRules";
+import { classTypeLabel, humanizeEventType, isHolidayEventType } from "@/components/events/eventRules";
 import { formatDateMedium, formatLongDate } from "@/lib/date";
 import { CalendarDays, CalendarRange, Info } from "lucide-react";
 
@@ -12,8 +12,6 @@ import { CalendarDays, CalendarRange, Info } from "lucide-react";
 function formatEventDate(value: string): string {
   return formatDateMedium(value);
 }
-
-const HOLIDAY_TYPES = new Set([EventType.PUBLIC_HOLIDAY, EventType.INSTITUTE_HOLIDAY, EventType.FESTIVAL_HOLIDAY]);
 
 /**
  * Detail card for the selected calendar day. Every value is rendered directly
@@ -90,7 +88,7 @@ export function DayDetail({ day }: { day: CalendarDayItem }) {
 }
 
 function EventRow({ event }: { event: AcademicEventResponse }) {
-  const isHoliday = HOLIDAY_TYPES.has(event.event_type);
+  const isHoliday = isHolidayEventType(event.event_type);
   const range =
     event.start_date === event.end_date
       ? formatEventDate(event.start_date)

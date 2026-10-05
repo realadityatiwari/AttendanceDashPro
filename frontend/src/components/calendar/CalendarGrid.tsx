@@ -4,15 +4,13 @@ import { CalendarDayItem } from "@/types/api";
 import type { WeekStart } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatLongDate, getLocalDateString, parseLocalDate } from "@/lib/date";
+import { formatLongDate, getLocalDateString, getMonthName, parseLocalDate } from "@/lib/date";
 
 // Weekday headers are pure layout; whether a day is working comes only from
 // the API read model. Column order rotates with the user's week-start
 // preference (Phase 9, D-05) — the backend default is MONDAY.
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAY_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
-
-const MONTH_NAME_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "long" });
 
 interface CalendarGridProps {
   year: number;
@@ -56,7 +54,7 @@ export function CalendarGrid({
     ? (firstOfMonth.getDay() + 6) % 7
     : firstOfMonth.getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
-  const monthLabel = `${MONTH_NAME_FORMATTER.format(firstOfMonth)} ${year}`;
+  const monthLabel = `${getMonthName(firstOfMonth)} ${year}`;
 
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < leadingBlanks; i++) {

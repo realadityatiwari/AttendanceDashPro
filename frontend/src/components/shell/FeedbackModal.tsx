@@ -6,20 +6,16 @@ import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { FEEDBACK_TYPES } from "@/lib/canonicalStatus";
+import type { FeedbackType } from "@/types/api";
 
 interface FeedbackModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type FeedbackType = "BUG" | "SUGGESTION" | "QUESTION" | "PRAISE";
-
-const FEEDBACK_TYPES: { value: FeedbackType; label: string }[] = [
-  { value: "BUG", label: "Bug" },
-  { value: "SUGGESTION", label: "Suggestion" },
-  { value: "QUESTION", label: "Question" },
-  { value: "PRAISE", label: "Praise" },
-];
+// Type vocabulary is canonical (lib/canonicalStatus) — shared with the
+// feedback review surface so labels can never drift (25.UX-1).
 
 type FeedbackState =
   | { status: "idle" }

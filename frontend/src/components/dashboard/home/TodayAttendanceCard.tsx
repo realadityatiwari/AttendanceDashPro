@@ -4,7 +4,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatLongDate } from "@/lib/date";
-import { classStatusLabel, classStatusVariant, classTypeLabel } from "./status";
+import { classTypeLabel } from "@/lib/canonicalStatus";
+import { classStatusLabel, classStatusVariant } from "./status";
 
 interface TodayAttendanceCardProps {
   today: TodaySection;
@@ -23,7 +24,7 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
           <div>
             <CardTitle>Today&apos;s Attendance</CardTitle>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarDays className="size-3.5" />
+              <CalendarDays className="size-3.5" aria-hidden="true" />
               {formatLongDate(today.date)}
             </p>
           </div>
@@ -58,9 +59,13 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
                     <span className="text-sm font-semibold text-foreground">
                       {cls.subject_code}
                     </span>
-                    <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
-                      {classTypeLabel(cls.class_type)}
-                    </Badge>
+                    {/* Canonical class-type label; unknown types render no
+                        badge instead of a guessed default (25.UX-1). */}
+                    {classTypeLabel(cls.class_type) && (
+                      <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
+                        {classTypeLabel(cls.class_type)}
+                      </Badge>
+                    )}
                     {cls.is_extra && (
                       <Badge variant="neutral" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
                         Extra
@@ -73,7 +78,7 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
                 </div>
                 <Badge variant={classStatusVariant(cls.status)} className="shrink-0 capitalize">
                   {cls.status === DashboardClassStatus.ATTENDED && (
-                    <CheckCircle2 className="size-3" />
+                    <CheckCircle2 className="size-3" aria-hidden="true" />
                   )}
                   {classStatusLabel(cls.status)}
                 </Badge>

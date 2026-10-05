@@ -114,3 +114,40 @@ describe("UIA-037/UIA-044: detail vocabulary and mid-sem noise", () => {
     expect(screen.getByText("3 Nov 2026")).toBeInTheDocument();
   });
 });
+
+/**
+ * 25.UX-1 regression: health labels flow from the canonical vocabulary —
+ * backend WATCH renders the canonical "At Risk" (never "Watch"), while the
+ * preserved Phase 8.2 per-band visual mapping keeps WATCH on the warning
+ * token and CRITICAL on the solid destructive treatment.
+ */
+describe("25.UX-1: canonical health labels", () => {
+  it("renders backend WATCH as the canonical At Risk label on the warning token", () => {
+    render(
+      <SubjectAttendanceCard
+        subject={subject}
+        summary={{ ...summary, health: "WATCH" }}
+      />
+    );
+    const badge = screen.getByText("At Risk");
+    expect(badge.className).toContain("text-warning");
+    expect(screen.queryByText("Watch")).not.toBeInTheDocument();
+  });
+
+  it("renders backend HEALTHY as Healthy", () => {
+    render(<SubjectAttendanceCard subject={subject} summary={summary} />);
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
+  });
+
+  it("keeps CRITICAL on the solid destructive treatment", () => {
+    render(
+      <SubjectAttendanceCard
+        subject={subject}
+        summary={{ ...summary, health: "CRITICAL" }}
+      />
+    );
+    const badge = screen.getByText("Critical");
+    expect(badge.className).toContain("bg-destructive");
+    expect(badge.className).toContain("text-destructive-foreground");
+  });
+});

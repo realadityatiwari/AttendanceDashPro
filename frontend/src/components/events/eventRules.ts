@@ -1,6 +1,7 @@
 "use client";
 
 import { ClassType, ElectiveSlot, EventType } from "@/types/api";
+import { classTypeLabel as canonicalClassTypeLabel } from "@/lib/canonicalStatus";
 
 /**
  * Frontend mirror of the backend event validation registry
@@ -132,14 +133,26 @@ export function humanizeEventType(type: string): string {
   return type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-// Null for class types without a display label (unknown/legacy). Note: the
-// dashboard's status.ts has its own classTypeLabel with a DIFFERENT contract
-// (string return, "Practical" default) — intentionally not unified.
+// Canonical class-type label contract (25.UX-1): the label function lives in
+// lib/canonicalStatus and is shared with the dashboard surfaces; this module
+// re-exports it so events consumers keep one import path. Null for class
+// types without a display label (unknown/legacy) — callers skip rendering.
 export function classTypeLabel(type: ClassType | null): string | null {
-  if (type === ClassType.LECTURE) return "Lecture";
-  if (type === ClassType.TUTORIAL) return "Tutorial";
-  if (type === ClassType.PRACTICAL || type === ClassType.PRACTICAL2) return "Practical";
-  return null;
+  return canonicalClassTypeLabel(type);
+}
+
+// 25.UX-1: the ONE holiday-type set (previously duplicated in EventRow and
+// DayDetail with drift — DayDetail missed the unified HOLIDAY type). Both
+// surfaces now derive the Holiday badge from this registry.
+export const HOLIDAY_EVENT_TYPES: ReadonlySet<EventType> = new Set<EventType>([
+  EventType.HOLIDAY,
+  EventType.PUBLIC_HOLIDAY,
+  EventType.INSTITUTE_HOLIDAY,
+  EventType.FESTIVAL_HOLIDAY,
+]);
+
+export function isHolidayEventType(eventType: EventType | string): boolean {
+  return HOLIDAY_EVENT_TYPES.has(eventType as EventType);
 }
 
 export type DurationMode = "single" | "range";

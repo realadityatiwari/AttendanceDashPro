@@ -6,6 +6,7 @@ import { useEvents, useProfile, useEventMutations, calendarMonthKey } from "@/ho
 import { AcademicEventResponse, EventsParams, EventType } from "@/types/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { DateInput } from "@/components/shared/DateInput";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ import { EventFormDialog } from "@/components/events/EventFormDialog";
 import { canStudentMutateEventType } from "@/components/events/eventRules";
 import { useToast } from "@/components/feedback/toast";
 import { getLocalDateString } from "@/lib/date";
-import { AlertCircle, CalendarX2, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, CalendarX2, Plus } from "lucide-react";
 
 type ActiveFilter = "active" | "inactive";
 
@@ -167,8 +168,8 @@ export default function EventsPage() {
         description="Upcoming, current, and past academic events for your program."
       />
 
-      <Card className="border-amber-500/20 bg-amber-500/10 p-4">
-        <p className="flex items-start gap-2 text-sm text-amber-400">
+      <Card className="border-warning/30 bg-warning/10 p-4">
+        <p className="flex items-start gap-2 text-sm text-warning">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           {isAdmin
             ? "Admin view: you can add, edit, and deactivate any academic event. Deactivation is safe — the event can be re-enabled later."
@@ -259,21 +260,14 @@ export default function EventsPage() {
         )}
       </Card>
 
-      {/* Error */}
+      {/* Error — shared ErrorState (25.UX-1); the former ad-hoc red card is
+          gone, retry semantics unchanged. */}
       {isError ? (
-        <Card className="border-red-900/50 bg-red-950/20">
-          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-            <AlertCircle className="size-10 text-red-500" aria-hidden />
-            <h3 className="text-lg font-semibold text-red-400">Unable to load events</h3>
-            <p className="max-w-md text-sm text-red-400/80">
-              Academic events could not be fetched from the server. Check your connection and try again.
-            </p>
-            <Button variant="outline" size="sm" onClick={() => mutate()}>
-              <RefreshCw className="size-3.5" aria-hidden />
-              Try again
-            </Button>
-          </div>
-        </Card>
+        <ErrorState
+          title="Unable to load events"
+          message="Academic events could not be fetched from the server. Check your connection and try again."
+          onRetry={() => mutate()}
+        />
       ) : // Loading — never flash a fake empty state.
       isLoading || !events ? (
         <div className="flex flex-col gap-6">

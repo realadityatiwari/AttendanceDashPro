@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EligibilityState, type CriterionResult } from "@/types/api";
 import { formatDateMedium, formatPct1 } from "@/lib/date";
 import { getQuizEligibilityStatus } from "@/lib/canonicalStatus";
@@ -189,7 +190,13 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
   const { eligibility, isLoading, isError, mutate } = useQuizEligibility(subjectCode, cycle);
 
   if (isLoading) {
-    return <Card className="h-44 animate-pulse bg-muted/50" />;
+    // 25.UX-1: shared Skeleton primitive (same footprint as the former
+    // whole-card pulse).
+    return (
+      <Card className="p-6" aria-hidden="true">
+        <Skeleton className="h-32 w-full" />
+      </Card>
+    );
   }
 
   if (isError || !eligibility) {
@@ -251,7 +258,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" />
+                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
                 {cycleLabel} · Quiz on {eligibility.quiz_date ? formatDateMedium(eligibility.quiz_date) : "TBD"}
               </span>
               {eligibility.state !== EligibilityState.UNRESOLVED && (
@@ -331,10 +338,10 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
 
           <Button variant="outline" size="sm" onClick={() => setShowCalculation((v) => !v)} className="w-full justify-between">
             <span className="inline-flex items-center gap-1.5">
-              <Calculator className="size-3.5" />
+              <Calculator className="size-3.5" aria-hidden="true" />
               View Calculation
             </span>
-            {showCalculation ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            {showCalculation ? <ChevronUp className="size-3.5" aria-hidden="true" /> : <ChevronDown className="size-3.5" aria-hidden="true" />}
           </Button>
 
           {showCalculation && (

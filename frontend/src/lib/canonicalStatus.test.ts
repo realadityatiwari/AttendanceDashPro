@@ -1,14 +1,19 @@
 import { describe, it, expect } from "vitest";
 import {
+  classTypeLabel,
+  feedbackTypeBadgeClass,
   getSessionStatus,
   getSubjectHealthStatus,
   getQuizEligibilityStatus,
+  quizCycleLabel,
+  FEEDBACK_TYPES,
   SESSION_STATUS,
   SUBJECT_HEALTH_STATUS,
   QUIZ_STATUS,
 } from "./canonicalStatus";
 import {
   AttendanceStatus,
+  ClassType,
   DashboardClassStatus,
   EligibilityState,
 } from "@/types/api";
@@ -123,6 +128,58 @@ describe("UIA-006: Canonical Status Vocabulary", () => {
       expect(
         getQuizEligibilityStatus(EligibilityState.NOT_ELIGIBLE, true)
       ).toEqual(QUIZ_STATUS.NO_DATA);
+    });
+  });
+});
+
+describe("25.UX-1: canonical presentation vocabularies", () => {
+  describe("class type labels", () => {
+    it("maps the known class types", () => {
+      expect(classTypeLabel(ClassType.LECTURE)).toBe("Lecture");
+      expect(classTypeLabel(ClassType.TUTORIAL)).toBe("Tutorial");
+      expect(classTypeLabel(ClassType.PRACTICAL)).toBe("Practical");
+      expect(classTypeLabel(ClassType.PRACTICAL2)).toBe("Practical");
+    });
+
+    it("returns null for unknown/missing class types (no guessed default)", () => {
+      expect(classTypeLabel(null)).toBeNull();
+      expect(classTypeLabel(undefined)).toBeNull();
+      expect(classTypeLabel("SOMETHING_ELSE")).toBeNull();
+    });
+  });
+
+  describe("quiz cycle labels", () => {
+    it("maps cycle numbers and backend label shapes to Quiz I/II/III", () => {
+      expect(quizCycleLabel(1)).toBe("Quiz I");
+      expect(quizCycleLabel(2)).toBe("Quiz II");
+      expect(quizCycleLabel(3)).toBe("Quiz III");
+      expect(quizCycleLabel("Quiz1")).toBe("Quiz I");
+      expect(quizCycleLabel("QUIZ_2")).toBe("Quiz II");
+    });
+
+    it("keeps the former fallback behavior for out-of-range and pre-labeled values", () => {
+      expect(quizCycleLabel(4)).toBe("Quiz IV");
+      expect(quizCycleLabel(11)).toBe("Quiz 11");
+      expect(quizCycleLabel("Quiz IV")).toBe("Quiz IV");
+      expect(quizCycleLabel(null)).toBe("Quiz");
+    });
+  });
+
+  describe("feedback type vocabulary", () => {
+    it("exposes the four canonical feedback types", () => {
+      expect(FEEDBACK_TYPES.map((t) => t.value)).toEqual([
+        "BUG",
+        "SUGGESTION",
+        "QUESTION",
+        "PRAISE",
+      ]);
+    });
+
+    it("maps feedback types to semantic-token badge classes", () => {
+      expect(feedbackTypeBadgeClass("BUG")).toContain("text-destructive");
+      expect(feedbackTypeBadgeClass("SUGGESTION")).toContain("text-warning");
+      expect(feedbackTypeBadgeClass("QUESTION")).toContain("text-primary");
+      expect(feedbackTypeBadgeClass("PRAISE")).toContain("text-success");
     });
   });
 });

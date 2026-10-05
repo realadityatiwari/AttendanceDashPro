@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TrackSessionCard } from "@/components/dashboard/TrackSessionCard";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useToast } from "@/components/feedback/toast";
@@ -183,7 +184,7 @@ export default function TrackAttendancePage() {
           `sm:h-8` restore keeps the desktop size byte-identical). */}
       <div className="flex items-center justify-between w-full gap-2">
         <Button variant="outline" size="icon" onClick={handlePreviousDay} disabled={atSemesterStart} aria-label="Previous day">
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
         <div className="flex flex-1 min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
           <Input
@@ -206,13 +207,15 @@ export default function TrackAttendancePage() {
           </Button>
         </div>
         <Button variant="outline" size="icon" onClick={handleNextDay} disabled={atSemesterEnd} aria-label="Next day">
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
       {isLoading ? (
-        <div className="space-y-4">
-          <div className="h-32 animate-pulse bg-muted rounded-xl border border-border" />
-          <div className="h-40 animate-pulse bg-muted rounded-xl border border-border" />
+        // 25.UX-1: the shared Skeleton primitive replaces the anonymous
+        // hand-rolled pulse divs (same footprint, same density).
+        <div className="space-y-4" aria-hidden="true">
+          <Skeleton className="h-32 w-full rounded-xl border border-border" />
+          <Skeleton className="h-40 w-full rounded-xl border border-border" />
         </div>
       ) : sessions.length === 0 ? (
         <EmptyState

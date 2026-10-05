@@ -15,6 +15,8 @@ import {
   PenLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useToast } from "@/components/feedback/toast";
@@ -26,6 +28,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDateMedium, formatPct1 } from "@/lib/date";
+import { classTypeLabel, getSessionStatus } from "@/lib/canonicalStatus";
 import {
   useSubjects,
   useProfile,
@@ -122,9 +125,11 @@ export default function LaboratoryPage() {
       </div>
 
       {resolvedCode === "" ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          No lab subjects available for your enrollment.
-        </Card>
+        <EmptyState
+          icon={<FlaskConical className="h-10 w-10 text-muted-foreground mb-4" />}
+          title="No lab subjects available"
+          message="No lab subjects are available for your enrollment."
+        />
       ) : (
         <>
           {tab === "attendance" && (
@@ -154,7 +159,7 @@ function PracticalAttendanceTab({
   subjectCode: string;
   onViewExperiments: () => void;
 }) {
-  const { summary, isLoading, isError } = useLabSummary(subjectCode);
+  const { summary, isLoading, isError, mutate } = useLabSummary(subjectCode);
 
   if (isLoading) {
     return (
@@ -168,17 +173,20 @@ function PracticalAttendanceTab({
 
   if (isError || !summary) {
     return (
-      <Card className="p-4 border border-red-900/50 bg-red-950/20">
-        <div className="flex items-center gap-2 text-red-400">
-          <AlertCircle className="h-4 w-4" />
-          <span className="text-sm font-medium">Failed to load laboratory summary.</span>
-        </div>
-      </Card>
+      <ErrorState
+        title="Failed to load laboratory summary"
+        message="The laboratory summary for this subject could not be fetched. Check your connection and try again."
+        onRetry={() => mutate()}
+      />
     );
   }
 
   const pa = summary.practical_attendance;
   const ms = summary.mid_sem;
+  // D-07: "Attended"/"Missed" are the backend's lab-domain data values —
+  // getSessionStatus normalizes them to the canonical Present/Absent
+  // vocabulary (including the not-yet-logged → Pending fallback).
+  const msStatus = getSessionStatus(ms.attendance_status);
 
   return (
     // UIA-043: the default tab now carries the backend-provided experiment
@@ -219,20 +227,13 @@ function PracticalAttendanceTab({
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Session</span>
-              <span className="font-mono text-foreground">{ms.session_date ?? "—"}</span>
+              <span className="font-mono text-foreground">
+                {ms.session_date ? formatDateMedium(ms.session_date) : "—"}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Attendance</span>
-              <Badge variant={ms.attendance_status === "Attended" ? "success" : ms.attendance_status === "Missed" ? "danger" : "neutral"}>
-                {/* D-07: "Attended"/"Missed" are the backend's lab-domain data
-                    values (comparisons unchanged) — display maps to the
-                    canonical Present/Absent vocabulary. */}
-                {ms.attendance_status === "Attended"
-                  ? "Present"
-                  : ms.attendance_status === "Missed"
-                    ? "Absent"
-                    : (ms.attendance_status ?? "Not logged")}
-              </Badge>
+              <Badge variant={msStatus.variant}>{msStatus.label}</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
               The mid-semester practical is a real scheduled lab session; attendance against it flows through the normal attendance pipeline.
@@ -389,13 +390,11 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
 
   if (!catalogAvailable) {
     return (
-      <Card className="p-8 text-center">
-        <FlaskConical className="mx-auto size-8 text-muted-foreground/50" aria-hidden="true" />
-        <h3 className="mt-3 font-bold text-foreground">Experiment curriculum not yet available</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          No experiment catalog has been published for {subjectCode} yet. Progress is shown as soon as the curriculum is available.
-        </p>
-      </Card>
+      <EmptyState
+        icon={<FlaskConical className="h-10 w-10 text-muted-foreground mb-4" />}
+        title="Experiment curriculum not yet available"
+        message={`No experiment catalog has been published for ${subjectCode} yet. Progress is shown as soon as the curriculum is available.`}
+      />
     );
   }
 
@@ -413,9 +412,9 @@ function ExperimentsTab({ subjectCode, isAdmin }: { subjectCode: string; isAdmin
   return (
     <div className="space-y-4">
       {error && (
-        <Card className="p-3 border border-red-900/50 bg-red-950/20">
-          <div className="flex items-center gap-2 text-sm text-red-400">
-            <AlertCircle className="size-4" />
+        <Card className="p-3 border border-destructive/30 bg-destructive/10">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
             {error}
           </div>
         </Card>
@@ -545,18 +544,21 @@ function ExperimentRow({
 }) {
   const busy = busyId === exp.id;
 
-  let statusIcon = <Circle className="size-4 text-muted-foreground/50" />;
+  // Status colors come from the semantic tokens (success/warning), never the
+  // raw palette; the text is always visible so mobile never relies on the
+  // icon (color/shape) alone (25.UX-1).
+  let statusIcon = <Circle className="size-4 text-muted-foreground/50" aria-hidden="true" />;
   let statusText = "Not tracked";
   let statusTone = "text-muted-foreground";
 
   if (record?.signature_status === SignatureStatus.SIGNED) {
-    statusIcon = <CheckCircle2 className="size-4 text-emerald-400" />;
+    statusIcon = <CheckCircle2 className="size-4 text-success" aria-hidden="true" />;
     statusText = "Signed";
-    statusTone = "text-emerald-400";
+    statusTone = "text-success";
   } else if (record?.signature_status === SignatureStatus.PENDING) {
-    statusIcon = <Clock className="size-4 text-amber-400" />;
+    statusIcon = <Clock className="size-4 text-warning" aria-hidden="true" />;
     statusText = "Pending";
-    statusTone = "text-amber-400";
+    statusTone = "text-warning";
   }
 
   return (
@@ -582,7 +584,7 @@ function ExperimentRow({
       <div className="flex flex-wrap shrink-0 items-center gap-2 self-start sm:self-auto">
         <span className={cn("flex items-center gap-1.5 text-sm font-medium", statusTone)}>
           {statusIcon}
-          <span className="hidden sm:inline">{statusText}</span>
+          <span>{statusText}</span>
         </span>
         {busy ? (
           <span className="text-xs text-muted-foreground">…</span>
@@ -618,7 +620,7 @@ function ExperimentRow({
 // ---------------------------------------------------------------------------
 
 function ActivityTab({ subjectCode }: { subjectCode: string }) {
-  const { activity, isLoading, isError } = useLabActivity(subjectCode);
+  const { activity, isLoading, isError, mutate } = useLabActivity(subjectCode);
 
   if (isLoading) {
     return (
@@ -632,21 +634,21 @@ function ActivityTab({ subjectCode }: { subjectCode: string }) {
 
   if (isError || !activity) {
     return (
-      <Card className="p-4 border border-red-900/50 bg-red-950/20">
-        <div className="flex items-center gap-2 text-red-400">
-          <AlertCircle className="h-4 w-4" />
-          <span className="text-sm font-medium">Failed to load laboratory activity.</span>
-        </div>
-      </Card>
+      <ErrorState
+        title="Failed to load laboratory activity"
+        message="The laboratory activity for this subject could not be fetched. Check your connection and try again."
+        onRetry={() => mutate()}
+      />
     );
   }
 
   if (activity.items.length === 0) {
     return (
-      <Card className="p-8 text-center text-muted-foreground">
-        <CalendarDays className="mx-auto size-8 text-muted-foreground/50" aria-hidden="true" />
-        <p className="mt-2 text-sm">No practical sessions scheduled yet for {subjectCode}.</p>
-      </Card>
+      <EmptyState
+        icon={<CalendarDays className="h-10 w-10 text-muted-foreground mb-4" />}
+        title="No practical sessions yet"
+        message={`No practical sessions are scheduled for ${subjectCode} yet.`}
+      />
     );
   }
 
@@ -660,29 +662,24 @@ function ActivityTab({ subjectCode }: { subjectCode: string }) {
 }
 
 function ActivityRow({ item }: { item: LaboratoryActivityItem }) {
-  const status = item.attendance_status;
+  // Canonical 4-state session vocabulary; is_cancelled wins per the canonical
+  // normalization order. D-07: "Attended"/"Missed" remain the backend data
+  // values — display maps through getSessionStatus.
+  const status = getSessionStatus(item.attendance_status, item.is_cancelled);
+  const typeLabel = classTypeLabel(item.class_type) ?? item.class_type;
   const experiments = item.experiments || [];
 
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm text-foreground">{item.date}</span>
+        <span className="font-mono text-sm text-foreground">
+          {formatDateMedium(item.date)}
+        </span>
         <Badge variant={item.class_type === ClassType.PRACTICAL ? "primary" : "outline"}>
-          {item.class_type === ClassType.PRACTICAL ? "Practical" : item.class_type}
+          {typeLabel}
         </Badge>
         {item.is_extra && <Badge variant="warning">Extra</Badge>}
-        {item.is_cancelled ? (
-          <Badge variant="danger">Cancelled</Badge>
-        ) : status ? (
-          <Badge
-            variant={status === "Attended" ? "success" : status === "Missed" ? "danger" : "neutral"}
-          >
-            {/* D-07: backend data value → canonical display label. */}
-            {status === "Attended" ? "Present" : status === "Missed" ? "Absent" : status}
-          </Badge>
-        ) : (
-          <Badge variant="neutral">Not logged</Badge>
-        )}
+        <Badge variant={status.variant}>{status.label}</Badge>
         {item.designation === "MID_SEM_PRACTICAL" && <Badge variant="primary">Mid-Sem</Badge>}
       </div>
 

@@ -10,8 +10,10 @@ import {
 import type { ComponentType } from "react";
 import {
   AttendanceStatus,
+  ClassType,
   DashboardClassStatus,
   EligibilityState,
+  FeedbackType,
   type AttendanceStatusLabel,
 } from "@/types/api";
 
@@ -216,4 +218,80 @@ export function getQuizEligibilityStatus(
     label: "Unknown",
     variant: "neutral",
   };
+}
+
+// ---------------------------------------------------------------------------
+// 4. CLASS TYPE (Lecture, Tutorial, Practical)
+// ---------------------------------------------------------------------------
+/**
+ * Canonical class-type label. Null for values without a display label
+ * (unknown/legacy) so callers can skip rendering instead of showing a wrong
+ * default. This is the ONE class-type label contract — the dashboard's
+ * status.ts helper and the events module both delegate here (25.UX-1).
+ */
+export function classTypeLabel(
+  type: ClassType | string | null | undefined
+): string | null {
+  if (type === ClassType.LECTURE) return "Lecture";
+  if (type === ClassType.TUTORIAL) return "Tutorial";
+  if (type === ClassType.PRACTICAL || type === ClassType.PRACTICAL2) {
+    return "Practical";
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 5. QUIZ CYCLE LABELS (Quiz I, Quiz II, Quiz III)
+// ---------------------------------------------------------------------------
+const QUIZ_CYCLE_ROMAN = [
+  "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+];
+
+/**
+ * Canonical quiz-cycle label from any backend shape: 1/2/3, "Quiz1",
+ * "QUIZ_2" → "Quiz I/II/III". Values beyond the roman table fall back to the
+ * bare number; already-humanized labels pass through unchanged.
+ */
+export function quizCycleLabel(
+  cycle: number | string | null | undefined
+): string {
+  if (cycle === null || cycle === undefined || cycle === "") return "Quiz";
+  if (typeof cycle === "number") {
+    return `Quiz ${QUIZ_CYCLE_ROMAN[cycle - 1] ?? cycle}`;
+  }
+  const match = String(cycle).match(/(\d+)/);
+  if (match) {
+    const n = Number(match[1]);
+    return `Quiz ${QUIZ_CYCLE_ROMAN[n - 1] ?? n}`;
+  }
+  return String(cycle);
+}
+
+// ---------------------------------------------------------------------------
+// 6. FEEDBACK TYPE (Bug, Suggestion, Question, Praise)
+// ---------------------------------------------------------------------------
+/** Canonical feedback-type vocabulary, shared by the feedback form (student)
+ * and the feedback review surface (admin) so the labels can never drift. */
+export const FEEDBACK_TYPES: ReadonlyArray<{
+  value: FeedbackType;
+  label: string;
+}> = [
+  { value: "BUG", label: "Bug" },
+  { value: "SUGGESTION", label: "Suggestion" },
+  { value: "QUESTION", label: "Question" },
+  { value: "PRAISE", label: "Praise" },
+];
+
+/** Semantic-token badge classes for a feedback type. */
+export function feedbackTypeBadgeClass(type: FeedbackType): string {
+  switch (type) {
+    case "BUG":
+      return "bg-destructive/10 text-destructive";
+    case "SUGGESTION":
+      return "bg-warning/10 text-warning";
+    case "QUESTION":
+      return "bg-primary/10 text-primary";
+    case "PRAISE":
+      return "bg-success/10 text-success";
+  }
 }

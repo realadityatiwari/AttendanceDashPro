@@ -17,33 +17,31 @@ import {
   ClassType,
   HistoryStatusFilter,
 } from "@/types/api";
-import { formatDateRange, formatShortDate } from "@/lib/date";
+import { formatDateParts, formatDateRange } from "@/lib/date";
+import { getSessionStatus, SESSION_STATUS } from "@/lib/canonicalStatus";
 import { RecordedPct } from "@/components/shared/RecordedPct";
 import { DateInput } from "@/components/shared/DateInput";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Loader2, Calendar, FilterX, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 
+// Filter values are backend contract values; labels come from the canonical
+// session vocabulary (25.UX-1) so filter copy can never drift from badges.
 const STATUS_OPTIONS: { value: HistoryStatusFilter; label: string }[] = [
   { value: "", label: "All statuses" },
-  { value: AttendanceStatus.ATTENDED, label: "Present" },
-  { value: AttendanceStatus.MISSED, label: "Absent" },
-  { value: AttendanceStatus.PENDING, label: "Pending" },
-  { value: "Cancelled", label: "Cancelled" },
+  { value: AttendanceStatus.ATTENDED, label: SESSION_STATUS.PRESENT.label },
+  { value: AttendanceStatus.MISSED, label: SESSION_STATUS.ABSENT.label },
+  { value: AttendanceStatus.PENDING, label: SESSION_STATUS.PENDING.label },
+  { value: "Cancelled", label: SESSION_STATUS.CANCELLED.label },
 ];
 
 function StatusBadge({ item }: { item: AttendanceHistoryItem }) {
-  if (item.is_cancelled) {
-    return <Badge variant="neutral" className="uppercase">Cancelled</Badge>;
-  }
-  if (item.status === AttendanceStatus.ATTENDED) {
-    return <Badge variant="success" className="uppercase">Present</Badge>;
-  }
-  if (item.status === AttendanceStatus.MISSED) {
-    return <Badge variant="danger" className="uppercase">Absent</Badge>;
-  }
-  return <Badge variant="warning" className="uppercase">Pending</Badge>;
+  // Canonical 4-state session vocabulary (Present/Absent/Pending/Cancelled);
+  // is_cancelled wins per the canonical normalization order.
+  const status = getSessionStatus(item.status, item.is_cancelled);
+  return <Badge variant={status.variant} className="uppercase">{status.label}</Badge>;
 }
 
 function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
@@ -62,10 +60,10 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-muted border border-border shrink-0">
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {formatShortDate(item.date).split(" ")[1]}
+            {formatDateParts(item.date).month}
           </span>
           <span className="text-sm font-bold text-foreground leading-none">
-            {formatShortDate(item.date).split(" ")[0]}
+            {formatDateParts(item.date).day}
           </span>
         </div>
         <div className="min-w-0">
@@ -298,7 +296,7 @@ export default function HistoryPage() {
           <div className="flex flex-col gap-1">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-search">Search</label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               <Input
                 id="history-search"
                 type="search"
@@ -355,9 +353,9 @@ export default function HistoryPage() {
           </p>
         </div>
       ) : isLoading || !history ? (
-        <div className="space-y-4">
+        <div className="space-y-4" aria-hidden="true">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Card key={i} className="h-20 animate-pulse bg-muted border-border" />
+            <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
       ) : (

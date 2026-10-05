@@ -7,21 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatDateMedium, formatPct, formatPct1 } from "@/lib/date";
+import { attendanceStatusLabel } from "@/lib/statusLabels";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Attendance Health (Phase 8.2) — the backend emits the classification
-// (`summary.health`); React only maps it to existing semantic tokens:
+// (`summary.health`); React maps it to existing semantic tokens:
 //   HEALTHY  -> success (green)
 //   WATCH    -> warning (amber)
 //   AT_RISK  -> danger (soft red)
 //   CRITICAL -> danger (solid red)
-// No new color system is invented; banding never happens in React.
-const HEALTH_BADGE: Record<string, { label: string; variant: "success" | "warning" | "danger"; solid?: boolean }> = {
-  HEALTHY: { label: "Healthy", variant: "success" },
-  WATCH: { label: "Watch", variant: "warning" },
-  AT_RISK: { label: "At Risk", variant: "danger" },
-  CRITICAL: { label: "Critical", variant: "danger", solid: true },
+// The per-band visual mapping is a preserved Phase 8.2 decision; the LABELS
+// now flow from the canonical vocabulary (lib/statusLabels → canonicalStatus)
+// so WATCH can never drift back to a non-canonical word (25.UX-1: WATCH
+// renders "At Risk" everywhere).
+const HEALTH_BADGE: Record<string, { variant: "success" | "warning" | "danger"; solid?: boolean }> = {
+  HEALTHY: { variant: "success" },
+  WATCH: { variant: "warning" },
+  AT_RISK: { variant: "danger" },
+  CRITICAL: { variant: "danger", solid: true },
 };
 
 const HEALTH_PROGRESS: Record<string, "success" | "warning" | "danger" | "default"> = {
@@ -83,7 +87,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             variant={healthBadge.variant}
             className={cn("uppercase text-[11px] tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
           >
-            {healthBadge.label}
+            {attendanceStatusLabel(health)}
           </Badge>
         )}
       </CardHeader>
@@ -165,7 +169,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
         {/* Details: real backend values only — no forecast, no optimizer */}
         <Button variant="outline" size="sm" onClick={() => setShowDetails(v => !v)} className="w-full justify-between mt-auto">
           <span>View Details</span>
-          {showDetails ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          {showDetails ? <ChevronUp className="size-3.5" aria-hidden="true" /> : <ChevronDown className="size-3.5" aria-hidden="true" />}
         </Button>
 
         {showDetails && (

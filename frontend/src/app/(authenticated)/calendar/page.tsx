@@ -3,17 +3,16 @@
 import { useState } from "react";
 import { useCalendarMonth, usePreferences } from "@/hooks/useApi";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarGrid } from "@/components/calendar/CalendarGrid";
 import { DayDetail } from "@/components/calendar/DayDetail";
-import { formatLongDate, getLocalDateString } from "@/lib/date";
-import { AlertCircle, CalendarX2, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { formatMonthYear, formatWeekdayDate, getLocalDateString } from "@/lib/date";
+import { CalendarX2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
 
 interface DaySelection {
   monthKey: string;
@@ -95,10 +94,10 @@ export default function CalendarPage() {
 
   const semesterRange =
     semesterStart && semesterEnd
-      ? `Semester ${formatLongDate(semesterStart).replace(" · ", " ")} – ${formatLongDate(semesterEnd).replace(" · ", " ")}`
+      ? `Semester ${formatWeekdayDate(semesterStart)} – ${formatWeekdayDate(semesterEnd)}`
       : null;
 
-  const monthLabel = MONTH_LABEL_FORMATTER.format(new Date(year, month - 1, 1));
+  const monthLabel = formatMonthYear(new Date(year, month - 1, 1));
 
   // Phase 12B: the row wraps (never clips) and the month label shrinks
   // responsively so Previous / Next / Today all fit at 320px; desktop keeps
@@ -136,19 +135,11 @@ export default function CalendarPage() {
         <PageHeader title="Calendar" description="Monthly view of your academic calendar">
           {navControls}
         </PageHeader>
-        <Card className="border-red-900/50 bg-red-950/20">
-          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-            <AlertCircle className="size-10 text-red-500" aria-hidden />
-            <h3 className="text-lg font-semibold text-red-400">Unable to load calendar</h3>
-            <p className="max-w-md text-sm text-red-400/80">
-              The calendar could not be fetched from the server. Check your connection and try again.
-            </p>
-            <Button variant="outline" size="sm" onClick={() => mutate()}>
-              <RefreshCw className="size-3.5" aria-hidden />
-              Try again
-            </Button>
-          </div>
-        </Card>
+        <ErrorState
+          title="Unable to load calendar"
+          message="The calendar could not be fetched from the server. Check your connection and try again."
+          onRetry={() => mutate()}
+        />
       </div>
     );
   }

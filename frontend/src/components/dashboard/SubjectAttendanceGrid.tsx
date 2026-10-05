@@ -3,6 +3,8 @@
 import { useSubjects, useAnalyticsOverview } from "@/hooks/useApi";
 import { SubjectAttendanceCard } from "./SubjectAttendanceCard";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function SubjectAttendanceGrid() {
   const {
@@ -25,9 +27,9 @@ export function SubjectAttendanceGrid() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-hidden="true">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-40 bg-muted rounded-xl border border-border animate-pulse"></div>
+          <Skeleton key={i} className="h-40 rounded-xl border border-border" />
         ))}
       </div>
     );
@@ -48,12 +50,10 @@ export function SubjectAttendanceGrid() {
 
   if (!subjects || subjects.length === 0) {
     return (
-      <div className="p-8 bg-card border border-border rounded-xl text-center">
-        <h3 className="text-sm font-semibold text-foreground">No subjects found</h3>
-        <p className="text-xs text-muted-foreground mt-1">
-          You are not currently enrolled in any subjects.
-        </p>
-      </div>
+      <EmptyState
+        title="No subjects found"
+        message="You are not currently enrolled in any subjects."
+      />
     );
   }
 

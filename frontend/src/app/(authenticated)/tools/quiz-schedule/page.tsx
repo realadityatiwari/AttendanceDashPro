@@ -6,18 +6,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { QuizEligibilityCard } from "@/components/quiz/QuizEligibilityCard";
 import { cn } from "@/lib/utils";
+import { quizCycleLabel } from "@/lib/canonicalStatus";
 import { POOLED_ATTENDANCE_FORMULA } from "@/lib/formula";
 import { Calendar, Info } from "lucide-react";
 
-const CYCLES = [
-  { number: 1, label: "Quiz I" },
-  { number: 2, label: "Quiz II" },
-  { number: 3, label: "Quiz III" },
-];
-
-const QUIZ_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+// Cycle labels flow from the canonical quiz-cycle vocabulary (25.UX-1) —
+// the page-local label/roman maps are gone.
+const CYCLES = [1, 2, 3].map((number) => ({ number, label: quizCycleLabel(number) }));
 
 export default function QuizEligibilityPage() {
   const { subjects, isLoading, isError } = useSubjects();
@@ -102,9 +100,11 @@ export default function QuizEligibilityPage() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-6">
+        <div className="space-y-6" aria-hidden="true">
           {[1, 2].map((i) => (
-            <Card key={i} className="h-44 animate-pulse bg-muted/50" />
+            <Card key={i} className="p-6">
+              <Skeleton className="h-32 w-full" />
+            </Card>
           ))}
         </div>
       ) : quizApplicableSubjects.length === 0 ? (
@@ -120,7 +120,7 @@ export default function QuizEligibilityPage() {
               key={`${subject.code}-${activeCycle}`}
               subjectCode={subject.code}
               cycle={activeCycle}
-              cycleLabel={CYCLES.find((c) => c.number === activeCycle)?.label ?? `Quiz ${QUIZ_ROMAN[activeCycle] ?? activeCycle}`}
+              cycleLabel={quizCycleLabel(activeCycle)}
             />
           ))}
         </div>

@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDateMedium,
+  formatDateParts,
   formatDateRange,
   formatLongDate,
+  formatMonthYear,
   formatShortDate,
+  formatTimestampDate,
+  formatWeekdayDate,
+  getMonthName,
 } from "./date";
 
 describe("date formatting (UIA-011 regression)", () => {
@@ -28,5 +33,33 @@ describe("date formatting (UIA-011 regression)", () => {
 
   it("formats short date as day and uppercase month", () => {
     expect(formatShortDate("2026-09-29")).toBe("29 SEP");
+  });
+});
+
+describe("25.UX-1: canonical month/part/timestamp formatting", () => {
+  it("formats the full month name and month-year header", () => {
+    expect(getMonthName("2026-01-01")).toBe("January");
+    expect(getMonthName("2026-10-05")).toBe("October");
+    expect(formatMonthYear("2026-10-05")).toBe("October 2026");
+    expect(formatMonthYear(new Date(2026, 8, 29))).toBe("September 2026");
+  });
+
+  it("formats structured tile parts without splitting formatted output", () => {
+    expect(formatDateParts("2026-09-29")).toEqual({ day: "29", month: "SEP" });
+    expect(formatDateParts("2026-10-04")).toEqual({ day: "4", month: "OCT" });
+  });
+
+  it("formats weekday + date without the dot separator", () => {
+    expect(formatWeekdayDate("2026-09-29")).toBe("Tuesday 29 Sep 2026");
+  });
+
+  it("formats backend timestamps by their local calendar date", () => {
+    // No timezone suffix → parsed as local time, so the calendar date is
+    // stable in every environment.
+    expect(formatTimestampDate("2026-10-05T14:23:45")).toBe("5 Oct 2026");
+    // Date-only strings keep the local-calendar contract.
+    expect(formatTimestampDate("2026-10-05")).toBe("5 Oct 2026");
+    // Unparseable input renders an em dash — never silently today's date.
+    expect(formatTimestampDate("not-a-date")).toBe("—");
   });
 });

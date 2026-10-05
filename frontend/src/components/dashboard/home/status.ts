@@ -1,4 +1,4 @@
-import { ClassType, DashboardClassStatus, AttendanceStatusLabel } from "@/types/api";
+import { DashboardClassStatus, AttendanceStatusLabel } from "@/types/api";
 import {
   getSessionStatus,
   getSubjectHealthStatus,
@@ -21,16 +21,9 @@ export function attendanceStatusVariant(
   return getSubjectHealthStatus(status).variant;
 }
 
-export function classTypeLabel(classType: ClassType): string {
-  switch (classType) {
-    case ClassType.LECTURE:
-      return "Lecture";
-    case ClassType.TUTORIAL:
-      return "Tutorial";
-    default:
-      return "Practical";
-  }
-}
+// 25.UX-1: the dashboard's classTypeLabel is gone — consumers use the ONE
+// canonical contract (lib/canonicalStatus), which returns null for unknown
+// class types instead of guessing a default.
 
 export function eventTypeLabel(eventType: string): string {
   return eventType

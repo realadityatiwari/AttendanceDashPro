@@ -5,8 +5,9 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatShortDate } from "@/lib/date";
-import { classTypeLabel, eventTypeLabel } from "./status";
+import { formatDateParts } from "@/lib/date";
+import { classTypeLabel } from "@/lib/canonicalStatus";
+import { eventTypeLabel } from "./status";
 
 interface UpcomingEventsCardProps {
   events: UpcomingEventItem[];
@@ -24,7 +25,7 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
       <CardContent className="p-0">
         {events.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <CalendarDays className="size-8 text-muted-foreground" />
+            <CalendarDays className="size-8 text-muted-foreground" aria-hidden="true" />
             <h3 className="mt-3 text-sm font-medium text-foreground">
               No upcoming events
             </h3>
@@ -38,10 +39,10 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
               <li key={event.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex w-12 shrink-0 flex-col items-center rounded-md border border-border bg-muted/40 py-1.5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {formatShortDate(event.start_date).split(" ")[1]}
+                    {formatDateParts(event.start_date).month}
                   </span>
                   <span className="text-lg font-bold tabular-nums leading-tight text-foreground">
-                    {formatShortDate(event.start_date).split(" ")[0]}
+                    {formatDateParts(event.start_date).day}
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -55,7 +56,11 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
                     {event.subject_code && (
                       <span className="text-xs text-muted-foreground">
                         {event.subject_code}
-                        {event.class_type ? ` · ${classTypeLabel(event.class_type)}` : ""}
+                        {/* Canonical class-type label — skipped entirely when
+                            the type has no display label (25.UX-1). */}
+                        {event.class_type && classTypeLabel(event.class_type)
+                          ? ` · ${classTypeLabel(event.class_type)}`
+                          : ""}
                       </span>
                     )}
                   </div>

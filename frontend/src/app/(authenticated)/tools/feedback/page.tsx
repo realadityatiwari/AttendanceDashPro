@@ -13,23 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatLongDate } from "@/lib/date";
+import { formatTimestampDate } from "@/lib/date";
+import { FEEDBACK_TYPES, feedbackTypeBadgeClass } from "@/lib/canonicalStatus";
 import { MessageSquareText, RefreshCw } from "lucide-react";
 
+// Filter values are backend contract values; labels/classes come from the
+// canonical feedback-type vocabulary (25.UX-1) shared with the form.
 const TYPE_OPTIONS: { value: FeedbackType | ""; label: string }[] = [
   { value: "", label: "All types" },
-  { value: "BUG", label: "Bug" },
-  { value: "SUGGESTION", label: "Suggestion" },
-  { value: "QUESTION", label: "Question" },
-  { value: "PRAISE", label: "Praise" },
+  ...FEEDBACK_TYPES,
 ];
-
-const TYPE_BADGE: Record<FeedbackType, string> = {
-  BUG: "bg-destructive/10 text-destructive",
-  SUGGESTION: "bg-warning/10 text-warning",
-  QUESTION: "bg-primary/10 text-primary",
-  PRAISE: "bg-success/10 text-success",
-};
 
 const PAGE_SIZE = 20;
 
@@ -178,11 +171,14 @@ export default function FeedbackAdminPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={cn("text-xs", TYPE_BADGE[item.feedback_type])}>
+                    <Badge className={cn("text-xs", feedbackTypeBadgeClass(item.feedback_type))}>
                       {item.feedback_type}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {formatLongDate(item.created_at)}
+                      {/* 25.UX-1: created_at is a backend timestamp — the
+                          timestamp-aware formatter replaces the date-only
+                          parser that could silently render today's date. */}
+                      {formatTimestampDate(item.created_at)}
                     </span>
                   </div>
                 </div>

@@ -318,7 +318,13 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
           )}
           <div className="flex max-h-[60dvh] flex-col gap-2 overflow-y-auto py-1 pr-1 md:max-h-[26rem]">
           {actionError && (
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5">
+            // 25.UX-1: action failures are announced politely (same
+            // convention as the mark-attendance mutation banner) so read/
+            // dismiss outcomes are never silent for screen readers.
+            <div
+              aria-live="polite"
+              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5"
+            >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
               <p className="text-xs leading-relaxed text-destructive">
                 The action could not be saved: {actionError}. Nothing was changed —
