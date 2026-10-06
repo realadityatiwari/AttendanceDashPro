@@ -11,8 +11,19 @@ class AcademicEvent(Base):
     event_type: Mapped[EventType] = mapped_column(Enum(EventType))
     start_date: Mapped[datetime.date] = mapped_column(Date)
     end_date: Mapped[datetime.date] = mapped_column(Date)
-    
+
     subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=True)
+    # OCC-1: the exact scheduled TimetableEntry a cancellation event targets
+    # (CLASS_CANCELLED / LAB_CANCELLED). The EventService validates the
+    # reference against the real timetable (existence, active state, weekday
+    # of the selected date, subject/class-type consistency, admin scope) and
+    # the EventSessionSynchronizer removes THAT occurrence — no longer a
+    # subject + class-type guess at sync time. NULL for every other event
+    # type and for legacy rows (never backfilled, never guessed).
+    timetable_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("timetable_entries.id"), nullable=True,
+        default=None,
+    )
     # Phase 22.4: an event may be scoped to a Departmental Elective LOGICAL
     # SLOT instead of a concrete subject. The shared event stays ONE row for
     # all students (never per-student duplicates) and keeps the anchor subject

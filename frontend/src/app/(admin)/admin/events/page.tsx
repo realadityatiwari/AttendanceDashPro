@@ -164,6 +164,11 @@ export default function EventsPage() {
                         {ev.subject_slot === "ELECTIVE_I" ? "DE-I" : "DE-II"} member
                       </Badge>
                     )}
+                    {ev.occurrence_label && (
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {ev.occurrence_label}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {ev.start_date === ev.end_date ? ev.start_date : `${ev.start_date} \u2013 ${ev.end_date}`}

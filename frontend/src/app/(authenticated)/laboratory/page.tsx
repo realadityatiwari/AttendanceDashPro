@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import { formatDateMedium, formatPct1 } from "@/lib/date";
 import { classTypeLabel, getSessionStatus } from "@/lib/canonicalStatus";
@@ -50,10 +51,10 @@ import {
 
 type Tab = "attendance" | "experiments" | "activity";
 
-const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "attendance", label: "Practical Attendance", icon: ClipboardList },
-  { id: "experiments", label: "Experiments", icon: FlaskConical },
-  { id: "activity", label: "Activity", icon: ActivityIcon },
+const TABS: { value: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { value: "attendance", label: "Practical Attendance", icon: ClipboardList },
+  { value: "experiments", label: "Experiments", icon: FlaskConical },
+  { value: "activity", label: "Activity", icon: ActivityIcon },
 ];
 
 export default function LaboratoryPage() {
@@ -101,27 +102,17 @@ export default function LaboratoryPage() {
 
         {/* UI-033: these buttons switch in-page section content (they are
             not links and not route navigation), so the link-only aria-current
-            state is replaced by aria-pressed on native buttons inside a named
-            group. Section rendering and the subject selector are unchanged. */}
-        <div role="group" aria-label="Laboratory sections" className="flex overflow-x-auto gap-1 rounded-md border border-border bg-muted p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              aria-pressed={tab === id}
-              className={cn(
-                "flex h-10 sm:h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors shrink-0 whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-                tab === id
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              )}
-            >
-              <Icon className="size-4" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-        </div>
+            state is replaced by a pressed state on native buttons inside a
+            named group. Section rendering and the subject selector are
+            unchanged. 25.UX-2: the group is now the shared SegmentedControl
+            primitive (the pressed-state attribute lives there). */}
+        <SegmentedControl
+          value={tab}
+          onValueChange={setTab}
+          options={TABS}
+          variant="track"
+          aria-label="Laboratory sections"
+        />
       </div>
 
       {resolvedCode === "" ? (
@@ -220,7 +211,7 @@ function PracticalAttendanceTab({
         <h3 className="text-sm font-bold text-foreground">Mid-Semester Practical</h3>
         {!ms.designated ? (
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <Circle className="size-4 text-muted-foreground/50" />
+            <Circle className="size-4 text-muted-foreground/50" aria-hidden="true" />
             Not yet designated. An administrator marks the mid-semester practical on an actual scheduled lab session.
           </div>
         ) : (
@@ -600,13 +591,13 @@ function ExperimentRow({
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete record">
-              <Trash2 className="size-4 text-muted-foreground" />
+              <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
             </Button>
           </div>
         ) : (
           isAdmin && (
             <Button size="sm" variant="ghost" onClick={onDeactivate} aria-label="Deactivate experiment">
-              <Trash2 className="size-4 text-muted-foreground" />
+              <Trash2 className="size-4 text-muted-foreground" aria-hidden="true" />
             </Button>
           )
         )}

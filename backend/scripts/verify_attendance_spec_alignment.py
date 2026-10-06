@@ -55,7 +55,7 @@ from app.models.event import AcademicEvent
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject
 from app.models.quiz import QuizSchedule, ScheduleStatus
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.enums import ClassType, UserRole
 from app.models.notification import Notification
 from app.models.preference import UserPreference
@@ -321,14 +321,32 @@ async def main() -> int:
                     ).order_by(ClassSession.date)
                 )).scalars().first()
             if quiz_session is not None:
-                r = await client.post("/api/v1/events", headers=admin_headers(admin_token), json={
-                    "event_type": "CLASS_CANCELLED", "start_date": quiz_session.date.isoformat(),
-                    "end_date": quiz_session.date.isoformat(),
-                    "subject_id": str(quiz_session.subject_id), "class_type": quiz_session.class_type.value})
-                check("7. admin POST CLASS_CANCELLED on quiz-day date -> 201", r.status_code == 201, f"got {r.status_code}")
-                if r.status_code == 201:
-                    cancel_id = uuid.UUID(r.json()["id"])
-                    test_event_ids.append(cancel_id)
+                # OCC-1: the cancellation must reference the exact scheduled
+                # timetable occurrence — the real lecture covering the quiz-day
+                # date for that subject (the quiz-day session itself has no
+                # timetable link and is never the cancellation target).
+                async with AsyncSessionLocal() as db:
+                    covering_entry = (await db.execute(
+                        select(TimetableEntry).where(
+                            TimetableEntry.subject_id == quiz_session.subject_id,
+                            TimetableEntry.day_of_week == quiz_session.date.weekday(),
+                            TimetableEntry.class_type == quiz_session.class_type,
+                            TimetableEntry.is_active.is_(True),
+                        ).order_by(TimetableEntry.start_time).limit(1)
+                    )).scalars().first()
+                if covering_entry is None:
+                    check("7. admin POST CLASS_CANCELLED on quiz-day date -> 201",
+                          False, "no covering timetable entry for the quiz-day subject/date")
+                else:
+                    r = await client.post("/api/v1/events", headers=admin_headers(admin_token), json={
+                        "event_type": "CLASS_CANCELLED", "start_date": quiz_session.date.isoformat(),
+                        "end_date": quiz_session.date.isoformat(),
+                        "subject_id": str(quiz_session.subject_id), "class_type": quiz_session.class_type.value,
+                        "timetable_entry_id": str(covering_entry.id)})
+                    check("7. admin POST CLASS_CANCELLED on quiz-day date -> 201", r.status_code == 201, f"got {r.status_code}")
+                    if r.status_code == 201:
+                        cancel_id = uuid.UUID(r.json()["id"])
+                        test_event_ids.append(cancel_id)
                 async with AsyncSessionLocal() as db:
                     after = (await db.execute(
                         select(ClassSession).where(ClassSession.id == quiz_session.id))).scalars().first()

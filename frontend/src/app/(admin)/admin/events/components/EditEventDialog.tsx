@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AdminEventResponse, UpdateAdminEventRequest, ClassType } from "@/types/api";
-import { getRule, CLASS_TYPE_LABELS, SUBSTITUTION_DAYS } from "@/components/events/eventRules";
+import { useOccurrenceOptions } from "@/hooks/useApi";
+import { AdminEventResponse, UpdateAdminEventRequest, ClassType, ElectiveSlot } from "@/types/api";
+import { getRule, CLASS_TYPE_LABELS, SUBSTITUTION_DAYS, isOccurrenceEventType } from "@/components/events/eventRules";
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -17,6 +18,13 @@ const selectClass =
  * authoritative). Quiz-schedule-managed QUIZ_DAY events are read-only here
  * (their date/subject/active state is owned by the Quiz Schedule Manager).
  * Deactivation is safe/reversible (no physical deletion).
+ *
+ * OCC-1: occurrence-driven cancellation events show the exact referenced
+ * occurrence; the class type is never independently editable (it belongs to
+ * the occurrence). Changing the date re-resolves the occurrences scheduled
+ * for that new date — if the stored occurrence is no longer scheduled (or the
+ * event predates occurrence references), a new one must be selected and the
+ * subject/class-type/entry state is re-derived, never left stale.
  */
 export function EditEventDialog({
   event, isSubmitting, onUpdate, onDeactivate, onOpenChange,
@@ -29,6 +37,7 @@ export function EditEventDialog({
 }) {
   const rule = getRule(event.event_type);
   const readOnly = event.quiz_schedule_managed;
+  const isOccurrence = isOccurrenceEventType(event.event_type);
 
   const [startDate, setStartDate] = useState(event.start_date);
   const [endDate, setEndDate] = useState(event.end_date);
@@ -38,21 +47,84 @@ export function EditEventDialog({
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // OCC-1 occurrence state. Selection falls back to the event's stored entry
+  // (kept when the date still resolves to it); a date change resets the
+  // fallback so a stale entry can never be silently submitted.
+  const [entryId, setEntryId] = useState(event.timetable_entry_id ?? "");
+  const [narrowToSubjectId, setNarrowToSubjectId] = useState("");
+  const [narrowTouched, setNarrowTouched] = useState(false);
+  const { options, dayInfo, isLoading: optionsLoading } = useOccurrenceOptions(
+    isOccurrence ? startDate : null,
+    isOccurrence ? event.event_type : null,
+  );
+
+  const selectedEntry = (options ?? []).find((o) => o.timetable_entry_id === entryId) ?? null;
+  const storedEntryStillListed = Boolean(
+    event.timetable_entry_id && (options ?? []).some((o) => o.timetable_entry_id === event.timetable_entry_id)
+  );
+
+  // Narrowing derivation: whenever the selected entry identity changes,
+  // reset any touched narrowing; prefill from the event's own subject when
+  // it is a concrete member of the entry's slot (a narrowed event edits as
+  // narrowed), else slot-wide.
+  const [lastEntryKey, setLastEntryKey] = useState<string | null>(event.timetable_entry_id);
+  const entryKey = selectedEntry?.timetable_entry_id ?? null;
+  if (entryKey !== lastEntryKey) {
+    setLastEntryKey(entryKey);
+    setNarrowTouched(false);
+    setNarrowToSubjectId("");
+  }
+  const prefilledNarrow =
+    selectedEntry && event.subject_id
+      && selectedEntry.elective_subjects.some((m) => m.id === event.subject_id)
+      ? event.subject_id
+      : "";
+  if (selectedEntry && !narrowTouched && narrowToSubjectId !== prefilledNarrow) {
+    setNarrowToSubjectId(prefilledNarrow);
+  }
+
+  const occurrenceNeedsSelection =
+    isOccurrence && selectedEntry === null && (dayInfo?.is_working_day ?? true);
+
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    // Re-resolve: fall back to the stored entry (kept only if still
+    // scheduled on the new date); narrowing re-derives from the entry.
+    setEntryId(event.timetable_entry_id ?? "");
+  };
+
   const handleSubmit = async () => {
     if (readOnly) { setError("This event is managed by the Quiz Schedule Manager and cannot be edited here."); return; }
     if (endDate < startDate) { setError("End date must not be before start date"); return; }
+    if (occurrenceNeedsSelection) {
+      setError(
+        "Select the scheduled occurrence for this date — a cancellation must reference a real timetable occurrence."
+      );
+      return;
+    }
     setError(null);
     try {
       const payload: UpdateAdminEventRequest = {};
       if (startDate !== event.start_date) payload.start_date = startDate;
       if (endDate !== event.end_date) payload.end_date = endDate;
-      if (rule.requiresClassType && classType !== (event.class_type ?? "")) {
+      if (isOccurrence && selectedEntry) {
+        const entryChanged = selectedEntry.timetable_entry_id !== event.timetable_entry_id;
+        const narrowingChanged = narrowTouched && narrowToSubjectId !== prefilledNarrow;
+        if (entryChanged || narrowingChanged) {
+          payload.timetable_entry_id = selectedEntry.timetable_entry_id;
+          payload.subject_id = narrowToSubjectId || null;
+          payload.elective_slot = null; // server re-derives from the occurrence
+          payload.class_type = selectedEntry.class_type;
+        }
+      }
+      if (!isOccurrence && rule.requiresClassType && classType !== (event.class_type ?? "")) {
         payload.class_type = classType as ClassType;
       }
       if (subDay !== (event.substitution_schedule_override ?? "")) {
         payload.substitution_schedule_override = subDay || null;
       }
       if (event.event_type === "HOLIDAY" && note !== (event.note ?? "")) payload.note = note || null;
+      if (Object.keys(payload).length === 0) { onOpenChange(false); return; }
       await onUpdate(event.id, payload);
       onOpenChange(false);
     } catch (err: unknown) {
@@ -90,7 +162,7 @@ export function EditEventDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Start date</label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={readOnly} />
+              <Input type="date" value={startDate} onChange={(e) => handleStartDateChange(e.target.value)} disabled={readOnly} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">End date</label>
@@ -98,15 +170,95 @@ export function EditEventDialog({
             </div>
           </div>
 
+          {isOccurrence && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Scheduled occurrence</label>
+                {event.occurrence_label && storedEntryStillListed && (
+                  <p className="text-xs text-muted-foreground">
+                    Currently references: {event.occurrence_label}
+                  </p>
+                )}
+                {!event.occurrence_label && (
+                  <p className="text-xs text-warning">
+                    This event predates occurrence references — select the
+                    scheduled occurrence it cancels before saving.
+                  </p>
+                )}
+                <select
+                  className={selectClass}
+                  value={entryId}
+                  onChange={(e) => setEntryId(e.target.value)}
+                  disabled={readOnly || optionsLoading || (dayInfo != null && !dayInfo.is_working_day)}
+                >
+                  <option value="">
+                    {optionsLoading
+                      ? "Loading schedule…"
+                      : (options ?? []).length === 0
+                        ? "No classes scheduled on this date"
+                        : "Select the class to cancel"}
+                  </option>
+                  {(options ?? []).map((o) => (
+                    <option key={o.timetable_entry_id} value={o.timetable_entry_id}>
+                      {o.display_label}
+                    </option>
+                  ))}
+                </select>
+                {dayInfo && !dayInfo.is_working_day && (
+                  <p className="text-xs text-warning">
+                    {startDate} is a non-working day ({dayInfo.non_working_reason}) —
+                    there are no scheduled classes to cancel.
+                  </p>
+                )}
+              </div>
+              {selectedEntry && selectedEntry.elective_subjects.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Affects</label>
+                  <select
+                    className={selectClass}
+                    value={narrowToSubjectId}
+                    onChange={(e) => { setNarrowTouched(true); setNarrowToSubjectId(e.target.value); }}
+                    disabled={readOnly}
+                  >
+                    <option value="">
+                      The entire {ELECTIVE_SLOT_LABEL(selectedEntry.elective_slot)} slot
+                      (every student in the slot)
+                    </option>
+                    {selectedEntry.elective_subjects.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        Only {m.code} — {m.name} students
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {selectedEntry && (
+                <p className="text-xs text-muted-foreground">
+                  Subject and class type follow the occurrence —{" "}
+                  {selectedEntry.subject_code} ({CLASS_TYPE_LABELS[selectedEntry.class_type]}).
+                </p>
+              )}
+            </>
+          )}
+
           {rule.requiresClassType && (
             <div className="space-y-2">
               <label className="text-sm font-medium">Class type</label>
-              <select className={selectClass} value={classType} onChange={(e) => setClassType(e.target.value as ClassType)} disabled={readOnly}>
-                <option value="">Select class type</option>
-                {rule.allowedClassTypes.map((ct) => (
-                  <option key={ct} value={ct}>{CLASS_TYPE_LABELS[ct]}</option>
-                ))}
-              </select>
+              {isOccurrence ? (
+                // OCC-1: the class type belongs to the referenced occurrence —
+                // never independently changeable.
+                <p className="text-sm text-muted-foreground">
+                  {event.class_type ? CLASS_TYPE_LABELS[event.class_type] : "—"}{" "}
+                  <span className="text-xs">(derived from the occurrence)</span>
+                </p>
+              ) : (
+                <select className={selectClass} value={classType} onChange={(e) => setClassType(e.target.value as ClassType)} disabled={readOnly}>
+                  <option value="">Select class type</option>
+                  {rule.allowedClassTypes.map((ct) => (
+                    <option key={ct} value={ct}>{CLASS_TYPE_LABELS[ct]}</option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -147,4 +299,11 @@ export function EditEventDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// Canonical elective-slot label (mirrors the create dialog's register).
+function ELECTIVE_SLOT_LABEL(slot: ElectiveSlot | null): string {
+  if (slot === "ELECTIVE_I") return "Department Elective-I";
+  if (slot === "ELECTIVE_II") return "Department Elective-II";
+  return slot ?? "";
 }

@@ -58,7 +58,16 @@ export const NAV_ITEMS: NavItem[] = [
     icon: CalendarClock,
     title: "Quiz Eligibility",
   },
-  { label: "Attendance", href: "/subjects", icon: BookOpen, title: "Attendance" },
+  {
+    // 25.UX-3: the nav label stays "Attendance" (D-01 destination naming),
+    // but the mobile header title now matches the page h1 ("Subjects
+    // Overview") like every other title in this list — one route can no
+    // longer present two different names for itself.
+    label: "Attendance",
+    href: "/subjects",
+    icon: BookOpen,
+    title: "Subjects Overview",
+  },
   { label: "History", href: "/history", icon: History, title: "Attendance History" },
   { label: "Calendar", href: "/calendar", icon: CalendarRange, title: "Calendar" },
   { label: "Events", href: "/tools/events", icon: CalendarDays, title: "Academic Events" },

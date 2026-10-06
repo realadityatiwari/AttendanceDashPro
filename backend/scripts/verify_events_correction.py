@@ -65,7 +65,7 @@ from app.core.security import create_access_token
 from app.db.session import AsyncSessionLocal
 from app.models.user import User, Section
 from app.models.event import AcademicEvent
-from app.models.timetable import ClassSession
+from app.models.timetable import ClassSession, TimetableEntry
 from app.models.attendance import AttendanceRecord
 from app.models.academic import StudentEnrollment, Subject
 from app.models.quiz import QuizSchedule
@@ -104,17 +104,28 @@ async def count_sessions(db, *conds):
 async def cleanup_residue(db) -> None:
     """Startup: remove crashed-run residue of THIS script. Ownership is the
     note marker this verifier stamps on every event it creates (ev_payload).
-    Session rows are deliberately NOT touched here: they carry no event
-    linkage and no created_at, so any date/type/shape-based sweep could delete
-    owner/live rows — the original version deleted the owner's live BNC-501
-    07-31 EXTRA_LECTURE/SURPRISE_QUIZ sessions exactly that way. Sessions a
-    run creates are removed by the finally block's captured-ID cleanup; only a
-    hard kill mid-run can leave orphan sessions, which is strictly preferable
-    to ever deleting owner data."""
+    Session rows are deliberately NOT swept by shape — but a crashed run can
+    leave an ATTENDED extra (the lifecycle deliberately preserves those with
+    is_deactivated=True and source_event_id intact), and the event rows can
+    then never be hard-deleted (fk_class_sessions_source_event_id). Those
+    sessions are verifier-owned artifacts (they carry THIS script's event
+    provenance), so they — and only they — are removed here with their
+    records, before the events."""
     note_events = (await db.execute(
         select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
     )).scalars().all()
     stale_event_ids = [ev.id for ev in note_events]
+    if stale_event_ids:
+        linked_sessions = (await db.execute(
+            select(ClassSession).where(
+                ClassSession.source_event_id.in_(stale_event_ids))
+        )).scalars().all()
+        for s in linked_sessions:
+            await db.execute(delete(AttendanceRecord).where(
+                AttendanceRecord.class_session_id == s.id))
+            await db.delete(s)
+        if linked_sessions:
+            await db.flush()
     for ev in note_events:
         await db.delete(ev)
     # H-4b: crashed-run residue - remove its notification projections for ALL
@@ -269,14 +280,41 @@ async def main() -> int:
                   r.status_code == 403, f"got {r.status_code}")
 
             # --- 2. CLASS_CANCELLED: practical rejected -------------------------
+            # OCC-1: the payload carries a REAL scheduled practical occurrence
+            # (BCS-551 has Monday practical entries), so a 422 here is genuinely
+            # the L/T-only class-type rule — not a missing occurrence reference.
+            async with AsyncSessionLocal() as db:
+                bcs551_entry = (await db.execute(
+                    select(TimetableEntry).where(
+                        TimetableEntry.subject_id == subject_ids["BCS-551"],
+                        TimetableEntry.day_of_week == FUT[0].weekday(),
+                        TimetableEntry.class_type == ClassType.PRACTICAL,
+                        TimetableEntry.is_active.is_(True),
+                    ).order_by(TimetableEntry.start_time).limit(1)
+                )).scalars().first()
             r = await client.post("/api/v1/events", headers=admin_headers,
-                                  json=ev_payload("CLASS_CANCELLED", "BCS-551", FUT[0], class_type="P"))
+                                  json=ev_payload("CLASS_CANCELLED", "BCS-551", FUT[0],
+                                                  class_type="P",
+                                                  timetable_entry_id=str(bcs551_entry.id) if bcs551_entry else None))
             check("2. CLASS_CANCELLED practical (BCS-551/P) -> 422 (L/T only)",
                   r.status_code == 422, f"got {r.status_code} {r.text[:200]}")
 
             # --- 3. CLASS_CANCELLED lecture: cancels the matching occurrence ----
+            # OCC-1: the event references the exact scheduled BCS-501 lecture
+            # occurrence for that date (its timetable entry).
+            async with AsyncSessionLocal() as db:
+                bcs501_entry = (await db.execute(
+                    select(TimetableEntry).where(
+                        TimetableEntry.subject_id == subject_ids["BCS-501"],
+                        TimetableEntry.day_of_week == FUT[1].weekday(),
+                        TimetableEntry.class_type == ClassType.LECTURE,
+                        TimetableEntry.is_active.is_(True),
+                    ).order_by(TimetableEntry.start_time).limit(1)
+                )).scalars().first()
             r = await client.post("/api/v1/events", headers=admin_headers,
-                                  json=ev_payload("CLASS_CANCELLED", "BCS-501", FUT[1], class_type="L"))
+                                  json=ev_payload("CLASS_CANCELLED", "BCS-501", FUT[1],
+                                                  class_type="L",
+                                                  timetable_entry_id=str(bcs501_entry.id) if bcs501_entry else None))
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -311,23 +349,31 @@ async def main() -> int:
                   and any(s["class_type"] == "T" and s["status"] == "Pending" for s in occ),
                   f"got {[(s['class_type'], s['status'], s['is_cancelled']) for s in occ]}")
 
-            # --- 4. CLASS_CANCELLED on a no-class day: graceful no-op -----------
+            # --- 4. CLASS_CANCELLED on a no-class day: rejected ------------------
+            # OCC-1: BCS-501 has no Monday occurrence, so there is no timetable
+            # entry to reference — the strict architecture makes a cancellation
+            # of a non-scheduled occurrence IMPOSSIBLE (was: 201 graceful no-op).
             r = await client.post("/api/v1/events", headers=admin_headers,
                                   json=ev_payload("CLASS_CANCELLED", "BCS-501", FUT[0], class_type="L"))
-            ok = r.status_code == 201
-            if ok:
-                test_event_ids.append(uuid.UUID(r.json()["id"]))
-            async with AsyncSessionLocal() as db:
-                n = await count_sessions(db, ClassSession.date == FUT[0])
-                cancelled = await count_sessions(
-                    db, (ClassSession.date == FUT[0]) & ClassSession.is_cancelled.is_(True))
-            check("4. CLASS_CANCELLED BCS-501/L 11-23 (no Monday class) -> 201, "
-                  "nothing cancelled, nothing created", ok and n == 5 and cancelled == 0,
-                  f"got {r.status_code} rows={n} cancelled={cancelled}")
+            check("4. CLASS_CANCELLED BCS-501/L 11-23 (no Monday class) -> 422 "
+                  "(no scheduled occurrence to reference)",
+                  r.status_code == 422, f"got {r.status_code} {r.text[:200]}")
 
             # --- 5. CLASS_CANCELLED tutorial ------------------------------------
+            # OCC-1: reference the exact scheduled Friday tutorial occurrence.
+            async with AsyncSessionLocal() as db:
+                bcs502_tut_entry = (await db.execute(
+                    select(TimetableEntry).where(
+                        TimetableEntry.subject_id == subject_ids["BCS-502"],
+                        TimetableEntry.day_of_week == FUT[4].weekday(),
+                        TimetableEntry.class_type == ClassType.TUTORIAL,
+                        TimetableEntry.is_active.is_(True),
+                    ).order_by(TimetableEntry.start_time).limit(1)
+                )).scalars().first()
             r = await client.post("/api/v1/events", headers=admin_headers,
-                                  json=ev_payload("CLASS_CANCELLED", "BCS-502", FUT[4], class_type="T"))
+                                  json=ev_payload("CLASS_CANCELLED", "BCS-502", FUT[4],
+                                                  class_type="T",
+                                                  timetable_entry_id=str(bcs502_tut_entry.id) if bcs502_tut_entry else None))
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -671,8 +717,21 @@ async def main() -> int:
                   f"extras={len(extras)} occ501={len(occ501)}")
 
             # --- 23. Regression: LAB_CANCELLED block ----------------------------
+            # OCC-1: reference the exact scheduled practical occurrence (the
+            # first Friday BCS-553 lab entry — the block's first period).
+            async with AsyncSessionLocal() as db:
+                bcs553_entry = (await db.execute(
+                    select(TimetableEntry).where(
+                        TimetableEntry.subject_id == subject_ids["BCS-553"],
+                        TimetableEntry.day_of_week == FUT[4].weekday(),
+                        TimetableEntry.class_type == ClassType.PRACTICAL,
+                        TimetableEntry.is_active.is_(True),
+                    ).order_by(TimetableEntry.start_time).limit(1)
+                )).scalars().first()
             r = await client.post("/api/v1/events", headers=admin_headers,
-                                  json=ev_payload("LAB_CANCELLED", "BCS-553", FUT[4], class_type="P"))
+                                  json=ev_payload("LAB_CANCELLED", "BCS-553", FUT[4],
+                                                  class_type="P",
+                                                  timetable_entry_id=str(bcs553_entry.id) if bcs553_entry else None))
             ok = r.status_code == 201
             if ok:
                 test_event_ids.append(uuid.UUID(r.json()["id"]))
@@ -724,6 +783,21 @@ async def main() -> int:
                 select(AcademicEvent).where(AcademicEvent.note.like(f"{EVENT_TITLE_PREFIX}%"))
             )).scalars().all()
             fixture_event_ids = [ev.id for ev in events]
+            # Attended extras created by this run's events deliberately SURVIVE
+            # event deletion (frozen lifecycle contract: is_deactivated=True,
+            # never deleted) — they still carry source_event_id, so they (and
+            # only they: verifier-owned provenance) are removed here with their
+            # records before the event rows, or the hard delete FK-fails.
+            linked_sessions = (await db.execute(
+                select(ClassSession).where(
+                    ClassSession.source_event_id.in_(fixture_event_ids))
+            )).scalars().all() if fixture_event_ids else []
+            for s in linked_sessions:
+                await db.execute(delete(AttendanceRecord).where(
+                    AttendanceRecord.class_session_id == s.id))
+                await db.delete(s)
+            if linked_sessions:
+                await db.flush()
             for ev in events:
                 await db.delete(ev)
             # H-4b: remove this fixture's notification projections for ALL

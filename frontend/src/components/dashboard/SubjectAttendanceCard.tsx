@@ -74,7 +74,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             <CardTitle className="font-mono text-sm font-bold tracking-tight text-foreground">
               {subject.code}
             </CardTitle>
-            <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-[11px] tracking-wider px-2 py-0 h-5">
+            <Badge variant={isLabOnly ? "neutral" : "primary"} className="uppercase text-2xs tracking-wider px-2 py-0 h-5">
               {isLabOnly ? "LAB" : "THEORY"}
             </Badge>
           </div>
@@ -85,7 +85,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
         {healthBadge && (
           <Badge
             variant={healthBadge.variant}
-            className={cn("uppercase text-[11px] tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
+            className={cn("uppercase text-2xs tracking-wider px-2 py-0 h-5 shrink-0", healthBadge.solid && "bg-destructive text-destructive-foreground border-destructive")}
           >
             {attendanceStatusLabel(health)}
           </Badge>
@@ -100,10 +100,10 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
                 {formatPct1(primaryPct)}
               </div>
             <div className="text-right pb-0.5">
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wide leading-tight">
+              <div className="text-2xs text-muted-foreground uppercase tracking-wide leading-tight">
                 {isLabOnly ? "Practical" : "Overall"}
               </div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wide leading-tight">
+              <div className="text-2xs text-muted-foreground uppercase tracking-wide leading-tight">
                 Attendance
               </div>
             </div>
@@ -134,7 +134,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
                   counts={summary?.tutorial}
                 />
               ) : (
-                <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5 flex items-center justify-center text-[11px] text-muted-foreground">
+                <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5 flex items-center justify-center text-2xs text-muted-foreground">
                   No tutorials
                 </div>
               )}
@@ -184,7 +184,7 @@ export function SubjectAttendanceCard({ subject, summary }: SubjectAttendanceCar
             {isLabOnly && (
               <DetailRow label="Practical" counts={summary?.practical} pct={summary?.current_practical_pct ?? null} />
             )}
-            <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+            <p className="text-2xs text-muted-foreground pt-1 border-t border-border/40">
               Percentages are current and recorded-only — pending sessions are never treated as absent.
             </p>
           </div>
@@ -214,10 +214,10 @@ function Block({
   return (
     <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
+        <span className="text-2xs uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
         <span className="tabular-nums font-semibold text-foreground text-sm leading-none">{formatPct(pct)}</span>
       </div>
-      <p className="text-[11px] text-muted-foreground mt-1.5 tabular-nums">
+      <p className="text-2xs text-muted-foreground mt-1.5 tabular-nums">
         {counts?.attended ?? 0}/{counts?.total ?? 0} attended
       </p>
     </div>

@@ -145,6 +145,9 @@ describe("SettingsModal dirty state (UIA-002)", () => {
     await waitFor(() => {
       expect(screen.getByText("Saved")).toBeInTheDocument();
     });
+    // …announced to screen readers (25.UX-7: the save outcome is a direct
+    // consequence of the user's action, so the status slot has role=status).
+    expect(screen.getByText("Saved")).toHaveAttribute("role", "status");
     // …and the dirty state has cleared: Save disabled again.
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
     expect(

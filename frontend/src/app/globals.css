@@ -13,6 +13,9 @@
      must exist so the utility resolves instead of silently falling back to
      the inherited font. Mirrors --font-sans (Geist Sans via next/font). */
   --font-heading: var(--font-geist-sans);
+  /* 25.UX-2: semantic micro-typography step. 11px — the former text-[11px]
+     arbitrary value used by micro-labels and compact academic metadata. */
+  --text-2xs: 0.6875rem;
   
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

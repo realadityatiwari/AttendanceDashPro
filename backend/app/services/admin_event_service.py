@@ -24,15 +24,23 @@ QUIZ_DAY OWNERSHIP GUARD (critical — enforced in EventService since the
   directly and never routes through EventService).
 """
 
-from typing import List, Optional
+from datetime import date
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import EventType
+from app.engines.calendar_engine import (
+    DEFAULT_WEEKENDS,
+    DAY_NAMES,
+    get_academic_day,
+)
+from app.models.enums import ClassType, ElectiveSlot, EventType
 from app.models.event import AcademicEvent
 from app.models.user import User
+from app.repositories.admin_timetable_repo import AdminTimetableRepository
 from app.repositories.event_repo import EventRepository
 from app.repositories.calendar_repo import CalendarRepository
 from app.schemas.calendar import AcademicEventCreate, AcademicEventUpdate
@@ -40,11 +48,29 @@ from app.schemas.admin_events import (
     AdminEventListResponse,
     AdminEventMutationResponse,
     AdminEventResponse,
+    AdminOccurrenceElectiveSubject,
+    AdminOccurrenceOption,
+    AdminOccurrenceOptionsResponse,
 )
 from app.services.authorization_service import AuthorizationService
+from app.services.elective_resolver import ElectiveResolver
 from app.services.event_service import EventService, EventForbidden
 from app.services.event_registry import EventValidationError, get_rule
 from app.repositories.event_repo import EventNotFound, EventConflict
+
+# ClassType -> display label for occurrence read models.
+CLASS_TYPE_LABELS: Dict[ClassType, str] = {
+    ClassType.LECTURE: "Lecture",
+    ClassType.TUTORIAL: "Tutorial",
+    ClassType.PRACTICAL: "Practical",
+}
+
+# ElectiveSlot -> canonical user-facing label (matches the frontend's
+# canonicalStatus register).
+ELECTIVE_SLOT_LABELS: Dict[ElectiveSlot, str] = {
+    ElectiveSlot.ELECTIVE_I: "Department Elective-I",
+    ElectiveSlot.ELECTIVE_II: "Department Elective-II",
+}
 
 
 class AdminEventDomainError(Exception):
@@ -61,6 +87,7 @@ class AdminEventService:
         self.db = db
         self.event_repo = EventRepository(db)
         self.calendar_repo = CalendarRepository(db)
+        self.timetable_repo = AdminTimetableRepository(db)
         self.authz = AuthorizationService(db)
         self.event_service = EventService(db)
 
@@ -90,6 +117,63 @@ class AdminEventService:
         )
 
     # ------------------------------------------------------------------
+    # OCC-1 occurrence read helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _occurrence_label(entry) -> str:
+        """Ready-to-render description of a scheduled timetable occurrence,
+        e.g. "BCS-502 — Web Technology (Lecture) · 10:00–11:00 · Monday".
+        Slot entries are marked so an admin can never mistake the shared
+        anchor session for a regular subject class."""
+        label = (
+            f"{entry.subject.code} — {entry.subject.name} "
+            f"({CLASS_TYPE_LABELS[entry.class_type]}) · "
+            f"{entry.start_time.strftime('%H:%M')}–{entry.end_time.strftime('%H:%M')}"
+        )
+        if entry.elective_slot is not None:
+            slot_label = ELECTIVE_SLOT_LABELS.get(entry.elective_slot)
+            if slot_label is not None:
+                label += f" · {slot_label} slot"
+        label += f" · {DAY_NAMES[entry.day_of_week].title()}"
+        return label
+
+    async def _entry_label_map(self, entry_ids: List[UUID]) -> Dict[UUID, str]:
+        """Batch timetable-entry labels for a page of events (one query)."""
+        ids = [e for e in entry_ids if e is not None]
+        if not ids:
+            return {}
+        entries = await self.timetable_repo.list_entries_by_ids(ids)
+        return {entry.id: self._occurrence_label(entry) for entry in entries}
+
+    async def _elective_members_by_slot(self) -> Dict[ElectiveSlot, list]:
+        """The DB-backed elective catalog grouped by slot (active academic
+        session), anchors EXCLUDED — members are the concrete subjects a
+        slot occurrence may be narrowed to. Same session scoping as
+        ElectiveResolver.catalog_codes (the resolver returns codes only;
+        the read model needs id/code/name)."""
+        from app.models.academic import AcademicSession, Semester, Subject as SubjectModel
+        result = await self.db.execute(
+            select(SubjectModel)
+            .join(Semester, Semester.id == SubjectModel.semester_id)
+            .join(AcademicSession, AcademicSession.id == Semester.session_id)
+            .where(
+                AcademicSession.is_active.is_(True),
+                SubjectModel.elective_slot.isnot(None),
+            )
+        )
+        anchors = await ElectiveResolver(self.db).anchor_subjects()
+        anchor_ids = {a.id for a in anchors.values()}
+        members: Dict[ElectiveSlot, list] = {}
+        for subject in result.scalars().all():
+            if subject.id in anchor_ids:
+                continue
+            members.setdefault(subject.elective_slot, []).append(subject)
+        for subjects in members.values():
+            subjects.sort(key=lambda s: s.code)
+        return members
+
+    # ------------------------------------------------------------------
     # Read model composition
     # ------------------------------------------------------------------
 
@@ -101,7 +185,12 @@ class AdminEventService:
             return None, None
         return subject.code, subject.name
 
-    async def _to_response(self, event: AcademicEvent, user: Optional[User] = None) -> AdminEventResponse:
+    async def _to_response(
+        self,
+        event: AcademicEvent,
+        user: Optional[User] = None,
+        entry_labels: Optional[Dict[UUID, str]] = None,
+    ) -> AdminEventResponse:
         subject_code, subject_name = await self._subject_info(event.subject_id)
         managed = await self._is_quiz_schedule_managed(
             event.event_type, event.subject_id, event.elective_slot, event.start_date
@@ -135,6 +224,17 @@ class AdminEventService:
                 summary = subject_code
         else:
             summary = rule.display_name
+        # OCC-1: the referenced occurrence's server-computed label (the UI
+        # never reconstructs it from the weekly timetable).
+        occurrence_label = None
+        if event.timetable_entry_id is not None:
+            if entry_labels is not None:
+                occurrence_label = entry_labels.get(event.timetable_entry_id)
+            else:
+                entry = await self.timetable_repo.get_entry(event.timetable_entry_id)
+                occurrence_label = (
+                    self._occurrence_label(entry) if entry is not None else None
+                )
         return AdminEventResponse(
             id=event.id,
             event_type=event.event_type,
@@ -144,6 +244,8 @@ class AdminEventService:
             subject_id=event.subject_id,
             subject_code=subject_code,
             subject_name=subject_name,
+            timetable_entry_id=event.timetable_entry_id,
+            occurrence_label=occurrence_label,
             elective_slot=event.elective_slot,
             class_type=event.class_type,
             is_working_day=event.is_working_day,
@@ -197,15 +299,142 @@ class AdminEventService:
             if class_type is not None and event.class_type != class_type:
                 continue
             if await self._visible(user, event):
-                items.append(await self._to_response(event, user))
+                items.append(event)
         items.sort(key=lambda e: (e.start_date, e.event_type.value))
-        return AdminEventListResponse(items=items, total=len(items))
+        # OCC-1: batch the occurrence labels for the visible page (one query).
+        entry_labels = await self._entry_label_map(
+            [e.timetable_entry_id for e in items]
+        )
+        responses = [
+            await self._to_response(event, user, entry_labels) for event in items
+        ]
+        return AdminEventListResponse(items=responses, total=len(responses))
 
     async def get_event(self, user: User, event_id: UUID) -> AdminEventResponse:
         event = await self.event_repo.get_by_id(event_id)
         if event is None or not await self._visible(user, event):
             raise AdminEventDomainError("Event not found", http_status=404)
         return await self._to_response(event, user)
+
+    # ------------------------------------------------------------------
+    # OCC-1 — occurrence options read model
+    # ------------------------------------------------------------------
+
+    async def list_occurrence_options(
+        self,
+        user: User,
+        *,
+        for_date: date,
+        event_type: Optional[EventType] = None,
+    ) -> AdminOccurrenceOptionsResponse:
+        """The selectable timetable occurrences for event creation on one
+        date — the exact data the Events UI needs, resolved entirely on the
+        backend (the frontend never reconstructs it from the weekly
+        timetable):
+
+          - canonical day resolution via the frozen calendar engine (weekend
+            default, active closures, working-Saturday override, substitution
+            schedule) — on a non-working day the list is empty and
+            `non_working_reason` explains why;
+          - the effective schedule weekday (substitution applied) picks the
+            ACTIVE timetable entries;
+          - the acting admin's section/subject scope is applied (HEAD all;
+            CLASS sections; ELECTIVE exact subjects — resolved from the DB,
+            never from the client);
+          - `event_type` narrows to the registry's allowed class types
+            (CLASS_CANCELLED -> Lecture/Tutorial, LAB_CANCELLED ->
+            Practical);
+          - shared elective-slot entries keep their anchor subject and carry
+            the concrete catalog members the occurrence may be narrowed to
+            (canonical ElectiveResolver anchors — never leaked or guessed).
+        """
+        section_ids, subject_ids = await self.authz.resolve_admin_scope_filters(user)
+
+        events = await self.calendar_repo.get_all_events(active=True)
+        day = get_academic_day(for_date, events, DEFAULT_WEEKENDS)
+        non_working_reason: Optional[str] = None
+        if not day.is_working_day:
+            dominant = day.events[0] if day.events else None
+            non_working_reason = (
+                get_rule(dominant.event_type).display_name
+                if dominant is not None
+                else "Weekend"
+            )
+        # The weekday whose schedule this date follows (substitution-aware) —
+        # the same resolution the synchronizer applies.
+        schedule_day = day.substitution_schedule_override or day.original_day_of_week
+        day_of_week = DAY_NAMES.index(schedule_day)
+
+        items: List[AdminOccurrenceOption] = []
+        if day.is_working_day:
+            allowed_class_types = None
+            if event_type is not None:
+                allowed_class_types = get_rule(event_type).allowed_class_types or None
+            entries = await self.timetable_repo.list_entries(
+                section_ids=(
+                    list(section_ids) if section_ids is not None else None
+                ),
+                subject_ids=(
+                    list(subject_ids) if subject_ids is not None else None
+                ),
+                day_of_week=day_of_week,
+                is_active=True,
+            )
+            members_by_slot = await self._elective_members_by_slot()
+            anchors = await ElectiveResolver(self.db).anchor_subjects()
+            for entry in entries:
+                if (
+                    allowed_class_types is not None
+                    and entry.class_type not in allowed_class_types
+                ):
+                    continue
+                subject = entry.subject
+                slot_members = (
+                    members_by_slot.get(entry.elective_slot, [])
+                    if entry.elective_slot is not None
+                    else []
+                )
+                is_slot_anchor = (
+                    entry.elective_slot is not None
+                    and entry.elective_slot in anchors
+                    and anchors[entry.elective_slot].id == entry.subject_id
+                )
+                items.append(
+                    AdminOccurrenceOption(
+                        timetable_entry_id=entry.id,
+                        subject_id=entry.subject_id,
+                        subject_code=subject.code,
+                        subject_name=subject.name,
+                        class_type=entry.class_type,
+                        start_time=entry.start_time,
+                        end_time=entry.end_time,
+                        section_id=entry.section_id,
+                        section_name=entry.section.name,
+                        subsection_id=entry.subsection_id,
+                        subsection_name=(
+                            entry.subsection.name if entry.subsection else None
+                        ),
+                        elective_slot=entry.elective_slot,
+                        is_slot_anchor=is_slot_anchor,
+                        elective_subjects=[
+                            AdminOccurrenceElectiveSubject(
+                                id=m.id, code=m.code, name=m.name
+                            )
+                            for m in slot_members
+                        ],
+                        display_label=self._occurrence_label(entry),
+                    )
+                )
+        return AdminOccurrenceOptionsResponse(
+            date=for_date,
+            event_type=event_type,
+            is_working_day=day.is_working_day,
+            day_type=day.day_type,
+            schedule_day=schedule_day,
+            non_working_reason=non_working_reason,
+            items=items,
+            total=len(items),
+        )
 
     # ------------------------------------------------------------------
     # Writes (endpoint: require_any_admin; EventService enforces scope)

@@ -50,6 +50,7 @@ from app.models.academic import StudentEnrollment, Subject
 from app.models.event import AcademicEvent
 from app.models.timetable import ClassSession
 from app.models.attendance import AttendanceRecord
+from app.models.notification import Notification
 from app.models.enums import AttendanceStatus, ClassType, EventType, UserRole
 from app.services.event_session_service import EventSessionSynchronizer
 
@@ -191,10 +192,13 @@ async def main() -> int:
                   f"{base_sum['lecture']}")
 
             # --- the bugfix under test -----------------------------------------
+            # OCC-1: a cancellation must reference the exact scheduled
+            # occurrence — the fixture session's own timetable entry.
             r = await c.post("/api/v1/events", headers=t2, json={
                 "event_type": "CLASS_CANCELLED", "start_date": D_SOURCE.isoformat(),
                 "end_date": D_SOURCE.isoformat(),
-                "subject_id": str(bcs502.id), "class_type": "L"})
+                "subject_id": str(bcs502.id), "class_type": "L",
+                "timetable_entry_id": str(src.timetable_entry_id)})
             ok_ev = r.status_code == 201
             check("4. student CLASS_CANCELLED BCS-502/L 08-05 -> 201",
                   ok_ev, f"got {r.status_code} {r.text[:160]}")
@@ -278,9 +282,14 @@ async def main() -> int:
                   f"missed={hm['summary']} cancelled={hc['summary']}")
 
             # --- edit semantics: moving the event reconciles BOTH dates ----------
+            # OCC-1: moving a cancellation to another date must re-target the
+            # occurrence scheduled on the NEW date (the 08-11 session's own
+            # timetable entry) — the backend rejects a move that would leave
+            # the referenced occurrence unscheduled on the selected date.
             r = await c.patch(f"/api/v1/events/{ev_id}", headers=t2,
                               json={"start_date": D_TARGET.isoformat(),
-                                    "end_date": D_TARGET.isoformat()})
+                                    "end_date": D_TARGET.isoformat(),
+                                    "timetable_entry_id": str(tgt.timetable_entry_id)})
             check("15. PATCH moves the cancellation 08-05 -> 08-11 -> 200",
                   r.status_code == 200, f"got {r.status_code} {r.text[:160]}")
             async with AsyncSessionLocal() as db:
@@ -378,6 +387,11 @@ async def main() -> int:
                 db, test_event_ids, label="event_cancellation_propagation")
             await db.execute(delete(StudentEnrollment).where(
                 StudentEnrollment.user_id.in_([tmp1_id, tmp2_id])))
+            # Notification projections addressed to the temp users (beyond the
+            # retired event projections above) must go before the users or the
+            # FK blocks the delete.
+            await db.execute(delete(Notification).where(
+                Notification.user_id.in_([tmp1_id, tmp2_id])))
             await db.execute(delete(User).where(User.id.in_([tmp1_id, tmp2_id])))
             drifted = []
             for sid, was_cancelled in window_pre.items():

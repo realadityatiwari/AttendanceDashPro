@@ -182,11 +182,11 @@ export default function TrackAttendancePage() {
           date input stretches between the arrows on narrow screens (input and
           Today are 40px tall on mobile via the 12A button foundation; the
           `sm:h-8` restore keeps the desktop size byte-identical). */}
-      <div className="flex items-center justify-between w-full gap-2">
+      <div className="flex items-center justify-between w-full gap-2.5">
         <Button variant="outline" size="icon" onClick={handlePreviousDay} disabled={atSemesterStart} aria-label="Previous day">
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <div className="flex flex-1 min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
+        <div className="flex flex-1 min-w-0 flex-col items-stretch gap-2.5 sm:flex-row sm:items-center sm:justify-center">
           <Input
             type="date"
             aria-label="Jump to date"
@@ -232,7 +232,7 @@ export default function TrackAttendancePage() {
               aria-live="polite"
               className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
-              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{mutationError}</span>
             </div>
           )}
@@ -264,7 +264,7 @@ export default function TrackAttendancePage() {
                   variant="success"
                   className="w-full"
                 >
-                  {isMarkingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {isMarkingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true" /> : null}
                   Mark all present
                 </Button>
               )

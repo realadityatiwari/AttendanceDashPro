@@ -896,6 +896,40 @@ export function useAdminEventMutations() {
 }
 
 // ===========================================================================
+// OCC-1 — occurrence options (admin Events UI)
+// ===========================================================================
+
+import type { AdminOccurrenceOptionsResponse } from '@/types/api';
+
+/**
+ * The timetable occurrences actually scheduled on `date` for the acting
+ * admin's scope (backend-resolved: day state, substitution, scope, class-type
+ * constraints). `eventType` narrows to that type's allowed class types
+ * (cancellation creation must pick one of these exact occurrences); omitted,
+ * the response still carries the canonical day resolution (used for the
+ * working-day default semantics).
+ */
+export function useOccurrenceOptions(date: string | null, eventType?: string | null) {
+  const enabled = Boolean(date);
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (eventType) params.set('event_type', eventType);
+  const key = enabled ? `/api/v1/admin/events/occurrence-options?${params.toString()}` : null;
+  const { data, error, isLoading, mutate } = useSWR<AdminOccurrenceOptionsResponse>(
+    key,
+    fetcher,
+    STANDARD_CACHE
+  );
+  return {
+    options: data?.items,
+    dayInfo: data ?? null,
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
+// ===========================================================================
 // Phase 24.11 — Admin & Scope Management (HEAD_ADMIN only)
 // ===========================================================================
 

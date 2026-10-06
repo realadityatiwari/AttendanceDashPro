@@ -342,7 +342,14 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                 key={item.id}
                 className={item.is_read ? "rounded-lg border border-border bg-background p-3" : "rounded-lg border border-border bg-muted/40 p-3"}
               >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                {/* 25.UX-6: the Read/Dismiss actions own a dedicated bottom
+                    row on touch widths. In the former single flex row the
+                    unread message could flow under the corner buttons (the
+                    dismiss box visually overlapped the message line), and the
+                    adjacent 40px-touch controls sat at gap-1 — below the 8px
+                    adjacent-target spacing. At sm+ the original corner
+                    placement is preserved byte-identically. */}
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:gap-3">
                   <div className="flex items-start gap-3 sm:min-w-0 sm:flex-1">
                     <span
                       className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${meta.iconClass}`}
@@ -353,7 +360,17 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                       <div className="flex items-center gap-2">
                         <Badge variant={meta.badge}>{meta.label}</Badge>
                         {!item.is_read && (
-                          <span className="size-1.5 rounded-full bg-primary" aria-label="Unread" />
+                          // 25.UX-7: a bare <span> has no role, so aria-label on
+                          // it is not reliably announced. The dot stays purely
+                          // visual (aria-hidden) and the sr-only text carries
+                          // the unread state next to the row's badge.
+                          <>
+                            <span
+                              className="size-1.5 rounded-full bg-primary"
+                              aria-hidden="true"
+                            />
+                            <span className="sr-only">Unread</span>
+                          </>
                         )}
                       </div>
                       <p
@@ -370,7 +387,7 @@ export function NotificationCenter({ open, onOpenChange }: NotificationCenterPro
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center justify-end gap-1 sm:items-start">
+                  <div className="flex shrink-0 items-center justify-end gap-2 sm:items-start sm:gap-1">
                     {!item.is_read && (
                       <Button
                         variant="ghost"

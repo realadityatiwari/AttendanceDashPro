@@ -28,8 +28,11 @@ export function SubjectAttendanceGrid() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-hidden="true">
+        {/* 25.UX-4: h-64 tracks the real subject card height (~300px with
+            header, headline, breakdown blocks, and details CTA) so the
+            loading state no longer collapses to half the loaded height. */}
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-40 rounded-xl border border-border" />
+          <Skeleton key={i} className="h-64 rounded-xl border border-border" />
         ))}
       </div>
     );
@@ -63,6 +66,17 @@ export function SubjectAttendanceGrid() {
   const summaryByCode = new Map((overview?.subjects ?? []).map((s) => [s.subject_code, s]));
 
   const displaySubjects = subjects.filter((s) => s.attendance_applicable);
+
+  // 25.UX-4: an enrollment can exist while carrying no attendance-applicable
+  // subject — without this guard the grid rendered as a silent blank area.
+  if (displaySubjects.length === 0) {
+    return (
+      <EmptyState
+        title="No attendance to track"
+        message="None of your enrolled subjects are attendance-applicable this semester."
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

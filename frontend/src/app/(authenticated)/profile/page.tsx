@@ -22,7 +22,7 @@ import { formatDateMedium } from "@/lib/date";
  */
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
-  const { profile, isLoading, isError } = useProfile();
+  const { profile, isLoading, isError, mutate } = useProfile();
 
   if (loading) {
     return (
@@ -48,7 +48,11 @@ export default function ProfilePage() {
     return (
       <div className="flex-1 py-8 w-full max-w-4xl mx-auto">
         <PageHeader title="Profile Settings" />
-        <ErrorState message="Could not load your student profile. Please check your connection and try again." />
+        {/* 25.UX-5: retry parity with the other screens' error states. */}
+        <ErrorState
+          message="Could not load your student profile. Please check your connection and try again."
+          onRetry={() => mutate()}
+        />
         <div className="mt-8 flex justify-center">
           <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -82,7 +86,7 @@ export default function ProfilePage() {
               <div className="space-y-4 flex-1 w-full">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Display Name</label>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Display Name</span>
                     {isLoading ? (
                       <Skeleton className="h-6 w-48 mt-1" />
                     ) : (
@@ -90,7 +94,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Roll Number</label>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Roll Number</span>
                     {isLoading ? (
                       <Skeleton className="h-6 w-32 mt-1" />
                     ) : (
@@ -98,7 +102,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Section</label>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Section</span>
                     {isLoading ? (
                       <Skeleton className="h-6 w-24 mt-1" />
                     ) : (

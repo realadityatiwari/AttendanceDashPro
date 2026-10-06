@@ -24,10 +24,5 @@ export function attendanceStatusVariant(
 // 25.UX-1: the dashboard's classTypeLabel is gone — consumers use the ONE
 // canonical contract (lib/canonicalStatus), which returns null for unknown
 // class types instead of guessing a default.
-
-export function eventTypeLabel(eventType: string): string {
-  return eventType
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
+// 25.UX-3: the dashboard's eventTypeLabel is gone too — event-type labels
+// flow through the canonical humanizeEventType.

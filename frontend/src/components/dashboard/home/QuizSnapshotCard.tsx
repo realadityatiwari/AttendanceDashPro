@@ -5,13 +5,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatShortDate } from "@/lib/date";
-
-const QUIZ_LABELS: Record<string, string> = {
-  Quiz1: "Quiz I",
-  Quiz2: "Quiz II",
-  Quiz3: "Quiz III",
-};
+import { formatPct, formatShortDate } from "@/lib/date";
+import { quizCycleLabel } from "@/lib/canonicalStatus";
 
 interface QuizSnapshotCardProps {
   quiz: QuizSnapshotSection;
@@ -26,7 +21,9 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Quiz Snapshot</CardTitle>
           {quiz.has_snapshot && quiz.quiz_label && (
-            <Badge variant="primary">{QUIZ_LABELS[quiz.quiz_label] ?? quiz.quiz_label}</Badge>
+            // 25.UX-1/3: cycle labels flow from the canonical quiz-cycle
+            // vocabulary (handles backend shapes like "Quiz1").
+            <Badge variant="primary">{quizCycleLabel(quiz.quiz_label)}</Badge>
           )}
         </div>
       </CardHeader>
@@ -61,7 +58,9 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                     Eligibility
                   </div>
                   <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                    ≥ {Math.round(quiz.threshold)}%
+                    {/* 25.UX-3: thresholds render through the canonical
+                        whole-number formatter. */}
+                    ≥ {formatPct(quiz.threshold)}
                   </div>
                 </div>
               )}
@@ -72,7 +71,7 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                 <div className="text-xl font-bold tabular-nums text-success">
                   {quiz.eligible}
                 </div>
-                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                   Eligible
                 </div>
               </div>
@@ -80,15 +79,19 @@ export function QuizSnapshotCard({ quiz }: QuizSnapshotCardProps) {
                 <div className="text-xl font-bold tabular-nums text-warning">
                   {quiz.attention}
                 </div>
-                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Attention
+                {/* 25.UX-3: the middle bucket IS the canonical Recoverable
+                    state — the backend counts subjects whose optimization is
+                    reachable (dashboard_service), so the label matches the
+                    Quiz Eligibility vocabulary instead of a second name. */}
+                <div className="mt-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Recoverable
                 </div>
               </div>
               <div>
                 <div className="text-xl font-bold tabular-nums text-destructive">
                   {quiz.not_eligible}
                 </div>
-                <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                   Not eligible
                 </div>
               </div>

@@ -62,12 +62,12 @@ export function TodayAttendanceCard({ today }: TodayAttendanceCardProps) {
                     {/* Canonical class-type label; unknown types render no
                         badge instead of a guessed default (25.UX-1). */}
                     {classTypeLabel(cls.class_type) && (
-                      <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
+                      <Badge variant="outline" size="xs" className="px-1.5 uppercase tracking-wider">
                         {classTypeLabel(cls.class_type)}
                       </Badge>
                     )}
                     {cls.is_extra && (
-                      <Badge variant="neutral" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
+                      <Badge variant="neutral" size="xs" className="px-1.5 uppercase tracking-wider">
                         Extra
                       </Badge>
                     )}

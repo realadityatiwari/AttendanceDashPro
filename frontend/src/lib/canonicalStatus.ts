@@ -12,6 +12,7 @@ import {
   AttendanceStatus,
   ClassType,
   DashboardClassStatus,
+  ElectiveSlot,
   EligibilityState,
   FeedbackType,
   type AttendanceStatusLabel,
@@ -295,3 +296,34 @@ export function feedbackTypeBadgeClass(type: FeedbackType): string {
       return "bg-success/10 text-success";
   }
 }
+
+// ---------------------------------------------------------------------------
+// 7. EVENT TYPE LABELS (Surprise Quiz, Quiz Day, …)
+// ---------------------------------------------------------------------------
+/**
+ * Humanizes any event type string — including types unknown to the current
+ * enum — so an unknown/future type renders a readable label instead of
+ * crashing. The ONE event-type label implementation (25.UX-3): previously
+ * duplicated as humanizeEventType (events module) and eventTypeLabel
+ * (dashboard status helper).
+ */
+export function humanizeEventType(type: string): string {
+  return type
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ---------------------------------------------------------------------------
+// 8. ELECTIVE SLOT LABELS (Department Elective-I / Department Elective-II)
+// ---------------------------------------------------------------------------
+/**
+ * Canonical labels for the DE-I / DE-II logical slots (25.UX-3). Wording
+ * follows the backend's user-visible register ("Department Elective-I",
+ * cf. the auth validation copy) — the former "Departmental Elective" variant
+ * in the events module was the same concept under a second name.
+ */
+export const ELECTIVE_SLOT_LABELS: Record<ElectiveSlot, string> = {
+  [ElectiveSlot.ELECTIVE_I]: "Department Elective-I",
+  [ElectiveSlot.ELECTIVE_II]: "Department Elective-II",
+};

@@ -107,9 +107,13 @@ export function ShellField({ label, value, unavailable, mono }: ShellFieldProps)
           —
         </span>
       ) : (
+        // 25.UX-6: long values (session names, program titles) wrap instead
+        // of squeezing the label — the profile grid keeps its label/value
+        // collision-free at any value length. Desktop appearance is
+        // unchanged for the values these fields actually carry.
         <span
           className={cn(
-            "text-right text-sm font-medium text-foreground",
+            "min-w-0 break-words text-right text-sm font-medium text-foreground",
             mono && "font-mono"
           )}
         >

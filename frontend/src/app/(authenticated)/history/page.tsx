@@ -14,11 +14,10 @@ import {
   AttendanceHistoryItem,
   AttendanceHistoryParams,
   AttendanceStatus,
-  ClassType,
   HistoryStatusFilter,
 } from "@/types/api";
-import { formatDateParts, formatDateRange } from "@/lib/date";
-import { getSessionStatus, SESSION_STATUS } from "@/lib/canonicalStatus";
+import { formatDateParts, formatDateRange, formatTime } from "@/lib/date";
+import { classTypeLabel, getSessionStatus, SESSION_STATUS } from "@/lib/canonicalStatus";
 import { RecordedPct } from "@/components/shared/RecordedPct";
 import { DateInput } from "@/components/shared/DateInput";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,10 +44,16 @@ function StatusBadge({ item }: { item: AttendanceHistoryItem }) {
 }
 
 function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
-  const displayType =
-    item.class_type === ClassType.LECTURE ? "LECTURE" :
-    item.class_type === ClassType.TUTORIAL ? "TUTORIAL" : "PRACTICAL";
-  const timeLabel = item.start_time || (item.is_extra ? "Extra Class" : "TBD");
+  // 25.UX-3: the class-type label flows from the canonical vocabulary and is
+  // uppercased via CSS (the badge treatment) — no local map.
+  const displayType = classTypeLabel(item.class_type) ?? "Practical";
+  // Canonical 24h "HH:MM" time display; the Extra Class / TBD fallbacks are
+  // preserved verbatim.
+  const timeLabel = item.start_time
+    ? formatTime(item.start_time)
+    : item.is_extra
+      ? "Extra Class"
+      : "TBD";
 
   return (
     <Card
@@ -59,7 +64,7 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-muted border border-border shrink-0">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-2xs uppercase tracking-wider text-muted-foreground">
             {formatDateParts(item.date).month}
           </span>
           <span className="text-sm font-bold text-foreground leading-none">
@@ -69,16 +74,21 @@ function HistoryRow({ item }: { item: AttendanceHistoryItem }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-foreground font-mono text-sm">{item.subject_code}</span>
-            <Badge variant="outline" className="text-[11px] leading-none tracking-wider py-0 h-4">
+            <Badge variant="outline" size="xs" className="uppercase tracking-wider">
               {displayType}
             </Badge>
             {item.is_extra && (
-              <Badge variant="primary" className="text-[11px] leading-none tracking-wider py-0 h-4">
+              <Badge variant="primary" size="xs" className="tracking-wider">
                 EXTRA
               </Badge>
             )}
           </div>
-          <div className="text-sm text-muted-foreground mt-0.5 truncate max-w-md">
+          {/* 25.UX-6: the row is one line-tall at desktop, so the subject name
+              stays a truncate (title fallback) there — but inside a flexible
+              min-w-0 box so the fluid column itself can grow to the row edge
+              without horizontal overflow, and wraps on mobile where a row is
+              naturally multi-line. */}
+          <div className="text-sm text-muted-foreground mt-0.5 max-w-full sm:max-w-md sm:truncate min-w-0" title={item.subject_name}>
             {item.subject_name}
           </div>
           {/* UIA-026: the record-creation timestamp ("Logged 2:09 AM") was
@@ -219,7 +229,11 @@ export default function HistoryPage() {
             No sessions recorded yet — mark classes to build your history.
           </p>
         )}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {/* 25.UX-6: the stat strip matches the dashboard QuizSnapshotCard's
+            2-col mobile grid (grid-cols-2 sm:grid-cols-5) — the former
+            3-col mobile layout stacked 3 stats over a ragged 2 when five
+            aggregates shared one row. Desktop is unchanged. */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           <SummaryStat label="Total" value={summary?.total} className="text-foreground" />
           <SummaryStat label="Present" value={summary?.attended} className="text-success" />
           <SummaryStat label="Absent" value={summary?.missed} className="text-destructive" />
@@ -239,14 +253,14 @@ export default function HistoryPage() {
               floor. */}
           {hasFilters && (
             <Button variant="ghost" size="sm" className="text-xs" onClick={resetFilters}>
-              <FilterX className="h-3.5 w-3.5 mr-1" />
+              <FilterX className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
               Reset
             </Button>
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-subject">Subject</label>
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="history-subject">Subject</label>
             <Select
               id="history-subject"
               value={subject}
@@ -261,7 +275,7 @@ export default function HistoryPage() {
           <div className="flex flex-col gap-1">
             {/* UIA-027: the filter group is "Status" — the same user-facing
                 vocabulary the status badges use. */}
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-status">Status</label>
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="history-status">Status</label>
             <Select
               id="history-status"
               value={status}
@@ -273,7 +287,7 @@ export default function HistoryPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-from">From</label>
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="history-from">From</label>
             {/* UIA-025: native date input + visible formatted companion. */}
             <DateInput
               id="history-from"
@@ -284,7 +298,7 @@ export default function HistoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-to">To</label>
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="history-to">To</label>
             <DateInput
               id="history-to"
               min={semesterStart ?? undefined}
@@ -294,7 +308,7 @@ export default function HistoryPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="history-search">Search</label>
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="history-search">Search</label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               <Input
@@ -334,7 +348,7 @@ export default function HistoryPage() {
               onClick={() => setOffset(prev => prev + PAGE_SIZE)}
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true" />
               ) : null}
               Load more ({history.total_count - rows.length} remaining)
             </Button>
@@ -343,7 +357,7 @@ export default function HistoryPage() {
             // flight (SWR gives a fresh key per URL); render a loading row
             // instead of a button that dereferences history.total_count.
             <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               Loading sessions…
             </div>
           ) : null}
@@ -379,7 +393,7 @@ function SummaryStat({ label, value, className }: { label: string; value: number
       <span className={cn("text-xl font-bold tracking-tight", className)}>
         {value ?? "—"}
       </span>
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground mt-0.5">{label}</span>
+      <span className="text-2xs uppercase tracking-wider text-muted-foreground mt-0.5">{label}</span>
     </div>
   );
 }

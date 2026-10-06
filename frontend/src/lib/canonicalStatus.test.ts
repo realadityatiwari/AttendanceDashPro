@@ -7,6 +7,8 @@ import {
   getQuizEligibilityStatus,
   quizCycleLabel,
   FEEDBACK_TYPES,
+  humanizeEventType,
+  ELECTIVE_SLOT_LABELS,
   SESSION_STATUS,
   SUBJECT_HEALTH_STATUS,
   QUIZ_STATUS,
@@ -15,6 +17,7 @@ import {
   AttendanceStatus,
   ClassType,
   DashboardClassStatus,
+  ElectiveSlot,
   EligibilityState,
 } from "@/types/api";
 
@@ -181,5 +184,22 @@ describe("25.UX-1: canonical presentation vocabularies", () => {
       expect(feedbackTypeBadgeClass("QUESTION")).toContain("text-primary");
       expect(feedbackTypeBadgeClass("PRAISE")).toContain("text-success");
     });
+  });
+});
+
+describe("25.UX-3: canonical academic label vocabularies", () => {
+  it("humanizes event type enum values and unknown future types", () => {
+    expect(humanizeEventType("SURPRISE_QUIZ")).toBe("Surprise Quiz");
+    expect(humanizeEventType("CLASS_CANCELLED")).toBe("Class Cancelled");
+    expect(humanizeEventType("SOME_FUTURE_TYPE")).toBe("Some Future Type");
+  });
+
+  it("uses the backend's Department Elective register for the DE slots", () => {
+    expect(ELECTIVE_SLOT_LABELS[ElectiveSlot.ELECTIVE_I]).toBe(
+      "Department Elective-I"
+    );
+    expect(ELECTIVE_SLOT_LABELS[ElectiveSlot.ELECTIVE_II]).toBe(
+      "Department Elective-II"
+    );
   });
 });

@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import date
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -95,6 +96,14 @@ class EventRepository:
         )
         return result.scalars().first()
 
+    async def get_timetable_entry(self, entry_id: UUID):
+        """The TimetableEntry row for an occurrence reference (OCC-1)."""
+        from app.models.timetable import TimetableEntry
+        result = await self.db.execute(
+            select(TimetableEntry).where(TimetableEntry.id == entry_id)
+        )
+        return result.scalars().first()
+
     async def is_enrolled(self, user_id: UUID, subject_id: UUID) -> bool:
         """
         Whether the user holds an enrollment for the subject (student event
@@ -117,6 +126,7 @@ class EventRepository:
         end_date: date,
         subject_id: Optional[UUID],
         class_type: Optional[ClassType],
+        timetable_entry_id: Optional[UUID] = None,
         exclude_id: Optional[UUID] = None,
     ) -> bool:
         """
@@ -124,6 +134,12 @@ class EventRepository:
         (event_type, subject_id, class_type, start_date, end_date).
         Inactive rows do not block anything (they are disabled lifecycle
         records, not live events).
+
+        OCC-1: for an occurrence-referenced new event the identity includes
+        the timetable entry — distinct occurrences of the same subject/class
+        on the same dates stay separately cancellable. A legacy NULL-entry
+        event with the same key still blocks: it cancels by subject+class on
+        those dates, so the referenced occurrence is already covered.
         """
         stmt = select(AcademicEvent.id).where(
             AcademicEvent.event_type == event_type,
@@ -139,6 +155,13 @@ class EventRepository:
             stmt = stmt.where(AcademicEvent.class_type.is_(None))
         else:
             stmt = stmt.where(AcademicEvent.class_type == class_type)
+        if timetable_entry_id is not None:
+            stmt = stmt.where(
+                or_(
+                    AcademicEvent.timetable_entry_id == timetable_entry_id,
+                    AcademicEvent.timetable_entry_id.is_(None),
+                )
+            )
         if exclude_id is not None:
             stmt = stmt.where(AcademicEvent.id != exclude_id)
         result = await self.db.execute(stmt)

@@ -24,7 +24,7 @@ Rules are derived from repository evidence, never invented:
 """
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 
 from app.models.enums import ClassType, EventType, SubjectCategory, ElectiveSlot
@@ -46,6 +46,15 @@ class EventTypeRule:
     # for day resolution; this is metadata for creation-time guidance).
     is_closure: bool = False
     is_global: bool = False
+    # OCC-1: cancellation events identify the exact scheduled occurrence they
+    # cancel (academic_events.timetable_entry_id). The reference is REQUIRED
+    # for these types and FORBIDDEN for every other type — a cancellation can
+    # no longer be described as a bare subject + class type.
+    requires_timetable_entry: bool = False
+    # Subject-category metadata rule (canonical backend authority): these
+    # extra types are theory-subject events. A practical/lab subject can
+    # never host them (mirrored in the UI; enforced here authoritatively).
+    theory_only_subject: bool = False
 
 
 def _rule(
@@ -56,6 +65,8 @@ def _rule(
     allowed_class_types: Optional[List[ClassType]] = None,
     is_closure: bool = False,
     is_global: bool = False,
+    requires_timetable_entry: bool = False,
+    theory_only_subject: bool = False,
 ) -> EventTypeRule:
     return EventTypeRule(
         event_type=event_type,
@@ -65,6 +76,8 @@ def _rule(
         allowed_class_types=allowed_class_types or [],
         is_closure=is_closure,
         is_global=is_global,
+        requires_timetable_entry=requires_timetable_entry,
+        theory_only_subject=theory_only_subject,
     )
 
 
@@ -79,11 +92,13 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         EventType.EXTRA_LECTURE, "Extra Lecture",
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[ClassType.LECTURE],
+        theory_only_subject=True,
     ),
     EventType.EXTRA_TUTORIAL: _rule(
         EventType.EXTRA_TUTORIAL, "Extra Tutorial",
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[ClassType.TUTORIAL],
+        theory_only_subject=True,
     ),
     EventType.EXTRA_PRACTICAL: _rule(
         EventType.EXTRA_PRACTICAL, "Extra Practical",
@@ -96,6 +111,7 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         allowed_class_types=[
             ClassType.LECTURE, ClassType.TUTORIAL,
         ],
+        requires_timetable_entry=True,
     ),
     # Phase 9.1 laboratory events. Both are subject-scoped PRACTICAL events
     # the synchronizer resolves into canonical ClassSession state: LAB_CANCELLED
@@ -107,6 +123,7 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         EventType.LAB_CANCELLED, "Lab Cancelled",
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[ClassType.PRACTICAL],
+        requires_timetable_entry=True,
     ),
     EventType.MID_SEM_PRACTICAL: _rule(
         EventType.MID_SEM_PRACTICAL, "Mid-Sem Practical",
@@ -194,6 +211,15 @@ LAB_ONLY_EVENT_TYPES = {
     EventType.LAB_CANCELLED,
 }
 
+# OCC-1: the occurrence-driven event types — the only types allowed to carry
+# an academic_events.timetable_entry_id reference (and required to carry one).
+# Kept local to the registry (no import from the synchronizer) so the
+# registry stays the dependency-free validation authority.
+OCCURRENCE_EVENT_TYPES = {
+    EventType.CLASS_CANCELLED,
+    EventType.LAB_CANCELLED,
+}
+
 
 def get_rule(event_type: EventType) -> EventTypeRule:
     rule = EVENT_TYPE_RULES.get(event_type)
@@ -208,6 +234,7 @@ def validate_event(
     start_date: date,
     end_date: date,
     subject_id: Optional[object] = None,
+    timetable_entry_id: Optional[object] = None,
     elective_slot: Optional[ElectiveSlot] = None,
     class_type: Optional[ClassType] = None,
     subject_category: Optional[SubjectCategory] = None,
@@ -224,11 +251,26 @@ def validate_event(
     `elective_slot` (Phase 22.4) scopes the event to a Departmental Elective
     logical slot; the service resolves and passes the shared anchor subject's
     id/category, so the subject-scoped rules below apply to the anchor.
+
+    `timetable_entry_id` (OCC-1) is the occurrence reference: required for
+    cancellation types, forbidden for every other type. The reference's
+    DB-level consistency (existence, active state, weekday, subject/class
+    match, scope) is validated by EventService against the real timetable.
     """
     rule = get_rule(event_type)
 
     if start_date > end_date:
         raise EventValidationError("start_date must not be after end_date")
+
+    if rule.requires_timetable_entry and timetable_entry_id is None:
+        raise EventValidationError(
+            f"{rule.display_name} must reference the exact scheduled "
+            "timetable occurrence it cancels (timetable_entry_id)"
+        )
+    if not rule.requires_timetable_entry and timetable_entry_id is not None:
+        raise EventValidationError(
+            f"{rule.display_name} must not reference a timetable occurrence"
+        )
 
     if elective_slot is not None and event_type in LAB_ONLY_EVENT_TYPES:
         raise EventValidationError(
@@ -286,6 +328,16 @@ def validate_event(
             "(practical/lab subjects cannot host quizzes)"
         )
 
+    # OCC-1 subject-category metadata rule: extra L/T occurrences are
+    # theory-subject events (requirements: extra lecture / extra tutorial
+    # target THEORY subjects only — never practical/lab subjects, including
+    # via crafted requests that bypass the UI).
+    if rule.theory_only_subject and subject_category == SubjectCategory.LAB:
+        raise EventValidationError(
+            f"{rule.display_name} is only valid for theory subjects "
+            "(practical/lab subjects cannot host it)"
+        )
+
     # Working-day state is an explicit per-event override for the dominant
     # event (engine honors it when set). The engine treats closure types as
     # non-working regardless; no policy is invented beyond that.
@@ -303,3 +355,20 @@ def validate_event(
             "Working Saturday is always a working day on Saturdays; "
             "is_working_day=false is contradictory"
         )
+
+    # Weekend contradiction rule: forcing a Saturday/Sunday to be a working
+    # day is only representable by the canonical WORKING_SATURDAY event type
+    # (whose engine semantics flip ONLY Saturdays). Any other event type with
+    # is_working_day=True covering a weekend date contradicts the calendar
+    # engine's default weekend resolution and is rejected.
+    if is_working_day is True and event_type != EventType.WORKING_SATURDAY:
+        current = start_date
+        while current <= end_date:
+            # Python weekday(): 5=Saturday, 6=Sunday.
+            if current.weekday() >= 5:
+                raise EventValidationError(
+                    "is_working_day=true contradicts a weekend date "
+                    f"({current.isoformat()}); a working weekend is only "
+                    "representable as a Working Saturday event"
+                )
+            current += timedelta(days=1)

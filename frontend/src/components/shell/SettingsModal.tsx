@@ -145,7 +145,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </div>
         ) : isError && !preferences ? (
           <div className="flex flex-col gap-3">
-            <div className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+            {/* 25.UX-7: load failures inside the dialog are announced. */}
+            <div
+              role="alert"
+              className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3"
+            >
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
               <p className="text-xs leading-relaxed text-destructive">
                 Your preferences could not be loaded. Nothing was changed.
@@ -349,7 +353,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             </div>
 
             {saveState.status === "error" && (
-              <div className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+              // 25.UX-7: a failed save is a direct consequence of the user's
+              // action — it must be announced, not just recolored.
+              <div
+                role="alert"
+                className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3"
+              >
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
                 <p className="text-xs leading-relaxed text-destructive">
                   Your changes could not be saved: {saveState.message}. Your
@@ -359,13 +368,21 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             )}
 
             <div className="flex items-center justify-between gap-2">
+              {/* 25.UX-7: the save status slot swaps between "All changes
+                  saved" / "You have unsaved changes" / "Saved" — role="status"
+                  announces the change (especially the post-submit outcome).
+                  role=status is polite, so the dirty-state swaps stay quiet
+                  while the user is typing. */}
               {saveState.status === "saved" ? (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-success">
+                <span
+                  role="status"
+                  className="flex items-center gap-1.5 text-xs font-medium text-success"
+                >
                   <CheckCircle2 className="size-4" aria-hidden="true" />
                   Saved
                 </span>
               ) : (
-                <span className="text-xs text-muted-foreground">
+                <span role="status" className="text-xs text-muted-foreground">
                   {dirty ? "You have unsaved changes" : "All changes saved"}
                 </span>
               )}

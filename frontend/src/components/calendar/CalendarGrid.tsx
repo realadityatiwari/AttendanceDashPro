@@ -84,7 +84,7 @@ export function CalendarGrid({
         {weekdayLabels.map((label, i) => (
           <div
             key={label}
-            className="pb-1 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs"
+            className="pb-1 text-center text-2xs font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs"
           >
             <span className="sm:hidden">{weekdayShort[i]}</span>
             <span className="hidden sm:inline">{label}</span>
@@ -92,7 +92,7 @@ export function CalendarGrid({
         ))}
       </div>
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5">{cells}</div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="size-2 rounded-full bg-primary" aria-hidden />
           Event
@@ -172,7 +172,7 @@ function DayCell({
       <span className="min-h-0">
         {working ? (
           item.session_count > 0 && (
-            <span className="block truncate text-[11px] leading-tight font-medium text-success/90">{classLabel}</span>
+            <span className="block truncate text-2xs leading-tight font-medium text-success/90">{classLabel}</span>
           )
         ) : (
           item.non_working_reason && (
@@ -185,7 +185,7 @@ function DayCell({
                 aria-hidden
               />
               <span
-                className="hidden truncate text-[11px] leading-tight text-muted-foreground/80 sm:block"
+                className="hidden truncate text-2xs leading-tight text-muted-foreground/80 sm:block"
                 title={item.non_working_reason}
               >
                 {item.non_working_reason}

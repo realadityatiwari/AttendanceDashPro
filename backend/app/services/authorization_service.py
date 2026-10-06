@@ -27,7 +27,7 @@ introduced: subject/section/semester relationships are read directly from the
 authoritative tables (subjects.semester_id, sections.semester_id).
 """
 
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 from uuid import UUID
 
 from sqlalchemy import select
@@ -75,6 +75,51 @@ class AuthorizationService:
 
     async def is_head_admin(self, user: User) -> bool:
         return AdminRole.HEAD_ADMIN in await self.effective_admin_roles(user)
+
+    async def resolve_admin_scope_filters(
+        self, user: User
+    ) -> Tuple[Optional[Set[UUID]], Optional[Set[UUID]]]:
+        """Shared scoped-read filter sets: (allowed_section_ids,
+        allowed_subject_ids). ``None`` means UNRESTRICTED on that dimension;
+        an empty set means nothing visible.
+
+        - HEAD_ADMIN       -> (None, None) — everything
+        - CLASS_ADMIN      -> assigned section(s); subjects unrestricted
+        - SUBSECTION_ADMIN -> section(s) of the assigned subsection(s)
+                              (inert today — no authoritative subsection
+                              data, so the section set is empty => nothing)
+        - ELECTIVE_ADMIN   -> sections unrestricted; subjects restricted to
+                              the exact assigned concrete subject(s)
+        An admin holding several scopes gets the union. A user with NO
+        effective admin role and NO scopes -> (empty, empty) — nothing
+        visible (the HTTP layer additionally 403s).
+        """
+        if await self.is_head_admin(user):
+            return None, None
+        scopes = await self.get_active_scopes(user.id)
+        if not scopes:
+            return set(), set()
+
+        section_ids: Set[UUID] = set()
+        subject_ids: Set[UUID] = set()
+        for s in scopes:
+            if s.role == AdminRole.CLASS_ADMIN and s.section_id:
+                section_ids.add(s.section_id)
+            elif s.role == AdminRole.SUBSECTION_ADMIN and s.subsection_id:
+                sub = (
+                    await self.db.execute(
+                        select(Subsection).where(Subsection.id == s.subsection_id)
+                    )
+                ).scalars().first()
+                if sub is not None:
+                    section_ids.add(sub.section_id)
+            elif s.role == AdminRole.ELECTIVE_ADMIN and s.subject_id:
+                subject_ids.add(s.subject_id)
+
+        return (
+            section_ids if section_ids else None,
+            subject_ids if subject_ids else None,
+        )
 
     # ------------------------------------------------------------------
     # Admin identity read model (Phase 24.1 — presentation only)

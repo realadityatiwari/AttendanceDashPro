@@ -207,7 +207,7 @@ export default function EventsPage() {
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-type">
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="events-type">
               Event type
             </label>
             <Select
@@ -221,7 +221,7 @@ export default function EventsPage() {
               ))}
             </Select>
           </div>
-          <div className="flex flex-col gap-1">              <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
+          <div className="flex flex-col gap-1">              <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="events-active">
               Status
             </label>
             <Select
@@ -234,7 +234,7 @@ export default function EventsPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="events-from">
               From
             </label>
             {/* UIA-025: native date input + formatted companion. */}
@@ -245,7 +245,7 @@ export default function EventsPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
+            <label className="text-2xs uppercase tracking-wider text-muted-foreground" htmlFor="events-to">
               To
             </label>
             <DateInput
@@ -372,7 +372,7 @@ function EventSection({
         <h2 id={id} className="text-sm font-semibold uppercase tracking-wider text-foreground">
           {title}
         </h2>
-        <Badge variant="neutral" className="h-4 px-1.5 leading-none text-[11px]">{count}</Badge>
+        <Badge variant="neutral" size="xs" className="px-1.5">{count}</Badge>
       </div>
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyLabel}</p>

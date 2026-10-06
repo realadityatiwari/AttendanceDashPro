@@ -60,6 +60,7 @@ from app.schemas.admin_events import (
     AdminEventListResponse,
     AdminEventMutationResponse,
     AdminEventResponse,
+    AdminOccurrenceOptionsResponse,
 )
 from app.schemas.admin_attendance import (
     AdminSectionAttendanceListResponse,
@@ -910,6 +911,29 @@ async def list_admin_events(
             class_type=class_type,
             date_from=date_from,
             date_to=date_to,
+        )
+    except AdminEventDomainError as exc:
+        _raise_event_admin_error(exc)
+
+
+@router.get("/events/occurrence-options", response_model=AdminOccurrenceOptionsResponse)
+async def list_event_occurrence_options(
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+    date: datetime.date = Query(..., description="The event date (weekday resolves the scheduled occurrences)"),
+    event_type: Optional[EventType] = Query(None, description="Narrows to the event type's allowed class types (e.g. CLASS_CANCELLED, LAB_CANCELLED)"),
+):
+    """
+    OCC-1: the timetable occurrences actually scheduled on this date for the
+    acting admin's scope — the only valid targets for an occurrence-specific
+    cancellation. Day resolution (weekend/closure/substitution) comes from the
+    canonical calendar engine; a non-working day returns no occurrences and
+    explains why. Cancellation creation must reference one of these entries
+    (timetable_entry_id); the backend rejects any other target.
+    """
+    try:
+        return await AdminEventService(db).list_occurrence_options(
+            current_user, for_date=date, event_type=event_type
         )
     except AdminEventDomainError as exc:
         _raise_event_admin_error(exc)

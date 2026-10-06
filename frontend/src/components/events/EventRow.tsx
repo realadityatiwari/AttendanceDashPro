@@ -59,7 +59,7 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex w-12 shrink-0 flex-col items-center justify-center rounded-full border border-border bg-muted py-1.5">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-2xs uppercase tracking-wider text-muted-foreground">
             {formatDateParts(event.start_date).month}
           </span>
           <span className="text-sm font-bold leading-none text-foreground">
@@ -69,14 +69,14 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold text-foreground">{title}</h3>
-            {isToday && <Badge variant="primary" className="h-4 py-0 leading-none text-[11px]">Today</Badge>}
-            {isHoliday && <Badge variant="success" className="h-4 py-0 leading-none text-[11px]">Holiday</Badge>}
-            {isExtra && <Badge variant="warning" className="h-4 py-0 leading-none text-[11px]">Extra</Badge>}
-            {isCancelled && <Badge variant="neutral" className="h-4 py-0 leading-none text-[11px]">Cancelled</Badge>}
+            {isToday && <Badge variant="primary" size="xs">Today</Badge>}
+            {isHoliday && <Badge variant="success" size="xs">Holiday</Badge>}
+            {isExtra && <Badge variant="warning" size="xs">Extra</Badge>}
+            {isCancelled && <Badge variant="neutral" size="xs">Cancelled</Badge>}
             {classLabel && (
-              <Badge variant="outline" className="h-4 py-0 leading-none text-[11px] uppercase tracking-wider">{classLabel}</Badge>
+              <Badge variant="outline" size="xs" className="uppercase tracking-wider">{classLabel}</Badge>
             )}
-            {!event.active && <Badge variant="neutral" className="h-4 py-0 leading-none text-[11px]">Inactive</Badge>}
+            {!event.active && <Badge variant="neutral" size="xs">Inactive</Badge>}
           </div>
           {dateRange && (
             <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -86,10 +86,10 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
           )}
           {/* Phase 22.4: the effective subject of the event as resolved for
               the authenticated student (their selected elective for
-              Departmental Elective slot events; null for global events). */}
+              Department Elective slot events; null for global events). */}
           {event.resolved_subject_code && (
             <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-foreground/80">
-              <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-wide">
+              <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs tracking-wide">
                 {event.resolved_subject_code}
               </span>
               {event.resolved_subject_name}

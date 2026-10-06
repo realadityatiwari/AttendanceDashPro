@@ -1,7 +1,11 @@
 "use client";
 
 import { ClassType, ElectiveSlot, EventType } from "@/types/api";
-import { classTypeLabel as canonicalClassTypeLabel } from "@/lib/canonicalStatus";
+import {
+  classTypeLabel as canonicalClassTypeLabel,
+  humanizeEventType as canonicalHumanizeEventType,
+  ELECTIVE_SLOT_LABELS as canonicalElectiveSlotLabels,
+} from "@/lib/canonicalStatus";
 
 /**
  * Frontend mirror of the backend event validation registry
@@ -15,43 +19,58 @@ export interface EventTypeRule {
   allowedClassTypes: ClassType[];
   isClosure: boolean;
   isGlobal: boolean;
+  /** OCC-1 mirror: cancellation events must reference the exact scheduled
+   *  timetable occurrence (timetable_entry_id); other types must not. */
+  requiresTimetableEntry: boolean;
+  /** Mirror of the backend subject-category rule: these extra types are
+   *  theory-subject events (practical/lab subjects cannot host them). The
+   *  backend registry remains authoritative. */
+  theoryOnlySubject: boolean;
 }
 
 export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   [EventType.EXTRA_LECTURE]: {
     eventType: EventType.EXTRA_LECTURE, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: true,
   },
   [EventType.EXTRA_TUTORIAL]: {
     eventType: EventType.EXTRA_TUTORIAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.TUTORIAL], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: true,
   },
   [EventType.EXTRA_PRACTICAL]: {
     eventType: EventType.EXTRA_PRACTICAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.CLASS_CANCELLED]: {
     eventType: EventType.CLASS_CANCELLED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL],
     isClosure: false, isGlobal: false,
+    requiresTimetableEntry: true, theoryOnlySubject: false,
   },
   // Phase 9.1 laboratory events: subject-scoped PRACTICAL events resolved by
   // the canonical event synchronizer (no separate lab attendance system).
   [EventType.LAB_CANCELLED]: {
     eventType: EventType.LAB_CANCELLED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: true, theoryOnlySubject: false,
   },
   [EventType.MID_SEM_PRACTICAL]: {
     eventType: EventType.MID_SEM_PRACTICAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.SURPRISE_QUIZ]: {
     eventType: EventType.SURPRISE_QUIZ, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.QUIZ_DAY]: {
     eventType: EventType.QUIZ_DAY, requiresSubject: true, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   // Unified holiday: the consolidated closure flow (single day or range with
   // a reason/occasion note). The legacy holiday types remain supported for
@@ -59,38 +78,47 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   [EventType.HOLIDAY]: {
     eventType: EventType.HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.PUBLIC_HOLIDAY]: {
     eventType: EventType.PUBLIC_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.INSTITUTE_HOLIDAY]: {
     eventType: EventType.INSTITUTE_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.FESTIVAL_HOLIDAY]: {
     eventType: EventType.FESTIVAL_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.EMERGENCY_CLOSURE]: {
     eventType: EventType.EMERGENCY_CLOSURE, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.SEMESTER_BREAK]: {
     eventType: EventType.SEMESTER_BREAK, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.MID_SEMESTER_BREAK]: {
     eventType: EventType.MID_SEMESTER_BREAK, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.WORKING_DAY_OVERRIDE]: {
     eventType: EventType.WORKING_DAY_OVERRIDE, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   [EventType.WORKING_SATURDAY]: {
     eventType: EventType.WORKING_SATURDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
   // Phase 23.7: subject-scoped modified occurrence. The scheduled class
   // happened but was modified (time/room/delivery). Not extra, not cancelled.
@@ -98,8 +126,21 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
     eventType: EventType.CLASS_MODIFIED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
     isClosure: false, isGlobal: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false,
   },
 };
+
+// OCC-1: occurrence-driven event types — creation/edit targets an exact
+// scheduled timetable occurrence on the selected date (backend mirror:
+// event_registry.OCCURRENCE_EVENT_TYPES).
+export const OCCURRENCE_EVENT_TYPES: ReadonlySet<EventType> = new Set<EventType>([
+  EventType.CLASS_CANCELLED,
+  EventType.LAB_CANCELLED,
+]);
+
+export function isOccurrenceEventType(eventType: EventType | string): boolean {
+  return OCCURRENCE_EVENT_TYPES.has(eventType as EventType);
+}
 
 // Event types students may create/update/deactivate for their OWN enrolled
 // subjects (attendance spec: events are student-adjustable; mirrors the
@@ -125,12 +166,11 @@ export function canStudentMutateEventType(eventType: EventType): boolean {
   return STUDENT_CREATABLE_EVENT_TYPES.includes(eventType);
 }
 
-// Humanizes any event type string — including types unknown to the current
-// enum — so an unknown/future type renders a readable label instead of
-// crashing. Canonical copy (Phase 6, UI-021): previously duplicated in
-// EventRow and DayDetail.
+// Canonical event-type label (25.UX-3): the humanizer lives in
+// lib/canonicalStatus and is shared with the dashboard surfaces; this module
+// re-exports it so events consumers keep one import path.
 export function humanizeEventType(type: string): string {
-  return type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return canonicalHumanizeEventType(type);
 }
 
 // Canonical class-type label contract (25.UX-1): the label function lives in
@@ -203,15 +243,11 @@ export const CLASS_TYPE_LABELS: Record<ClassType, string> = {
   [ClassType.PRACTICAL2]: "Practical", // legacy alias, never returned by the backend
 };
 
-// Phase 22.4: the ADMIN-facing "subject" options for Departmental Elective
-// logical slots. ADMIN creates ONE shared event scoped to the slot; each
-// student sees it resolved to their own selected subject. These are not
-// concrete subjects — the backend rejects them for non-ADMIN users and for
-// practical/lab event types.
-export const ELECTIVE_SLOT_LABELS: Record<ElectiveSlot, string> = {
-  [ElectiveSlot.ELECTIVE_I]: "Departmental Elective-I",
-  [ElectiveSlot.ELECTIVE_II]: "Departmental Elective-II",
-};
+// 25.UX-3: the elective-slot labels live in lib/canonicalStatus (the
+// canonical "Department Elective-I/II" register, matching the backend's
+// user-visible copy); this module re-exports them so events consumers keep
+// one import path.
+export const ELECTIVE_SLOT_LABELS = canonicalElectiveSlotLabels;
 
 // Option values used by the event form's subject selector to represent the
 // logical slots (prefixed so they can never collide with subject UUIDs).

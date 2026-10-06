@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getLocalDateString } from "@/lib/date";
+import { formatTime, getLocalDateString } from "@/lib/date";
+import { classTypeLabel, getSessionStatus } from "@/lib/canonicalStatus";
 
 interface TrackSessionCardProps {
   session: DailySessionResponse;
@@ -48,7 +49,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
       return (
         <div className="flex items-center gap-2">
           <Badge variant="neutral" className="pointer-events-none">
-            <Clock className="h-3 w-3 mr-1" /> Upcoming
+            <Clock className="h-3 w-3 mr-1" aria-hidden="true" /> Upcoming
           </Badge>
         </div>
       );
@@ -58,8 +59,8 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
       return (
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2 text-success font-medium text-sm">
-            <CheckCircle2 className="h-5 w-5" />
-            <span>Present</span>
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            <span>{getSessionStatus(session.status).label}</span>
           </div>
           {!isFuture && (
             <Button 
@@ -69,7 +70,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
               onClick={() => handleMutate(AttendanceStatus.MISSED)}
               disabled={isMutating}
             >
-              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" /> : null}
               Change
             </Button>
           )}
@@ -81,8 +82,8 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
       return (
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2 text-destructive font-medium text-sm">
-            <XCircle className="h-5 w-5" />
-            <span>Absent</span>
+            <XCircle className="h-5 w-5" aria-hidden="true" />
+            <span>{getSessionStatus(session.status).label}</span>
           </div>
           {!isFuture && (
             <Button 
@@ -92,7 +93,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
               onClick={() => handleMutate(AttendanceStatus.ATTENDED)}
               disabled={isMutating}
             >
-              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              {isMutating ? <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" /> : null}
               Change
             </Button>
           )}
@@ -109,7 +110,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
           onClick={() => handleMutate(AttendanceStatus.ATTENDED)}
           disabled={isMutating}
         >
-          {isMutating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Present"}
+          {isMutating ? <Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true" /> : "Present"}
         </Button>
         <Button 
           variant="outline" 
@@ -117,7 +118,7 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
           onClick={() => handleMutate(AttendanceStatus.MISSED)}
           disabled={isMutating}
         >
-          {isMutating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Absent"}
+          {isMutating ? <Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true" /> : "Absent"}
         </Button>
       </div>
     );
@@ -139,10 +140,17 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
     !session.is_extra &&
     !session.start_time;
 
-  const displayType = session.designation === "MID_SEM_PRACTICAL" ? "MID-SEM PRACTICAL" :
-                      isQuizDaySession ? "QUIZ DAY" :
-                      session.class_type === ClassType.LECTURE ? "LECTURE" :
-                      session.class_type === ClassType.TUTORIAL ? "TUTORIAL" : "PRACTICAL";
+  // 25.UX-3: the class-type label flows from the canonical vocabulary and is
+  // uppercased via CSS (the badge treatment), so this surface can never grow
+  // its own class-type map. MID-SEM PRACTICAL and QUIZ DAY are backend
+  // session designations, not class types — they stay explicit here (the
+  // uppercased rendering is byte-identical to the former literal strings).
+  const typeLabel =
+    session.designation === "MID_SEM_PRACTICAL"
+      ? "Mid-Sem Practical"
+      : isQuizDaySession
+        ? "Quiz Day"
+        : (classTypeLabel(session.class_type) ?? "Practical");
 
   return (
     <Card className={cn("p-4", session.is_cancelled && "opacity-50 grayscale")}>
@@ -153,11 +161,17 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
             screens. */}
         <div className="flex justify-between items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-col">
+            {/* 25.UX-3: canonical 24h "HH:MM" time display — the backend's
+                "HH:MM:SS" seconds are presentation noise. The Extra Class /
+                TBD fallbacks are preserved verbatim. */}
             <span className="text-sm font-semibold text-foreground">
               {isQuizDaySession
                 ? "Quiz Day"
-                : session.start_time || (session.is_extra ? "Extra Class" : "TBD")}
-              {!isQuizDaySession && session.end_time ? ` – ${session.end_time}` : ""}
+                : formatTime(session.start_time) ||
+                  (session.is_extra ? "Extra Class" : "TBD")}
+              {!isQuizDaySession && session.end_time
+                ? ` – ${formatTime(session.end_time)}`
+                : ""}
             </span>
             <span className="text-xs text-muted-foreground font-mono mt-0.5">{session.subject_code}</span>
           </div>
@@ -166,12 +180,12 @@ export function TrackSessionCard({ session, onMutate }: TrackSessionCardProps) {
                 ClassSession (shape: LECTURE, is_extra=false, no timetable
                 time). Normal lectures on the same date stay unflagged. */}
             {session.is_quiz_day && (
-              <Badge variant="primary" className="text-[11px] tracking-wider py-0 h-5">
+              <Badge variant="primary" className="text-2xs tracking-wider py-0 h-5">
                 Quiz Day
               </Badge>
             )}
-            <Badge variant="outline" className="text-[11px] tracking-wider py-0 h-5">
-              {displayType}
+            <Badge variant="outline" className="uppercase text-2xs tracking-wider py-0 h-5">
+              {typeLabel}
             </Badge>
           </div>
         </div>

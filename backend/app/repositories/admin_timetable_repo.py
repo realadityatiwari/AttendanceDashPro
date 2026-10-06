@@ -116,6 +116,22 @@ class AdminTimetableRepository:
         )
         return result.scalars().first()
 
+    async def list_entries_by_ids(self, entry_ids: List[UUID]) -> List[TimetableEntry]:
+        """Batch lookup for read-model composition (OCC-1 occurrence labels
+        on admin event responses). One query, relationships eager-loaded."""
+        if not entry_ids:
+            return []
+        result = await self.db.execute(
+            select(TimetableEntry)
+            .options(
+                selectinload(TimetableEntry.subject),
+                selectinload(TimetableEntry.section),
+                selectinload(TimetableEntry.subsection),
+            )
+            .where(TimetableEntry.id.in_(entry_ids))
+        )
+        return list(result.scalars().all())
+
     async def list_active_conflict_candidates(
         self, section_id: UUID, day_of_week: int, exclude_id: Optional[UUID] = None
     ) -> List[TimetableEntry]:

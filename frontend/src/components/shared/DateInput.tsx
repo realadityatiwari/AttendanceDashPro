@@ -43,7 +43,7 @@ export function DateInput({
         className={cn("[color-scheme:dark]", className)}
         {...props}
       />
-      <span aria-hidden="true" className="text-[11px] text-muted-foreground">
+      <span aria-hidden="true" className="text-2xs text-muted-foreground">
         {value ? formatDateMedium(value) : emptyHint}
       </span>
     </div>

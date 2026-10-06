@@ -33,7 +33,11 @@ export function AppShell({ children }: AppShellProps) {
       <ToastProvider>
         <TopNav />
 
-        <main className="flex-1 overflow-y-auto">
+        {/* 25.UX-7: scroll-padding keeps keyboard focus clear of the fixed
+            mobile bottom nav (WCAG 2.4.11 Focus Not Obscured) — the browser's
+            scroll-into-view now leaves the same 7rem the content padding
+            reserves; md+ resets it because the nav is md:hidden. */}
+        <main className="flex-1 overflow-y-auto scroll-pb-28 md:scroll-pb-0">
           <div className="mx-auto w-full max-w-5xl p-4 pb-28 md:p-6 lg:p-8">
             {children}
           </div>

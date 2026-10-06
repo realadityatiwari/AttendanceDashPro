@@ -75,6 +75,18 @@ export function formatTimestampDate(value: string | Date): string {
   return isNaN(parsed.getTime()) ? "—" : formatDateMedium(parsed);
 }
 
+/** Canonical time-of-day display: "09:30" (24-hour). Backend times are
+ * "HH:MM:SS" strings; the seconds are presentation noise, not information.
+ * Pure string formatting — it never constructs a Date, so no timezone
+ * semantics exist and the value can never shift. Unparseable input passes
+ * through unchanged and empty input renders as an empty string, preserving
+ * the callers' own TBD / Extra Class fallbacks — a time is never invented. */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "";
+  const match = value.match(/^(\d{1,2}:\d{2})/);
+  return match ? match[1].padStart(5, "0") : value;
+}
+
 export function formatShortDate(value: string | Date): string {
   const d = toDate(value);
   return `${d.getDate()} ${MONTHS[d.getMonth()].toUpperCase()}`;

@@ -85,8 +85,23 @@ def _past_weekday(days_back):
     while d.weekday() >= 5:  # skip Sat/Sun: no sessions materialize there
         d -= timedelta(days=1)
     return d
-FUT1 = _TODAY + timedelta(days=45)
-FUT2 = _TODAY + timedelta(days=47)
+def _future_weekday(days_ahead):
+    """Weekend-safe future date (same invariant as _past_weekday: the
+    synchronizer materializes nothing on non-working days, so the fixture
+    dates must be weekdays — FUT1 was originally a raw offset and failed
+    whenever today+45 landed on a weekend)."""
+    d = _TODAY + timedelta(days=days_ahead)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+FUT1 = _future_weekday(45)
+FUT2 = _future_weekday(47)
+if FUT2 <= FUT1:
+    # Weekend skipping can collapse the 2-day gap; keep the identities
+    # distinct (the duplicate-guard scenarios rely on FUT1 != FUT2).
+    FUT2 = FUT1 + timedelta(days=1)
+    while FUT2.weekday() >= 5:
+        FUT2 += timedelta(days=1)
 PAST1 = _past_weekday(19)
 PAST2 = _past_weekday(15)
 _TAG = "TXE4" + uuid.uuid4().hex[:8]

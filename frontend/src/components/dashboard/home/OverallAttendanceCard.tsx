@@ -39,8 +39,10 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
     // UIA-024: h-full keeps the grid row aligned; the content column centers
     // within the available height so extra space reads as intentional
     // breathing room instead of a dead void at the bottom of the card.
+    // 25.UX-4: the header divider matches the other five dashboard cards —
+    // within one uniform grid, five of six titles carried a border-b.
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="border-b">
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Overall Attendance</CardTitle>
           <Badge variant={health.variant}>{health.label}</Badge>
@@ -117,7 +119,7 @@ export function OverallAttendanceCard({ overall, forecastPct }: OverallAttendanc
 export function OverallAttendanceCardSkeleton() {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="border-b">
         <Skeleton className="h-5 w-44" />
       </CardHeader>
       <CardContent>

@@ -223,7 +223,7 @@ class EventSessionSynchronizer:
 
         current = start
         while current <= end:
-            desired_scheduled, extras_event_ids, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed, desired_outcomes = (
+            desired_scheduled, extras_event_ids, extras_slots, mid_sem_active, desired_quiz_days, quiz_day_slots, cancellation_removed, desired_outcomes, outcome_entry_ids = (
                 self._desired_schedule(
                     current, all_active_events, entries_by_dow,
                     by_date.get(current, []), attended_ids,
@@ -245,6 +245,7 @@ class EventSessionSynchronizer:
                 by_date.get(current, []),
                 attended_ids,
                 subject_elective_slots,
+                outcome_entry_ids,
             )
             current += timedelta(days=1)
 
@@ -259,10 +260,12 @@ class EventSessionSynchronizer:
         attended_ids: set,
     ) -> object:
         """
-        The timetable occurrence a CLASS_CANCELLED / LAB_CANCELLED event
-        removes. Unattended occurrences are preferred when several matching
-        entries exist on one date; when every matching occurrence is attended
-        (or none is marked yet) the first matching entry is returned.
+        LEGACY FALLBACK ONLY (OCC-1): the timetable occurrence a
+        CLASS_CANCELLED / LAB_CANCELLED event without a timetable-occurrence
+        reference removes (subject + class-type match, unattended preferred).
+        New cancellations carry `timetable_entry_id` and are matched exactly
+        in `_desired_schedule`; this heuristic path exists so pre-OCC-1 rows
+        keep resolving. New events never reach it.
         """
         candidates = [
             entry
@@ -290,7 +293,7 @@ class EventSessionSynchronizer:
         existing: List[ClassSession],
         attended_ids: set,
         subject_elective_slots: Dict[object, ElectiveSlot],
-    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], List[object]], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set, Dict[object, OccurrenceOutcomeType]]:
+    ) -> Tuple[Dict[object, object], Dict[Tuple[object, object], List[object]], Dict[Tuple[object, object], Optional[ElectiveSlot]], set, set, Dict[object, Optional[ElectiveSlot]], set, Dict[object, OccurrenceOutcomeType], Dict[object, object]]:
         """
         Returns:
           desired_scheduled: {timetable_entry_id: TimetableEntry} for the
@@ -340,10 +343,16 @@ class EventSessionSynchronizer:
                              NO timetable session on the date, the event falls
                              back to the regular extra path (a subject-scoped
                              session) and never appears here.
+          outcome_entry_ids: {subject_id: timetable_entry_id} — OCC-1: the
+                             EXACT occurrence each subject-specific outcome is
+                             pinned to (from the event's timetable_entry_id).
+                             When absent, the outcome anchors to the slot's
+                             first scheduled session (legacy Phase 23.6
+                             behavior for pre-occurrence events).
         """
         day = get_academic_day(target, events, DEFAULT_WEEKENDS)
         if not day.is_working_day:
-            return {}, {}, {}, set(), set(), {}, set(), {}
+            return {}, {}, {}, set(), set(), {}, set(), {}, {}
 
         schedule_day = day.substitution_schedule_override or day.original_day_of_week
         target_dow = DAY_NAMES.index(schedule_day)
@@ -371,6 +380,8 @@ class EventSessionSynchronizer:
         # multiple subject-specific events collide on one subject/date; else
         # the highest-priority extra type (deterministic event ordering).
         desired_outcomes: Dict[object, OccurrenceOutcomeType] = {}
+        # OCC-1: the exact occurrence each outcome is pinned to.
+        outcome_entry_ids: Dict[object, object] = {}
         for event in ordered:
             if event.event_type in CLOSURE_TYPES:
                 # Unreachable on a working day (closure => non-working), kept
@@ -422,17 +433,28 @@ class EventSessionSynchronizer:
                 and event.subject_id in subject_elective_slots
             ):
                 subject_slot = subject_elective_slots[event.subject_id]
-                slot_has_timetable = any(
-                    entry.elective_slot == subject_slot
-                    for entry in scheduled.values()
-                )
+                if event.timetable_entry_id is not None:
+                    # OCC-1: the event pinned its exact occurrence — the
+                    # outcome applies only while THAT entry is still
+                    # scheduled on this date (e.g. not already removed by a
+                    # slot-wide cancellation processed earlier).
+                    slot_has_timetable = event.timetable_entry_id in scheduled
+                else:
+                    slot_has_timetable = any(
+                        entry.elective_slot == subject_slot
+                        for entry in scheduled.values()
+                    )
                 if slot_has_timetable:
                     if event.event_type in CANCELLATION_TYPES:
                         desired_outcomes[event.subject_id] = OccurrenceOutcomeType.CANCELLED
+                        if event.timetable_entry_id is not None:
+                            outcome_entry_ids[event.subject_id] = event.timetable_entry_id
                     elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                         desired_outcomes[event.subject_id] = EVENT_TO_OUTCOME_TYPE.get(
                             event.event_type, OccurrenceOutcomeType.SURPRISE_QUIZ
                         )
+                        if event.timetable_entry_id is not None:
+                            outcome_entry_ids[event.subject_id] = event.timetable_entry_id
                     continue
                 if event.event_type in CANCELLATION_TYPES:
                     # No session to cancel on this date (nothing matches) —
@@ -440,11 +462,17 @@ class EventSessionSynchronizer:
                     continue
             if event.event_type in CANCELLATION_TYPES:
                 # Remove ONE matching occurrence (legacy splice semantics).
+                # OCC-1: an event carrying a timetable-occurrence reference
+                # removes THAT exact entry — never a guessed subject+class
+                # match. Legacy events (no reference) keep the legacy match.
+                if event.timetable_entry_id is not None:
+                    match = scheduled.get(event.timetable_entry_id)
+                else:
+                    match = self._cancellation_match(
+                        scheduled, event.subject_id, event.class_type, existing, attended_ids
+                    )
                 if event.class_type == ClassType.PRACTICAL:
                     cancelled_practical_subjects.add(event.subject_id)
-                match = self._cancellation_match(
-                    scheduled, event.subject_id, event.class_type, existing, attended_ids
-                )
                 if match is not None:
                     del scheduled[match.id]
                     if event.event_type == EventType.CLASS_CANCELLED:
@@ -506,7 +534,11 @@ class EventSessionSynchronizer:
             and event.elective_slot is not None
         }
 
-        return scheduled, extras, extras_slots, mid_sem_active, quiz_day_subjects, quiz_day_slots, cancellation_removed, desired_outcomes
+        return (
+            scheduled, extras, extras_slots, mid_sem_active,
+            quiz_day_subjects, quiz_day_slots, cancellation_removed,
+            desired_outcomes, outcome_entry_ids,
+        )
 
     @staticmethod
     def _is_weekend_artifact(target: date, session: ClassSession) -> bool:
@@ -536,6 +568,7 @@ class EventSessionSynchronizer:
         existing: List[ClassSession],
         attended_ids: set,
         subject_elective_slots: Dict[object, ElectiveSlot],
+        outcome_entry_ids: Optional[Dict[object, object]] = None,
     ) -> None:
         desired_scheduled_ids = set(desired_scheduled.keys())
 
@@ -823,6 +856,7 @@ class EventSessionSynchronizer:
         await self._reconcile_outcomes(
             target, desired_scheduled, desired_outcomes,
             existing, subject_elective_slots,
+            outcome_entry_ids or {},
         )
 
     # -- Phase 23.6 occurrence outcomes -----------------------------------------
@@ -834,6 +868,7 @@ class EventSessionSynchronizer:
         desired_outcomes: Dict[object, OccurrenceOutcomeType],
         existing: List[ClassSession],
         subject_elective_slots: Dict[object, ElectiveSlot],
+        outcome_entry_ids: Optional[Dict[object, object]] = None,
     ) -> None:
         """
         State-based reconciliation of per-subject occurrence outcomes
@@ -842,15 +877,21 @@ class EventSessionSynchronizer:
         for the subject (e.g. only BCS-058 students see a Surprise Quiz while
         BCS-055 stays a normal lecture).
 
-        The anchor session is the timetable-bound session for the subject's
-        slot (deterministic: first by timetable start time, then session id).
-        For non-elective subjects the anchor session is the timetable-bound
-        session whose subject matches the event's subject_id.
+        OCC-1: when the event pins an exact occurrence (timetable_entry_id),
+        the outcome anchors to THAT entry's session — with several sections
+        sharing one weekly timetable, "the first slot session of the date"
+        is not necessarily the occurrence the admin cancelled.
+
+        The anchor session is otherwise the timetable-bound session for the
+        subject's slot (deterministic: first by timetable start time, then
+        session id). For non-elective subjects the anchor session is the
+        timetable-bound session whose subject matches the event's subject_id.
         Creating/updating an outcome NEVER modifies the session row or any
         attendance record. Stale outcomes (subject no longer implied by an
         active event on this date) are removed; outcomes never hold attendance
         and are safe to delete.
         """
+        outcome_entry_ids = outcome_entry_ids or {}
         # Build anchor entry lookups: by slot (elective) and by subject
         # (non-elective). An entry may appear in both maps (elective slot
         # entries also have a subject_id — the anchor subject).
@@ -873,16 +914,25 @@ class EventSessionSynchronizer:
         # Build the desired (session, subject) -> outcome_type set.
         desired_rows: Dict[Tuple[object, object], OccurrenceOutcomeType] = {}
         for subject_id, outcome_type in desired_outcomes.items():
-            slot = subject_elective_slots.get(subject_id)
-            if slot is not None and slot in anchor_entry_by_slot:
-                # Elective subject: anchor session is the slot's timetable session.
-                entry = anchor_entry_by_slot[slot]
-            elif slot is None and subject_id in anchor_entry_by_subject:
-                # Non-elective subject: anchor session is the subject's timetable session.
-                entry = anchor_entry_by_subject[subject_id]
+            pinned_entry_id = outcome_entry_ids.get(subject_id)
+            if pinned_entry_id is not None:
+                # OCC-1: the exact occurrence the event references.
+                entry = desired_scheduled.get(pinned_entry_id)
+                if entry is None:
+                    # The pinned occurrence is not scheduled this date —
+                    # nothing to override.
+                    continue
             else:
-                # No anchor entry for this subject on this date — nothing to override.
-                continue
+                slot = subject_elective_slots.get(subject_id)
+                if slot is not None and slot in anchor_entry_by_slot:
+                    # Elective subject: anchor session is the slot's timetable session.
+                    entry = anchor_entry_by_slot[slot]
+                elif slot is None and subject_id in anchor_entry_by_subject:
+                    # Non-elective subject: anchor session is the subject's timetable session.
+                    entry = anchor_entry_by_subject[subject_id]
+                else:
+                    # No anchor entry for this subject on this date — nothing to override.
+                    continue
             session = session_by_entry_id.get(entry.id)
             if session is None:
                 continue
@@ -894,7 +944,7 @@ class EventSessionSynchronizer:
         # (so stale outcomes on those sessions are cleaned up).
         all_anchor_entry_ids = set(anchor_entry_by_slot[s].id for s in anchor_entry_by_slot) | set(
             anchor_entry_by_subject[s].id for s in anchor_entry_by_subject
-        )
+        ) | set(outcome_entry_ids.values())
         for entry_id, session in session_by_entry_id.items():
             if entry_id in all_anchor_entry_ids:
                 target_session_ids.add(session.id)

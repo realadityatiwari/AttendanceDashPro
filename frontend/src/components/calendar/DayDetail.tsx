@@ -99,14 +99,14 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
     <li className="rounded-lg border-l-2 border-primary bg-muted/30 px-2.5 py-1.5 sm:px-3 sm:py-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm font-medium text-foreground">{humanizeEventType(event.event_type)}</span>
-        {isHoliday && <Badge variant="success" className="h-4 py-0 leading-none text-[11px]">Holiday</Badge>}
+        {isHoliday && <Badge variant="success" size="xs">Holiday</Badge>}
         {classLabel && (
-          <Badge variant="outline" className="h-4 py-0 leading-none text-[11px] uppercase tracking-wider">{classLabel}</Badge>
+          <Badge variant="outline" size="xs" className="uppercase tracking-wider">{classLabel}</Badge>
         )}
       </div>
       {event.resolved_subject_code && (
         <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-foreground/80">
-          <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[11px] tracking-wide">
+          <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs tracking-wide">
             {event.resolved_subject_code}
           </span>
           {event.resolved_subject_name}

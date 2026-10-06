@@ -21,6 +21,7 @@ function makeEvent(overrides: Partial<AcademicEventResponse> = {}): AcademicEven
     resolved_subject_id: null,
     resolved_subject_code: null,
     resolved_subject_name: null,
+    timetable_entry_id: null,
     class_type: null,
     is_working_day: null,
     substitution_schedule_override: null,

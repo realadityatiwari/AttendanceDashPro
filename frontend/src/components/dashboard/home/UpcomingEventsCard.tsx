@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateParts } from "@/lib/date";
-import { classTypeLabel } from "@/lib/canonicalStatus";
-import { eventTypeLabel } from "./status";
+import { classTypeLabel, humanizeEventType } from "@/lib/canonicalStatus";
 
 interface UpcomingEventsCardProps {
   events: UpcomingEventItem[];
@@ -38,7 +37,7 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
             {events.map((event) => (
               <li key={event.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex w-12 shrink-0 flex-col items-center rounded-md border border-border bg-muted/40 py-1.5">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                     {formatDateParts(event.start_date).month}
                   </span>
                   <span className="text-lg font-bold tabular-nums leading-tight text-foreground">
@@ -47,11 +46,11 @@ export function UpcomingEventsCard({ events }: UpcomingEventsCardProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">
-                    {event.subject_name ?? eventTypeLabel(event.event_type)}
+                    {event.subject_name ?? humanizeEventType(event.event_type)}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className="h-4 px-1.5 py-0 leading-none text-[11px] uppercase tracking-wider">
-                      {eventTypeLabel(event.event_type)}
+                    <Badge variant="outline" size="xs" className="px-1.5 uppercase tracking-wider">
+                      {humanizeEventType(event.event_type)}
                     </Badge>
                     {event.subject_code && (
                       <span className="text-xs text-muted-foreground">

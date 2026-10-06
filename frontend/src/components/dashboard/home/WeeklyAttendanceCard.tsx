@@ -85,7 +85,11 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                     isCurrentWeek ? "bg-muted/60 ring-1 ring-border" : ""
                   }`}
                 >
-                  <span className="w-16 shrink-0 text-xs font-medium text-foreground">
+                  {/* 25.UX-6: the three columns are fluid at touch widths — the
+                      former fixed w-16/w-14/w-24 reservation left a 296px card
+                      with ~64px of bar at 360px and clipped the counts.
+                      Desktop widths are byte-identical. */}
+                  <span className="w-12 shrink-0 text-xs font-medium text-foreground sm:w-16">
                     {formatShortDate(week.week_start)}
                   </span>
                   {/* UIA-018: the shared Progress primitive (size md = the
@@ -104,10 +108,14 @@ export function WeeklyAttendanceCard({ weekly, series }: WeeklyAttendanceCardPro
                     size="md"
                     className="min-w-0 flex-1"
                   />
-                  <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                    {pct !== null ? `${Math.round(pct)}%` : "—"}
+                  <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:w-14">
+                    {/* 25.UX-3: canonical whole-number formatter (the null
+                        case renders the same em dash). */}
+                    {formatPct(pct)}
                   </span>
-                  <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {/* min-w-0 lets the counts span wrap instead of pushing the
+                      row past the card edge on the narrowest phones. */}
+                  <span className="min-w-0 text-right text-xs tabular-nums text-muted-foreground">
                     {week.attended}/{week.recorded}
                     {week.pending > 0
                       ? ` · ${week.pending} ${isPastWeek ? "unmarked" : "pending"}`

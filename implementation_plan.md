@@ -5903,3 +5903,43 @@ Timing: daily job fires once per institution day (06:30 IST proposed) generating
 - **Phase H — Reliability/observability:** delivery-outcome logging/counters; stale-subscription proactive sweep; notifications retention/pruning policy (none exists today); job failure visibility.
 
 **Status: DISCOVERY COMPLETE. HARD STOP FOR REVIEW — no implementation performed.**
+
+---
+
+## OCC-1 — Strict occurrence/timetable enforcement for the Events system (2026-10-07, IMPLEMENTED + VERIFIED locally)
+
+Goal: the Admin Events tab can no longer describe an academic event that contradicts the actual timetable. For cancellations, the selected target IS a real timetable occurrence on that exact date — not a subject name. Architecture preserved: AcademicEvent → EventSessionSynchronizer → ClassSession → Attendance remains the single pipeline; no second event/session system; ElectiveResolver stays the only elective resolver; attendance formulas untouched.
+
+### Data model
+- `academic_events.timetable_entry_id` (nullable UUID FK → timetable_entries.id), migration `c7d8e9f0a1b2` (head). Nullable: only cancellation events (CLASS_CANCELLED/LAB_CANCELLED) carry it; legacy rows stay NULL by design (never backfilled/guessed). No DB uniqueness added — the flexible extra-family deliberately supports multiple same-key rows (EVT-004 contract); the duplicate guard is application-level.
+
+### Validation layering (unchanged layering, new rules)
+- Registry (event_registry.py): `requires_timetable_entry` on cancellations; `OCCURRENCE_EVENT_TYPES` (entry forbidden elsewhere); `theory_only_subject` for EXTRA_LECTURE/EXTRA_TUTORIAL (SubjectCategory.LAB → 422); weekend contradiction rule (is_working_day=true covering Sat/Sun → 422 unless WORKING_SATURDAY, which still only flips Saturdays; closures still can never claim working).
+- Service (EventService._resolve_occurrence_target): entry exists + active; start_date.weekday() == entry.day_of_week (Python 0=Mon convention, consistent with the synchronizer); class type derived from the entry (contradicting payload → 422); regular entry → subject must equal entry.subject_id; slot entry → slot-wide (HEAD only; anchor+elective_slot derived server-side) or concrete narrowing to a member of THAT slot (elective_slot stays NULL → Phase 23.6 subject-specific outcome path); scope via AuthorizationService (HEAD/CLASS/ELECTIVE semantics; slot-wide = HEAD only, mirroring payload-level slot events).
+- Update path: the occurrence reference is re-validated on the FINAL state (date/entry/subject/slot changes re-derive subject+slot+class_type — stale state impossible; legacy NULL-entry cancellations must be re-targeted before they can be edited again; deactivation of legacy rows remains always possible).
+- Duplicate guard: same-key events with different timetable entries are distinct; a legacy NULL-entry event with the same key still subsumes (blocks) new exact-occurrence events.
+
+### Synchronizer
+- `_desired_schedule`: exact-entry cancellation (`scheduled.get(event.timetable_entry_id)`) replaces subject+class-type matching for OCC-1 events; `_cancellation_match` retained ONLY as the documented legacy fallback. `cancellation_removed` (CLASS_CANCELLED attendance-safe propagation) and mid-sem practical exclusion semantics unchanged; LAB_CANCELLED still never cancels a recorded lab.
+- Subject-specific elective outcomes (Phase 23.6) now anchor to the event's EXACT entry when pinned (`outcome_entry_ids` threaded into `_reconcile_outcomes`) — removes the first-slot-session ambiguity where several sections share one weekly timetable; legacy anchoring preserved for legacy events.
+
+### Occurrence options read model ("available timetable occurrences for event creation on this date")
+- `GET /api/v1/admin/events/occurrence-options?date=&event_type=` (before `/events/{event_id}` in the router). Resolution order: canonical engine day (weekend/closure/working-Saturday/substitution; non-working → empty + reason) → effective weekday → ACTIVE entries within the admin's scope (section/subject filters from the new shared `AuthorizationService.resolve_admin_scope_filters`, which AdminTimetableService._resolve_scope now delegates to — one implementation) → registry allowed class types for the requested event type → options with entry id, subject id/code/name, class type, start/end, section/subsection, elective slot, is_slot_anchor, concrete member list (ElectiveResolver anchors excluded from members), and a display label ("BCS-502 — Web Technology (Lecture) · 10:00–11:00 · Monday").
+- AdminEventResponse: + `timetable_entry_id`, + server-computed `occurrence_label` (batched one-query lookup per list page).
+
+### Frontend
+- eventRules.ts mirror: + `requiresTimetableEntry`, `theoryOnlySubject`, `OCCURRENCE_EVENT_TYPES`/`isOccurrenceEventType` (frontend is a mirror only; backend authoritative).
+- CreateEventDialog: cancellation types lose the subject/semester/class-type controls entirely — date → backend occurrence options → pick the occurrence (subject/class type displayed as derived facts); slot occurrences offer "entire slot" (default) vs "only <member> students"; extras/quizzes filter subjects by canonical category (THEORY for L/T extras + quizzes, LAB for extra practical/mid-sem; anchors never concrete targets); single-allowed-type events auto-set the class type; WORKING_DAY_OVERRIDE exposes a working state prefilled from the backend day resolution (weekday working / weekend+closure non-working — never hand-derived in React).
+- EditEventDialog: occurrence shown via occurrence_label; class type display-only for occurrence events; date change re-fetches options and re-derives the target (stored entry kept only if still scheduled on the new date); legacy cancellations must select an occurrence before save.
+- Student EventFormDialog: cancellation payloads carry `timetable_entry_id` resolved from the student's own /api/v1/timetable read model (submission blocked when nothing is scheduled that day); THEORY filter for extra lecture/tutorial. Keeps the same strict invariant without a second occurrence service on the client.
+
+### Verification (local/dev only — no production touched)
+- Migration applied to dev DB; head = c7d8e9f0a1b2.
+- pytest: 269 passed (incl. 15 new occurrence tests covering requirements A-G).
+- Frontend: tsc clean; vitest 215 passed.
+- HTTP verifiers (in-process ASGI + dev DB): verify_events_correction.py 41/42, verify_event_cancellation_propagation.py 25/26. Both remaining failures (17d quiz-day attended in the admin's own lecture summary; 0b owner-mark drift) reproduce identically on the pre-change code (verified via git stash) — pre-existing, unrelated; the verifier payloads/cleanups were updated to the new contract.
+- Pre-existing latent flake repaired (test-only): EVT-004 FUT1/FUT2 now weekend-safe (2026-10-07 + 45d = Saturday; reproduced on pre-change code).
+
+### Discovered but intentionally NOT changed (needs a product/institution decision)
+- EXTRA_PRACTICAL / MID_SEM_PRACTICAL still accept THEORY subjects. Requirement 5's strict reading ("practical/lab → P events") would make them LAB-only, but the EVT-004 pinned uniqueness contract exercises a THEORY chain subject with EXTRA_PRACTICAL; changing that needs a deliberate test-chain update. Frontend already mirrors LAB-only UX.
+- Quiz-day attendance (Option A) materializes an entry-less LECTURE-shaped session; verify_events_correction 17d expects the admin's own summary attended +1 and does not observe it (summary read path — untouched per the attendance-formula freeze).

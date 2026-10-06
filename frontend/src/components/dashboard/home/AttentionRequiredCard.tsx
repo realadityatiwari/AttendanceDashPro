@@ -28,7 +28,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
         {items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
             <div className="flex size-9 items-center justify-center rounded-full bg-success/15">
-              <AlertTriangle className="size-4 text-success" />
+              <AlertTriangle className="size-4 text-success" aria-hidden="true" />
             </div>
             <h3 className="mt-3 text-sm font-medium text-foreground">
               All subjects on track
@@ -59,7 +59,7 @@ export function AttentionRequiredCard({ items }: AttentionRequiredCardProps) {
                     {formatPct(item.current_pct)}
                   </div>
                   {item.forecast_pct !== null && (
-                    <div className="text-[11px] tabular-nums text-muted-foreground">
+                    <div className="text-2xs tabular-nums text-muted-foreground">
                       forecast {formatPct(item.forecast_pct)}
                     </div>
                   )}

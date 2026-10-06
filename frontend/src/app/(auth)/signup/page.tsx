@@ -174,6 +174,7 @@ export default function SignupPage() {
               id="name"
               type="text"
               required
+              autoComplete="name"
               value={name}
               onChange={(e) => { setName(e.target.value); setErrors(prev => ({ ...prev, name: undefined })); }}
               placeholder="Your full name"
@@ -188,6 +189,8 @@ export default function SignupPage() {
               type="text"
               inputMode="numeric"
               required
+              // 25.UX-7: the roll number is the account identifier.
+              autoComplete="username"
               value={rollNumber}
               onChange={(e) => { setRollNumber(e.target.value); setErrors(prev => ({ ...prev, rollNumber: undefined })); }}
               placeholder="13 digit roll number"
@@ -202,6 +205,7 @@ export default function SignupPage() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 required
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: undefined })); }}
                 placeholder="Min 8 characters"
@@ -214,7 +218,7 @@ export default function SignupPage() {
                 onClick={() => setShowPassword(v => !v)}
                 className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
               </button>
             </div>
             {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
@@ -227,6 +231,7 @@ export default function SignupPage() {
                 id="confirmPassword"
                 type={showConfirm ? "text" : "password"}
                 required
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => { setConfirmPassword(e.target.value); setErrors(prev => ({ ...prev, confirmPassword: undefined })); }}
                 placeholder="Re-enter password"
@@ -239,7 +244,7 @@ export default function SignupPage() {
                 onClick={() => setShowConfirm(v => !v)}
                 className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 rounded-md"
               >
-                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showConfirm ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
               </button>
             </div>
             {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword}</p>}

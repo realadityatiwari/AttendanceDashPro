@@ -236,6 +236,7 @@ class ElectiveResolver:
                 resolved_subject_id=resolved_id,
                 resolved_subject_code=resolved_code,
                 resolved_subject_name=resolved_name,
+                timetable_entry_id=getattr(e, "timetable_entry_id", None),
                 class_type=e.class_type,
                 is_working_day=e.is_working_day,
                 substitution_schedule_override=e.substitution_schedule_override,

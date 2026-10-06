@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EligibilityState, type CriterionResult } from "@/types/api";
-import { formatDateMedium, formatPct1 } from "@/lib/date";
+import { formatDateMedium, formatPct, formatPct1 } from "@/lib/date";
 import { getQuizEligibilityStatus } from "@/lib/canonicalStatus";
 import { AlertCircle, Calendar, ChevronDown, ChevronUp, Calculator, Check, X, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,9 @@ function CriterionRow({
           <span className="text-muted-foreground">
             Required:{" "}
             <span className="font-bold tabular-nums text-foreground">
-              {criterion?.threshold != null ? `${criterion.threshold.toFixed(0)}%` : "—"}
+              {/* 25.UX-3: whole-number thresholds render through the canonical
+                  formatter (same rounding as the former toFixed(0)). */}
+              {criterion?.threshold != null ? formatPct(criterion.threshold) : "—"}
             </span>
           </span>
         </div>
@@ -204,7 +206,9 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
     // a raw red palette, so it can never drift from the token set.
     return (
       <Card className="border-destructive/40 bg-destructive/10 p-4">
-        <div className="flex items-center justify-between gap-3">
+        {/* 25.UX-7: the load-failure card is announced (it also reappears
+            when a Retry click fails again — role=alert covers both). */}
+        <div role="alert" className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="text-sm font-medium">Could not load eligibility for {subjectCode}</span>
@@ -315,7 +319,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
             <div>
               <div className="flex items-baseline justify-between gap-3 text-sm mb-1.5">
                 <span className="font-medium text-foreground min-w-0">
-                  Average <span className="text-muted-foreground font-normal">· required {required.toFixed(0)}%</span>
+                  Average <span className="text-muted-foreground font-normal">· required {formatPct(required)}</span>
                 </span>
                 <span className={cn("tabular-nums font-medium", noData ? "text-muted-foreground" : eligibility.average_pct !== null && eligibility.average_pct >= required ? "text-success" : "text-warning")}>
                   {formatPct1(eligibility.average_pct)}
@@ -365,7 +369,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
               {!noData && eligibility.optimization && eligibility.optimization.is_reachable === true && (
                 <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-xs">
                   <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
-                    <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
+                    <p className="font-semibold text-muted-foreground text-2xs tracking-wider uppercase mb-1">
                       Must Attend{eligibility.must_attend_criterion ? ` — ${eligibility.must_attend_criterion}` : " (best route)"}
                     </p>
                     <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.optimization.lecture_deficit}</span></p>
@@ -375,7 +379,7 @@ export function QuizEligibilityCard({ subjectCode, cycle, cycleLabel }: { subjec
                   </div>
                   {eligibility.safe_skip_optimization && (
                     <div className="rounded bg-muted/50 border border-border/50 px-3 py-2">
-                      <p className="font-semibold text-muted-foreground text-[11px] tracking-wider uppercase mb-1">
+                      <p className="font-semibold text-muted-foreground text-2xs tracking-wider uppercase mb-1">
                         Safe Skip{eligibility.safe_skip_criterion ? ` — ${eligibility.safe_skip_criterion}` : " (best route)"}
                       </p>
                       <p className="text-foreground">Lecture: <span className="font-bold tabular-nums">{eligibility.safe_skip_optimization.safe_skip_lecture}</span></p>

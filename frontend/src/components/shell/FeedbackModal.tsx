@@ -4,8 +4,8 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
 import { ShellDialog } from "@/components/shell/ShellDialog";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { apiFetch } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { FEEDBACK_TYPES } from "@/lib/canonicalStatus";
 import type { FeedbackType } from "@/types/api";
 
@@ -95,7 +95,13 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       width="md"
     >
       {state.status === "success" ? (
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
+        // 25.UX-7: the form is replaced by this panel after a successful
+        // submit — role="status" announces the outcome that would otherwise
+        // be visually apparent only.
+        <div
+          role="status"
+          className="flex flex-col items-center gap-3 py-6 text-center"
+        >
           <CheckCircle2 className="size-10 text-success" aria-hidden="true" />
           <p className="text-sm font-medium text-foreground">Thank you!</p>
           <p className="text-sm text-muted-foreground">
@@ -109,7 +115,12 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
         </div>
       ) : state.status === "error" ? (
         <div className="flex flex-col gap-3 py-2">
-          <div className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+          {/* 25.UX-7: submission failures are announced (same role="alert"
+              contract as the Event form's error banner). */}
+          <div
+            role="alert"
+            className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3"
+          >
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
             <p className="text-xs leading-relaxed text-destructive">
               {state.message}
@@ -122,29 +133,28 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       ) : (
         <>
           <fieldset className="mb-4">
-            <legend className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <legend id="feedback-type-legend" className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Feedback type
             </legend>
-            <div className="grid grid-cols-2 gap-2">
-              {FEEDBACK_TYPES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={feedbackType === value}
-                  onClick={() => setFeedbackType(value)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                    feedbackType === value
-                      ? "border-primary/50 bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* 25.UX-2: the chips are the shared SegmentedControl primitive
+                (tint variant). The grid layout is the fieldset's former
+                grid-cols-2; the primitive lifts the chips to the shared
+                40px touch / 32px pointer floor. */}
+            <SegmentedControl
+              value={feedbackType}
+              onValueChange={setFeedbackType}
+              options={FEEDBACK_TYPES}
+              variant="tint"
+              aria-labelledby="feedback-type-legend"
+              // 25.UX-7: the inline error is programmatically associated with
+              // the control group (Error Placement — aria-describedby).
+              aria-describedby={typeError ? "feedback-type-error" : undefined}
+              className="grid grid-cols-2 gap-2"
+            />
             {typeError && (
-              <p className="mt-1.5 text-xs text-destructive">{typeError}</p>
+              <p id="feedback-type-error" className="mt-1.5 text-xs text-destructive">
+                {typeError}
+              </p>
             )}
           </fieldset>
 
@@ -160,14 +170,20 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             onChange={(e) => setMessage(e.target.value)}
             maxLength={1000}
             rows={4}
+            aria-invalid={messageError ? true : undefined}
+            // 25.UX-7: the hint slot doubles as the error message — one stable
+            // id keeps the association valid in both states.
+            aria-describedby="feedback-message-hint"
             placeholder="How can we improve AttendanceDash Pro?"
             className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-ring focus:ring-2 focus:ring-ring/40 focus:outline-none"
           />
           <div className="mt-1 flex items-center justify-between">
             {messageError ? (
-              <p className="text-xs text-destructive">{messageError}</p>
+              <p id="feedback-message-hint" className="text-xs text-destructive">
+                {messageError}
+              </p>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p id="feedback-message-hint" className="text-xs text-muted-foreground">
                 {message.length}/1000 characters
               </p>
             )}

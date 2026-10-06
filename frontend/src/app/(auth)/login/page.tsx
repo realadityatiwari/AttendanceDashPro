@@ -130,6 +130,9 @@ export default function LoginPage() {
               id="rollNumber"
               type="text"
               required
+              // 25.UX-7: WCAG 1.3.5 input purpose — the roll number is the
+              // sign-in identifier, so password managers must recognize it.
+              autoComplete="username"
               value={rollNumber}
               onChange={(e) => setRollNumber(e.target.value)}
               placeholder="13 digit roll number"
@@ -145,6 +148,9 @@ export default function LoginPage() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 required
+                // 25.UX-7: current-password — never blocks paste or
+                // password-manager autofill (Accessible Authentication).
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Min 8 characters"

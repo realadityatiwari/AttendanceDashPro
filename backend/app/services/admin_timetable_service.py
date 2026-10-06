@@ -148,40 +148,13 @@ class AdminTimetableService:
         """Return (allowed_section_ids, allowed_subject_ids).  None means
         UNRESTRICTED on that dimension; empty set means nothing visible.
 
-        - HEAD_ADMIN       -> (None, None) — everything
-        - CLASS_ADMIN      -> assigned section(s); subjects unrestricted
-        - SUBSECTION_ADMIN -> section(s) of the assigned subsection(s)
-                              (inert today — no authoritative subsection
-                              data, so the section set is empty => nothing)
-        - ELECTIVE_ADMIN   -> sections unrestricted; subjects restricted to
-                              the exact assigned concrete subject(s)
-        An admin holding several scopes gets the union.  A user with NO
-        effective admin role -> (empty, empty) — nothing visible (the HTTP
-        layer additionally 403s in 24.7-C).
-        """
-        authz = AuthorizationService(self.db)
-        if await authz.is_head_admin(user):
-            return None, None
-        scopes = await authz.get_active_scopes(user.id)
-        if not scopes:
-            return set(), set()
-
-        section_ids: Set[UUID] = set()
-        subject_ids: Set[UUID] = set()
-        for s in scopes:
-            if s.role == AdminRole.CLASS_ADMIN and s.section_id:
-                section_ids.add(s.section_id)
-            elif s.role == AdminRole.SUBSECTION_ADMIN and s.subsection_id:
-                sub = await self.repo.get_subsection(s.subsection_id)
-                if sub is not None:
-                    section_ids.add(sub.section_id)
-            elif s.role == AdminRole.ELECTIVE_ADMIN and s.subject_id:
-                subject_ids.add(s.subject_id)
-
-        return (
-            section_ids if section_ids else None,
-            subject_ids if subject_ids else None,
-        )
+        OCC-1: the semantics now live in exactly one place —
+        ``AuthorizationService.resolve_admin_scope_filters`` (HEAD all;
+        CLASS sections; SUBSECTION sections-of-subsections, inert today;
+        ELECTIVE exact subjects; union across scopes; no role + no scopes =>
+        nothing visible) — so every scoped timetable/event read resolves
+        scope identically."""
+        return await AuthorizationService(self.db).resolve_admin_scope_filters(user)
 
     async def _assert_write_scope(self, user: User, section_id: UUID) -> None:
         """STRICT write gate (authoritative Phase 24.0 matrix).

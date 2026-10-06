@@ -413,6 +413,9 @@ export interface AcademicEventResponse {
   resolved_subject_id: string | null;
   resolved_subject_code: string | null;
   resolved_subject_name: string | null;
+  /** OCC-1: the exact scheduled timetable occurrence a cancellation event
+      targets (CLASS_CANCELLED / LAB_CANCELLED); null for every other type. */
+  timetable_entry_id: string | null;
   class_type: ClassType | null;
   is_working_day: boolean | null;
   substitution_schedule_override: string | null;
@@ -440,6 +443,9 @@ export interface AcademicEventPayload {
   start_date: string;
   end_date: string;
   subject_id?: string | null;
+  /** OCC-1: required for cancellation events — the exact scheduled timetable
+   *  occurrence (from the student's own resolved timetable read model). */
+  timetable_entry_id?: string | null;
   elective_slot?: ElectiveSlot | null;
   class_type?: ClassType | null;
   is_working_day?: boolean | null;
@@ -1354,6 +1360,12 @@ export interface AdminEventResponse {
   subject_id: string | null;
   subject_code: string | null;
   subject_name: string | null;
+  /** OCC-1: the exact scheduled timetable occurrence a cancellation event
+   *  targets (CLASS_CANCELLED / LAB_CANCELLED); null for every other type. */
+  timetable_entry_id: string | null;
+  /** OCC-1: server-computed human-readable description of the referenced
+   *  occurrence — the UI never reconstructs it from the weekly timetable. */
+  occurrence_label: string | null;
   elective_slot: ElectiveSlot | null;
   class_type: ClassType | null;
   is_working_day: boolean | null;
@@ -1384,6 +1396,9 @@ export interface CreateAdminEventRequest {
   start_date: string;
   end_date: string;
   subject_id?: string | null;
+  /** OCC-1: required for cancellation events — the exact scheduled
+   *  occurrence picked from the occurrence-options read model. */
+  timetable_entry_id?: string | null;
   elective_slot?: ElectiveSlot | null;
   class_type?: ClassType | null;
   is_working_day?: boolean | null;
@@ -1397,12 +1412,56 @@ export interface UpdateAdminEventRequest {
   start_date?: string;
   end_date?: string;
   subject_id?: string | null;
+  timetable_entry_id?: string | null;
   elective_slot?: ElectiveSlot | null;
   class_type?: ClassType | null;
   is_working_day?: boolean | null;
   substitution_schedule_override?: string | null;
   note?: string | null;
   active?: boolean;
+}
+
+// ===========================================================================
+// OCC-1 — occurrence options read model (admin Events UI)
+// ===========================================================================
+
+/** A concrete elective subject a slot occurrence may be narrowed to. */
+export interface AdminOccurrenceElectiveSubject {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface AdminOccurrenceOption {
+  timetable_entry_id: string;
+  subject_id: string;
+  subject_code: string;
+  subject_name: string;
+  class_type: ClassType;
+  start_time: string;
+  end_time: string;
+  section_id: string;
+  section_name: string;
+  subsection_id: string | null;
+  subsection_name: string | null;
+  /** The shared Departmental Elective slot this entry belongs to (null for
+   *  regular entries). Slot entries keep the anchor subject in subject_id. */
+  elective_slot: ElectiveSlot | null;
+  is_slot_anchor: boolean;
+  /** Concrete elective members the occurrence may be narrowed to. */
+  elective_subjects: AdminOccurrenceElectiveSubject[];
+  display_label: string;
+}
+
+export interface AdminOccurrenceOptionsResponse {
+  date: string;
+  event_type: EventType | null;
+  is_working_day: boolean;
+  day_type: string;
+  schedule_day: string;
+  non_working_reason: string | null;
+  items: AdminOccurrenceOption[];
+  total: number;
 }
 
 // ===========================================================================

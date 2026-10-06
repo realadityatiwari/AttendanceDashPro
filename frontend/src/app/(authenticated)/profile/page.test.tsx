@@ -1,6 +1,21 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import ProfilePage from "./page";
+
+const { profileState, retryMock } = vi.hoisted(() => ({
+  profileState: {
+    profile: {
+      id: "fc9b5093-ff46-43b6-a6d7-329921913ca3",
+      display_name: "Test Student",
+      roll_number: "2401220999001",
+      section_name: "CSE-A",
+      role: "STUDENT",
+    },
+    isLoading: false,
+    isError: null as unknown,
+  },
+  retryMock: vi.fn(),
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
@@ -14,18 +29,13 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 vi.mock("@/hooks/useApi", () => ({
-  useProfile: () => ({
-    profile: {
-      id: "fc9b5093-ff46-43b6-a6d7-329921913ca3",
-      display_name: "Test Student",
-      roll_number: "2401220999001",
-      section_name: "CSE-A",
-      role: "STUDENT",
-    },
-    isLoading: false,
-    isError: null,
-  }),
+  useProfile: () => ({ ...profileState, mutate: retryMock }),
 }));
+
+beforeEach(() => {
+  profileState.isError = null;
+  retryMock.mockClear();
+});
 
 describe("UIA-007: Profile Page UUID removal", () => {
   it("renders roll number and student details but never displays the raw internal UUID", () => {
@@ -54,5 +64,27 @@ describe("UIA-007: Profile Page UUID removal", () => {
     // block + field); the canonical page renders it once.
     render(<ProfilePage />);
     expect(screen.getAllByText("2401220999001")).toHaveLength(1);
+  });
+
+  it("renders read-only field captions as spans, never orphan <label> elements", () => {
+    // 25.UX-5: Display Name / Roll Number / Section captions annotate display
+    // values — a <label> without a control is invalid semantics.
+    const { container } = render(<ProfilePage />);
+    expect(container.querySelectorAll("label")).toHaveLength(0);
+    expect(screen.getByText("Display Name")).toBeInTheDocument();
+    expect(screen.getByText("Roll Number")).toBeInTheDocument();
+    expect(screen.getByText("Section")).toBeInTheDocument();
+  });
+});
+
+describe("25.UX-5: profile error retry", () => {
+  it("offers a retry that re-triggers the profile request", () => {
+    profileState.isError = new Error("failed");
+    render(<ProfilePage />);
+    const retry = screen.getByRole("button", { name: /try again/i });
+    fireEvent.click(retry);
+    expect(retryMock).toHaveBeenCalledTimes(1);
+    // The honest sign-out fallback stays available alongside the retry.
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
 });

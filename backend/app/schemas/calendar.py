@@ -19,6 +19,11 @@ class AcademicEventResponse(BaseModel):
     resolved_subject_id: Optional[UUID] = None
     resolved_subject_code: Optional[str] = None
     resolved_subject_name: Optional[str] = None
+    # OCC-1: the exact scheduled timetable occurrence a cancellation event
+    # targets (CLASS_CANCELLED / LAB_CANCELLED); null for every other type.
+    # Additive read field — clients show/keep the reference; the authoritative
+    # validation stays in EventService.
+    timetable_entry_id: Optional[UUID] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
     substitution_schedule_override: Optional[str] = None
@@ -35,11 +40,15 @@ class AcademicEventCreate(BaseModel):
     `elective_slot` scopes the event to a Departmental Elective logical slot
     (ADMIN-only; the server resolves and stores the shared anchor subject).
     `subject_id` and `elective_slot` are mutually exclusive.
+    OCC-1: `timetable_entry_id` is required for cancellation events
+    (CLASS_CANCELLED / LAB_CANCELLED) — the exact scheduled occurrence the
+    event cancels, validated against the real timetable by EventService.
     """
     event_type: EventType
     start_date: date
     end_date: date
     subject_id: Optional[UUID] = None
+    timetable_entry_id: Optional[UUID] = None
     elective_slot: Optional[ElectiveSlot] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
@@ -53,6 +62,7 @@ class AcademicEventUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     subject_id: Optional[UUID] = None
+    timetable_entry_id: Optional[UUID] = None
     elective_slot: Optional[ElectiveSlot] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None

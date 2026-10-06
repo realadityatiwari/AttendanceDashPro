@@ -7,6 +7,7 @@ import {
   formatMonthYear,
   formatShortDate,
   formatTimestampDate,
+  formatTime,
   formatWeekdayDate,
   getMonthName,
 } from "./date";
@@ -61,5 +62,20 @@ describe("25.UX-1: canonical month/part/timestamp formatting", () => {
     expect(formatTimestampDate("2026-10-05")).toBe("5 Oct 2026");
     // Unparseable input renders an em dash — never silently today's date.
     expect(formatTimestampDate("not-a-date")).toBe("—");
+  });
+});
+
+describe("25.UX-3: canonical time-of-day formatting", () => {
+  it("renders backend HH:MM:SS times as 24h HH:MM", () => {
+    expect(formatTime("09:30:00")).toBe("09:30");
+    expect(formatTime("14:05:00")).toBe("14:05");
+    expect(formatTime("9:30:00")).toBe("09:30");
+  });
+
+  it("never invents a time: empty/null passes through empty, unknown shapes pass through raw", () => {
+    expect(formatTime(null)).toBe("");
+    expect(formatTime(undefined)).toBe("");
+    expect(formatTime("")).toBe("");
+    expect(formatTime("not-a-time")).toBe("not-a-time");
   });
 });
