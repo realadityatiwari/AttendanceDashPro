@@ -81,6 +81,7 @@ from app.engines.calendar_engine import (
     DEFAULT_WEEKENDS,
     get_event_priority,
 )
+from app.engines.practical_occurrence import group_timetable_practical_occurrences
 from app.models.event import AcademicEvent
 from app.models.enums import EventType, ClassType, SessionDesignation, ElectiveSlot, OccurrenceOutcomeType
 from app.models.timetable import ClassSession, TimetableEntry
@@ -362,6 +363,14 @@ class EventSessionSynchronizer:
         # replaced by a freshly created extra (which would create two
         # attendance opportunities for one practical turn).
         original_scheduled = dict(scheduled)
+        practical_block_members: Dict[object, List[object]] = {
+            member_id: occ["member_ids"]
+            for occ in group_timetable_practical_occurrences(
+                list(original_scheduled.values()), for_date=target
+            )
+            if occ.get("class_type") == ClassType.PRACTICAL
+            for member_id in occ["member_ids"]
+        }
 
         # Deterministic order: priority desc, then event id (no timestamps on
         # the model; uuid ordering is stable across runs).
@@ -435,11 +444,22 @@ class EventSessionSynchronizer:
                 subject_slot = subject_elective_slots[event.subject_id]
                 if event.timetable_entry_id is not None:
                     # OCC-1: the event pinned its exact occurrence — the
-                    # outcome applies only while THAT entry is still
-                    # scheduled on this date (e.g. not already removed by a
-                    # slot-wide cancellation processed earlier).
-                    slot_has_timetable = event.timetable_entry_id in scheduled
+                    # outcome applies only while THAT entry (or its canonical
+                    # practical occurrence block) is still scheduled on this
+                    # date (e.g. not already removed by a slot-wide
+                    # cancellation processed earlier).
+                    pinned_members = (
+                        practical_block_members.get(
+                            event.timetable_entry_id, [event.timetable_entry_id]
+                        )
+                        if event.class_type == ClassType.PRACTICAL
+                        else [event.timetable_entry_id]
+                    )
+                    slot_has_timetable = any(
+                        mid in scheduled for mid in pinned_members
+                    )
                 else:
+                    pinned_members = []
                     slot_has_timetable = any(
                         entry.elective_slot == subject_slot
                         for entry in scheduled.values()
@@ -448,14 +468,15 @@ class EventSessionSynchronizer:
                     if event.event_type in CANCELLATION_TYPES:
                         desired_outcomes[event.subject_id] = OccurrenceOutcomeType.CANCELLED
                         if event.timetable_entry_id is not None:
-                            prev_pin = outcome_entry_ids.get(event.subject_id)
-                            if prev_pin is None:
-                                outcome_entry_ids[event.subject_id] = event.timetable_entry_id
-                            elif isinstance(prev_pin, list):
-                                if event.timetable_entry_id not in prev_pin:
-                                    prev_pin.append(event.timetable_entry_id)
-                            elif prev_pin != event.timetable_entry_id:
-                                outcome_entry_ids[event.subject_id] = [prev_pin, event.timetable_entry_id]
+                            for mid in pinned_members:
+                                prev_pin = outcome_entry_ids.get(event.subject_id)
+                                if prev_pin is None:
+                                    outcome_entry_ids[event.subject_id] = mid
+                                elif isinstance(prev_pin, list):
+                                    if mid not in prev_pin:
+                                        prev_pin.append(mid)
+                                elif prev_pin != mid:
+                                    outcome_entry_ids[event.subject_id] = [prev_pin, mid]
                     elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                         desired_outcomes[event.subject_id] = EVENT_TO_OUTCOME_TYPE.get(
                             event.event_type, OccurrenceOutcomeType.SURPRISE_QUIZ
@@ -477,10 +498,19 @@ class EventSessionSynchronizer:
             if event.event_type in CANCELLATION_TYPES:
                 # Remove ONE matching occurrence (legacy splice semantics).
                 # OCC-1: an event carrying a timetable-occurrence reference
-                # removes THAT exact entry — never a guessed subject+class
-                # match. Legacy events (no reference) keep the legacy match.
+                # removes THAT exact entry (and for a practical occurrence,
+                # all raw periods of its canonical practical block) — never a
+                # guessed subject+class match. Legacy events (no reference)
+                # keep the legacy match.
                 if event.timetable_entry_id is not None:
                     match = scheduled.get(event.timetable_entry_id)
+                    if match is None and event.class_type == ClassType.PRACTICAL:
+                        for member_id in practical_block_members.get(
+                            event.timetable_entry_id, ()
+                        ):
+                            match = scheduled.get(member_id)
+                            if match is not None:
+                                break
                 else:
                     match = self._cancellation_match(
                         scheduled, event.subject_id, event.class_type, existing, attended_ids
@@ -488,7 +518,16 @@ class EventSessionSynchronizer:
                 if event.class_type == ClassType.PRACTICAL:
                     cancelled_practical_subjects.add(event.subject_id)
                 if match is not None:
-                    del scheduled[match.id]
+                    if (
+                        event.timetable_entry_id is not None
+                        and match.class_type == ClassType.PRACTICAL
+                    ):
+                        for member_id in practical_block_members.get(
+                            match.id, [match.id]
+                        ):
+                            scheduled.pop(member_id, None)
+                    else:
+                        del scheduled[match.id]
                     if event.event_type == EventType.CLASS_CANCELLED:
                         cancellation_removed.add(match.id)
             elif event.event_type in EXTRA_OCCURRENCE_TYPES:
@@ -968,9 +1007,16 @@ class EventSessionSynchronizer:
                 pinned_all.update(v)
             elif v is not None:
                 pinned_all.add(v)
-        all_anchor_entry_ids = set(anchor_entry_by_slot[s].id for s in anchor_entry_by_slot) | set(
-            anchor_entry_by_subject[s].id for s in anchor_entry_by_subject
-        ) | pinned_all
+        all_anchor_entry_ids = (
+            set(anchor_entry_by_slot[s].id for s in anchor_entry_by_slot)
+            | set(anchor_entry_by_subject[s].id for s in anchor_entry_by_subject)
+            | {
+                entry.id
+                for entry in desired_scheduled.values()
+                if entry.elective_slot is not None or entry.subject_id is not None
+            }
+            | pinned_all
+        )
         for entry_id, session in session_by_entry_id.items():
             if entry_id in all_anchor_entry_ids:
                 target_session_ids.add(session.id)

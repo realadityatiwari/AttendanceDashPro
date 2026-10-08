@@ -27,6 +27,7 @@ from app.services.event_registry import (
 )
 from app.services.event_session_service import EventSessionSynchronizer
 from app.engines.calendar_engine import DAY_NAMES
+from app.engines.practical_occurrence import group_timetable_practical_occurrences
 
 
 class EventForbidden(Exception):
@@ -376,6 +377,22 @@ class EventService:
             )
         return member.id, None, effective_class_type
 
+    async def _canonical_occurrence_entry_id(
+        self, timetable_entry_id: UUID, start_date: date
+    ) -> UUID:
+        """Resolve any raw period ID of a contiguous practical occurrence block
+        to its canonical practical occurrence representative ID."""
+        entry = await self.repo.get_timetable_entry(timetable_entry_id)
+        if entry is None or entry.class_type != ClassType.PRACTICAL:
+            return timetable_entry_id
+        siblings = await self.repo.list_sibling_practical_entries(entry)
+        for occ in group_timetable_practical_occurrences(
+            siblings, for_date=start_date
+        ):
+            if entry.id in occ["member_ids"]:
+                return occ["id"]
+        return timetable_entry_id
+
     async def _check_duplicate(
         self,
         event_type: EventType,
@@ -409,6 +426,7 @@ class EventService:
         # effective subject/slot/class-type are derived from it (never from
         # the payload's guess) BEFORE authorization so students are checked
         # against the subject the occurrence actually resolves to.
+        effective_timetable_entry_id = data.timetable_entry_id
         if data.timetable_entry_id is not None:
             effective_subject_id, elective_slot, effective_class_type = (
                 await self._resolve_occurrence_target(
@@ -420,6 +438,11 @@ class EventService:
                     class_type=data.class_type,
                     start_date=data.start_date,
                     end_date=data.end_date,
+                )
+            )
+            effective_timetable_entry_id = (
+                await self._canonical_occurrence_entry_id(
+                    data.timetable_entry_id, data.start_date
                 )
             )
         else:
@@ -451,7 +474,7 @@ class EventService:
             start_date=data.start_date,
             end_date=data.end_date,
             subject_id=effective_subject_id,
-            timetable_entry_id=data.timetable_entry_id,
+            timetable_entry_id=effective_timetable_entry_id,
             elective_slot=elective_slot,
             class_type=effective_class_type,
             subject_category=subject_category,
@@ -474,7 +497,7 @@ class EventService:
             data.end_date,
             effective_subject_id,
             effective_class_type,
-            timetable_entry_id=data.timetable_entry_id,
+            timetable_entry_id=effective_timetable_entry_id,
         )
 
         event = AcademicEvent(
@@ -482,7 +505,7 @@ class EventService:
             start_date=data.start_date,
             end_date=data.end_date,
             subject_id=effective_subject_id,
-            timetable_entry_id=data.timetable_entry_id,
+            timetable_entry_id=effective_timetable_entry_id,
             elective_slot=elective_slot,
             class_type=effective_class_type,
             is_working_day=data.is_working_day,
@@ -651,6 +674,11 @@ class EventService:
                             class_type=event.class_type,
                             start_date=event.start_date,
                             end_date=event.end_date,
+                        )
+                    )
+                    event.timetable_entry_id = (
+                        await self._canonical_occurrence_entry_id(
+                            event.timetable_entry_id, event.start_date
                         )
                     )
                     event.subject_id = eff_subject

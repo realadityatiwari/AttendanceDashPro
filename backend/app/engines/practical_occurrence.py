@@ -135,12 +135,82 @@ def group_practical_occurrences(rows: List[Dict[str, Any]]) -> List[Dict[str, An
         if pending and (
             _subject_key(pending[-1]) != _subject_key(row)
             or pending[-1].get("date") != row.get("date")
+            or pending[-1].get("section_id") != row.get("section_id")
+            or pending[-1].get("subsection_id") != row.get("subsection_id")
+            or pending[-1].get("elective_slot") != row.get("elective_slot")
             or not _contiguous(pending[-1], row)
         ):
             flush()
         pending.append(row)
     flush()
     return occurrences
+
+
+def group_timetable_practical_occurrences(
+    entries: List[Any],
+    for_date: Any = None,
+) -> List[Dict[str, Any]]:
+    """
+    Collapse contiguous PRACTICAL TimetableEntry rows (same weekday/date,
+    section, subsection, subject, and elective_slot) into canonical practical
+    occurrence dicts by delegating to `group_practical_occurrences`.
+
+    Non-PRACTICAL entries pass through as standalone occurrence dicts.
+    Returned dicts are ordered chronologically by (start_time, str(id)) and
+    carry `id`, `member_ids`, `start_time`, `end_time`, and `entry`
+    (the canonical representative TimetableEntry).
+    """
+    rows: List[Dict[str, Any]] = []
+    for entry in entries:
+        entry_date = (
+            for_date
+            if for_date is not None
+            else getattr(entry, "day_of_week", None)
+        )
+        rows.append(
+            {
+                "id": entry.id,
+                "subject_id": getattr(entry, "subject_id", None),
+                "class_type": getattr(entry, "class_type", None),
+                "date": entry_date,
+                "day_of_week": getattr(entry, "day_of_week", None),
+                "section_id": getattr(entry, "section_id", None),
+                "subsection_id": getattr(entry, "subsection_id", None),
+                "elective_slot": getattr(entry, "elective_slot", None),
+                "start_time": getattr(entry, "start_time", None),
+                "end_time": getattr(entry, "end_time", None),
+                "is_cancelled": False,
+                "status": None,
+                "entry": entry,
+            }
+        )
+
+    rows.sort(
+        key=lambda r: (
+            r["date"] if r["date"] is not None else -1,
+            0 if r["class_type"] == ClassType.PRACTICAL else 1,
+            str(r["section_id"] or ""),
+            str(r["subsection_id"] or ""),
+            str(r["subject_id"] or ""),
+            str(r["elective_slot"] or ""),
+            r["start_time"] is None,
+            r["start_time"],
+            str(r["id"]),
+        )
+    )
+
+    grouped = group_practical_occurrences(rows)
+    for occ in grouped:
+        if "member_ids" not in occ:
+            occ["member_ids"] = [occ["id"]]
+    grouped.sort(
+        key=lambda occ: (
+            occ.get("start_time") is None,
+            occ.get("start_time"),
+            str(occ["id"]),
+        )
+    )
+    return grouped
 
 
 def _collapse_block(members: List[Dict[str, Any]]) -> Dict[str, Any]:

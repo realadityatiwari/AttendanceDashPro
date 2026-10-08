@@ -104,6 +104,31 @@ class EventRepository:
         )
         return result.scalars().first()
 
+    async def list_sibling_practical_entries(self, entry):
+        """Active PRACTICAL TimetableEntry rows sharing weekday, section,
+        subsection, subject, and elective_slot with `entry`."""
+        from app.models.timetable import TimetableEntry
+        stmt = select(TimetableEntry).where(
+            TimetableEntry.is_active.is_(True),
+            TimetableEntry.class_type == ClassType.PRACTICAL,
+            TimetableEntry.day_of_week == entry.day_of_week,
+            TimetableEntry.subject_id == entry.subject_id,
+        )
+        if entry.section_id is None:
+            stmt = stmt.where(TimetableEntry.section_id.is_(None))
+        else:
+            stmt = stmt.where(TimetableEntry.section_id == entry.section_id)
+        if getattr(entry, "subsection_id", None) is None:
+            stmt = stmt.where(TimetableEntry.subsection_id.is_(None))
+        else:
+            stmt = stmt.where(TimetableEntry.subsection_id == entry.subsection_id)
+        if entry.elective_slot is None:
+            stmt = stmt.where(TimetableEntry.elective_slot.is_(None))
+        else:
+            stmt = stmt.where(TimetableEntry.elective_slot == entry.elective_slot)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def is_enrolled(self, user_id: UUID, subject_id: UUID) -> bool:
         """
         Whether the user holds an enrollment for the subject (student event

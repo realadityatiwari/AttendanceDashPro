@@ -26,23 +26,6 @@ vi.mock("@/hooks/useApi", () => ({
               subject_name: "Web Technology Lab",
               class_type: ClassType.PRACTICAL,
               start_time: "14:00:00",
-              end_time: "15:00:00",
-              section_id: "sec-1",
-              subsection_id: null,
-              subsection_name: null,
-              elective_slot: null,
-              is_slot_anchor: false,
-              elective_subjects: [],
-              display_label:
-                "BCS-552 — Web Technology Lab (Practical) · 14:00–15:00",
-            },
-            {
-              timetable_entry_id: "entry-15",
-              subject_id: "sub-552",
-              subject_code: "BCS-552",
-              subject_name: "Web Technology Lab",
-              class_type: ClassType.PRACTICAL,
-              start_time: "15:00:00",
               end_time: "16:00:00",
               section_id: "sec-1",
               subsection_id: null,
@@ -50,8 +33,7 @@ vi.mock("@/hooks/useApi", () => ({
               elective_slot: null,
               is_slot_anchor: false,
               elective_subjects: [],
-              display_label:
-                "BCS-552 — Web Technology Lab (Practical) · 15:00–16:00",
+              display_label: "BCS-552 — Web Technology Lab",
             },
           ]
         : [],
@@ -127,7 +109,7 @@ describe("UIA-032: EventRow date presentation", () => {
     );
   });
 
-  it("renders occurrence_label, subject, and Practical class type for a Lab Cancelled event", () => {
+  it("renders subject code and lab name without raw period time for a Lab Cancelled event", () => {
     render(
       <EventRow
         event={makeEvent({
@@ -138,7 +120,7 @@ describe("UIA-032: EventRow date presentation", () => {
           resolved_subject_code: "BCS-552",
           resolved_subject_name: "Web Technology Lab",
           timetable_entry_id: "entry-14",
-          occurrence_label: "14:00–15:00",
+          occurrence_label: null,
           class_type: ClassType.PRACTICAL,
         })}
       />
@@ -148,7 +130,7 @@ describe("UIA-032: EventRow date presentation", () => {
     expect(screen.getByText("Practical")).toBeInTheDocument();
     expect(screen.getByText("BCS-552")).toBeInTheDocument();
     expect(screen.getByText("Web Technology Lab")).toBeInTheDocument();
-    expect(screen.getByText(/14:00–15:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/14:00/)).not.toBeInTheDocument();
     expect(screen.queryByText("8 Oct 2026")).not.toBeInTheDocument();
   });
 });
@@ -161,7 +143,7 @@ describe("Lab Cancelled single-day and occurrence semantics", () => {
     expect(rule.allowedClassTypes).toEqual([ClassType.PRACTICAL]);
   });
 
-  it("hides Single day and Date range toggles and End date when Lab Cancelled is selected, while keeping single date picker and scheduled occurrence selector", async () => {
+  it("hides Single day and Date range toggles and End date when Lab Cancelled is selected, and shows ONE canonical practical occurrence with only subject code + lab name and no time", async () => {
     mockCreateEvent.mockReset();
     mockCreateEvent.mockResolvedValue({ id: "created-1" });
     const onSaved = vi.fn();
@@ -206,11 +188,19 @@ describe("Lab Cancelled single-day and occurrence semantics", () => {
       target: { value: "2026-10-08" },
     });
 
-    // Select one concrete scheduled lab occurrence (14:00–15:00).
-    const occSelect = screen.getByLabelText("Scheduled occurrence");
+    // Verify the selector shows ONE canonical option with ONLY "<Subject Code> — <Lab/Practical Name>" and no time.
+    const occSelect = screen.getByLabelText("Scheduled occurrence") as HTMLSelectElement;
+    const optionTexts = Array.from(occSelect.options).map((o) => o.textContent);
+    expect(optionTexts).toEqual([
+      "Select the class to cancel",
+      "BCS-552 — Web Technology Lab",
+    ]);
+    expect(optionTexts.join(" ")).not.toMatch(/14:00|15:00|16:00/);
+
+    // Select the canonical practical occurrence.
     fireEvent.change(occSelect, { target: { value: "entry-14" } });
 
-    // Submit the form and verify single-day + exact occurrence payload.
+    // Submit the form and verify single-day + exact canonical occurrence payload.
     fireEvent.click(screen.getByRole("button", { name: /create event/i }));
 
     await waitFor(() => {

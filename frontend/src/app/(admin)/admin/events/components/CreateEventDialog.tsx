@@ -363,10 +363,18 @@ export function CreateEventDialog({
               {selectedEntry && (
                 <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
                   <span className="font-medium">Cancelling:</span>{" "}
-                  {selectedEntry.subject_code} — {selectedEntry.subject_name} (
-                  {CLASS_TYPE_LABELS[selectedEntry.class_type]}) ·{" "}
-                  {selectedEntry.start_time.slice(0, 5)}–{selectedEntry.end_time.slice(0, 5)}
-                  {selectedEntry.section_name ? ` · ${selectedEntry.section_name}` : ""}
+                  {selectedEntry.class_type === ClassType.PRACTICAL ? (
+                    <>
+                      {selectedEntry.subject_code} — {selectedEntry.subject_name}
+                    </>
+                  ) : (
+                    <>
+                      {selectedEntry.subject_code} — {selectedEntry.subject_name} (
+                      {CLASS_TYPE_LABELS[selectedEntry.class_type]}) ·{" "}
+                      {selectedEntry.start_time.slice(0, 5)}–{selectedEntry.end_time.slice(0, 5)}
+                      {selectedEntry.section_name ? ` · ${selectedEntry.section_name}` : ""}
+                    </>
+                  )}
                 </div>
               )}
             </>

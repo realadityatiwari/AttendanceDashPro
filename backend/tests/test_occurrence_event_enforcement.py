@@ -529,7 +529,36 @@ async def _scenario_lab_cancellation_exact():
         try:
             db = _RollbackSession(session)
             chain = await _chain(db, tag)
+            # Add a second, non-contiguous 2-period practical block on Tuesday
+            # (14:00–15:00 + 15:00–16:00) so we prove both:
+            #   (a) contiguous raw periods (09:00–10:00 + 10:00–11:00) collapse
+            #       into ONE canonical occurrence and cancel together, and
+            #   (b) separate practical occurrences remain separate in the
+            #       selector and untouched when the morning block is cancelled.
+            afternoon_a = TimetableEntry(
+                subject_id=chain["lab"].id, day_of_week=1,
+                start_time=time(14, 0), end_time=time(15, 0),
+                class_type=ClassType.PRACTICAL, section_id=chain["section"].id,
+                is_active=True, elective_slot=None,
+            )
+            afternoon_b = TimetableEntry(
+                subject_id=chain["lab"].id, day_of_week=1,
+                start_time=time(15, 0), end_time=time(16, 0),
+                class_type=ClassType.PRACTICAL, section_id=chain["section"].id,
+                is_active=True, elective_slot=None,
+            )
+            db.add_all([afternoon_a, afternoon_b])
+            await db.flush()
+            chain["entries"]["lab_tue_pm_a"] = afternoon_a
+            chain["entries"]["lab_tue_pm_b"] = afternoon_b
+
             await _materialize_scheduled(db, chain["entries"], TUESDAY)
+            admin_svc = AdminEventService(db)
+            opts = await admin_svc.list_occurrence_options(
+                chain["head"], for_date=TUESDAY, event_type=EventType.LAB_CANCELLED
+            )
+            sandbox_opts = _sandbox_only(opts, chain["section_id"])
+
             svc = EventService(db)
             entry_a = chain["entries"]["lab_tue_a"]
             entry_b = chain["entries"]["lab_tue_b"]
@@ -540,12 +569,19 @@ async def _scenario_lab_cancellation_exact():
                 timetable_entry_id=entry_a.id))
             sessions_a = await _sessions_for_entry(db, entry_a.id, TUESDAY)
             sessions_b = await _sessions_for_entry(db, entry_b.id, TUESDAY)
+            sessions_pm_a = await _sessions_for_entry(db, afternoon_a.id, TUESDAY)
+            sessions_pm_b = await _sessions_for_entry(db, afternoon_b.id, TUESDAY)
             return {
+                "option_ids": [str(o.timetable_entry_id) for o in sandbox_opts],
+                "option_labels": [o.display_label for o in sandbox_opts],
                 "stored_class_type": event.class_type,
                 "stored_entry": str(event.timetable_entry_id),
                 "entry_a_id": str(entry_a.id),
+                "afternoon_a_id": str(afternoon_a.id),
                 "a_cancelled": [s.is_cancelled for s in sessions_a],
                 "b_cancelled": [s.is_cancelled for s in sessions_b],
+                "pm_a_cancelled": [s.is_cancelled for s in sessions_pm_a],
+                "pm_b_cancelled": [s.is_cancelled for s in sessions_pm_b],
             }
         finally:
             await session.rollback()
@@ -825,10 +861,16 @@ def test_options_scoped_by_admin_scope():
     assert len(class_scoped["items"]) == 4
     # The other section has no entries: nothing visible.
     assert empty_scoped["items"] == []
-    # LAB_CANCELLED on Tuesday: only the two practical occurrences.
-    assert lab_tuesday["items"], "scheduled labs must be listed"
-    assert sorted(o.class_type.value for o in lab_tuesday["items"]) == ["P", "P"]
-    assert all("TXO-551" in o.display_label for o in lab_tuesday["items"])
+    # LAB_CANCELLED on Tuesday: the two contiguous raw periods (09:00–10:00 and
+    # 10:00–11:00) collapse into ONE canonical practical occurrence option,
+    # whose display_label is strictly '<Subject Code> — <Lab/Practical Name>'
+    # with no time, duration, or day.
+    assert len(lab_tuesday["items"]) == 1, "contiguous lab periods must collapse into one option"
+    opt = lab_tuesday["items"][0]
+    assert opt.class_type == ClassType.PRACTICAL
+    assert opt.display_label == f"{CODE_LAB} — TXO Subject {CODE_LAB}"
+    assert "09:00" not in opt.display_label and "10:00" not in opt.display_label
+    assert "Tuesday" not in opt.display_label and "Practical" not in opt.display_label
 
 
 def test_options_day_resolution_weekend_and_holiday():
@@ -896,10 +938,22 @@ def test_lab_cancellation_cancels_only_that_practical_occurrence():
     data = _run(_scenario_lab_cancellation_exact())
     assert _run(_canonical_counts()) == before
 
+    # Two separate non-contiguous 2-period practical blocks produce two
+    # separate selector options, each keeping its canonical occurrence ID.
+    assert data["option_ids"] == [data["entry_a_id"], data["afternoon_a_id"]]
+    assert data["option_labels"] == [
+        f"{CODE_LAB} — TXO Subject {CODE_LAB}",
+        f"{CODE_LAB} — TXO Subject {CODE_LAB}",
+    ]
     assert data["stored_class_type"] == ClassType.PRACTICAL
     assert data["stored_entry"] == data["entry_a_id"]
-    assert data["a_cancelled"] == [True], "the selected lab occurrence is cancelled"
-    assert data["b_cancelled"] == [False], "the other lab occurrence is untouched"
+    # Selecting the morning canonical practical occurrence cancels ALL of its
+    # underlying sessions (09:00–10:00 and 10:00–11:00), while the separate
+    # afternoon practical occurrence's sessions remain untouched.
+    assert data["a_cancelled"] == [True], "period 1 of the selected lab block is cancelled"
+    assert data["b_cancelled"] == [True], "period 2 of the selected lab block is cancelled"
+    assert data["pm_a_cancelled"] == [False], "separate afternoon lab block stays active"
+    assert data["pm_b_cancelled"] == [False], "separate afternoon lab block stays active"
 
 
 def test_working_day_contradictions_rejected():
@@ -1273,6 +1327,50 @@ async def _scenario_lab_cancelled_single_day_and_propagation():
                 note="Lab equipment maintenance",
             ))
 
+            # 3b. Cancel Tuesday's contiguous 2-period practical occurrence
+            # (09:00–10:00 + 10:00–11:00) via its canonical representative ID
+            # and verify BOTH underlying ClassSession rows are cancelled and
+            # both reject attendance with 409, then deactivate and verify both
+            # underlying ClassSession rows are restored.
+            ev_tue = await svc.create_event(chain["head"], AcademicEventCreate(
+                event_type=EventType.LAB_CANCELLED,
+                start_date=TUESDAY,
+                end_date=TUESDAY,
+                subject_id=None,
+                class_type=ClassType.PRACTICAL,
+                timetable_entry_id=chain["entries"]["lab_tue_a"].id,
+            ))
+            sess_tue_a = (
+                await _sessions_for_entry(db, chain["entries"]["lab_tue_a"].id, TUESDAY)
+            )[0]
+            sess_tue_b = (
+                await _sessions_for_entry(db, chain["entries"]["lab_tue_b"].id, TUESDAY)
+            )[0]
+            tue_a_cancelled = sess_tue_a.is_cancelled
+            tue_b_cancelled = sess_tue_b.is_cancelled
+            mark_tue_a_status = None
+            mark_tue_b_status = None
+            try:
+                await att.record_attendance(
+                    chain["student"].id, sess_tue_a.id, AttendanceStatus.ATTENDED
+                )
+            except HTTPException as exc:
+                mark_tue_a_status = exc.status_code
+            try:
+                await att.record_attendance(
+                    chain["student"].id, sess_tue_b.id, AttendanceStatus.ATTENDED
+                )
+            except HTTPException as exc:
+                mark_tue_b_status = exc.status_code
+            await svc.deactivate_event(chain["head"], ev_tue.id)
+            await db.flush()
+            tue_a_restored = (
+                await _sessions_for_entry(db, chain["entries"]["lab_tue_a"].id, TUESDAY)
+            )[0].is_cancelled
+            tue_b_restored = (
+                await _sessions_for_entry(db, chain["entries"]["lab_tue_b"].id, TUESDAY)
+            )[0].is_cancelled
+
             # 4. Reject widening a single-day LAB_CANCELLED to a date range on PATCH.
             range_update_error = None
             try:
@@ -1332,9 +1430,14 @@ async def _scenario_lab_cancelled_single_day_and_propagation():
             )).scalars().first()
 
             # 10. Events & Calendar read models: resolve_events and get_month_view
-            # surface the single-day LAB_CANCELLED with occurrence_label="14:00–15:00".
+            # surface the single-day LAB_CANCELLED without raw period times
+            # (occurrence_label is None on student responses, and
+            # '<Subject Code> — <Lab/Practical Name>' on admin responses).
             resolved_evs = await resolver.resolve_events(
                 [ev_fri], await resolver.load_choices(chain["student"].id)
+            )
+            admin_ev_resp = await AdminEventService(db).get_event(
+                chain["head"], ev_fri.id
             )
             cal_july = await cal.get_month_view(chain["student"], 2026, 7)
             cal_fri_day = next(d for d in cal_july.days if d.date == FRIDAY)
@@ -1415,6 +1518,12 @@ async def _scenario_lab_cancelled_single_day_and_propagation():
                 "lab_id": str(chain["lab"].id),
                 "ev_fri_start": ev_fri.start_date,
                 "ev_fri_end": ev_fri.end_date,
+                "tue_a_cancelled": tue_a_cancelled,
+                "tue_b_cancelled": tue_b_cancelled,
+                "mark_tue_a_status": mark_tue_a_status,
+                "mark_tue_b_status": mark_tue_b_status,
+                "tue_a_restored": tue_a_restored,
+                "tue_b_restored": tue_b_restored,
                 "sess_14_cancelled": sess_14_cancelled,
                 "sess_16_cancelled": sess_16_cancelled,
                 "entry_14_active": entry_14_active,
@@ -1431,6 +1540,7 @@ async def _scenario_lab_cancelled_single_day_and_propagation():
                 ],
                 "fabricated_record": fabricated_record,
                 "resolved_occurrence_label": resolved_evs[0].occurrence_label,
+                "admin_occurrence_label": admin_ev_resp.occurrence_label,
                 "cal_occurrence_label": cal_fri_ev.occurrence_label,
                 "cal_session_count_fri": cal_fri_day.session_count,
                 "evs_for_a_count": len(evs_for_a),
@@ -1463,6 +1573,17 @@ def test_lab_cancelled_single_day_enforcement_and_full_pipeline_propagation():
     assert data["ev_fri_subject_id"] == data["lab_id"]
     assert data["ev_fri_start"] == FRIDAY and data["ev_fri_end"] == FRIDAY
 
+    # 3b. Selecting one canonical 2-period practical occurrence on Tuesday
+    # cancels BOTH underlying sessions (09:00–10:00 and 10:00–11:00), blocks
+    # attendance with 409 on EVERY underlying session, and restores BOTH
+    # underlying sessions upon deactivation.
+    assert data["tue_a_cancelled"] is True
+    assert data["tue_b_cancelled"] is True
+    assert data["mark_tue_a_status"] == 409
+    assert data["mark_tue_b_status"] == 409
+    assert data["tue_a_restored"] is False
+    assert data["tue_b_restored"] is False
+
     # 5. Only the selected 14:00–15:00 turn is cancelled; 16:00–17:00 stays
     # active; TimetableEntry rows remain active.
     assert data["sess_14_cancelled"] is True
@@ -1487,10 +1608,13 @@ def test_lab_cancelled_single_day_enforcement_and_full_pipeline_propagation():
     assert ("04:00 PM", False) in data["history_items_cancelled"]
     assert data["fabricated_record"] is None
 
-    # 10. Events and Calendar include the occurrence_label ("14:00–15:00"),
-    # and Calendar session_count on Friday counts only the 1 active turn.
-    assert data["resolved_occurrence_label"] == "14:00–15:00"
-    assert data["cal_occurrence_label"] == "14:00–15:00"
+    # 10. Events and Calendar do NOT leak raw period times on LAB_CANCELLED
+    # (student occurrence_label is None; admin occurrence_label is strictly
+    # '<Subject Code> — <Lab/Practical Name>'), and Calendar session_count on
+    # Friday counts only the 1 active turn.
+    assert data["resolved_occurrence_label"] is None
+    assert data["cal_occurrence_label"] is None
+    assert data["admin_occurrence_label"] == f"{CODE_LAB} — TXO Subject {CODE_LAB}"
     assert data["cal_session_count_fri"] == 1
 
     # 11. Concrete elective isolation: Student A sees the cancellation in both
@@ -1504,4 +1628,53 @@ def test_lab_cancelled_single_day_enforcement_and_full_pipeline_propagation():
     # denominator (Tuesday block = 1 + Friday two non-contiguous turns = 2 -> 3).
     assert data["sess_14_after_deactivate"] is False
     assert data["prac_total_after_deactivate"] == 3
+
+
+async def _scenario_real_bcs552_thursday_lab_occurrence():
+    async with AsyncSessionLocal() as session:
+        await session.begin()
+        try:
+            db = _RollbackSession(session)
+            head = (await db.execute(
+                select(User).where(User.role == UserRole.ADMIN)
+            )).scalars().first()
+            assert head is not None
+            svc = AdminEventService(db)
+            options = await svc.list_occurrence_options(
+                head,
+                for_date=date(2026, 10, 8),
+                event_type=EventType.LAB_CANCELLED,
+            )
+            return [
+                (
+                    o.subject_code,
+                    o.subject_name,
+                    o.class_type.value,
+                    o.start_time.strftime("%H:%M"),
+                    o.end_time.strftime("%H:%M"),
+                    o.display_label,
+                )
+                for o in options.items
+            ]
+        finally:
+            await session.rollback()
+
+
+def test_real_bcs552_thursday_lab_occurrence_collapses_into_one_option():
+    """AUTHORITATIVE SOURCE REGRESSION: on Thursday 08 Oct 2026, BCS-552
+    (Web Technology Lab) is scheduled as two contiguous raw periods
+    (14:00–15:00 and 15:00–16:00). The occurrence options endpoint for
+    LAB_CANCELLED must collapse them into ONE canonical practical occurrence
+    with display_label == 'BCS-552 — Web Technology Lab' (no time, duration,
+    or day)."""
+    items = _run(_scenario_real_bcs552_thursday_lab_occurrence())
+    assert len(items) == 1, f"expected 1 collapsed practical occurrence, got {items}"
+    code, name, class_type, start, end, label = items[0]
+    assert code == "BCS-552"
+    assert name == "Web Technology Lab"
+    assert class_type == "P"
+    assert start == "14:00" and end == "16:00"
+    assert label == "BCS-552 — Web Technology Lab"
+    assert "14:00" not in label and "15:00" not in label and "16:00" not in label
+    assert "Practical" not in label and "Thursday" not in label
 

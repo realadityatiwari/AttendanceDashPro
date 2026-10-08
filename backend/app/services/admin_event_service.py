@@ -1,4 +1,4 @@
-﻿"""
+"""
 Phase 24.9 â€” Admin Event Manager service.
 
 Additive admin control-plane over the EXISTING event architecture:
@@ -37,6 +37,7 @@ from app.engines.calendar_engine import (
     DAY_NAMES,
     get_academic_day,
 )
+from app.engines.practical_occurrence import group_timetable_practical_occurrences
 from app.models.enums import ClassType, ElectiveSlot, EventType
 from app.models.event import AcademicEvent
 from app.models.user import User
@@ -122,10 +123,16 @@ class AdminEventService:
 
     @staticmethod
     def _occurrence_label(entry) -> str:
-        """Ready-to-render description of a scheduled timetable occurrence,
-        e.g. "BCS-502 — Web Technology (Lecture) · 10:00–11:00 · Monday".
+        """Ready-to-render description of a scheduled timetable occurrence.
+
+        For PRACTICAL/lab occurrences, the canonical label is strictly
+        '<Subject Code> — <Lab/Practical Name>' with no time, duration, or day.
+        For theory occurrences (LECTURE/TUTORIAL), e.g.
+        'BCS-502 — Web Technology (Lecture) · 10:00–11:00 · Monday'.
         Slot entries are marked so an admin can never mistake the shared
         anchor session for a regular subject class."""
+        if entry.class_type == ClassType.PRACTICAL:
+            return f"{entry.subject.code} — {entry.subject.name}"
         label = (
             f"{entry.subject.code} — {entry.subject.name} "
             f"({CLASS_TYPE_LABELS[entry.class_type]}) · "
@@ -382,12 +389,17 @@ class AdminEventService:
             )
             members_by_slot = await self._elective_members_by_slot()
             anchors = await ElectiveResolver(self.db).anchor_subjects()
-            for entry in entries:
-                if (
-                    allowed_class_types is not None
-                    and entry.class_type not in allowed_class_types
-                ):
-                    continue
+            filtered_entries = [
+                entry
+                for entry in entries
+                if allowed_class_types is None
+                or entry.class_type in allowed_class_types
+            ]
+            grouped_occurrences = group_timetable_practical_occurrences(
+                filtered_entries, for_date=for_date
+            )
+            for occ in grouped_occurrences:
+                entry = occ["entry"]
                 subject = entry.subject
                 slot_members = (
                     members_by_slot.get(entry.elective_slot, [])
@@ -401,13 +413,13 @@ class AdminEventService:
                 )
                 items.append(
                     AdminOccurrenceOption(
-                        timetable_entry_id=entry.id,
+                        timetable_entry_id=occ["id"],
                         subject_id=entry.subject_id,
                         subject_code=subject.code,
                         subject_name=subject.name,
                         class_type=entry.class_type,
-                        start_time=entry.start_time,
-                        end_time=entry.end_time,
+                        start_time=occ["start_time"],
+                        end_time=occ["end_time"],
                         section_id=entry.section_id,
                         section_name=entry.section.name,
                         subsection_id=entry.subsection_id,

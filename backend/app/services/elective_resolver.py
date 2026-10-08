@@ -215,6 +215,8 @@ class ElectiveResolver:
             )
             subject_by_id = {s.id: s for s in result.scalars().all()}
 
+        from app.models.enums import ClassType
+
         entry_ids = {
             getattr(e, "timetable_entry_id", None)
             for e in events
@@ -228,6 +230,8 @@ class ElectiveResolver:
                 .where(TimetableEntry.id.in_(entry_ids))
             )
             for entry in entry_res.scalars().all():
+                if entry.class_type == ClassType.PRACTICAL:
+                    continue
                 label = (
                     f"{entry.start_time.strftime('%H:%M')}–"
                     f"{entry.end_time.strftime('%H:%M')}"
