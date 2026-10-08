@@ -1163,3 +1163,345 @@ def test_occurrence_options_include_real_bnc501_wednesday_occurrence():
     assert data["empty_scoped_items"] == [], (
         "an admin scoped to a section with no timetable sees nothing"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 9 — Lab Cancelled single-day enforcement, turn isolation, downstream
+# propagation (Mark Attendance, 409 guard, Summary denominator, History,
+# Events/Calendar occurrence_label, Elective/Scope isolation, Deactivate)
+# ---------------------------------------------------------------------------
+
+async def _scenario_lab_cancelled_single_day_and_propagation():
+    from fastapi import HTTPException
+    from app.models.academic import StudentElectiveChoice
+    from app.schemas.calendar import AcademicEventUpdate
+    from app.services.calendar_service import CalendarService
+
+    tag = uuid.uuid4().hex[:8]
+    async with AsyncSessionLocal() as session:
+        await session.begin()
+        try:
+            db = _RollbackSession(session)
+            chain = await _chain(db, tag)
+            # Enroll the sandbox student in the practical/lab subject as well.
+            db.add(StudentEnrollment(
+                user_id=chain["student"].id,
+                subject_id=chain["lab"].id,
+                enrollment_type=EnrollmentType.COMPULSORY,
+            ))
+            # Add two non-contiguous Afternoon lab turns (14:00–15:00 and
+            # 16:00–17:00) on Friday so we can also prove non-contiguous
+            # same-day turn isolation alongside Tuesday's 09:00–10:00 +
+            # 10:00–11:00 entries.
+            turn_14 = TimetableEntry(
+                subject_id=chain["lab"].id, day_of_week=4,
+                start_time=time(14, 0), end_time=time(15, 0),
+                class_type=ClassType.PRACTICAL, section_id=chain["section"].id,
+                is_active=True, elective_slot=None,
+            )
+            turn_16 = TimetableEntry(
+                subject_id=chain["lab"].id, day_of_week=4,
+                start_time=time(16, 0), end_time=time(17, 0),
+                class_type=ClassType.PRACTICAL, section_id=chain["section"].id,
+                is_active=True, elective_slot=None,
+            )
+            db.add_all([turn_14, turn_16])
+            await db.flush()
+            chain["entries"]["lab_fri_14"] = turn_14
+            chain["entries"]["lab_fri_16"] = turn_16
+
+            await _materialize_scheduled(db, chain["entries"], TUESDAY)
+            await _materialize_scheduled(db, chain["entries"], FRIDAY)
+
+            svc = EventService(db)
+            att = AttendanceService(db)
+            cal = CalendarService(db)
+            resolver = ElectiveResolver(db)
+
+            # 1. Reject date range on create (both registry and service).
+            range_create_error = None
+            try:
+                await svc.create_event(chain["head"], AcademicEventCreate(
+                    event_type=EventType.LAB_CANCELLED,
+                    start_date=TUESDAY,
+                    end_date=FRIDAY,
+                    subject_id=chain["lab"].id,
+                    class_type=ClassType.PRACTICAL,
+                    timetable_entry_id=chain["entries"]["lab_tue_a"].id,
+                ))
+            except EventValidationError as exc:
+                range_create_error = str(exc)
+
+            # 2. Missing occurrence reference on LAB_CANCELLED fails.
+            missing_occ_error = None
+            try:
+                await svc.create_event(chain["head"], AcademicEventCreate(
+                    event_type=EventType.LAB_CANCELLED,
+                    start_date=TUESDAY,
+                    end_date=TUESDAY,
+                    subject_id=chain["lab"].id,
+                    class_type=ClassType.PRACTICAL,
+                    timetable_entry_id=None,
+                ))
+            except EventValidationError as exc:
+                missing_occ_error = str(exc)
+
+            # 2b. Out-of-scope occurrence reference fails for section-scoped admin.
+            out_of_scope_error = None
+            try:
+                await svc.create_event(chain["other_admin"], AcademicEventCreate(
+                    event_type=EventType.LAB_CANCELLED,
+                    start_date=FRIDAY,
+                    end_date=FRIDAY,
+                    subject_id=chain["lab"].id,
+                    class_type=ClassType.PRACTICAL,
+                    timetable_entry_id=turn_14.id,
+                ))
+            except EventForbidden as exc:
+                out_of_scope_error = str(exc)
+
+            # 3. Valid single-day LAB_CANCELLED on Friday 14:00–15:00 turn
+            # (with subject_id=None, proving regular-occurrence subject
+            # derivation works when the admin UI sends only timetable_entry_id).
+            ev_fri = await svc.create_event(chain["head"], AcademicEventCreate(
+                event_type=EventType.LAB_CANCELLED,
+                start_date=FRIDAY,
+                end_date=FRIDAY,
+                subject_id=None,
+                class_type=ClassType.PRACTICAL,
+                timetable_entry_id=turn_14.id,
+                note="Lab equipment maintenance",
+            ))
+
+            # 4. Reject widening a single-day LAB_CANCELLED to a date range on PATCH.
+            range_update_error = None
+            try:
+                await svc.update_event(
+                    chain["head"],
+                    ev_fri.id,
+                    AcademicEventUpdate(end_date=SATURDAY),
+                )
+            except EventValidationError as exc:
+                range_update_error = str(exc)
+
+            # 5. Inspect DB ClassSession state on Friday: 14:00–15:00 is
+            # cancelled; 16:00–17:00 remains active; TimetableEntry rows are
+            # still active and unchanged.
+            sess_14 = (await _sessions_for_entry(db, turn_14.id, FRIDAY))[0]
+            sess_16 = (await _sessions_for_entry(db, turn_16.id, FRIDAY))[0]
+            sess_14_cancelled = sess_14.is_cancelled
+            sess_16_cancelled = sess_16.is_cancelled
+            entry_14_active = turn_14.is_active
+            entry_16_active = turn_16.is_active
+
+            # 6. Mark Attendance read model (get_daily_sessions) on Friday:
+            # 14:00–15:00 shows is_cancelled=True; 16:00–17:00 shows is_cancelled=False.
+            daily_fri = await att.get_daily_sessions(chain["student"].id, FRIDAY)
+            daily_by_id = {s.id: s for s in daily_fri.sessions}
+
+            # 7. Submitting attendance for the cancelled lab occurrence fails with 409;
+            # submitting attendance for the active 16:00–17:00 turn succeeds.
+            mark_cancelled_status = None
+            try:
+                await att.record_attendance(
+                    chain["student"].id, sess_14.id, AttendanceStatus.ATTENDED
+                )
+            except HTTPException as exc:
+                mark_cancelled_status = exc.status_code
+
+            # 8. Subject attendance summary up to FRIDAY: Tuesday's contiguous
+            # 2-hour block (09:00–11:00) counts as 1 practical; Friday's
+            # cancelled 14:00–15:00 is excluded from the denominator, while
+            # Friday's active 16:00–17:00 counts as 1 -> total = 2.
+            summary_while_cancelled = await att.get_summary(
+                chain["student"].id, chain["lab"].id, chain["lab"].code, FRIDAY
+            )
+            prac_total_while_cancelled = summary_while_cancelled.practical.total
+
+            # 9. History read model up to FRIDAY: includes the cancelled
+            # Friday 14:00–15:00 turn with is_cancelled=True, summary.cancelled == 1,
+            # and no AttendanceRecord row fabricated for sess_14.
+            history_while_cancelled = await att.get_history(
+                chain["student"], subject_code=chain["lab"].code,
+                date_from=FRIDAY, date_to=FRIDAY,
+            )
+            fabricated_record = (await db.execute(
+                select(AttendanceRecord).where(
+                    AttendanceRecord.class_session_id == sess_14.id
+                )
+            )).scalars().first()
+
+            # 10. Events & Calendar read models: resolve_events and get_month_view
+            # surface the single-day LAB_CANCELLED with occurrence_label="14:00–15:00".
+            resolved_evs = await resolver.resolve_events(
+                [ev_fri], await resolver.load_choices(chain["student"].id)
+            )
+            cal_july = await cal.get_month_view(chain["student"], 2026, 7)
+            cal_fri_day = next(d for d in cal_july.days if d.date == FRIDAY)
+            cal_fri_ev = next(e for e in cal_fri_day.events if e.id == ev_fri.id)
+
+            # 11. Concrete elective isolation across two students in the same section.
+            student_b = User(
+                roll_number=f"TXO-STUB-{tag}", name="TXO Student B",
+                hashed_password=None, role=UserRole.STUDENT,
+                section_id=chain["section"].id,
+            )
+            db.add(student_b)
+            await db.flush()
+            db.add_all([
+                StudentEnrollment(
+                    user_id=chain["student"].id,
+                    subject_id=chain["member_a"].id,
+                    enrollment_type=EnrollmentType.ELECTIVE,
+                ),
+                StudentElectiveChoice(
+                    user_id=chain["student"].id,
+                    elective_slot=ElectiveSlot.ELECTIVE_I,
+                    subject_id=chain["member_a"].id,
+                ),
+                StudentEnrollment(
+                    user_id=student_b.id,
+                    subject_id=chain["member_b"].id,
+                    enrollment_type=EnrollmentType.ELECTIVE,
+                ),
+                StudentElectiveChoice(
+                    user_id=student_b.id,
+                    elective_slot=ElectiveSlot.ELECTIVE_I,
+                    subject_id=chain["member_b"].id,
+                ),
+            ])
+            await db.flush()
+            await _materialize_scheduled(db, chain["entries"], MONDAY)
+            ev_narrow = await svc.create_event(chain["head"], AcademicEventCreate(
+                event_type=EventType.CLASS_CANCELLED,
+                start_date=MONDAY,
+                end_date=MONDAY,
+                subject_id=chain["member_a"].id,
+                timetable_entry_id=chain["entries"]["slot_mon"].id,
+            ))
+            evs_for_a = await resolver.resolve_events(
+                [ev_narrow], await resolver.load_choices(chain["student"].id)
+            )
+            evs_for_b = await resolver.resolve_events(
+                [ev_narrow], await resolver.load_choices(student_b.id)
+            )
+            slot_mon_sess = (
+                await _sessions_for_entry(db, chain["entries"]["slot_mon"].id, MONDAY)
+            )[0]
+            daily_mon_a = await att.get_daily_sessions(chain["student"].id, MONDAY)
+            daily_mon_b = await att.get_daily_sessions(student_b.id, MONDAY)
+            slot_sess_a = next(
+                s for s in daily_mon_a.sessions if s.id == str(slot_mon_sess.id)
+            )
+            slot_sess_b = next(
+                s for s in daily_mon_b.sessions if s.id == str(slot_mon_sess.id)
+            )
+
+            # 12. Deactivating the Friday LAB_CANCELLED event restores sess_14
+            # to active (is_cancelled=False) and restores the denominator.
+            await svc.deactivate_event(chain["head"], ev_fri.id)
+            await db.flush()
+            sess_14_after = (await _sessions_for_entry(db, turn_14.id, FRIDAY))[0]
+            summary_after_deactivate = await att.get_summary(
+                chain["student"].id, chain["lab"].id, chain["lab"].code, FRIDAY
+            )
+
+            return {
+                "range_create_error": range_create_error,
+                "missing_occ_error": missing_occ_error,
+                "out_of_scope_error": out_of_scope_error,
+                "range_update_error": range_update_error,
+                "ev_fri_subject_id": str(ev_fri.subject_id),
+                "lab_id": str(chain["lab"].id),
+                "ev_fri_start": ev_fri.start_date,
+                "ev_fri_end": ev_fri.end_date,
+                "sess_14_cancelled": sess_14_cancelled,
+                "sess_16_cancelled": sess_16_cancelled,
+                "entry_14_active": entry_14_active,
+                "entry_16_active": entry_16_active,
+                "daily_14_cancelled": daily_by_id[str(sess_14.id)].is_cancelled,
+                "daily_16_cancelled": daily_by_id[str(sess_16.id)].is_cancelled,
+                "mark_cancelled_status": mark_cancelled_status,
+                "prac_total_while_cancelled": prac_total_while_cancelled,
+                "history_summary_cancelled": history_while_cancelled["summary"]["cancelled"],
+                "history_summary_total": history_while_cancelled["summary"]["total"],
+                "history_items_cancelled": [
+                    (i["start_time"], i["is_cancelled"])
+                    for i in history_while_cancelled["items"]
+                ],
+                "fabricated_record": fabricated_record,
+                "resolved_occurrence_label": resolved_evs[0].occurrence_label,
+                "cal_occurrence_label": cal_fri_ev.occurrence_label,
+                "cal_session_count_fri": cal_fri_day.session_count,
+                "evs_for_a_count": len(evs_for_a),
+                "evs_for_b_count": len(evs_for_b),
+                "slot_sess_a_cancelled": slot_sess_a.is_cancelled,
+                "slot_sess_b_cancelled": slot_sess_b.is_cancelled,
+                "sess_14_after_deactivate": sess_14_after.is_cancelled,
+                "prac_total_after_deactivate": summary_after_deactivate.practical.total,
+            }
+        finally:
+            await session.rollback()
+
+
+def test_lab_cancelled_single_day_enforcement_and_full_pipeline_propagation():
+    before = _run(_canonical_counts())
+    data = _run(_scenario_lab_cancelled_single_day_and_propagation())
+    assert _run(_canonical_counts()) == before
+
+    # 1–2. Single-day only: date ranges rejected on both create and update;
+    # missing occurrence and out-of-scope occurrence rejected.
+    assert data["range_create_error"] is not None
+    assert "single date" in data["range_create_error"].lower()
+    assert data["range_update_error"] is not None
+    assert "single date" in data["range_update_error"].lower()
+    assert data["missing_occ_error"] is not None
+    assert data["out_of_scope_error"] is not None
+    assert "scope" in data["out_of_scope_error"].lower()
+
+    # 3. Valid single-day LAB_CANCELLED derives subject_id when omitted.
+    assert data["ev_fri_subject_id"] == data["lab_id"]
+    assert data["ev_fri_start"] == FRIDAY and data["ev_fri_end"] == FRIDAY
+
+    # 5. Only the selected 14:00–15:00 turn is cancelled; 16:00–17:00 stays
+    # active; TimetableEntry rows remain active.
+    assert data["sess_14_cancelled"] is True
+    assert data["sess_16_cancelled"] is False
+    assert data["entry_14_active"] is True and data["entry_16_active"] is True
+
+    # 6–7. Mark Attendance daily read model reflects the cancelled turn, and
+    # POST /attendance on the cancelled session returns 409.
+    assert data["daily_14_cancelled"] is True
+    assert data["daily_16_cancelled"] is False
+    assert data["mark_cancelled_status"] == 409
+
+    # 8. Subject attendance denominator excludes the cancelled lab turn
+    # (Tuesday contiguous 2-hr block = 1, Friday active 16:00 turn = 1 -> 2).
+    assert data["prac_total_while_cancelled"] == 2
+
+    # 9. History shows 1 cancelled and 1 active pending on Friday, with no
+    # fabricated AttendanceRecord row.
+    assert data["history_summary_cancelled"] == 1
+    assert data["history_summary_total"] == 1
+    assert ("02:00 PM", True) in data["history_items_cancelled"]
+    assert ("04:00 PM", False) in data["history_items_cancelled"]
+    assert data["fabricated_record"] is None
+
+    # 10. Events and Calendar include the occurrence_label ("14:00–15:00"),
+    # and Calendar session_count on Friday counts only the 1 active turn.
+    assert data["resolved_occurrence_label"] == "14:00–15:00"
+    assert data["cal_occurrence_label"] == "14:00–15:00"
+    assert data["cal_session_count_fri"] == 1
+
+    # 11. Concrete elective isolation: Student A sees the cancellation in both
+    # Track and Events/Calendar; Student B is completely unaffected.
+    assert data["evs_for_a_count"] == 1
+    assert data["evs_for_b_count"] == 0
+    assert data["slot_sess_a_cancelled"] is True
+    assert data["slot_sess_b_cancelled"] is False
+
+    # 12. Deactivating the LAB_CANCELLED event restores the session and
+    # denominator (Tuesday block = 1 + Friday two non-contiguous turns = 2 -> 3).
+    assert data["sess_14_after_deactivate"] is False
+    assert data["prac_total_after_deactivate"] == 3
+

@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # start-dev.ps1
 # AttendanceDash Pro — one-command local development startup.
 #
@@ -304,8 +304,25 @@ if (Test-ServiceRunning -Port $frontendPort -Pattern "node") {
         -WorkingDirectory $frontendDir `
         -PassThru `
         -WindowStyle Hidden
+
+    Write-Step "Waiting for frontend to bind to port $frontendPort ..."
+    $maxFrontendWaitSec = 20
+    $frontendElapsed = 0
+    while (-not (Test-PortListening -TargetHost "127.0.0.1" -Port $frontendPort)) {
+        if ($frontendProcess.HasExited) {
+            Write-Fail "Frontend process exited immediately (Exit Code: $($frontendProcess.ExitCode))."
+            exit 1
+        }
+        if ($frontendElapsed -ge $maxFrontendWaitSec) {
+            Write-Fail "Frontend failed to bind to port $frontendPort within ${maxFrontendWaitSec}s."
+            exit 1
+        }
+        Start-Sleep -Milliseconds 500
+        $frontendElapsed += 1
+    }
+
     $frontendStarted = $true
-    Write-Ok "Launched (PID $($frontendProcess.Id))"
+    Write-Ok "Launched and listening (PID $($frontendProcess.Id))"
 }
 
 Write-Host ""

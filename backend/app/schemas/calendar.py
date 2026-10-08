@@ -24,6 +24,7 @@ class AcademicEventResponse(BaseModel):
     # Additive read field — clients show/keep the reference; the authoritative
     # validation stays in EventService.
     timetable_entry_id: Optional[UUID] = None
+    occurrence_label: Optional[str] = None
     class_type: Optional[ClassType] = None
     is_working_day: Optional[bool] = None
     substitution_schedule_override: Optional[str] = None

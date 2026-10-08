@@ -194,10 +194,13 @@ class ElectiveResolver:
         
         Two queries total (choices + subjects), independent of event count.
         """
+        from sqlalchemy.orm import selectinload
         from app.models.academic import Subject as SubjectModel
+        from app.models.timetable import TimetableEntry
         from app.schemas.calendar import AcademicEventResponse
 
         anchor_map = await self.anchor_subjects()
+        anchor_ids = {a.id for a in anchor_map.values()}
 
         subject_ids = {
             e.subject_id
@@ -212,6 +215,27 @@ class ElectiveResolver:
             )
             subject_by_id = {s.id: s for s in result.scalars().all()}
 
+        entry_ids = {
+            getattr(e, "timetable_entry_id", None)
+            for e in events
+            if getattr(e, "timetable_entry_id", None) is not None
+        }
+        entry_label_by_id: Dict[UUID, str] = {}
+        if entry_ids:
+            entry_res = await self.db.execute(
+                select(TimetableEntry)
+                .options(selectinload(TimetableEntry.subsection))
+                .where(TimetableEntry.id.in_(entry_ids))
+            )
+            for entry in entry_res.scalars().all():
+                label = (
+                    f"{entry.start_time.strftime('%H:%M')}–"
+                    f"{entry.end_time.strftime('%H:%M')}"
+                )
+                if entry.subsection is not None:
+                    label += f" · {entry.subsection.name}"
+                entry_label_by_id[entry.id] = label
+
         # Build response objects without mutating the original events
         responses = []
         for e in events:
@@ -220,11 +244,24 @@ class ElectiveResolver:
                 subject = choice.subject if choice is not None else anchor_map.get(e.elective_slot)
             else:
                 subject = subject_by_id.get(e.subject_id) if e.subject_id is not None else None
+                # Concrete elective isolation: a narrowed/concrete elective event
+                # (elective_slot is None, subject is a non-anchor member of an
+                # elective slot) must not leak into the event/calendar read model
+                # of a student who chose a different elective in that slot.
+                if (
+                    subject is not None
+                    and subject.elective_slot is not None
+                    and subject.id not in anchor_ids
+                    and subject.elective_slot in choice_map
+                    and choice_map[subject.elective_slot].subject_id != subject.id
+                ):
+                    continue
             
             # Create a new AcademicEventResponse with resolved fields
             resolved_id = subject.id if subject is not None else None
             resolved_code = subject.code if subject is not None else None
             resolved_name = subject.name if subject is not None else None
+            entry_id = getattr(e, "timetable_entry_id", None)
             
             response = AcademicEventResponse(
                 id=e.id,
@@ -236,7 +273,8 @@ class ElectiveResolver:
                 resolved_subject_id=resolved_id,
                 resolved_subject_code=resolved_code,
                 resolved_subject_name=resolved_name,
-                timetable_entry_id=getattr(e, "timetable_entry_id", None),
+                timetable_entry_id=entry_id,
+                occurrence_label=entry_label_by_id.get(entry_id) if entry_id is not None else None,
                 class_type=e.class_type,
                 is_working_day=e.is_working_day,
                 substitution_schedule_override=e.substitution_schedule_override,

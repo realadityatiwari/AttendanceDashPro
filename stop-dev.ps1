@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # stop-dev.ps1
 # AttendanceDash Pro — one-command development environment shutdown.
 #
@@ -44,6 +44,7 @@ function Stop-DevPort {
         if (-not $proc) { continue }
 
         if ($proc.Name -match $ExpectedProcessPattern) {
+            $null = & taskkill /PID $proc.Id /T /F 2>$null
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             Write-Ok "Stopped $($proc.Name) (PID $($proc.Id)) on port $Port"
         } else {

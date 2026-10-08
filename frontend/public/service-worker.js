@@ -7,7 +7,7 @@
  * - Update lifecycle: wait for reload (no skipWaiting) to avoid HTML/JS mismatch
  */
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `attendancedash-pro-${CACHE_VERSION}`;
 
 // Only precache assets that are verified to exist as static files.

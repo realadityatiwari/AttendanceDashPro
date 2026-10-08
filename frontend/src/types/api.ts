@@ -416,6 +416,8 @@ export interface AcademicEventResponse {
   /** OCC-1: the exact scheduled timetable occurrence a cancellation event
       targets (CLASS_CANCELLED / LAB_CANCELLED); null for every other type. */
   timetable_entry_id: string | null;
+  /** Server-derived time/turn label of the referenced occurrence (e.g. "14:00–15:00"). */
+  occurrence_label?: string | null;
   class_type: ClassType | null;
   is_working_day: boolean | null;
   substitution_schedule_override: string | null;

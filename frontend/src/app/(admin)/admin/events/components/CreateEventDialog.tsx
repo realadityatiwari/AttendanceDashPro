@@ -171,7 +171,7 @@ export function CreateEventDialog({
 
   const handleSubmit = async () => {
     if (!startDate) { setError("Start date is required"); return; }
-    const effectiveEnd = durationMode === "single" ? startDate : (endDate || startDate);
+    const effectiveEnd = (rule.singleDayOnly || durationMode === "single") ? startDate : (endDate || startDate);
     if (effectiveEnd < startDate) { setError("End date must not be before start date"); return; }
 
     if (isOccurrence) {
@@ -205,8 +205,11 @@ export function CreateEventDialog({
           end_date: effectiveEnd,
           // Slot occurrence + no narrowing -> server resolves the slot-wide
           // shape (anchor subject + elective_slot). Narrowed -> the concrete
-          // member subject (subject-specific effect only).
-          subject_id: isNarrowed ? narrowToSubjectId : null,
+          // member subject (subject-specific effect only). Regular occurrence ->
+          // the occurrence's own subject_id.
+          subject_id: isNarrowed
+            ? narrowToSubjectId
+            : (selectedEntry.elective_slot ? null : selectedEntry.subject_id),
           elective_slot: null,
           class_type: selectedEntry.class_type,
           timetable_entry_id: selectedEntry.timetable_entry_id,
@@ -264,12 +267,12 @@ export function CreateEventDialog({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={!rule.singleDayOnly && durationMode === "range" ? "grid grid-cols-2 gap-4" : "space-y-2"}>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Start date</label>
+              <label className="text-sm font-medium">{rule.singleDayOnly ? "Date" : "Start date"}</label>
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </div>
-            {durationMode === "range" && (
+            {!rule.singleDayOnly && durationMode === "range" && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">End date</label>
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />

@@ -88,6 +88,9 @@ export function EditEventDialog({
 
   const handleStartDateChange = (value: string) => {
     setStartDate(value);
+    if (rule.singleDayOnly) {
+      setEndDate(value);
+    }
     // Re-resolve: fall back to the stored entry (kept only if still
     // scheduled on the new date); narrowing re-derives from the entry.
     setEntryId(event.timetable_entry_id ?? "");
@@ -95,7 +98,8 @@ export function EditEventDialog({
 
   const handleSubmit = async () => {
     if (readOnly) { setError("This event is managed by the Quiz Schedule Manager and cannot be edited here."); return; }
-    if (endDate < startDate) { setError("End date must not be before start date"); return; }
+    const effectiveEndDate = rule.singleDayOnly ? startDate : endDate;
+    if (effectiveEndDate < startDate) { setError("End date must not be before start date"); return; }
     if (occurrenceNeedsSelection) {
       setError(
         "Select the scheduled occurrence for this date — a cancellation must reference a real timetable occurrence."
@@ -106,13 +110,13 @@ export function EditEventDialog({
     try {
       const payload: UpdateAdminEventRequest = {};
       if (startDate !== event.start_date) payload.start_date = startDate;
-      if (endDate !== event.end_date) payload.end_date = endDate;
+      if (effectiveEndDate !== event.end_date) payload.end_date = effectiveEndDate;
       if (isOccurrence && selectedEntry) {
         const entryChanged = selectedEntry.timetable_entry_id !== event.timetable_entry_id;
         const narrowingChanged = narrowTouched && narrowToSubjectId !== prefilledNarrow;
         if (entryChanged || narrowingChanged) {
           payload.timetable_entry_id = selectedEntry.timetable_entry_id;
-          payload.subject_id = narrowToSubjectId || null;
+          payload.subject_id = narrowToSubjectId || (selectedEntry.elective_slot ? null : selectedEntry.subject_id);
           payload.elective_slot = null; // server re-derives from the occurrence
           payload.class_type = selectedEntry.class_type;
         }
@@ -159,15 +163,17 @@ export function EditEventDialog({
         <div className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={rule.singleDayOnly ? "space-y-2" : "grid grid-cols-2 gap-4"}>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Start date</label>
+              <label className="text-sm font-medium">{rule.singleDayOnly ? "Date" : "Start date"}</label>
               <Input type="date" value={startDate} onChange={(e) => handleStartDateChange(e.target.value)} disabled={readOnly} />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">End date</label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={readOnly} />
-            </div>
+            {!rule.singleDayOnly && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">End date</label>
+                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={readOnly} />
+              </div>
+            )}
           </div>
 
           {isOccurrence && (

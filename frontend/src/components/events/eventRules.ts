@@ -26,51 +26,54 @@ export interface EventTypeRule {
    *  theory-subject events (practical/lab subjects cannot host them). The
    *  backend registry remains authoritative. */
   theoryOnlySubject: boolean;
+  /** Mirror of backend single_day_only: event types that must target a single
+   *  date only (Date range option is hidden in the UI and rejected by backend). */
+  singleDayOnly: boolean;
 }
 
 export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   [EventType.EXTRA_LECTURE]: {
     eventType: EventType.EXTRA_LECTURE, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: true,
+    requiresTimetableEntry: false, theoryOnlySubject: true, singleDayOnly: false,
   },
   [EventType.EXTRA_TUTORIAL]: {
     eventType: EventType.EXTRA_TUTORIAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.TUTORIAL], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: true,
+    requiresTimetableEntry: false, theoryOnlySubject: true, singleDayOnly: false,
   },
   [EventType.EXTRA_PRACTICAL]: {
     eventType: EventType.EXTRA_PRACTICAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.CLASS_CANCELLED]: {
     eventType: EventType.CLASS_CANCELLED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL],
     isClosure: false, isGlobal: false,
-    requiresTimetableEntry: true, theoryOnlySubject: false,
+    requiresTimetableEntry: true, theoryOnlySubject: false, singleDayOnly: false,
   },
   // Phase 9.1 laboratory events: subject-scoped PRACTICAL events resolved by
   // the canonical event synchronizer (no separate lab attendance system).
   [EventType.LAB_CANCELLED]: {
     eventType: EventType.LAB_CANCELLED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: true, theoryOnlySubject: false,
+    requiresTimetableEntry: true, theoryOnlySubject: false, singleDayOnly: true,
   },
   [EventType.MID_SEM_PRACTICAL]: {
     eventType: EventType.MID_SEM_PRACTICAL, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.PRACTICAL], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.SURPRISE_QUIZ]: {
     eventType: EventType.SURPRISE_QUIZ, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.QUIZ_DAY]: {
     eventType: EventType.QUIZ_DAY, requiresSubject: true, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   // Unified holiday: the consolidated closure flow (single day or range with
   // a reason/occasion note). The legacy holiday types remain supported for
@@ -78,47 +81,47 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
   [EventType.HOLIDAY]: {
     eventType: EventType.HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.PUBLIC_HOLIDAY]: {
     eventType: EventType.PUBLIC_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.INSTITUTE_HOLIDAY]: {
     eventType: EventType.INSTITUTE_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.FESTIVAL_HOLIDAY]: {
     eventType: EventType.FESTIVAL_HOLIDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.EMERGENCY_CLOSURE]: {
     eventType: EventType.EMERGENCY_CLOSURE, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.SEMESTER_BREAK]: {
     eventType: EventType.SEMESTER_BREAK, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.MID_SEMESTER_BREAK]: {
     eventType: EventType.MID_SEMESTER_BREAK, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: true, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.WORKING_DAY_OVERRIDE]: {
     eventType: EventType.WORKING_DAY_OVERRIDE, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   [EventType.WORKING_SATURDAY]: {
     eventType: EventType.WORKING_SATURDAY, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
   // Phase 23.7: subject-scoped modified occurrence. The scheduled class
   // happened but was modified (time/room/delivery). Not extra, not cancelled.
@@ -126,7 +129,7 @@ export const EVENT_TYPE_RULES: Record<EventType, EventTypeRule> = {
     eventType: EventType.CLASS_MODIFIED, requiresSubject: true, requiresClassType: true,
     allowedClassTypes: [ClassType.LECTURE, ClassType.TUTORIAL, ClassType.PRACTICAL],
     isClosure: false, isGlobal: false,
-    requiresTimetableEntry: false, theoryOnlySubject: false,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   },
 };
 
@@ -269,5 +272,6 @@ export function getRule(eventType: EventType): EventTypeRule {
   return EVENT_TYPE_RULES[eventType] ?? {
     eventType, requiresSubject: false, requiresClassType: false,
     allowedClassTypes: [], isClosure: false, isGlobal: true,
+    requiresTimetableEntry: false, theoryOnlySubject: false, singleDayOnly: false,
   };
 }

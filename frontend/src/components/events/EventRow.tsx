@@ -88,11 +88,14 @@ export function EventRow({ event, isToday = false, onEdit, onDeactivate }: Event
               the authenticated student (their selected elective for
               Department Elective slot events; null for global events). */}
           {event.resolved_subject_code && (
-            <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-medium text-foreground/80">
               <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs tracking-wide">
                 {event.resolved_subject_code}
               </span>
-              {event.resolved_subject_name}
+              <span>{event.resolved_subject_name}</span>
+              {event.occurrence_label && (
+                <span className="text-muted-foreground">· {event.occurrence_label}</span>
+              )}
             </p>
           )}
           {event.substitution_schedule_override && (

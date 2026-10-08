@@ -109,7 +109,10 @@ function EventRow({ event }: { event: AcademicEventResponse }) {
           <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs tracking-wide">
             {event.resolved_subject_code}
           </span>
-          {event.resolved_subject_name}
+          <span>{event.resolved_subject_name}</span>
+          {event.occurrence_label && (
+            <span className="text-muted-foreground">· {event.occurrence_label}</span>
+          )}
         </p>
       )}
       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">

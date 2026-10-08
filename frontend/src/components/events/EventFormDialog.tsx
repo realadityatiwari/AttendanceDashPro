@@ -79,22 +79,28 @@ interface FormState {
 
 function initialState(event: AcademicEventResponse | null, isAdmin: boolean): FormState {
   const defaultType = event?.event_type ?? (isAdmin ? EventType.HOLIDAY : EventType.EXTRA_LECTURE);
+  const defaultRule = getRule(defaultType);
   // Existing events carry their true duration: start_date == end_date means
   // single-day. New events default per event type (DEFAULT_DURATION_MODE).
+  // Single-day-only types (e.g. LAB_CANCELLED) always force "single".
   const hasDates = Boolean(event?.start_date && event?.end_date);
-  const durationMode = event && hasDates
-    ? (event.start_date === event.end_date ? "single" : "range")
-    : defaultDurationMode(defaultType);
+  const durationMode: DurationMode = defaultRule.singleDayOnly
+    ? "single"
+    : event && hasDates
+      ? (event.start_date === event.end_date ? "single" : "range")
+      : defaultDurationMode(defaultType);
   // Phase 22.4: a slot-scoped event seeds the subject selector with the
   // logical Department Elective option (never the shared anchor UUID).
   const subjectSelection = event?.elective_slot
     ? slotOptionValue(event.elective_slot)
     : (event?.subject_id ?? "");
+  const startDate = event?.start_date ?? "";
+  const endDate = defaultRule.singleDayOnly ? startDate : (event?.end_date ?? "");
   return {
     event_type: defaultType,
     duration_mode: durationMode,
-    start_date: event?.start_date ?? "",
-    end_date: event?.end_date ?? "",
+    start_date: startDate,
+    end_date: endDate,
     subject_id: subjectSelection,
     class_type: event?.class_type ?? "",
     is_working_day: event?.is_working_day === null || event?.is_working_day === undefined
@@ -292,12 +298,30 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
 
   // Event-type change: re-apply the new type's default duration only while the
   // user has not deliberately chosen a mode; dates are always preserved.
+  // Single-day-only types (e.g. LAB_CANCELLED) unconditionally collapse to
+  // single-day mode and mirror start_date into end_date.
   const handleEventTypeChange = (value: EventType) => {
-    setForm(prev => ({
-      ...prev,
-      event_type: value,
-      duration_mode: durationModeTouched ? prev.duration_mode : defaultDurationMode(value),
-    }));
+    const nextRule = getRule(value);
+    setForm(prev => {
+      if (nextRule.singleDayOnly) {
+        const date = prev.start_date || prev.end_date;
+        return {
+          ...prev,
+          event_type: value,
+          duration_mode: "single",
+          start_date: date,
+          end_date: date,
+        };
+      }
+      return {
+        ...prev,
+        event_type: value,
+        duration_mode: durationModeTouched ? prev.duration_mode : defaultDurationMode(value),
+      };
+    });
+    if (nextRule.singleDayOnly) {
+      setDurationModeTouched(false);
+    }
     // OCC-1: switching types drops any occurrence selection (and its derived
     // subject/class-type state) so it can never leak into another type.
     setEntryId("");
@@ -308,6 +332,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   };
 
   const handleDurationModeChange = (mode: DurationMode) => {
+    if (rule.singleDayOnly && mode !== "single") return;
     setDurationModeTouched(true);
     setForm(prev => {
       if (mode === "single") {
@@ -327,7 +352,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
   // back — the form can never hold an inverted range.
   const handleStartDateChange = (value: string) => {
     setForm(prev => {
-      if (prev.duration_mode === "single") {
+      if (rule.singleDayOnly || prev.duration_mode === "single") {
         return { ...prev, start_date: value, end_date: value };
       }
       if (prev.end_date && value > prev.end_date) {
@@ -398,7 +423,8 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
     setServerError("");
     setLocalError("");
 
-    if (form.duration_mode === "single") {
+    const singleDay = rule.singleDayOnly || form.duration_mode === "single";
+    if (singleDay) {
       if (!form.start_date) {
         setLocalError("An event date is required.");
         return;
@@ -407,7 +433,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       setLocalError("Start and end dates are required.");
       return;
     }
-    if (form.start_date > form.end_date) {
+    if (!singleDay && form.start_date > form.end_date) {
       setLocalError("Start date must be on or before the end date.");
       return;
     }
@@ -453,9 +479,6 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
       return;
     }
 
-    // Single-day is represented by start_date == end_date (the backend has no
-    // separate duration concept); the picked date is mirrored into both.
-    const singleDay = form.duration_mode === "single";
     // Phase 22.4: a logical elective-slot selection (prefixed value) sends
     // elective_slot instead of a concrete subject_id (mutually exclusive).
     const slotSelection = rule.requiresSubject ? parseSlotOption(form.subject_id) : null;
@@ -468,7 +491,7 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
           event_type: form.event_type,
           start_date: form.start_date,
           end_date: singleDay ? form.start_date : form.end_date,
-          subject_id: narrowToSubjectId || null,
+          subject_id: narrowToSubjectId || (selectedOccurrence.elective_slot ? null : selectedOccurrence.subject_id),
           timetable_entry_id: selectedOccurrence.timetable_entry_id,
           elective_slot: null, // the backend re-derives it from the occurrence
           class_type: selectedOccurrence.class_type,
@@ -558,12 +581,13 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
 
           {/* UI-035 / D-13: the single-day vs range choice is an
               administrative concern — student-facing types are single-day by
-              definition, so students get one date picker. A student opening a
-              (defensive) pre-existing multi-day event still sees both pickers
-              so its stored range is never silently collapsed. */}
+              definition, so students get one date picker. Single-day-only
+              event types (e.g. LAB_CANCELLED) hide the Date range option even
+              for admins because a lab cancellation must target one concrete
+              date and occurrence. */}
           <div className={fieldClass}>
             <span className={labelClass}>Date</span>
-            {isAdmin && (
+            {isAdmin && !rule.singleDayOnly && (
               // 25.UX-6: the radios get the same before:-inset hit-area
               // extension the Settings switches use — the native control
               // renders at 18px (visual change ≤2px) while the target reaches
@@ -592,8 +616,12 @@ export function EventFormDialog({ open, onOpenChange, event, onSaved, isAdmin = 
                 </label>
               </div>
             )}
-            {(!isAdmin && form.start_date !== "" && form.start_date !== form.end_date) ||
-            (isAdmin && form.duration_mode === "range") ? (
+            {isAdmin && rule.singleDayOnly && (
+              <p className="text-xs text-muted-foreground">Single day only</p>
+            )}
+            {!rule.singleDayOnly &&
+            ((!isAdmin && form.start_date !== "" && form.start_date !== form.end_date) ||
+              (isAdmin && form.duration_mode === "range")) ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={fieldClass}>
                   <label className={labelClass} htmlFor="event-form-start">Start date</label>

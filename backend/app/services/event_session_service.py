@@ -448,13 +448,27 @@ class EventSessionSynchronizer:
                     if event.event_type in CANCELLATION_TYPES:
                         desired_outcomes[event.subject_id] = OccurrenceOutcomeType.CANCELLED
                         if event.timetable_entry_id is not None:
-                            outcome_entry_ids[event.subject_id] = event.timetable_entry_id
+                            prev_pin = outcome_entry_ids.get(event.subject_id)
+                            if prev_pin is None:
+                                outcome_entry_ids[event.subject_id] = event.timetable_entry_id
+                            elif isinstance(prev_pin, list):
+                                if event.timetable_entry_id not in prev_pin:
+                                    prev_pin.append(event.timetable_entry_id)
+                            elif prev_pin != event.timetable_entry_id:
+                                outcome_entry_ids[event.subject_id] = [prev_pin, event.timetable_entry_id]
                     elif event.event_type in EXTRA_OCCURRENCE_TYPES:
                         desired_outcomes[event.subject_id] = EVENT_TO_OUTCOME_TYPE.get(
                             event.event_type, OccurrenceOutcomeType.SURPRISE_QUIZ
                         )
                         if event.timetable_entry_id is not None:
-                            outcome_entry_ids[event.subject_id] = event.timetable_entry_id
+                            prev_pin = outcome_entry_ids.get(event.subject_id)
+                            if prev_pin is None:
+                                outcome_entry_ids[event.subject_id] = event.timetable_entry_id
+                            elif isinstance(prev_pin, list):
+                                if event.timetable_entry_id not in prev_pin:
+                                    prev_pin.append(event.timetable_entry_id)
+                            elif prev_pin != event.timetable_entry_id:
+                                outcome_entry_ids[event.subject_id] = [prev_pin, event.timetable_entry_id]
                     continue
                 if event.event_type in CANCELLATION_TYPES:
                     # No session to cancel on this date (nothing matches) —
@@ -914,14 +928,20 @@ class EventSessionSynchronizer:
         # Build the desired (session, subject) -> outcome_type set.
         desired_rows: Dict[Tuple[object, object], OccurrenceOutcomeType] = {}
         for subject_id, outcome_type in desired_outcomes.items():
-            pinned_entry_id = outcome_entry_ids.get(subject_id)
-            if pinned_entry_id is not None:
-                # OCC-1: the exact occurrence the event references.
-                entry = desired_scheduled.get(pinned_entry_id)
-                if entry is None:
-                    # The pinned occurrence is not scheduled this date —
-                    # nothing to override.
-                    continue
+            pinned = outcome_entry_ids.get(subject_id)
+            if pinned is not None:
+                # OCC-1: the exact occurrence(s) the event(s) reference.
+                pinned_ids = pinned if isinstance(pinned, (list, tuple, set)) else [pinned]
+                for pinned_entry_id in pinned_ids:
+                    entry = desired_scheduled.get(pinned_entry_id)
+                    if entry is None:
+                        # The pinned occurrence is not scheduled this date —
+                        # nothing to override.
+                        continue
+                    session = session_by_entry_id.get(entry.id)
+                    if session is not None:
+                        desired_rows[(session.id, subject_id)] = outcome_type
+                continue
             else:
                 slot = subject_elective_slots.get(subject_id)
                 if slot is not None and slot in anchor_entry_by_slot:
@@ -942,9 +962,15 @@ class EventSessionSynchronizer:
         target_session_ids = set(k[0] for k in desired_rows)
         # Also include sessions whose timetable_entry_id is in any anchor entry
         # (so stale outcomes on those sessions are cleaned up).
+        pinned_all: set = set()
+        for v in outcome_entry_ids.values():
+            if isinstance(v, (list, tuple, set)):
+                pinned_all.update(v)
+            elif v is not None:
+                pinned_all.add(v)
         all_anchor_entry_ids = set(anchor_entry_by_slot[s].id for s in anchor_entry_by_slot) | set(
             anchor_entry_by_subject[s].id for s in anchor_entry_by_subject
-        ) | set(outcome_entry_ids.values())
+        ) | pinned_all
         for entry_id, session in session_by_entry_id.items():
             if entry_id in all_anchor_entry_ids:
                 target_session_ids.add(session.id)

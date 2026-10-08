@@ -55,6 +55,10 @@ class EventTypeRule:
     # extra types are theory-subject events. A practical/lab subject can
     # never host them (mirrored in the UI; enforced here authoritatively).
     theory_only_subject: bool = False
+    # Single-day-only rule: event types that represent a single concrete date
+    # modification (e.g. LAB_CANCELLED cancels one scheduled lab occurrence on
+    # one date) and must never accept a multi-day range (start_date != end_date).
+    single_day_only: bool = False
 
 
 def _rule(
@@ -67,6 +71,7 @@ def _rule(
     is_global: bool = False,
     requires_timetable_entry: bool = False,
     theory_only_subject: bool = False,
+    single_day_only: bool = False,
 ) -> EventTypeRule:
     return EventTypeRule(
         event_type=event_type,
@@ -78,6 +83,7 @@ def _rule(
         is_global=is_global,
         requires_timetable_entry=requires_timetable_entry,
         theory_only_subject=theory_only_subject,
+        single_day_only=single_day_only,
     )
 
 
@@ -124,6 +130,7 @@ EVENT_TYPE_RULES: dict[EventType, EventTypeRule] = {
         requires_subject=True, requires_class_type=True,
         allowed_class_types=[ClassType.PRACTICAL],
         requires_timetable_entry=True,
+        single_day_only=True,
     ),
     EventType.MID_SEM_PRACTICAL: _rule(
         EventType.MID_SEM_PRACTICAL, "Mid-Sem Practical",
@@ -261,6 +268,12 @@ def validate_event(
 
     if start_date > end_date:
         raise EventValidationError("start_date must not be after end_date")
+
+    if rule.single_day_only and start_date != end_date:
+        raise EventValidationError(
+            f"{rule.display_name} must target a single date "
+            "(start_date and end_date must be identical; date ranges are not allowed)"
+        )
 
     if rule.requires_timetable_entry and timetable_entry_id is None:
         raise EventValidationError(

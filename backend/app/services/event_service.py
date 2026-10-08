@@ -245,6 +245,7 @@ class EventService:
         elective_slot: Optional[ElectiveSlot],
         class_type: Optional[ClassType],
         start_date: date,
+        end_date: Optional[date] = None,
     ) -> Tuple[Optional[UUID], Optional[ElectiveSlot], ClassType]:
         """OCC-1: validate a cancellation's timetable-occurrence reference
         against the REAL timetable and derive the event's effective
@@ -252,6 +253,8 @@ class EventService:
 
         The reference — not a subject name — is the identity of a
         cancellation:
+          - single-day-only event types (e.g. LAB_CANCELLED) reject date
+            ranges (start_date != end_date) immediately;
           - the entry must exist and be active (deactivated timetable rows
             are no longer part of the expected schedule);
           - its weekday must match the selected date (a cancellation can only
@@ -259,13 +262,20 @@ class EventService:
           - the event's class type is DERIVED from the entry (a contradicting
             payload class type is rejected, never silently coerced);
           - regular entry -> the event is concrete and must target exactly
-            the entry's subject;
+            the entry's subject (derived when subject_id is omitted);
           - shared elective-slot entry (anchor subject) -> either slot-wide
             (HEAD_ADMIN only, same rule as payload-level slot events) or
             narrowed to one concrete member subject of that slot (the
             Phase 23.6 subject-specific outcome path), never another slot's
             subject.
         """
+        rule = get_rule(event_type)
+        if rule.single_day_only and end_date is not None and start_date != end_date:
+            raise EventValidationError(
+                f"{rule.display_name} must target a single date "
+                "(start_date and end_date must be identical; date ranges are not allowed)"
+            )
+
         entry = await self.repo.get_timetable_entry(timetable_entry_id)
         if entry is None:
             raise EventValidationError(
@@ -289,6 +299,41 @@ class EventService:
             )
         effective_class_type = entry.class_type
 
+        # Scope isolation: ensure a student or section-scoped admin cannot
+        # target an occurrence belonging to another section or subsection.
+        authz = AuthorizationService(self.db)
+        roles = await authz.effective_admin_roles(user)
+        if roles:
+            section_ids, _ = await authz.resolve_admin_scope_filters(user)
+            if (
+                section_ids is not None
+                and entry.section_id is not None
+                and entry.section_id not in section_ids
+            ):
+                raise EventForbidden(
+                    "You are not authorized to cancel a timetable occurrence "
+                    "outside your administrative section scope."
+                )
+        else:
+            if (
+                user.section_id is not None
+                and entry.section_id is not None
+                and user.section_id != entry.section_id
+            ):
+                raise EventForbidden(
+                    "You can only cancel timetable occurrences belonging to "
+                    "your own section."
+                )
+            if (
+                getattr(user, "subsection_id", None) is not None
+                and getattr(entry, "subsection_id", None) is not None
+                and user.subsection_id != entry.subsection_id
+            ):
+                raise EventForbidden(
+                    "You can only cancel timetable occurrences belonging to "
+                    "your own subsection."
+                )
+
         if elective_slot is not None:
             # Slot-wide event: the occurrence must be its OWN slot's shared
             # anchor entry.
@@ -300,20 +345,21 @@ class EventService:
             return entry.subject_id, elective_slot, effective_class_type
 
         if entry.elective_slot is None:
-            # Regular concrete occurrence: exactly its subject.
-            if subject_id is None or subject_id != entry.subject_id:
+            # Regular concrete occurrence: its subject is derived from the
+            # occurrence when omitted; a contradicting subject_id is rejected.
+            if subject_id is not None and subject_id != entry.subject_id:
                 raise EventValidationError(
                     "Subject does not match the referenced timetable "
                     "occurrence"
                 )
-            return subject_id, None, effective_class_type
+            return entry.subject_id, None, effective_class_type
 
         # Shared elective-slot occurrence (the anchor subject sits in
         # entry.subject_id).
         if subject_id is None or subject_id == entry.subject_id:
             # Slot-wide cancellation: every student in the slot resolves it
             # to their own concrete elective. HEAD_ADMIN only.
-            if not await AuthorizationService(self.db).is_head_admin(user):
+            if not await authz.is_head_admin(user):
                 raise EventForbidden(
                     "Slot-wide (elective slot) events are restricted to "
                     "administrators."
@@ -373,6 +419,7 @@ class EventService:
                     elective_slot=data.elective_slot,
                     class_type=data.class_type,
                     start_date=data.start_date,
+                    end_date=data.end_date,
                 )
             )
         else:
@@ -513,6 +560,19 @@ class EventService:
         # old configuration are reconciled back even when the event moves.
         old_start = event.start_date
         old_end = event.end_date
+        snapshot = (
+            event.event_type,
+            event.start_date,
+            event.end_date,
+            event.subject_id,
+            event.timetable_entry_id,
+            event.elective_slot,
+            event.class_type,
+            event.is_working_day,
+            event.substitution_schedule_override,
+            event.note,
+            event.active,
+        )
 
         # EVT-004 follow-up (integrity review): the fields below mutate the
         # event row IN MEMORY before the final-state guards run. With the
@@ -524,118 +584,135 @@ class EventService:
         # whole guard phase: the guards read clean DB state, and the only
         # flush is the explicit one inside the transactional try below, where
         # a losing race is translated into EventConflict.
-        with self.db.no_autoflush:
-            # Partial update: absent fields keep their current values.
-            # `subject_id` and friends can be explicitly nulled to convert
-            # scoping.
-            fields = data.model_fields_set
-            if "event_type" in fields:
-                event.event_type = data.event_type
-            if "start_date" in fields:
-                event.start_date = data.start_date
-            if "end_date" in fields:
-                event.end_date = data.end_date
-            if "subject_id" in fields:
-                event.subject_id = data.subject_id
-            if "timetable_entry_id" in fields:
-                event.timetable_entry_id = data.timetable_entry_id
-            if "elective_slot" in fields:
-                event.elective_slot = data.elective_slot
-            if "class_type" in fields:
-                event.class_type = data.class_type
-            if "is_working_day" in fields:
-                event.is_working_day = data.is_working_day
-            if "substitution_schedule_override" in fields:
-                event.substitution_schedule_override = data.substitution_schedule_override
-            if "note" in fields:
-                event.note = data.note
-            if "active" in fields:
-                event.active = data.active
+        try:
+            with self.db.no_autoflush:
+                # Partial update: absent fields keep their current values.
+                # `subject_id` and friends can be explicitly nulled to convert
+                # scoping.
+                fields = data.model_fields_set
+                if "event_type" in fields:
+                    event.event_type = data.event_type
+                if "start_date" in fields:
+                    event.start_date = data.start_date
+                if "end_date" in fields:
+                    event.end_date = data.end_date
+                if "subject_id" in fields:
+                    event.subject_id = data.subject_id
+                if "timetable_entry_id" in fields:
+                    event.timetable_entry_id = data.timetable_entry_id
+                if "elective_slot" in fields:
+                    event.elective_slot = data.elective_slot
+                if "class_type" in fields:
+                    event.class_type = data.class_type
+                if "is_working_day" in fields:
+                    event.is_working_day = data.is_working_day
+                if "substitution_schedule_override" in fields:
+                    event.substitution_schedule_override = data.substitution_schedule_override
+                if "note" in fields:
+                    event.note = data.note
+                if "active" in fields:
+                    event.active = data.active
 
-            # Phase 22.4: a slot-scoped event must resolve to its shared anchor
-            # subject. ADMIN-only (same rule as creation); the final state may
-            # never carry both a concrete subject and a slot, nor a mismatch.
-            if event.elective_slot is not None:
-                # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN.
-                if not await AuthorizationService(self.db).is_head_admin(user):
-                    raise EventForbidden(
-                        "Elective-slot events are restricted to administrators."
-                    )
-                anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(event.elective_slot)
-                if anchor is None:
-                    raise EventValidationError(
-                        f"No shared anchor subject is configured for {event.elective_slot.value}"
-                    )
-                if event.subject_id is not None and event.subject_id != anchor.id:
-                    raise EventValidationError(
-                        "An elective-slot event must not carry a different concrete subject"
-                    )
-                event.subject_id = anchor.id
+                # Phase 22.4: a slot-scoped event must resolve to its shared anchor
+                # subject. ADMIN-only (same rule as creation); the final state may
+                # never carry both a concrete subject and a slot, nor a mismatch.
+                if event.elective_slot is not None:
+                    # Phase 23.11: elective-slot (slot-wide) events require HEAD_ADMIN.
+                    if not await AuthorizationService(self.db).is_head_admin(user):
+                        raise EventForbidden(
+                            "Elective-slot events are restricted to administrators."
+                        )
+                    anchor = await ElectiveResolver(self.db).anchor_subject_for_slot(event.elective_slot)
+                    if anchor is None:
+                        raise EventValidationError(
+                            f"No shared anchor subject is configured for {event.elective_slot.value}"
+                        )
+                    if event.subject_id is not None and event.subject_id != anchor.id:
+                        raise EventValidationError(
+                            "An elective-slot event must not carry a different concrete subject"
+                        )
+                    event.subject_id = anchor.id
 
-            # OCC-1 (final state): a referenced occurrence is re-validated
-            # against the real timetable and the effective subject/slot/
-            # class-type are re-derived from it — a date change, an entry
-            # change, or a narrowing can never leave stale subject/class-type
-            # state behind. A legacy cancellation without a reference is
-            # rejected by validate_event below (it must be re-targeted to a
-            # real occurrence before it can be edited again).
-            if event.timetable_entry_id is not None:
-                eff_subject, eff_slot, eff_class_type = (
-                    await self._resolve_occurrence_target(
-                        user,
-                        event_type=event.event_type,
-                        timetable_entry_id=event.timetable_entry_id,
-                        subject_id=event.subject_id,
-                        elective_slot=event.elective_slot,
-                        class_type=event.class_type,
-                        start_date=event.start_date,
+                # OCC-1 (final state): a referenced occurrence is re-validated
+                # against the real timetable and the effective subject/slot/
+                # class-type are re-derived from it — a date change, an entry
+                # change, or a narrowing can never leave stale subject/class-type
+                # state behind. A legacy cancellation without a reference is
+                # rejected by validate_event below (it must be re-targeted to a
+                # real occurrence before it can be edited again).
+                if event.timetable_entry_id is not None:
+                    eff_subject, eff_slot, eff_class_type = (
+                        await self._resolve_occurrence_target(
+                            user,
+                            event_type=event.event_type,
+                            timetable_entry_id=event.timetable_entry_id,
+                            subject_id=event.subject_id,
+                            elective_slot=event.elective_slot,
+                            class_type=event.class_type,
+                            start_date=event.start_date,
+                            end_date=event.end_date,
+                        )
                     )
+                    event.subject_id = eff_subject
+                    event.elective_slot = eff_slot
+                    event.class_type = eff_class_type
+
+                # Re-authorize on the FINAL state: a student changing the subject or
+                # type must still land on a flexible, enrolled-subject event.
+                await self.assert_mutation_allowed(
+                    user, event_type=event.event_type, subject_id=event.subject_id
                 )
-                event.subject_id = eff_subject
-                event.elective_slot = eff_slot
-                event.class_type = eff_class_type
+                # EVT-003 (final state): the PROPOSED state must not become a
+                # quiz-manager-owned QUIZ_DAY either. This closes the type-change
+                # bypass (e.g. EXTRA_LECTURE -> QUIZ_DAY onto a schedule-backed
+                # identity), which the former endpoint-layer guard never covered.
+                await self._assert_not_quiz_schedule_managed(
+                    event_type=event.event_type,
+                    subject_id=event.subject_id,
+                    elective_slot=event.elective_slot,
+                    quiz_date=event.start_date,
+                )
 
-            # Re-authorize on the FINAL state: a student changing the subject or
-            # type must still land on a flexible, enrolled-subject event.
-            await self.assert_mutation_allowed(
-                user, event_type=event.event_type, subject_id=event.subject_id
-            )
-            # EVT-003 (final state): the PROPOSED state must not become a
-            # quiz-manager-owned QUIZ_DAY either. This closes the type-change
-            # bypass (e.g. EXTRA_LECTURE -> QUIZ_DAY onto a schedule-backed
-            # identity), which the former endpoint-layer guard never covered.
-            await self._assert_not_quiz_schedule_managed(
-                event_type=event.event_type,
-                subject_id=event.subject_id,
-                elective_slot=event.elective_slot,
-                quiz_date=event.start_date,
-            )
-
-            subject_category = None
-            if event.subject_id is not None:
-                subject = await self._ensure_subject(event.subject_id)
-                subject_category = subject.category
-            validate_event(
-                event_type=event.event_type,
-                start_date=event.start_date,
-                end_date=event.end_date,
-                subject_id=event.subject_id,
-                timetable_entry_id=event.timetable_entry_id,
-                elective_slot=event.elective_slot,
-                class_type=event.class_type,
-                subject_category=subject_category,
-                substitution_schedule_override=event.substitution_schedule_override,
-                is_working_day=event.is_working_day,
-            )
-            await self._check_duplicate(
+                subject_category = None
+                if event.subject_id is not None:
+                    subject = await self._ensure_subject(event.subject_id)
+                    subject_category = subject.category
+                validate_event(
+                    event_type=event.event_type,
+                    start_date=event.start_date,
+                    end_date=event.end_date,
+                    subject_id=event.subject_id,
+                    timetable_entry_id=event.timetable_entry_id,
+                    elective_slot=event.elective_slot,
+                    class_type=event.class_type,
+                    subject_category=subject_category,
+                    substitution_schedule_override=event.substitution_schedule_override,
+                    is_working_day=event.is_working_day,
+                )
+                await self._check_duplicate(
+                    event.event_type,
+                    event.start_date,
+                    event.end_date,
+                    event.subject_id,
+                    event.class_type,
+                    timetable_entry_id=event.timetable_entry_id,
+                    exclude_id=event.id,
+                )
+        except Exception:
+            (
                 event.event_type,
                 event.start_date,
                 event.end_date,
                 event.subject_id,
+                event.timetable_entry_id,
+                event.elective_slot,
                 event.class_type,
-                timetable_entry_id=event.timetable_entry_id,
-                exclude_id=event.id,
-            )
+                event.is_working_day,
+                event.substitution_schedule_override,
+                event.note,
+                event.active,
+            ) = snapshot
+            raise
 
         try:
             # Reconcile the union of the old and new spans: dates the event
