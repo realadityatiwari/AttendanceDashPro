@@ -1004,6 +1004,15 @@ export interface SetStudentStatusRequest {
   is_active: boolean;
 }
 
+// Stage 3A — admin-assisted password recovery (one-time token issuance).
+// `reset_token` is the RAW opaque secret returned exactly once for private
+// out-of-band delivery to the student. It is never re-displayable and must
+// never be persisted in storage, URLs, or logs.
+export interface PasswordResetIssuance {
+  reset_token: string;
+  expires_at: string;
+}
+
 // ===========================================================================
 // Phase 24.5 — Academic Structure Management (HEAD_ADMIN only)
 // ===========================================================================

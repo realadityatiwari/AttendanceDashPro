@@ -5,12 +5,14 @@ import datetime
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.deps import get_db, require_any_admin, require_head_admin
+from app.core.rate_limit import rate_limit
 from app.models.user import User
 from app.schemas.admin import AdminIdentity, AdminScopeDescriptor
 from app.schemas.admin_dashboard import AdminDashboardResponse
 from app.schemas.admin_students import (
     AdminStudentDetail, AdminStudentListResponse,
     AssignSubsectionRequest, CorrectElectiveRequest, SetStudentStatusRequest,
+    PasswordResetIssuance,
     SubsectionDropdownResponse, ElectiveDropdownResponse
 )
 from app.schemas.admin_structure import (
@@ -250,6 +252,31 @@ async def set_student_status(
 ):
     """Activate or deactivate a student account."""
     return await AdminStudentService(db).set_student_status(current_user, student_id, request.is_active)
+
+@router.post("/students/{student_id}/password-reset", response_model=PasswordResetIssuance, status_code=201)
+async def issue_student_password_reset(
+    student_id: UUID,
+    current_user: User = Depends(require_any_admin),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(20, 900, "admin-password-reset")),
+):
+    """Stage 3A: issue a single-use password-reset token for a student.
+
+    Authorization: ``require_any_admin`` + the SAME per-student scope gate the
+    other student actions use (HEAD all; CLASS assigned sections; ELECTIVE
+    choice-roster; SUBSECTION inert-deny). Out-of-scope/nonexistent -> 404 (no
+    existence leak). The admin never sees or sets the student's password.
+
+    The RAW token is returned EXACTLY ONCE here for private out-of-band
+    delivery; only its hash is stored, it is never logged, and no email is
+    sent. Issuing a new token revokes any prior outstanding token for the
+    student.
+    """
+    raw_token, expires_at = await AdminStudentService(db).issue_password_reset(
+        current_user, student_id
+    )
+    return PasswordResetIssuance(reset_token=raw_token, expires_at=expires_at)
+
 
 @router.get("/sections/{section_id}/subsections", response_model=List[SubsectionDropdownResponse])
 async def list_section_subsections(

@@ -1,16 +1,40 @@
 "use client";
 
-import { useProfile } from "@/hooks/useApi";
+import { useState } from "react";
+import { useSWRConfig } from "swr";
+import { useProfile, useProfileMutation } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, ShieldAlert, GraduationCap } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  LogOut,
+  User,
+  GraduationCap,
+  Pencil,
+  Check,
+  X,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShellField } from "@/components/shell/ShellDialog";
 import { formatDateMedium } from "@/lib/date";
+import { PROFILE_KEY } from "@/lib/api";
+
+// Matches the backend-authoritative `MAX_DISPLAY_NAME_LENGTH`
+// (backend/app/schemas/student.py). Client-side cap is a UX guard only; the
+// backend remains authoritative.
+const MAX_DISPLAY_NAME_LENGTH = 100;
+
+type NameSaveState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "saved" }
+  | { status: "error"; message: string };
 
 /**
  * UIA-029: this page is the single canonical Profile surface. The user-menu
@@ -23,6 +47,69 @@ import { formatDateMedium } from "@/lib/date";
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const { profile, isLoading, isError, mutate } = useProfile();
+  const { updateProfileName } = useProfileMutation();
+  const { mutate: globalMutate } = useSWRConfig();
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameSave, setNameSave] = useState<NameSaveState>({ status: "idle" });
+
+  const currentName = profile?.display_name || user?.display_name || "Student";
+  const isSaving = nameSave.status === "saving";
+
+  const startEditingName = () => {
+    setNameDraft(profile?.display_name || "");
+    setNameError(null);
+    setNameSave({ status: "idle" });
+    setIsEditingName(true);
+  };
+
+  const cancelEditingName = () => {
+    if (isSaving) return;
+    setIsEditingName(false);
+    setNameDraft("");
+    setNameError(null);
+    setNameSave({ status: "idle" });
+  };
+
+  const handleSaveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSaving) return;
+
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError("Display name is required.");
+      return;
+    }
+    if (trimmed.length > MAX_DISPLAY_NAME_LENGTH) {
+      setNameError(
+        `Display name must not exceed ${MAX_DISPLAY_NAME_LENGTH} characters.`
+      );
+      return;
+    }
+
+    setNameError(null);
+    setNameSave({ status: "saving" });
+    try {
+      const updated = await updateProfileName(trimmed);
+      // Reconcile the single shared profile resource; the greeting, user menu
+      // and every other PROFILE_KEY consumer update from this cache entry.
+      await globalMutate(PROFILE_KEY, updated, { revalidate: true });
+      setIsEditingName(false);
+      setNameDraft("");
+      setNameSave({ status: "saved" });
+    } catch (error) {
+      // The current name is preserved on failure; the user can retry.
+      setNameSave({
+        status: "error",
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "We couldn't save your name. Please try again.",
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -41,7 +128,7 @@ export default function ProfilePage() {
     }
   };
 
-  const displayName = profile?.display_name || user?.display_name || "Student";
+  const displayName = currentName;
   const initials = displayName.charAt(0).toUpperCase();
 
   if (isError) {
@@ -89,8 +176,82 @@ export default function ProfilePage() {
                     <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Display Name</span>
                     {isLoading ? (
                       <Skeleton className="h-6 w-48 mt-1" />
+                    ) : isEditingName ? (
+                      <form onSubmit={handleSaveName} className="mt-1 space-y-2">
+                        <label htmlFor="displayName" className="sr-only">
+                          Display Name
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="displayName"
+                            type="text"
+                            value={nameDraft}
+                            onChange={(e) => {
+                              setNameDraft(e.target.value);
+                              if (nameError) setNameError(null);
+                            }}
+                            maxLength={MAX_DISPLAY_NAME_LENGTH}
+                            disabled={isSaving}
+                            autoComplete="name"
+                            autoFocus
+                            aria-invalid={!!nameError}
+                            aria-describedby={nameError ? "displayName-error" : undefined}
+                          />
+                          <Button
+                            type="submit"
+                            size="icon-sm"
+                            disabled={isSaving}
+                            aria-label="Save name"
+                          >
+                            {isSaving ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Check className="h-4 w-4" aria-hidden="true" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="outline"
+                            onClick={cancelEditingName}
+                            disabled={isSaving}
+                            aria-label="Cancel"
+                          >
+                            <X className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                        {nameError && (
+                          <p
+                            id="displayName-error"
+                            role="alert"
+                            className="text-xs text-destructive"
+                          >
+                            {nameError}
+                          </p>
+                        )}
+                      </form>
                     ) : (
-                      <p className="text-base font-medium mt-1">{profile?.display_name || "—"}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <p className="text-base font-medium">{profile?.display_name || "—"}</p>
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          onClick={startEditingName}
+                          aria-label="Edit display name"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                        </Button>
+                        {nameSave.status === "saved" && (
+                          <span
+                            role="status"
+                            className="flex items-center gap-1 text-xs font-medium text-success"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            Saved
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div>
@@ -113,23 +274,28 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="mt-6 pt-6 border-t border-border/50">
-              <div className="rounded-md bg-warning/10 p-4 border border-warning/20">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <ShieldAlert className="h-5 w-5 text-warning" aria-hidden="true" />
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-warning">Profile editing isn&apos;t available yet</h3>
-                    <div className="mt-2 text-sm text-warning/80">
-                      <p>
-                        This page is read-only for now.
-                      </p>
+            {nameSave.status === "error" && (
+              <div className="mt-6 pt-6 border-t border-border/50">
+                <div
+                  role="alert"
+                  className="rounded-md bg-destructive/10 p-4 border border-destructive/30"
+                >
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <X className="h-5 w-5 text-destructive" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-destructive">
+                        Your name could not be saved
+                      </h3>
+                      <div className="mt-2 text-sm text-destructive/80">
+                        <p>{nameSave.message}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </Card>
 

@@ -152,6 +152,25 @@ class RefreshTokenService:
         await self.db.commit()
         return user, raw_new, new_row
 
+    async def revoke_all_for_user(self, user_id: uuid.UUID) -> int:
+        """Revoke every active refresh-token family owned by one user.
+
+        Used after a credential change (password change) so long-lived
+        refresh sessions cannot mint new access tokens. Participates in the
+        CALLER's transaction: it does NOT commit, so the credential update and
+        the revocation commit or roll back together. Returns the number of
+        rows newly revoked.
+        """
+        result = await self.db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.is_revoked == False,  # noqa: E712
+            )
+            .values(is_revoked=True, updated_at=datetime.now(timezone.utc))
+        )
+        return result.rowcount or 0
+
     async def revoke_by_token(self, raw_token: str) -> None:
         """Logout: revoke the presented token's family. Idempotent — an
         unknown/expired/already-revoked token is silently accepted."""

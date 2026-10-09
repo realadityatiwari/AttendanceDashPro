@@ -44,7 +44,8 @@ import {
   ElectiveDropdownResponse,
   AssignSubsectionRequest,
   CorrectElectiveRequest,
-  SetStudentStatusRequest
+  SetStudentStatusRequest,
+  PasswordResetIssuance
 } from '@/types/api';
 
 // Fetcher function that wraps apiFetch for SWR
@@ -109,6 +110,56 @@ export function useProfile() {
     isError: error,
     mutate
   };
+}
+
+// Stage 2: authenticated password change (PATCH /api/v1/auth/change-password).
+// The account is the JWT principal; no user id is sent. Resolves on success
+// with the backend's message; rejects with the server's detail on failure.
+//
+// `explicitToken` (optional): the login-page re-auth flow authenticates with
+// the current password to obtain a fresh access token, then passes it here so
+// the change uses THAT session. The token is held in component memory only and
+// is never written to localStorage (which would auto-start a session). When
+// omitted, the normal persisted-token `apiFetch` path is used.
+export function useChangePassword() {
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+    explicitToken?: string,
+  ): Promise<void> => {
+    const body = JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    if (explicitToken) {
+      await apiFetch('/api/v1/auth/change-password', {
+        method: 'PATCH',
+        body,
+        requireAuth: false,
+        headers: { Authorization: `Bearer ${explicitToken}` },
+      });
+      return;
+    }
+    await apiFetch('/api/v1/auth/change-password', { method: 'PATCH', body });
+  };
+
+  return { changePassword };
+}
+
+// Stage 1: self-service profile-name update (PATCH /api/v1/student/me). The
+// target account is derived from the JWT server-side — no user id is sent.
+// Returns the updated StudentProfile; callers reconcile the shared PROFILE_KEY
+// resource with it (globalMutate) so the greeting, user menu and every other
+// consumer update from the single profile source.
+export function useProfileMutation() {
+  const updateProfileName = async (displayName: string): Promise<StudentProfile> => {
+    return apiFetch(PROFILE_KEY, {
+      method: 'PATCH',
+      body: JSON.stringify({ display_name: displayName }),
+    });
+  };
+
+  return { updateProfileName };
 }
 
 export function useSubjects() {
@@ -636,6 +687,37 @@ export function useAdminStudentMutations() {
   };
 
   return { assignSubsection, correctElective, setStudentStatus };
+}
+
+// Stage 3A — admin-assisted password recovery. Issues a ONE-TIME reset token
+// for a student inside the acting admin's existing scope (the backend resolves
+// the student and enforces HEAD/CLASS/ELECTIVE scope; SUBSECTION stays inert).
+// The raw token is returned exactly once — it must be handed to the student
+// out-of-band and never persisted in storage, URLs, or logs.
+export function usePasswordResetIssuance() {
+  const issuePasswordReset = async (studentId: string): Promise<PasswordResetIssuance> => {
+    return apiFetch(`/api/v1/admin/students/${studentId}/password-reset`, {
+      method: 'POST',
+    });
+  };
+
+  return { issuePasswordReset };
+}
+
+// Stage 3A — public redemption of an admin-issued reset token
+// (POST /api/v1/auth/reset-password). No login or old password is required;
+// the token is the recovery proof and is sent in the POST body only. No
+// session is created: the caller directs the student to sign in afterwards.
+export function useResetPassword() {
+  const resetPassword = async (resetToken: string, newPassword: string): Promise<void> => {
+    await apiFetch('/api/v1/auth/reset-password', {
+      method: 'POST',
+      requireAuth: false,
+      body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
+    });
+  };
+
+  return { resetPassword };
 }
 
 // ===========================================================================

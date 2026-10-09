@@ -22,6 +22,7 @@ elective choices, inconsistencies). No attendance/eligibility/elective
 mathematics are re-implemented here.
 """
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -29,6 +30,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
+from app.core.logging import get_logger
 from app.models.user import User, Subsection
 from app.models.academic import StudentEnrollment, StudentElectiveChoice, Subject
 from app.models.enums import AdminRole, UserRole, ElectiveSlot, EnrollmentType
@@ -41,7 +43,10 @@ from app.schemas.admin_students import (
 from app.repositories.admin_student_repo import AdminStudentRepository, StudentScopeFilter
 from app.services.authorization_service import AuthorizationService
 from app.services.enrollment_service import build_enrollment
+from app.services.password_reset_service import PasswordResetService
 from app.services.student_context_service import StudentContextService
+
+logger = get_logger(__name__)
 
 
 class AdminStudentService:
@@ -295,3 +300,28 @@ class AdminStudentService:
         student.is_active = is_active
         await self.db.commit()
         return await self.get_student_detail(user, student_id)
+
+    async def issue_password_reset(self, user: User, student_id: UUID) -> tuple[str, datetime]:
+        """Stage 3A: issue a single-use password-reset token for a student
+        inside the acting admin's effective scope.
+
+        Reuses the SAME ``_can_access_student`` gate as every other student
+        action (HEAD all; CLASS assigned sections; ELECTIVE choice-roster;
+        SUBSECTION inert-deny). Out-of-scope/nonexistent -> 404 (no existence
+        leak). The admin NEVER sees or sets the student's password; the raw
+        token is returned to the caller exactly once and only its hash is
+        persisted. Commits before returning so the row exists durably.
+        """
+        student = await self.repo.get_student(student_id)
+        if not await self._can_access_student(user, student):
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        raw_token, row = await PasswordResetService(self.db).issue(student, user)
+        await self.db.commit()
+        logger.info(
+            "Password-reset token issued by admin %s for student %s (expires %s)",
+            user.id,
+            student.id,
+            row.expires_at,
+        )
+        return raw_token, row.expires_at

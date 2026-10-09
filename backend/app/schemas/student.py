@@ -1,11 +1,39 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from uuid import UUID
 from datetime import date
 
+# Canonical display-name limit for the `users.name` column. Matches the
+# project-wide name convention used by admin academic-entity schemas
+# (e.g. `admin_structure.py` / `admin_subjects.py`). There is no DB-level
+# length constraint today; validation is backend-authoritative.
+MAX_DISPLAY_NAME_LENGTH = 100
+
 class StudentSyncRequest(BaseModel):
     display_name: str
     roll_number: str
+
+class StudentNameUpdateRequest(BaseModel):
+    """Self-service profile name update (`PATCH /api/v1/student/me`).
+
+    The target account is ALWAYS the authenticated user — no user id or roll
+    number is accepted here, so a caller can never rename another account.
+    The value is whitespace-normalized before validation, so a
+    whitespace-only name is rejected as empty.
+    """
+    display_name: str
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Display name is required")
+        if len(trimmed) > MAX_DISPLAY_NAME_LENGTH:
+            raise ValueError(
+                f"Display name must not exceed {MAX_DISPLAY_NAME_LENGTH} characters"
+            )
+        return trimmed
 
 class StudentProfile(BaseModel):
     id: UUID

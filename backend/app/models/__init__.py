@@ -12,4 +12,5 @@ from .feedback import Feedback
 from .preference import UserPreference
 from .notification import Notification
 from .refresh_token import RefreshToken
+from .password_reset_token import PasswordResetToken
 from .push_subscription import PushSubscription

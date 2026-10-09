@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      const isPublicRoute = pathname === "/login" || pathname === "/signup";
+      const isPublicRoute = pathname === "/login" || pathname === "/signup" || pathname === "/reset-password";
       // Redirect to /login only when there is genuinely no session token.
       // When a token exists but the profile fetch failed transiently, stay on
       // the current page and let SWR retry instead of bouncing the user out.

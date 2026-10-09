@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours; env-overridable for production
 
+    # Password-reset tokens (Stage 3A): admin-issued, single-use, short-lived.
+    # TTL is deliberately short; the admin hands the raw token to the student
+    # out-of-band and it must be redeemed before expiry.
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
+
     # Refresh-token sessions (opaque DB-backed rotating tokens)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     REFRESH_COOKIE_NAME: str = "refresh_token"

@@ -13,8 +13,9 @@ from app.core.security import verify_password, create_access_token, hash_passwor
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
-from app.api.dependencies.deps import get_db
+from app.api.dependencies.deps import get_db, get_current_user
 from app.services.refresh_token_service import RefreshTokenService, RefreshTokenError
+from app.services.password_reset_service import PasswordResetService, PasswordResetError
 from app.services.enrollment_service import apply_new_student_enrollments
 from types import SimpleNamespace
 
@@ -24,6 +25,26 @@ logger = get_logger(__name__)
 class LoginRequest(BaseModel):
     roll_number: str
     password: str
+
+def validate_password_policy(v: str) -> str:
+    """Backend-authoritative password policy, shared by registration and
+    authenticated password change so the rule cannot drift between them:
+    - Minimum 8 characters
+    - Maximum 128 characters (PBKDF2 DoS protection)
+    - At least one letter and one digit
+    Existing accounts are NOT invalidated; this policy applies when a password
+    is set (registration or an authenticated change).
+    """
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if len(v) > 128:
+        raise ValueError("Password must not exceed 128 characters")
+    if not re.search(r"[A-Za-z]", v):
+        raise ValueError("Password must contain at least one letter")
+    if not re.search(r"[0-9]", v):
+        raise ValueError("Password must contain at least one digit")
+    return v
+
 
 class RegisterRequest(BaseModel):
     name: str
@@ -40,21 +61,32 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        """Backend-authoritative password policy:
-        - Minimum 8 characters
-        - Maximum 128 characters (PBKDF2 DoS protection)
-        - At least one letter and one digit
-        Existing accounts are NOT invalidated; this policy applies at registration.
-        """
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if len(v) > 128:
-            raise ValueError("Password must not exceed 128 characters")
-        if not re.search(r"[A-Za-z]", v):
-            raise ValueError("Password must contain at least one letter")
-        if not re.search(r"[0-9]", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return validate_password_policy(v)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Authenticated password change. The account is the authenticated
+    principal only — no user id or roll number is accepted."""
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password_policy(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Stage 3A public redemption. Possession of a valid single-use reset
+    token is the recovery proof — no login or current password is accepted.
+    The reset token is submitted in the request BODY, never a URL."""
+    reset_token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password_policy(v)
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -312,6 +344,83 @@ async def refresh(
     )
     _set_refresh_cookie(response, raw_new)
     return response
+
+
+@router.patch("/change-password", status_code=status.HTTP_200_OK)
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(5, 900, "change-password")),
+):
+    """Change the authenticated user's own password.
+
+    - The account is the authenticated principal (get_current_user); no
+      identifier is accepted in the request.
+    - The current password is verified with the SAME verifier as login. A
+      wrong current password returns 400 and leaves the stored hash untouched.
+      (401 is deliberately NOT used: the frontend treats 401 as an expired
+      session and would log the user out for a mistyped current password.)
+    - On success only ``hashed_password`` is replaced and this user's
+      refresh-token families are revoked, in one transaction. Existing
+      short-lived access tokens are NOT invalidated (see the walkthrough for
+      the documented limitation).
+    - The response never includes a password or a hash.
+    """
+    if not current_user.hashed_password or not verify_password(
+        request.current_password, current_user.hashed_password
+    ):
+        logger.warning("Password change rejected: incorrect current password for user %s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.hashed_password = hash_password(request.new_password)
+    await RefreshTokenService(db).revoke_all_for_user(current_user.id)
+    await db.commit()
+    logger.info("Password changed for user %s; refresh sessions revoked", current_user.id)
+    return {"message": "Password updated"}
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit(10, 900, "reset-password")),
+):
+    """Stage 3A: redeem an admin-issued, single-use password-reset token.
+
+    No authentication is required — possession of a valid reset token is the
+    recovery proof. The token is hashed and looked up; unknown/expired/used/
+    revoked tokens all return the SAME generic 400 (no token/account details).
+    On success the password hash, token redemption, competing-token revocation
+    and refresh-family revocation commit atomically. A raw token/password is
+    never logged or returned. No session is created here.
+    """
+    try:
+        await PasswordResetService(db).redeem(request.reset_token, request.new_password)
+    except PasswordResetError:
+        # Generic failure: never reveal whether the token/account exists.
+        await db.rollback()
+        logger.warning("Password reset rejected: invalid, expired, or used token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("Password reset commit failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to reset password. Please try again.",
+        )
+
+    logger.info("Password reset completed via admin-issued reset token")
+    return {"message": "Password updated"}
 
 
 @router.post("/logout")

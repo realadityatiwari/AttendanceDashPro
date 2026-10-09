@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from uuid import UUID
-from datetime import date
+from datetime import date, datetime
 
 from app.models.enums import ElectiveSlot, EnrollmentType
 
@@ -89,6 +89,16 @@ class CorrectElectiveRequest(BaseModel):
 
 class SetStudentStatusRequest(BaseModel):
     is_active: bool
+
+class PasswordResetIssuance(BaseModel):
+    """Stage 3A: the one-time response to a successful reset-token issuance.
+
+    ``reset_token`` is the RAW opaque secret — returned exactly once, to be
+    handed to the student out-of-band. It is never persisted, logged, or
+    re-displayable. ``expires_at`` is the redemption deadline.
+    """
+    reset_token: str
+    expires_at: datetime
 
 class SubsectionDropdownResponse(BaseModel):
     id: UUID

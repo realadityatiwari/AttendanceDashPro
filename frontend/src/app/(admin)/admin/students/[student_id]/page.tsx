@@ -16,6 +16,7 @@ import { formatShortDate } from "@/lib/date";
 import { AssignSubsectionDialog } from "./components/AssignSubsectionDialog";
 import { CorrectElectiveDialog } from "./components/CorrectElectiveDialog";
 import { SetStudentStatusDialog } from "./components/SetStudentStatusDialog";
+import { GeneratePasswordResetDialog } from "./components/GeneratePasswordResetDialog";
 
 /**
  * Phase 24.3 scoped student detail (read-only academic context).
@@ -85,6 +86,7 @@ export default function AdminStudentDetailPage() {
 
 function DetailContent({ student }: { student: AdminStudentDetail }) {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -102,15 +104,26 @@ function DetailContent({ student }: { student: AdminStudentDetail }) {
             {student.program && <Badge variant="neutral">{student.program}</Badge>}
           </div>
         </PageHeader>
-        <Button variant="outline" size="sm" onClick={() => setStatusDialogOpen(true)}>
-          {student.is_active ? "Deactivate Account" : "Activate Account"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setResetDialogOpen(true)}>
+            Generate password reset
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setStatusDialogOpen(true)}>
+            {student.is_active ? "Deactivate Account" : "Activate Account"}
+          </Button>
+        </div>
       </div>
 
       <SetStudentStatusDialog 
         student={student} 
         open={statusDialogOpen} 
         onOpenChange={setStatusDialogOpen} 
+      />
+
+      <GeneratePasswordResetDialog
+        student={student}
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
       />
 
       {student.inconsistencies.length > 0 && (

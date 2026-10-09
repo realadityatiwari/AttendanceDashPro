@@ -5436,3 +5436,23 @@ Verdict: **NEEDS FIXES** (guidance optimality/traceability) — core mathematics
 - Structural observation (documented, no code impact): when Criterion II wins Must Attend it necessarily also wins Safe Skip (its window is a pending superset, so skips_II = pending_II − must_II > pending_I − must_I); the divergence case only arises as C-I-must + C-II-skip, which the fix supports.
 
 **Git/deployment:** no commit, no push, no deploy — the user's separate decision. No browser/manual testing performed (user will test personally).
+
+---
+
+## Account Lifecycle — Stage 3A: Admin-Assisted Password Recovery — 2026-10-10 — COMPLETE
+
+**Source:** account-lifecycle work (Stages 1/2 already complete on the working tree). Scope: an authorized administrator issues a short-lived, single-use reset token for a student inside their existing authorization scope; the student redeems it to set a new password without knowing the old one. No email recovery, account deletion, distributed rate limiting, JWT blacklisting/token versioning, new admin permissions, or broad auth refactoring.
+
+**Backend (already present in the working tree from the interrupted Stage 3A; reviewed and verified, not rewritten):**
+
+- Persistence: `password_reset_tokens` (`backend/app/models/password_reset_token.py`) + additive migration `d3e4f5a6b7c8` (down_revision `c7d8e9f0a1b2`; single linear head). `user_id`/`issued_by_id` FKs, UNIQUE `token_hash` (SHA-256 hex), `expires_at`, `redeemed_at`, `is_revoked`; indexes on token_hash/user_id/issued_by_id. Only the hash is persisted.
+- Issuance: `POST /api/v1/admin/students/{student_id}/password-reset` → `AdminStudentService.issue_password_reset` → `PasswordResetService.issue`. Reuses `require_any_admin` + the existing `_can_access_student` scope gate (HEAD global / CLASS assigned sections / ELECTIVE roster / SUBSECTION inert-deny); out-of-scope/nonexistent → 404. Token from `secrets.token_urlsafe(32)`; issuance atomically revokes any prior outstanding token for the student. Raw token returned once (201) after commit; never logged.
+- TTL: `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 60`.
+- Redemption: public `POST /api/v1/auth/reset-password` (no auth; token in the POST body). Reuses `validate_password_policy()` + `hash_password()`. Unknown/expired/consumed/invalidated all return the same generic 400. Atomic single-use gate (conditional UPDATE → exactly one concurrent winner); one transaction replaces the target hash, consumes the token, revokes competing tokens, and calls `RefreshTokenService.revoke_all_for_user()`; rollback on failure, 503 on commit failure.
+- Rate limiting reuses the existing `rate_limit` (issuance 20/15 min per IP; redemption 10/15 min per IP). Already-issued access JWTs remain valid until expiry (documented, no versioning introduced). Login/registration/Change Password unchanged.
+
+**Frontend (added this stage):** `PasswordResetIssuance` type; `usePasswordResetIssuance` + `useResetPassword` hooks; `GeneratePasswordResetDialog` wired into the scoped admin student detail page (one-time token display, private-delivery/expiry guidance, copy, guards; token cleared on close/reopen, never in storage/URLs/logs); public `/reset-password` `(auth)` page (token via URL fragment `#token=` stripped immediately or manual entry, POST body only; new/confirm password, policy validation, loading/error/success, duplicate-submit guard, sensitive fields cleared on success, no session started); `/reset-password` added to AuthContext public routes.
+
+**Verification (this environment):** pytest **325 passed** (+24 new in `backend/tests/test_password_reset.py`); vitest **250 passed** (34 files; +13 new frontend tests); `tsc --noEmit` PASS; ESLint PASS on changed files (only the two pre-existing AuthContext set-state-in-effect findings remain); Alembic downgrade/upgrade round-trip PASS; live-DB rolled-back sandbox confirmed hash-at-rest, one-time disclosure, invalidation/reuse/expiry rejection, and concurrent single-winner. Migration applied to the LOCAL dev DB only (`current = d3e4f5a6b7c8 (head)`); dev DB baseline preserved (`password_reset_tokens` 0); production never touched.
+
+**Git/deployment:** no commit, no push, no deploy. Browser/manual testing is the user's responsibility. Stage 3A only — Stages 3B+ NOT started.
